@@ -13,9 +13,16 @@ from pydantic import BaseModel, Field, model_validator
 
 from whf import __version__
 from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
+from whf.ai.session import CopilotNarrator, NarratorConfig
+from whf.ai.status import copilot_status_sync
 from whf.db.connection import connect
 from whf.db.repo import read_df
+from whf.narrate import narrate_run
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
+
+
+def _default_narrator_factory(model: str | None = None) -> CopilotNarrator:
+    return CopilotNarrator(NarratorConfig(model=model))
 
 
 class RunRequest(BaseModel):
@@ -64,12 +71,23 @@ class VacationCreate(BaseModel):
         return self
 
 
+class NarrativeRequest(BaseModel):
+    model: str | None = None
+
+
 def new_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def create_app(db_path: Path | str, token: str) -> FastAPI:
+def create_app(
+    db_path: Path | str,
+    token: str,
+    narrator_factory=None,
+    status_provider=None,
+) -> FastAPI:
     app = FastAPI(title="WorkloadHub AI Forecasting", version=__version__)
+    narrator_factory = narrator_factory or _default_narrator_factory
+    status_provider = status_provider or copilot_status_sync
 
     def require_token(x_whf_token: str | None = Header(default=None)) -> None:
         if x_whf_token is None:
@@ -139,6 +157,19 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
             return jsonable(load_run(conn, run_id))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/copilot/status", dependencies=guarded)
+    def copilot_status_route() -> dict:
+        status = status_provider()
+        return {**status.__dict__, "ready": status.ready}
+
+    @app.post("/runs/{run_id}/narrative", dependencies=guarded)
+    def create_narrative(run_id: int, body: NarrativeRequest, conn: sqlite3.Connection = Depends(db)) -> dict:
+        try:
+            outcome = narrate_run(conn, run_id, narrator=narrator_factory(body.model))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return jsonable({**outcome.__dict__, "ai_status": outcome.ai_status, "run_id": run_id})
 
     @app.get("/projects", dependencies=guarded)
     def get_projects(conn: sqlite3.Connection = Depends(db)) -> list:

@@ -11,10 +11,13 @@ import typer
 
 from whf import __version__
 from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
+from whf.ai.session import CopilotNarrator, NarratorConfig
+from whf.ai.status import copilot_status_sync, resolve_cli_path, run_login
 from whf.config import data_dir, db_path
 from whf.data.generator import GeneratorConfig, generate
 from whf.data.loader import load_generated, write_answer_key
 from whf.db.connection import connect
+from whf.narrate import narrate_run
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
 
 app = typer.Typer(help="WorkloadHub AI Forecasting", no_args_is_help=True)
@@ -32,7 +35,14 @@ for name, sub in [
 ]:
     app.add_typer(sub, name=name)
 
+copilot_app = typer.Typer(help="GitHub Copilot sign-in and status", no_args_is_help=True)
+app.add_typer(copilot_app, name="copilot")
+
 DbOption = Annotated[Path | None, typer.Option("--db", help="SQLite database path (default: the app data folder)")]
+
+
+def default_narrator(model: str | None = None) -> CopilotNarrator:
+    return CopilotNarrator(NarratorConfig(model=model))
 
 
 def _conn(db: Path | None):
@@ -88,6 +98,7 @@ def run(
     as_of: Annotated[str | None, typer.Option("--as-of")] = None,
     requested_by: Annotated[int | None, typer.Option("--requested-by")] = None,
     as_json: Annotated[bool, typer.Option("--json")] = False,
+    ai: Annotated[bool, typer.Option("--ai", help="Also ask Copilot for the narrative")] = False,
 ) -> None:
     """Run the two-week forecast for one team."""
     conn = _conn(db)
@@ -112,6 +123,14 @@ def run(
                 )
             )
         )
+        if ai:
+            outcome = narrate_run(
+                conn,
+                result.run_id,
+                narrator=default_narrator(),
+                progress=None if as_json else lambda m: typer.echo(f"  {m}"),
+            )
+            typer.echo(json.dumps(jsonable({"run_id": result.run_id, "ai_status": outcome.ai_status})))
         return
     typer.echo(
         f"run {result.run_id}: team {team}, weeks {result.weeks[0]} and {result.weeks[1]}, champion {result.champion} (MASE {result.backtest_mase:.2f})"
@@ -121,6 +140,61 @@ def run(
         typer.echo(
             f"  member {row.member_id:>4} {row.week_start}: demand {row.demand_hours:6.1f}h  capacity {row.capacity_hours:5.1f}h{flag}"
         )
+    if ai:
+        outcome = narrate_run(
+            conn,
+            result.run_id,
+            narrator=default_narrator(),
+            progress=None if as_json else lambda m: typer.echo(f"  {m}"),
+        )
+        typer.echo(f"narrative: {outcome.ai_status}" + (f" ({outcome.error})" if outcome.error else ""))
+
+
+@copilot_app.command("status")
+def copilot_status_cmd(as_json: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """Show where the Copilot CLI is and whether the user is signed in."""
+    status = copilot_status_sync()
+    if as_json:
+        typer.echo(json.dumps({**status.__dict__, "ready": status.ready}))
+    else:
+        typer.echo(f"cli: {status.cli_path or 'not found'} ({status.cli_source})")
+        typer.echo(f"sign-in: {status.message}")
+    raise typer.Exit(code=0 if status.ready else 3)
+
+
+@copilot_app.command("login")
+def copilot_login_cmd() -> None:
+    """Sign in to GitHub Copilot with the CLI's device flow (interactive)."""
+    cli_path, _source = resolve_cli_path()
+    if cli_path is None:
+        typer.echo("error: Copilot CLI not found; run `whf copilot status` after installing it or set COPILOT_CLI_PATH")
+        raise typer.Exit(code=3)
+    raise typer.Exit(code=run_login(cli_path))
+
+
+@app.command()
+def narrate(
+    run_id: int,
+    db: DbOption = None,
+    model: Annotated[
+        str | None, typer.Option("--model", help="Copilot model id; default is the account's default")
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Ask Copilot for the narrative of a stored run and save it with the run."""
+    conn = _conn(db)
+    try:
+        outcome = narrate_run(
+            conn, run_id, narrator=default_narrator(model), progress=None if as_json else lambda m: typer.echo(f"  {m}")
+        )
+    except KeyError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=1) from exc
+    if as_json:
+        typer.echo(json.dumps(jsonable({**outcome.__dict__, "ai_status": outcome.ai_status, "run_id": run_id})))
+    else:
+        typer.echo(f"narrative: {outcome.ai_status}" + (f" ({outcome.error})" if outcome.error else ""))
+    raise typer.Exit(code=0 if outcome.status != "failed" else 4)
 
 
 @runs_app.command("list")
