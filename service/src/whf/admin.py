@@ -8,8 +8,12 @@ import sqlite3
 
 def set_capacity_default(conn: sqlite3.Connection, weekly_hours: float) -> None:
     """Set the default weekly capacity for everyone."""
-    conn.execute("UPDATE capacity_defaults SET weekly_hours = ? WHERE id = 1", (weekly_hours,))
-    conn.commit()
+    try:
+        conn.execute("UPDATE capacity_defaults SET weekly_hours = ? WHERE id = 1", (weekly_hours,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def set_capacity_override(
@@ -24,12 +28,16 @@ def set_capacity_override(
     For permanent overrides, omit week_start. Replaces any existing row for that member/week combination.
     """
     week_iso = week_start.isoformat() if week_start else None
-    conn.execute("DELETE FROM capacity_overrides WHERE member_id = ? AND week_start IS ?", (member_id, week_iso))
-    conn.execute(
-        "INSERT INTO capacity_overrides (member_id, week_start, weekly_hours, reason) VALUES (?, ?, ?, ?)",
-        (member_id, week_iso, weekly_hours, reason),
-    )
-    conn.commit()
+    try:
+        conn.execute("DELETE FROM capacity_overrides WHERE member_id = ? AND week_start IS ?", (member_id, week_iso))
+        conn.execute(
+            "INSERT INTO capacity_overrides (member_id, week_start, weekly_hours, reason) VALUES (?, ?, ?, ?)",
+            (member_id, week_iso, weekly_hours, reason),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def add_vacation(
@@ -39,12 +47,21 @@ def add_vacation(
     end_date: dt.date,
     kind: str = "vacation",
 ) -> int:
-    """Add a vacation record and return its id."""
-    cur = conn.execute(
-        "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (?, ?, ?, ?)",
-        (member_id, start_date.isoformat(), end_date.isoformat(), kind),
-    )
-    conn.commit()
+    """Add a vacation record and return its id.
+
+    Raises ValueError if end_date is before start_date.
+    """
+    if end_date < start_date:
+        raise ValueError("end_date must not be before start_date")
+    try:
+        cur = conn.execute(
+            "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (?, ?, ?, ?)",
+            (member_id, start_date.isoformat(), end_date.isoformat(), kind),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return int(cur.lastrowid)
 
 
@@ -64,13 +81,17 @@ def add_project(
     """
     if deadline <= start_date:
         raise ValueError("deadline must be after start_date")
-    cur = conn.execute(
-        "INSERT INTO projects (name, department_id, start_date, deadline, type, status, created_by) VALUES (?, ?, ?, ?, ?, 'planned', ?)",
-        (name, department_id, start_date.isoformat(), deadline.isoformat(), kind, created_by),
-    )
-    project_id = int(cur.lastrowid)
-    conn.executemany(
-        "INSERT INTO project_teams (project_id, team_id) VALUES (?, ?)", [(project_id, t) for t in team_ids]
-    )
-    conn.commit()
+    try:
+        cur = conn.execute(
+            "INSERT INTO projects (name, department_id, start_date, deadline, type, status, created_by) VALUES (?, ?, ?, ?, ?, 'planned', ?)",
+            (name, department_id, start_date.isoformat(), deadline.isoformat(), kind, created_by),
+        )
+        project_id = int(cur.lastrowid)
+        conn.executemany(
+            "INSERT INTO project_teams (project_id, team_id) VALUES (?, ?)", [(project_id, t) for t in team_ids]
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return project_id

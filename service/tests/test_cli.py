@@ -111,6 +111,16 @@ def test_export_unknown_run_fails_cleanly(tmp_path) -> None:
     assert "Traceback" not in result.output
 
 
+def test_vacation_with_inverted_range_is_rejected_with_exit_code_2(tmp_path) -> None:
+    db = tmp_path / "t.db"
+    _generate(db)
+    result = runner.invoke(
+        app, ["vacations", "add", "--db", str(db), "--member", "2", "--start", "2026-09-25", "--end", "2026-09-21"]
+    )
+    assert result.exit_code == 2
+    assert "end_date must not be before start_date" in result.output
+
+
 def test_invalid_date_is_rejected_with_exit_code_2(tmp_path) -> None:
     db = tmp_path / "t.db"
     _generate(db)

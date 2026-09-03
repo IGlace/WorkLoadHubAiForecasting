@@ -163,10 +163,18 @@ def run_forecast(
     team_of = {int(m): int(t) for m, t in zip(members["id"], members["team_id"].fillna(0), strict=True)}
     new_placed = place_new_arrivals(predicted[["member_id", "week_start", "est_hours"]], effort, off_by_member, team_of)
     capacity = _capacity_rows(frames, member_ids, (f1, f2), off_by_member)
-    bounds = {h: interval_bounds(backtest.residuals.get((champion, h), np.array([]))) for h in horizons}
+    # Prediction intervals apply only to the new-arrival component: pooled champion backtest
+    # residuals for the horizon, clamped to bracket zero, scaled per member by their estimate
+    # ratio (open-task hours are placements of already-known work, not a forecast).
+    bounds = {}
+    for h in horizons:
+        q10, q90 = interval_bounds(backtest.residuals.get((champion, h), np.array([])))
+        bounds[h] = (min(0.0, q10), max(0.0, q90))
 
     rows = []
     for m in member_ids:
+        team = team_of.get(m, 0)
+        ratio = effort.estimate_ratio(m, None, team)
         for week, h in zip((f1, f2), horizons, strict=True):
             open_hours = (
                 float(open_placed[(open_placed.member_id == m) & (open_placed.week_start == week)]["hours"].sum())
@@ -181,14 +189,16 @@ def run_forecast(
             open_hours, new_hours = round(open_hours, 2), round(new_hours, 2)
             demand = round(open_hours + new_hours, 2)
             low, high = bounds[h]
+            demand_low = min(demand, open_hours + max(0.0, new_hours + low * ratio))
+            demand_high = max(demand, open_hours + new_hours + high * ratio)
             cap = capacity[(m, week)]
             rows.append(
                 {
                     "member_id": m,
                     "week_start": week,
                     "demand_hours": demand,
-                    "demand_low": round(max(0.0, demand + low), 2),
-                    "demand_high": round(demand + high, 2),
+                    "demand_low": round(demand_low, 2),
+                    "demand_high": round(demand_high, 2),
                     "capacity_hours": cap,
                     "overload_hours": round(overload_hours(demand, cap), 2),
                     "open_task_hours": open_hours,
@@ -222,6 +232,7 @@ def run_forecast(
         backtest.scores,
         origins,
         horizons,
+        bounds,
     )
 
     # persist: one run, its forecasts and its facts, in a single transaction
@@ -267,6 +278,7 @@ def _build_facts(
     scores,
     origins,
     horizons,
+    bounds,
 ) -> dict:
     f1, f2 = weeks
     team = frames["teams"][frames["teams"]["id"] == team_id].iloc[0]
@@ -382,6 +394,13 @@ def _build_facts(
                 "arrivals during the current partial week are not modelled; "
                 "open tasks are placed from the first forecast week"
             ),
+            "interval": {
+                "basis": (
+                    "10th/90th percentile of the champion's pooled backtest residuals, scaled by each "
+                    "member's estimate ratio, applied to new-arrival hours only"
+                ),
+                "horizons": {h: {"low": low, "high": high} for h, (low, high) in bounds.items()},
+            },
         },
         "rebalancing_candidates": {"overloaded": overloaded, "underloaded": underloaded},
     }

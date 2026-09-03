@@ -1,8 +1,9 @@
 import datetime as dt
+import sqlite3
 
 import pytest
 
-from whf.admin import add_project, add_vacation, set_capacity_override
+from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
 from whf.db.repo import read_df
 
 
@@ -57,3 +58,26 @@ def test_add_vacation_returns_id(db) -> None:
     df = read_df(db, "SELECT * FROM vacations WHERE id = ?", (vacation_id,))
     assert len(df) == 1
     assert int(df["member_id"][0]) == 1
+
+
+def test_add_vacation_rejects_end_before_start(db) -> None:
+    """add_vacation should reject an inverted date range."""
+    with pytest.raises(ValueError, match="end_date must not be before start_date"):
+        add_vacation(db, member_id=1, start_date=dt.date(2026, 9, 23), end_date=dt.date(2026, 9, 21))
+    assert len(read_df(db, "SELECT * FROM vacations WHERE member_id = 1")) == 0
+
+
+def test_failed_project_insert_leaves_no_orphan(db) -> None:
+    """A project insert that fails on a bad team_id must not leave a partial row behind."""
+    with pytest.raises(sqlite3.IntegrityError):
+        add_project(
+            db,
+            "OrphanProject",
+            1,
+            dt.date(2026, 10, 1),
+            dt.date(2026, 11, 1),
+            [999],
+        )
+    set_capacity_default(db, 39.0)  # a subsequent, unrelated write must succeed cleanly
+    assert len(read_df(db, "SELECT * FROM projects WHERE name = 'OrphanProject'")) == 0
+    assert float(read_df(db, "SELECT weekly_hours FROM capacity_defaults")["weekly_hours"][0]) == 39.0

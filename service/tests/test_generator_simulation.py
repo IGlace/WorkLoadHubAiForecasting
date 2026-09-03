@@ -2,6 +2,7 @@ import datetime as dt
 
 import pandas as pd
 
+from whf.calendar import days_in_ranges
 from whf.data.generator import GeneratedData, GeneratorConfig, generate, truncate_to
 from whf.db.repo import read_df
 
@@ -93,6 +94,40 @@ def test_truncate_reopens_tasks_completed_after_cutoff(generated: GeneratedData)
     assert all(t["completed_at"] is None or t["completed_at"] <= cutoff for t in cut.tasks)
     assert cut.config.as_of == cutoff
     assert cut.answer_key is generated.answer_key
+
+
+def test_effort_log_matches_actual_hours_of_done_tasks(generated: GeneratedData) -> None:
+    effort_log = generated.answer_key["effort_log"]
+    hours_by_task: dict[int, float] = {}
+    for row in effort_log:
+        hours_by_task[row["task_id"]] = hours_by_task.get(row["task_id"], 0.0) + row["hours"]
+    done = [t for t in generated.tasks if t["status"] == "done"]
+    assert done  # sanity: there are done tasks to check
+    for t in done:
+        logged = hours_by_task.get(t["id"], 0.0)
+        assert abs(logged - t["actual_hours"]) < 0.1, (t["id"], logged, t["actual_hours"])
+
+
+def test_no_effort_on_weekends_holidays_or_vacations(generated: GeneratedData) -> None:
+    holidays = {h["date"] for h in generated.holidays}
+    vacation_days: dict[int, set[dt.date]] = {}
+    for v in generated.vacations:
+        vacation_days.setdefault(v["member_id"], set()).update(days_in_ranges([(v["start_date"], v["end_date"])]))
+    for row in generated.answer_key["effort_log"]:
+        day = dt.date.fromisoformat(row["date"])
+        assert day.weekday() < 5, row
+        assert day not in holidays, row
+        assert day not in vacation_days.get(row["member_id"], set()), row
+
+
+def test_no_effort_after_completion(generated: GeneratedData) -> None:
+    completed_at = {t["id"]: t["completed_at"] for t in generated.tasks if t["completed_at"] is not None}
+    for row in generated.answer_key["effort_log"]:
+        deadline = completed_at.get(row["task_id"])
+        if deadline is None:
+            continue
+        day = dt.date.fromisoformat(row["date"])
+        assert day <= deadline, row
 
 
 def test_loader_writes_every_table(db) -> None:

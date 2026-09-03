@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from whf import __version__
+from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
 from whf.config import data_dir, db_path
 from whf.data.generator import GeneratorConfig, generate
 from whf.data.loader import load_generated, write_answer_key
@@ -218,11 +219,13 @@ def vacations_add(
     kind: Annotated[str, typer.Option("--type")] = "vacation",
 ) -> None:
     """Add planned time off for a member."""
-    from whf.admin import add_vacation
-
     start_date = _date(start)
     end_date = _date(end)
-    add_vacation(_conn(db), member, start_date, end_date, kind)
+    try:
+        add_vacation(_conn(db), member, start_date, end_date, kind)
+    except ValueError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=2) from exc
     typer.echo(f"member {member}: {kind} {start_date.isoformat()} to {end_date.isoformat()}")
 
 
