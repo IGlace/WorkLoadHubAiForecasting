@@ -2,11 +2,44 @@
 
 from __future__ import annotations
 
+import datetime as dt
+import json
+from pathlib import Path
+from typing import Annotated
+
 import typer
 
 from whf import __version__
+from whf.config import data_dir, db_path
+from whf.data.generator import GeneratorConfig, generate
+from whf.data.loader import load_generated, write_answer_key
+from whf.db.connection import connect
+from whf.pipeline import jsonable, list_runs, load_run, run_forecast
 
 app = typer.Typer(help="WorkloadHub AI Forecasting", no_args_is_help=True)
+data_app = typer.Typer(help="Dummy data commands", no_args_is_help=True)
+runs_app = typer.Typer(help="Inspect stored runs", no_args_is_help=True)
+capacity_app = typer.Typer(help="Capacity configuration", no_args_is_help=True)
+vacations_app = typer.Typer(help="Planned time off", no_args_is_help=True)
+projects_app = typer.Typer(help="Projects with start date and deadline", no_args_is_help=True)
+for name, sub in [
+    ("data", data_app),
+    ("runs", runs_app),
+    ("capacity", capacity_app),
+    ("vacations", vacations_app),
+    ("projects", projects_app),
+]:
+    app.add_typer(sub, name=name)
+
+DbOption = Annotated[Path | None, typer.Option("--db", help="SQLite database path (default: the app data folder)")]
+
+
+def _conn(db: Path | None):
+    return connect(db or db_path())
+
+
+def _date(value: str | None) -> dt.date | None:
+    return dt.date.fromisoformat(value) if value else None
 
 
 @app.callback()
@@ -18,3 +51,201 @@ def main() -> None:
 def version() -> None:
     """Print the service version."""
     typer.echo(f"whf {__version__}")
+
+
+@data_app.command("generate")
+def data_generate(
+    db: DbOption = None,
+    seed: int = 42,
+    months: int = 12,
+    as_of: Annotated[str | None, typer.Option("--as-of")] = None,
+    answer_key: Annotated[Path | None, typer.Option("--answer-key")] = None,
+) -> None:
+    """Generate dummy data (replaces existing data in the database)."""
+    config = GeneratorConfig(seed=seed, months=months, as_of=_date(as_of) or GeneratorConfig().as_of)
+    data = generate(config)
+    conn = _conn(db)
+    load_generated(conn, data)
+    key_path = answer_key or (data_dir() / "answer_key.json")
+    write_answer_key(key_path, data)
+    typer.echo(
+        f"generated {len(data.members)} members, {len(data.teams)} teams, {len(data.projects)} projects, "
+        f"{len(data.tasks)} tasks; answer key at {key_path}"
+    )
+
+
+@app.command()
+def run(
+    team: Annotated[int, typer.Option("--team", help="Team id to forecast")],
+    db: DbOption = None,
+    as_of: Annotated[str | None, typer.Option("--as-of")] = None,
+    requested_by: Annotated[int | None, typer.Option("--requested-by")] = None,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Run the two-week forecast for one team."""
+    conn = _conn(db)
+    try:
+        result = run_forecast(conn, team_id=team, as_of=_date(as_of), requested_by=requested_by)
+    except ValueError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=1) from exc
+    if as_json:
+        typer.echo(
+            json.dumps(
+                jsonable(
+                    {
+                        "run_id": result.run_id,
+                        "team_id": result.team_id,
+                        "as_of": result.as_of,
+                        "weeks": list(result.weeks),
+                        "champion": result.champion,
+                        "backtest_mase": result.backtest_mase,
+                        "forecasts": result.forecasts.to_dict(orient="records"),
+                    }
+                )
+            )
+        )
+        return
+    typer.echo(
+        f"run {result.run_id}: team {team}, weeks {result.weeks[0]} and {result.weeks[1]}, champion {result.champion} (MASE {result.backtest_mase:.2f})"
+    )
+    for row in result.forecasts.itertuples():
+        flag = " OVERLOAD" if row.overload_hours > 0 else ""
+        typer.echo(
+            f"  member {row.member_id:>4} {row.week_start}: demand {row.demand_hours:6.1f}h  capacity {row.capacity_hours:5.1f}h{flag}"
+        )
+
+
+@runs_app.command("list")
+def runs_list(db: DbOption = None, team: Annotated[int | None, typer.Option("--team")] = None) -> None:
+    """List stored runs."""
+    df = list_runs(_conn(db), team)
+    if df.empty:
+        typer.echo("no runs")
+        return
+    for row in df.itertuples():
+        typer.echo(
+            f"{row.id:>4}  team {row.team_id:>3}  as_of {row.as_of}  {row.status:<6} {row.champion_model or '-':<15} ai={row.ai_status}"
+        )
+
+
+@runs_app.command("show")
+def runs_show(run_id: int, db: DbOption = None, as_json: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """Show one run with its forecasts and facts."""
+    try:
+        payload = load_run(_conn(db), run_id)
+    except KeyError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=1) from exc
+    if as_json:
+        typer.echo(json.dumps(jsonable(payload)))
+        return
+    typer.echo(
+        f"run {run_id}: team {payload['run']['team_id']} as_of {payload['run']['as_of']} champion {payload['run']['champion_model']}"
+    )
+    for row in payload["forecasts"]:
+        typer.echo(
+            f"  member {row['member_id']:>4} {row['week_start']}: demand {row['demand_hours']:6.1f}h capacity {row['capacity_hours']:5.1f}h overload {row['overload_hours']:5.1f}h"
+        )
+
+
+@app.command()
+def export(
+    run_id: int,
+    out: Annotated[Path, typer.Option("--out")],
+    db: DbOption = None,
+    fmt: Annotated[str, typer.Option("--format")] = "csv",
+) -> None:
+    """Export a run's forecasts to CSV or JSON."""
+    payload = load_run(_conn(db), run_id)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if fmt == "json":
+        out.write_text(json.dumps(jsonable(payload), indent=1), encoding="utf-8")
+    elif fmt == "csv":
+        import pandas as pd
+
+        pd.DataFrame(payload["forecasts"]).to_csv(out, index=False)
+    else:
+        typer.echo("error: --format must be csv or json")
+        raise typer.Exit(code=2)
+    typer.echo(f"wrote {out}")
+
+
+@capacity_app.command("default")
+def capacity_default(hours: Annotated[float, typer.Option("--hours")], db: DbOption = None) -> None:
+    """Set the default weekly capacity for everyone."""
+    conn = _conn(db)
+    conn.execute("UPDATE capacity_defaults SET weekly_hours = ? WHERE id = 1", (hours,))
+    conn.commit()
+    typer.echo(f"default weekly capacity set to {hours}h")
+
+
+@capacity_app.command("set")
+def capacity_set(
+    member: Annotated[int, typer.Option("--member")],
+    hours: Annotated[float, typer.Option("--hours")],
+    db: DbOption = None,
+    week: Annotated[
+        str | None, typer.Option("--week", help="Monday of the week; omit for a permanent override")
+    ] = None,
+    reason: Annotated[str | None, typer.Option("--reason")] = None,
+) -> None:
+    """Override a member's weekly capacity, permanently or for one week."""
+    conn = _conn(db)
+    conn.execute(
+        "INSERT INTO capacity_overrides (member_id, week_start, weekly_hours, reason) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(member_id, week_start) DO UPDATE SET weekly_hours = excluded.weekly_hours, reason = excluded.reason",
+        (member, week, hours, reason),
+    )
+    conn.commit()
+    typer.echo(f"member {member}: {hours}h" + (f" for week {week}" if week else " permanently"))
+
+
+@vacations_app.command("add")
+def vacations_add(
+    member: Annotated[int, typer.Option("--member")],
+    start: Annotated[str, typer.Option("--start")],
+    end: Annotated[str, typer.Option("--end")],
+    db: DbOption = None,
+    kind: Annotated[str, typer.Option("--type")] = "vacation",
+) -> None:
+    """Add planned time off for a member."""
+    conn = _conn(db)
+    conn.execute(
+        "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (?, ?, ?, ?)", (member, start, end, kind)
+    )
+    conn.commit()
+    typer.echo(f"member {member}: {kind} {start} to {end}")
+
+
+@projects_app.command("add")
+def projects_add(
+    name: Annotated[str, typer.Option("--name")],
+    department: Annotated[int, typer.Option("--department")],
+    start: Annotated[str, typer.Option("--start")],
+    deadline: Annotated[str, typer.Option("--deadline")],
+    team: Annotated[list[int], typer.Option("--team", help="Team id; repeat for several teams")],
+    db: DbOption = None,
+    kind: Annotated[str, typer.Option("--type")] = "delivery",
+    created_by: Annotated[int | None, typer.Option("--created-by")] = None,
+) -> None:
+    """Create a project with a start date, a deadline and its teams."""
+    if _date(deadline) <= _date(start):
+        typer.echo("error: deadline must be after start")
+        raise typer.Exit(code=2)
+    conn = _conn(db)
+    cur = conn.execute(
+        "INSERT INTO projects (name, department_id, start_date, deadline, type, status, created_by) VALUES (?, ?, ?, ?, ?, 'planned', ?)",
+        (name, department, start, deadline, kind, created_by),
+    )
+    project_id = cur.lastrowid
+    conn.executemany("INSERT INTO project_teams (project_id, team_id) VALUES (?, ?)", [(project_id, t) for t in team])
+    conn.commit()
+    typer.echo(f"project {project_id} '{name}' {start} to {deadline} for teams {team}")
+
+
+@app.command()
+def serve(db: DbOption = None, port: int = 0) -> None:
+    """Start the local API (implemented in the next task)."""
+    typer.echo("error: the API server is not available yet")
+    raise typer.Exit(code=2)
