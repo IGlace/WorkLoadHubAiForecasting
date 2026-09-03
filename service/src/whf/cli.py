@@ -245,7 +245,24 @@ def projects_add(
 
 
 @app.command()
-def serve(db: DbOption = None, port: int = 0) -> None:
-    """Start the local API (implemented in the next task)."""
-    typer.echo("error: the API server is not available yet")
-    raise typer.Exit(code=2)
+def serve(
+    db: DbOption = None,
+    port: int = 0,
+    token: Annotated[
+        str | None, typer.Option("--token", help="Token the client must send; generated when omitted")
+    ] = None,
+) -> None:
+    """Start the local API on 127.0.0.1 and print the port and token as one JSON line."""
+    import socket
+
+    import uvicorn
+
+    from whf.api import create_app, new_token
+
+    token = token or new_token()
+    if port == 0:
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+    typer.echo(json.dumps({"port": port, "token": token}), nl=True)
+    uvicorn.run(create_app(db or db_path(), token), host="127.0.0.1", port=port, log_level="warning")
