@@ -1,0 +1,9 @@
+# Superpowers working directories
+.superpowers/
+.worktrees/
+
+# Local-only Claude Code settings
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
