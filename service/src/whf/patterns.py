@@ -1,4 +1,12 @@
-"""Deterministic per-member pattern statistics handed to Copilot as facts, plus clustering."""
+"""Deterministic per-member pattern statistics handed to Copilot as facts, plus clustering.
+
+For each member, member_patterns() computes arrival-based statistics (tasks_13w, hours_13w,
+hours_per_week_13w, trend_hours_per_week, weekday shares, style shares, hours_by_project,
+share_with_project, deadline_proximity_corr) using the recent N-week window (default 13 weeks),
+and completion-based statistics (estimate_ratio_median, cycle_days_median, cycle_days_by_type,
+lateness_days_median, share_late) using the member's full completed task history, consistent
+with the effort model.
+"""
 
 from __future__ import annotations
 
