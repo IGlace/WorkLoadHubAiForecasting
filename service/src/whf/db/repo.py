@@ -19,14 +19,15 @@ def _to_sql(value: Any) -> Any:
     return value
 
 
-def insert_rows(conn: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> int:
+def insert_rows(conn: sqlite3.Connection, table: str, rows: list[dict[str, Any]], commit: bool = True) -> int:
     if not rows:
         return 0
     columns = list(rows[0].keys())
     placeholders = ", ".join("?" for _ in columns)
     sql = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})"
     conn.executemany(sql, [[_to_sql(row.get(c)) for c in columns] for row in rows])
-    conn.commit()
+    if commit:
+        conn.commit()
     return len(rows)
 
 

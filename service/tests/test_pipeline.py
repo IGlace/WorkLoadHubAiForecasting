@@ -81,6 +81,23 @@ def test_jsonable_converts_dates_and_numpy() -> None:
     assert value == {"d": "2026-09-07", "n": 1.5, "nan": None, "list": [2]}
 
 
+def test_failed_persistence_leaves_no_partial_run(db, generated, monkeypatch) -> None:
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("whf.pipeline.json.dumps", boom)
+    with pytest.raises(RuntimeError):
+        run_forecast(db, team_id=1, as_of=generated.config.as_of)
+    assert read_df(db, "SELECT COUNT(*) AS n FROM runs")["n"][0] == 0
+    assert read_df(db, "SELECT COUNT(*) AS n FROM forecasts")["n"][0] == 0
+    assert read_df(db, "SELECT COUNT(*) AS n FROM run_facts")["n"][0] == 0
+
+
+def test_run_forecast_rejects_team_without_counted_members(db) -> None:
+    with pytest.raises(ValueError):
+        run_forecast(db, team_id=999)
+
+
 @pytest.mark.slow
 def test_accuracy_gate_against_hidden_effort_log() -> None:
     full = generate(GeneratorConfig(seed=42, as_of=dt.date(2026, 9, 24)))

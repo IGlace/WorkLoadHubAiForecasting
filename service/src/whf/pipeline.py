@@ -224,25 +224,30 @@ def run_forecast(
         horizons,
     )
 
-    # persist
-    cur = conn.execute(
-        "INSERT INTO runs (team_id, as_of, requested_by, status, champion_model, backtest_mase, started_at, finished_at, ai_status)"
-        " VALUES (?, ?, ?, 'done', ?, ?, ?, ?, 'not_requested')",
-        (
-            team_id,
-            as_of.isoformat(),
-            requested_by,
-            champion,
-            None if math.isnan(champion_mase) else champion_mase,
-            started.isoformat(timespec="seconds"),
-            dt.datetime.now().isoformat(timespec="seconds"),
-        ),
-    )
-    run_id = int(cur.lastrowid)
-    insert_rows(conn, "forecasts", [{"run_id": run_id, **r} for r in rows])
-    facts["run"]["id"] = run_id
-    conn.execute("INSERT INTO run_facts (run_id, json) VALUES (?, ?)", (run_id, json.dumps(jsonable(facts))))
-    conn.commit()
+    # persist: one run, its forecasts and its facts, in a single transaction
+    try:
+        cur = conn.execute(
+            "INSERT INTO runs (team_id, as_of, requested_by, status, champion_model, backtest_mase, started_at, finished_at, ai_status)"
+            " VALUES (?, ?, ?, 'done', ?, ?, ?, ?, 'not_requested')",
+            (
+                team_id,
+                as_of.isoformat(),
+                requested_by,
+                champion,
+                None if math.isnan(champion_mase) else champion_mase,
+                started.isoformat(timespec="seconds"),
+                dt.datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        run_id = int(cur.lastrowid)
+        facts["run"]["id"] = run_id
+        facts_json = json.dumps(jsonable(facts))
+        insert_rows(conn, "forecasts", [{"run_id": run_id, **r} for r in rows], commit=False)
+        conn.execute("INSERT INTO run_facts (run_id, json) VALUES (?, ?)", (run_id, facts_json))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return RunResult(run_id, team_id, as_of, (f1, f2), champion, champion_mase, forecasts, facts, backtest.scores)
 
 
@@ -355,7 +360,7 @@ def _build_facts(
             "id": int(team_id),
             "name": team["name"],
             "department_id": int(team["department_id"]),
-            "team_leader_id": team["team_leader_id"],
+            "team_leader_id": None if pd.isna(team["team_leader_id"]) else int(team["team_leader_id"]),
             "totals": [
                 {
                     "week": w,
