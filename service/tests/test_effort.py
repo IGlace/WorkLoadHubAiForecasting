@@ -171,7 +171,7 @@ def test_place_open_tasks_shifts_by_lateness(_model: EffortModel) -> None:
     assert placed["hours"].sum() > 0
 
 
-@settings(max_examples=3, deadline=None)
+@settings(max_examples=50, deadline=None)
 @given(st.floats(min_value=0, max_value=200), dates)
 def test_place_new_arrivals_property(_model: EffortModel, est_hours: float, week_start_date: dt.date) -> None:
     model = _model
@@ -188,7 +188,7 @@ def test_place_new_arrivals_property(_model: EffortModel, est_hours: float, week
         assert placed["week_start"].nunique() <= max_weeks
 
 
-@settings(max_examples=3, deadline=None)
+@settings(max_examples=50, deadline=None)
 @given(
     st.floats(min_value=0, max_value=100),
     st.dates(min_value=dt.date(2026, 1, 1), max_value=dt.date(2026, 9, 3)),

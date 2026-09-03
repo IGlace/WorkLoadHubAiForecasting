@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("OMP_NUM_THREADS", "2")  # keep scikit-learn's OpenMP pool small on shared CI runners
+
 import pytest
 
 from whf.data.generator import GeneratedData, GeneratorConfig, generate
