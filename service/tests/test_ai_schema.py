@@ -1,3 +1,4 @@
+import copy
 import datetime as dt
 import json
 
@@ -8,7 +9,24 @@ from whf.ai.schema import Narrative, parse_narrative
 FACTS = {
     "run": {"id": 7, "as_of": "2026-09-03", "weeks": ["2026-09-07", "2026-09-14"]},
     "team": {"id": 1, "name": "Web Platform"},
-    "members": [{"id": 4, "name": "Sara Tazi"}, {"id": 5, "name": "Omar Benali"}],
+    "members": [
+        {
+            "id": 4,
+            "name": "Sara Tazi",
+            "forecast": [
+                {"week": "2026-09-07", "demand": 52.0, "capacity": 40.0, "overload": 12.0},
+                {"week": "2026-09-14", "demand": 40.0, "capacity": 40.0, "overload": 0.0},
+            ],
+        },
+        {
+            "id": 5,
+            "name": "Omar Benali",
+            "forecast": [
+                {"week": "2026-09-07", "demand": 20.0, "capacity": 40.0, "overload": 0.0},
+                {"week": "2026-09-14", "demand": 35.0, "capacity": 40.0, "overload": 0.0},
+            ],
+        },
+    ],
 }
 
 
@@ -110,3 +128,32 @@ def test_validate_flags_duplicate_members() -> None:
     dup["members"].append(dup["members"][0])
     problems = Narrative.model_validate(dup).validate_against_facts(FACTS)
     assert any("appears more than once" in p and "4" in p for p in problems)
+
+
+def test_rebalancing_move_within_source_overload_and_target_capacity_passes() -> None:
+    # from_member_id 4 has 12.0 h overload, to_member_id 5 has 20.0 h spare in that week (facts above).
+    n = parse_narrative(json.dumps(_good()))
+    assert n.validate_against_facts(FACTS) == []
+
+
+def test_rebalancing_move_beyond_source_overload_is_flagged() -> None:
+    bad = _good()
+    bad["rebalancing"][0]["hours"] = 20.0  # source member 4 only has 12.0 h of overload that week
+    problems = Narrative.model_validate(bad).validate_against_facts(FACTS)
+    assert any("overload" in p for p in problems)
+
+
+def test_rebalancing_move_that_overfills_target_is_flagged() -> None:
+    facts = copy.deepcopy(FACTS)
+    facts["members"][0]["forecast"][0]["overload"] = 30.0  # give the source plenty of overload to move
+    bad = _good()
+    bad["rebalancing"][0]["hours"] = 25.0  # target member 5 only has 20.0 h spare that week (40 - 20 demand)
+    problems = Narrative.model_validate(bad).validate_against_facts(facts)
+    assert any("capacity" in p for p in problems)
+
+
+def test_suggested_adjustment_zero_delta_is_flagged() -> None:
+    bad = _good()
+    bad["suggested_adjustments"] = [{"member_id": 4, "week": "2026-09-07", "delta_hours": 0, "reason": "rest week"}]
+    problems = Narrative.model_validate(bad).validate_against_facts(FACTS)
+    assert any("delta_hours" in p for p in problems)

@@ -68,6 +68,16 @@ def test_cli_narrate_and_run_ai(monkeypatch, tmp_path) -> None:
     assert with_ai.exit_code == 0 and "narrative: ok" in with_ai.output
 
 
+def test_cli_run_json_ai_prints_a_single_json_document(monkeypatch, tmp_path) -> None:
+    db = _db(tmp_path)
+    ok = FakeNarrator(NarrativeOutcome(status="ok", narrative={"run_summary": "fine", "members": []}))
+    monkeypatch.setattr("whf.cli.default_narrator", lambda model=None: ok)
+    out = runner.invoke(app, ["run", "--db", str(db), "--team", "1", "--as-of", "2026-09-03", "--json", "--ai"])
+    assert out.exit_code == 0
+    payload = json.loads(out.output)  # a second JSON document on stdout would break this
+    assert payload["ai_status"] == "ok" and payload["team_id"] == 1 and "forecasts" in payload
+
+
 def test_api_copilot_status_and_narrative(tmp_path) -> None:
     db = _db(tmp_path)
     ok = FakeNarrator(
@@ -87,6 +97,14 @@ def test_api_copilot_status_and_narrative(tmp_path) -> None:
     assert body["ai_status"] == "unverified" and body["verification"]["unverified"]
     assert client.get(f"/runs/{run_id}", headers=h).json()["run"]["ai_status"] == "unverified"
     assert client.post("/runs/999/narrative", json={}, headers=h).status_code == 404
+    conn = connect(db)
+    conn.execute(
+        "INSERT INTO runs (id, team_id, as_of, status, started_at) VALUES (1000, 1, '2026-09-03', 'done', "
+        "'2026-09-03T00:00:00')"
+    )
+    conn.commit()
+    conn.close()
+    assert client.post("/runs/1000/narrative", json={}, headers=h).status_code == 409
     seen_models: list = []
     client2 = TestClient(
         create_app(

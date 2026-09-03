@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from copilot import define_tool
 from pydantic import BaseModel, Field
 
 TOOL_NAMES = (
@@ -91,6 +90,8 @@ class FactsToolbox:
 
     # ----- Copilot tools ------------------------------------------------
     def tools(self) -> list[Any]:
+        from copilot import define_tool
+
         box = self
 
         def member_tool(name: str, description: str, fn):

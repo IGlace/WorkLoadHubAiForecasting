@@ -1069,7 +1069,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "github-copilot-sdk", specifier = ">=1.0.11" },
+    { name = "github-copilot-sdk", specifier = ">=1.0.11,<2" },
     { name = "holidays", specifier = ">=0.60" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import re
 from typing import Literal
 
@@ -66,6 +67,16 @@ class SuggestedAdjustment(_Strict):
     reason: str = Field(min_length=1, max_length=600)
 
 
+def _forecast_row(facts: dict, member_id: int, week: dt.date) -> dict | None:
+    """The stored forecast row (week/demand/capacity/overload) of one member for one week, or None."""
+    for m in facts.get("members", []):
+        if int(m.get("id", -1)) == member_id:
+            for row in m.get("forecast", []) or []:
+                if str(row.get("week"))[:10] == week.isoformat():
+                    return row
+    return None
+
+
 class Narrative(_Strict):
     run_summary: str = Field(min_length=1, max_length=2000)
     members: list[MemberNarrative]
@@ -93,18 +104,51 @@ class Narrative(_Strict):
                 if mid not in known:
                     problems.append(f"team risk '{r.title}' names unknown member {mid}")
         for mv in self.rebalancing:
+            move_valid = True
             if mv.from_member_id == mv.to_member_id:
                 problems.append("a rebalancing move names the same member as source and target")
+                move_valid = False
             for mid in (mv.from_member_id, mv.to_member_id):
                 if mid not in known:
                     problems.append(f"rebalancing move names unknown member {mid}")
+                    move_valid = False
             if mv.week not in weeks:
                 problems.append(f"rebalancing week {mv.week.isoformat()} is not a forecast week")
+                move_valid = False
+            if not move_valid:
+                continue
+            if mv.hours <= 0:
+                problems.append(f"rebalancing move of {mv.hours:g} h must be a positive number of hours")
+                continue
+            source_row = _forecast_row(facts, mv.from_member_id, mv.week)
+            target_row = _forecast_row(facts, mv.to_member_id, mv.week)
+            if source_row is None or target_row is None:
+                continue  # no forecast data for that member/week to bound the move against
+            source_overload = float(source_row.get("overload") or 0)
+            if mv.hours > source_overload + 0.05:
+                problems.append(
+                    f"rebalancing move of {mv.hours:g} h from member {mv.from_member_id} in the week of "
+                    f"{mv.week.isoformat()} exceeds their overload of {source_overload:g} h; the source has no "
+                    "such overload to move"
+                )
+            target_demand = float(target_row.get("demand") or 0)
+            target_capacity = float(target_row.get("capacity") or 0)
+            if target_demand + mv.hours > target_capacity + 0.05:
+                problems.append(
+                    f"rebalancing move of {mv.hours:g} h to member {mv.to_member_id} in the week of "
+                    f"{mv.week.isoformat()} would bring their demand to {target_demand + mv.hours:g} h, above "
+                    f"their capacity of {target_capacity:g} h"
+                )
         for adj in self.suggested_adjustments:
             if adj.member_id not in known:
                 problems.append(f"adjustment names unknown member {adj.member_id}")
             if adj.week not in weeks:
                 problems.append(f"adjustment week {adj.week.isoformat()} is not a forecast week")
+            if adj.delta_hours == 0 or not math.isfinite(adj.delta_hours):
+                problems.append(
+                    f"suggested adjustment for member {adj.member_id} in the week of {adj.week.isoformat()} has "
+                    f"a delta_hours of {adj.delta_hours!r}, which is not a usable value"
+                )
         return problems
 
 

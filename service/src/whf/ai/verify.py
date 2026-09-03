@@ -12,7 +12,7 @@ SMALL_INTEGER_ALLOWANCE = 20
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _TIME = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 _PERCENT = re.compile(r"-?\d+(?:[.,]\d+)?\s*%")
-_NUMBER = re.compile(r"(?<![\w.])-?\d+(?:[.,]\d+)?(?![\w.]*\d)")
+_NUMBER = re.compile(r"(?<![\d.])-?\d+(?:[.,]\d+)?(?![\w.]*\d)")
 
 
 def _walk(value: Any, out: set[float]) -> None:
@@ -69,6 +69,14 @@ def _text_fields(narrative: Narrative) -> list[tuple[str, str]]:
 
 
 def verify_narrative(narrative: Narrative, facts: dict) -> VerificationReport:
+    """Check every number in the narrative's text fields against the flat set of all numeric facts of the run.
+
+    Membership is checked against the flat bag of every numeric leaf in the facts, not against the specific
+    member or field a number is attributed to, so a number that belongs to another member (or a different
+    field entirely) still verifies. `ok` therefore means "every number exists somewhere in the facts", not
+    "every number is attributed correctly" — a cheap, deterministic check, and the safe direction: it can
+    only under-flag, never accuse a correct number of being invented.
+    """
     known = fact_numbers(facts)
     report = VerificationReport()
     for path, text in _text_fields(narrative):

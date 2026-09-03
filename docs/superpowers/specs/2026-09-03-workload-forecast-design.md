@@ -200,7 +200,7 @@ rows and features for the same pipeline, which is the feedback loop the owner wa
   (how to explain demand, capacity, overload, intervals, champion model, backtest
   score), `whf-rebalancing-advice` (rules for suggesting moves: same team first,
   matching task types, respect capacity, prefer under-loaded members), `whf-report-style`
-  (tone, length, language, structure). (Implementation note, 2026-09-03: the skills live in `service/src/whf/ai/skills/` and are loaded through the SDK's `skill_directories`; the `.claude/skills/whf-*` location was dropped to keep one source of truth.)
+  (tone, length, language, structure). (Implementation note, 2026-09-03: the skills live in `service/src/whf/ai/skills/` and are loaded through the SDK's `skill_directories`; the `.claude/skills/whf-*` location was dropped to keep one source of truth.) (Implementation note, 2026-09-03: tool names shipped as `get_member_capacity` and `get_rebalancing_candidates`, plus `get_member_open_tasks`; the spec's `get_capacity` and `get_team_rebalancing_candidates` were renamed for consistency with the other `get_member_*` tools.)
 - **Output**: strict JSON validated with Pydantic: run summary; per member the
   discovered patterns with evidence, a short narrative, a risk level and warnings;
   team-level risks; rebalancing suggestions (from member, to member, hours, week,

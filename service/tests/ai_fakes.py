@@ -24,6 +24,7 @@ class FakeSession:
     call_tools_first: bool = True
     return_none: bool = False
     emit_session_error: str | None = None
+    disconnect_raises: bool = False
 
     def on(self, handler):
         self.handlers.append(handler)
@@ -56,6 +57,8 @@ class FakeSession:
 
     async def disconnect(self) -> None:
         self.disconnected = True
+        if self.disconnect_raises:
+            raise RuntimeError("disconnect failed: connection already closed")
 
 
 @dataclass
@@ -67,6 +70,7 @@ class FakeClient:
     session_error: Exception | None = None
     reply_none: bool = False
     emit_session_error: str | None = None
+    disconnect_raises: bool = False
     started: bool = False
     stopped: bool = False
     session: FakeSession | None = None
@@ -93,6 +97,7 @@ class FakeClient:
             tools=list(kwargs.get("tools") or []),
             return_none=self.reply_none,
             emit_session_error=self.emit_session_error,
+            disconnect_raises=self.disconnect_raises,
         )
         if kwargs.get("on_event"):
             self.session.on(kwargs["on_event"])

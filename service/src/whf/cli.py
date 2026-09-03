@@ -11,13 +11,13 @@ import typer
 
 from whf import __version__
 from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
-from whf.ai.session import CopilotNarrator, NarratorConfig
+from whf.ai.session import default_narrator
 from whf.ai.status import copilot_status_sync, resolve_cli_path, run_login
 from whf.config import data_dir, db_path
 from whf.data.generator import GeneratorConfig, generate
 from whf.data.loader import load_generated, write_answer_key
 from whf.db.connection import connect
-from whf.narrate import narrate_run
+from whf.narrate import RunHasNoFactsError, RunNotFoundError, narrate_run
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
 
 app = typer.Typer(help="WorkloadHub AI Forecasting", no_args_is_help=True)
@@ -39,10 +39,6 @@ copilot_app = typer.Typer(help="GitHub Copilot sign-in and status", no_args_is_h
 app.add_typer(copilot_app, name="copilot")
 
 DbOption = Annotated[Path | None, typer.Option("--db", help="SQLite database path (default: the app data folder)")]
-
-
-def default_narrator(model: str | None = None) -> CopilotNarrator:
-    return CopilotNarrator(NarratorConfig(model=model))
 
 
 def _conn(db: Path | None):
@@ -108,29 +104,21 @@ def run(
         typer.echo(f"error: {exc}")
         raise typer.Exit(code=1) from exc
     if as_json:
-        typer.echo(
-            json.dumps(
-                jsonable(
-                    {
-                        "run_id": result.run_id,
-                        "team_id": result.team_id,
-                        "as_of": result.as_of,
-                        "weeks": list(result.weeks),
-                        "champion": result.champion,
-                        "backtest_mase": result.backtest_mase,
-                        "forecasts": result.forecasts.to_dict(orient="records"),
-                    }
-                )
-            )
-        )
+        payload = {
+            "run_id": result.run_id,
+            "team_id": result.team_id,
+            "as_of": result.as_of,
+            "weeks": list(result.weeks),
+            "champion": result.champion,
+            "backtest_mase": result.backtest_mase,
+            "forecasts": result.forecasts.to_dict(orient="records"),
+        }
         if ai:
-            outcome = narrate_run(
-                conn,
-                result.run_id,
-                narrator=default_narrator(),
-                progress=None if as_json else lambda m: typer.echo(f"  {m}"),
-            )
-            typer.echo(json.dumps(jsonable({"run_id": result.run_id, "ai_status": outcome.ai_status})))
+            outcome = narrate_run(conn, result.run_id, narrator=default_narrator())
+            payload["ai_status"] = outcome.ai_status
+            if outcome.error:
+                payload["error"] = outcome.error
+        typer.echo(json.dumps(jsonable(payload)))
         return
     typer.echo(
         f"run {result.run_id}: team {team}, weeks {result.weeks[0]} and {result.weeks[1]}, champion {result.champion} (MASE {result.backtest_mase:.2f})"
@@ -187,7 +175,7 @@ def narrate(
         outcome = narrate_run(
             conn, run_id, narrator=default_narrator(model), progress=None if as_json else lambda m: typer.echo(f"  {m}")
         )
-    except KeyError as exc:
+    except (RunNotFoundError, RunHasNoFactsError) as exc:
         typer.echo(f"error: {exc}")
         raise typer.Exit(code=1) from exc
     if as_json:

@@ -5,7 +5,7 @@ from ai_fakes import FakeNarrator
 
 from whf.ai.session import NarrativeOutcome
 from whf.db.repo import read_df
-from whf.narrate import narrate_run
+from whf.narrate import RunHasNoFactsError, RunNotFoundError, narrate_run
 from whf.pipeline import load_run, run_forecast
 
 
@@ -59,3 +59,18 @@ def test_second_narration_replaces_the_first(db, generated) -> None:
 def test_unknown_run_raises(db) -> None:
     with pytest.raises(KeyError):
         narrate_run(db, 999, narrator=FakeNarrator(NarrativeOutcome(status="ok")))
+
+
+def test_unknown_run_raises_run_not_found_error(db) -> None:
+    with pytest.raises(RunNotFoundError):
+        narrate_run(db, 999, narrator=FakeNarrator(NarrativeOutcome(status="ok")))
+
+
+def test_run_without_stored_facts_raises_run_has_no_facts_error(db) -> None:
+    db.execute(
+        "INSERT INTO runs (id, team_id, as_of, status, started_at) VALUES (?, ?, ?, ?, ?)",
+        (1000, 1, "2026-09-03", "done", "2026-09-03T00:00:00"),
+    )
+    db.commit()
+    with pytest.raises(RunHasNoFactsError):
+        narrate_run(db, 1000, narrator=FakeNarrator(NarrativeOutcome(status="ok")))

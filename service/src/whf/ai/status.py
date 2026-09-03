@@ -11,9 +11,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from copilot._cli_download import get_cached_cli_path
-
 CliSource = Literal["environment", "path", "cache", "none"]
+
+
+def get_cached_cli_path() -> str | None:
+    """The CLI path the SDK itself cached, if any. Imports the SDK's private download module lazily
+    (so `import whf.cli` alone never pulls in `copilot`) and tolerates that module moving or
+    disappearing in a later SDK release: status reporting must degrade to "not found", not crash.
+    """
+    try:
+        from copilot._cli_download import get_cached_cli_path as _get_cached_cli_path
+    except ImportError:
+        return None
+    return _get_cached_cli_path()
 
 
 @dataclass

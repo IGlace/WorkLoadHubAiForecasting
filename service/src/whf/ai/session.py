@@ -115,7 +115,11 @@ class CopilotNarrator:
                     model=self.config.model,
                     tools=toolbox.tools(),
                     system_message={"mode": "replace", "content": SYSTEM_PROMPT},
-                    available_tools=ToolSet().add_custom("*"),
+                    # "skill" is a host-isolated builtin (BUILTIN_TOOLS_ISOLATED in the SDK: no filesystem
+                    # or network access), so allowing it does not weaken the custom-read-only-tools rule,
+                    # and it is what lets the model actually open the product skills below.
+                    available_tools=ToolSet().add_custom("*").add_builtin("skill"),
+                    enable_skills=True,
                     skill_directories=self.config.skill_directories or skill_directories(),
                     streaming=False,
                     on_event=on_event,
@@ -171,7 +175,10 @@ class CopilotNarrator:
                     outcome, state, status="failed", reason="invalid_output", error="; ".join(problems), raw_text=raw
                 )
             finally:
-                await session.disconnect()
+                try:
+                    await session.disconnect()
+                except Exception as exc:  # disconnecting must never mask the real outcome
+                    log.warning("copilot session disconnect failed: %s", exc)
         finally:
             try:
                 await client.stop()
@@ -204,3 +211,8 @@ class CopilotNarrator:
         outcome.usage = state.get("usage", {})
         outcome.tool_calls = list(state.get("tools", []))
         return outcome
+
+
+def default_narrator(model: str | None = None) -> CopilotNarrator:
+    """The one narrator factory shared by the CLI, the API and `whf narrate`."""
+    return CopilotNarrator(NarratorConfig(model=model))

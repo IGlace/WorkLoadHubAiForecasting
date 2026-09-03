@@ -1,7 +1,7 @@
 import pytest
 from ai_fakes import FakeClient, good_narrative
 
-from whf.ai.session import CopilotNarrator, NarratorConfig
+from whf.ai.session import CopilotNarrator, NarratorConfig, _default_client_factory
 from whf.pipeline import jsonable, run_forecast
 
 
@@ -25,7 +25,8 @@ def test_happy_path_returns_ok_and_cleans_up(facts) -> None:
     kwargs = client.session_kwargs
     assert kwargs["system_message"]["mode"] == "replace"
     assert [t.name for t in kwargs["tools"]][0] == "get_run_overview"
-    assert kwargs["available_tools"] is not None
+    assert kwargs["available_tools"].to_list() == ["custom:*", "builtin:skill"]
+    assert kwargs["enable_skills"] is True
     assert len(kwargs["skill_directories"]) == 5
 
 
@@ -104,3 +105,26 @@ def test_session_error_event_enriches_model_error(facts) -> None:
     client = FakeClient(replies=[RuntimeError("model call failed")], emit_session_error="rate limited")
     outcome = _narrator(client).narrate_sync(facts)
     assert outcome.reason == "model_error" and "rate limited" in outcome.error
+
+
+def test_disconnect_failure_does_not_mask_a_successful_narrative(facts) -> None:
+    client = FakeClient(replies=[good_narrative(facts)], disconnect_raises=True)
+    outcome = _narrator(client).narrate_sync(facts)
+    assert outcome.status == "ok" and outcome.ai_status == "ok"
+    assert client.session.disconnected and client.stopped
+
+
+def test_default_client_factory_uses_only_log_level_and_the_logged_in_user(monkeypatch) -> None:
+    """Pins the hard rule: no github_token, no provider, no use_logged_in_user override."""
+    calls: list[dict] = []
+
+    class RecordingCopilotClient:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+    import copilot
+
+    monkeypatch.setattr(copilot, "CopilotClient", RecordingCopilotClient)
+    factory = _default_client_factory(NarratorConfig(log_level="warn"))
+    factory()
+    assert calls == [{"log_level": "warn"}]

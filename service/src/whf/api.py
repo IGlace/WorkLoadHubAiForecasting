@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import secrets
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -13,16 +13,12 @@ from pydantic import BaseModel, Field, model_validator
 
 from whf import __version__
 from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
-from whf.ai.session import CopilotNarrator, NarratorConfig
-from whf.ai.status import copilot_status_sync
+from whf.ai.session import Narrator, default_narrator
+from whf.ai.status import CopilotStatus, copilot_status_sync
 from whf.db.connection import connect
 from whf.db.repo import read_df
-from whf.narrate import narrate_run
+from whf.narrate import RunHasNoFactsError, RunNotFoundError, narrate_run
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
-
-
-def _default_narrator_factory(model: str | None = None) -> CopilotNarrator:
-    return CopilotNarrator(NarratorConfig(model=model))
 
 
 class RunRequest(BaseModel):
@@ -82,11 +78,11 @@ def new_token() -> str:
 def create_app(
     db_path: Path | str,
     token: str,
-    narrator_factory=None,
-    status_provider=None,
+    narrator_factory: Callable[[str | None], Narrator] | None = None,
+    status_provider: Callable[[], CopilotStatus] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="WorkloadHub AI Forecasting", version=__version__)
-    narrator_factory = narrator_factory or _default_narrator_factory
+    narrator_factory = narrator_factory or default_narrator
     status_provider = status_provider or copilot_status_sync
 
     def require_token(x_whf_token: str | None = Header(default=None)) -> None:
@@ -167,8 +163,10 @@ def create_app(
     def create_narrative(run_id: int, body: NarrativeRequest, conn: sqlite3.Connection = Depends(db)) -> dict:
         try:
             outcome = narrate_run(conn, run_id, narrator=narrator_factory(body.model))
-        except KeyError as exc:
+        except RunNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RunHasNoFactsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         return jsonable({**outcome.__dict__, "ai_status": outcome.ai_status, "run_id": run_id})
 
     @app.get("/projects", dependencies=guarded)

@@ -8,12 +8,16 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict
 
-from whf.ai.session import CopilotNarrator, NarrativeOutcome, Narrator
+from whf.ai.session import NarrativeOutcome, Narrator, default_narrator
 from whf.db.repo import read_df
 
 
-def default_narrator() -> CopilotNarrator:
-    return CopilotNarrator()
+class RunNotFoundError(KeyError):
+    """No run with this id exists."""
+
+
+class RunHasNoFactsError(LookupError):
+    """The run exists but has no stored facts to narrate (the forecast did not save them)."""
 
 
 def narrate_run(
@@ -22,9 +26,12 @@ def narrate_run(
     narrator: Narrator | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> NarrativeOutcome:
+    run_rows = read_df(conn, "SELECT id FROM runs WHERE id = ?", (run_id,))
+    if run_rows.empty:
+        raise RunNotFoundError(f"run {run_id} not found")
     facts_rows = read_df(conn, "SELECT json FROM run_facts WHERE run_id = ?", (run_id,))
     if facts_rows.empty:
-        raise KeyError(f"run {run_id} not found or has no facts")
+        raise RunHasNoFactsError(f"run {run_id} exists but has no stored facts to narrate")
     facts = json.loads(facts_rows["json"][0])
     outcome = (narrator or default_narrator()).narrate_sync(facts, progress)
     document = {**asdict(outcome), "generated_at": dt.datetime.now().isoformat(timespec="seconds")}

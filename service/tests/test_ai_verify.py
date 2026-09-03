@@ -44,6 +44,11 @@ def test_numbers_in_text_skips_dates_times_and_percentages() -> None:
     assert numbers_in_text(text) == [52.0, 40.0, 0.91]
 
 
+def test_numbers_in_text_extracts_numbers_glued_to_a_preceding_word() -> None:
+    assert numbers_in_text("MASE0.91") == [0.91]
+    assert numbers_in_text("demand52.5h") == [52.5]
+
+
 def test_verified_when_every_number_matches_facts() -> None:
     report = verify_narrative(_narrative("Demand 52.0 h against 40 h, overload 12.0 h in week 2026-09-07."), FACTS)
     assert report.ok and report.checked == 3 and report.unverified == []
