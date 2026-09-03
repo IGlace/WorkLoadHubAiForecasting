@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from whf.features import HORIZONS
+
 
 class TSB:
     name = "tsb"
@@ -14,7 +16,8 @@ class TSB:
         self.beta = beta
         self._level: dict[int, float] = {}
 
-    def fit(self, train: pd.DataFrame) -> TSB:
+    def fit(self, train: pd.DataFrame, horizons: tuple[int, ...] = HORIZONS) -> TSB:
+        del horizons  # the level is horizon-independent
         ordered = train.sort_values("week_start")
         for member, series in ordered.groupby("member_id", observed=True)["est_hours"]:
             y = series.to_numpy(dtype=float)

@@ -214,7 +214,7 @@ def build_org(rng: np.random.Generator) -> Org:
         org.members.append(
             {
                 "id": leader_id,
-                "name": names[next_name],
+                "name": names[next_name % len(names)],
                 "team_id": None,
                 "department_id": dept_id,
                 "role": "skill_team_leader",

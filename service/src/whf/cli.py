@@ -138,7 +138,7 @@ def runs_list(db: DbOption = None, team: Annotated[int | None, typer.Option("--t
 
 @runs_app.command("show")
 def runs_show(run_id: int, db: DbOption = None, as_json: Annotated[bool, typer.Option("--json")] = False) -> None:
-    """Show one run with its forecasts and facts."""
+    """Show one run with its forecasts; facts are printed only with --json."""
     try:
         payload = load_run(_conn(db), run_id)
     except KeyError as exc:
@@ -185,8 +185,6 @@ def export(
 @capacity_app.command("default")
 def capacity_default(hours: Annotated[float, typer.Option("--hours")], db: DbOption = None) -> None:
     """Set the default weekly capacity for everyone."""
-    from whf.admin import set_capacity_default
-
     set_capacity_default(_conn(db), hours)
     typer.echo(f"default weekly capacity set to {hours}h")
 
@@ -202,8 +200,6 @@ def capacity_set(
     reason: Annotated[str | None, typer.Option("--reason")] = None,
 ) -> None:
     """Override a member's weekly capacity, permanently or for one week."""
-    from whf.admin import set_capacity_override
-
     week_date = _date(week)
     set_capacity_override(_conn(db), member, hours, week_date, reason)
     week_iso = week_date.isoformat() if week_date else None
@@ -241,8 +237,6 @@ def projects_add(
     created_by: Annotated[int | None, typer.Option("--created-by")] = None,
 ) -> None:
     """Create a project with a start date, a deadline and its teams."""
-    from whf.admin import add_project
-
     try:
         project_id = add_project(_conn(db), name, department, _date(start), _date(deadline), team, kind, created_by)
     except ValueError as exc:

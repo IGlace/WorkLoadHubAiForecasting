@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
 from whf import __version__
+from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
 from whf.db.connection import connect
 from whf.db.repo import read_df
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
@@ -71,7 +72,15 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
     app = FastAPI(title="WorkloadHub AI Forecasting", version=__version__)
 
     def require_token(x_whf_token: str | None = Header(default=None)) -> None:
-        if x_whf_token is None or not secrets.compare_digest(x_whf_token, token):
+        if x_whf_token is None:
+            raise HTTPException(status_code=401, detail="missing or invalid token")
+        try:
+            valid = secrets.compare_digest(
+                x_whf_token.encode("utf-8", "surrogateescape"), token.encode("utf-8", "surrogateescape")
+            )
+        except (UnicodeEncodeError, ValueError):
+            raise HTTPException(status_code=401, detail="missing or invalid token") from None
+        if not valid:
             raise HTTPException(status_code=401, detail="missing or invalid token")
 
     def db() -> Iterator[sqlite3.Connection]:
@@ -144,8 +153,6 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
 
     @app.post("/projects", dependencies=guarded)
     def post_project(body: ProjectCreate, conn: sqlite3.Connection = Depends(db)) -> dict:
-        from whf.admin import add_project
-
         project_id = add_project(
             conn,
             body.name,
@@ -173,15 +180,11 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
 
     @app.put("/capacity/default", dependencies=guarded)
     def put_capacity_default(body: CapacityDefault, conn: sqlite3.Connection = Depends(db)) -> dict:
-        from whf.admin import set_capacity_default
-
         set_capacity_default(conn, body.weekly_hours)
         return {"default_weekly_hours": body.weekly_hours}
 
     @app.put("/capacity/overrides", dependencies=guarded)
     def put_capacity_override(body: CapacityOverride, conn: sqlite3.Connection = Depends(db)) -> dict:
-        from whf.admin import set_capacity_override
-
         set_capacity_override(conn, body.member_id, body.weekly_hours, body.week_start, body.reason)
         return jsonable(body.model_dump())
 
@@ -195,8 +198,6 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
 
     @app.post("/vacations", dependencies=guarded)
     def post_vacation(body: VacationCreate, conn: sqlite3.Connection = Depends(db)) -> dict:
-        from whf.admin import add_vacation
-
         vacation_id = add_vacation(conn, body.member_id, body.start_date, body.end_date, body.type)
         return {"id": vacation_id}
 

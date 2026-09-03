@@ -48,8 +48,8 @@ def rolling_backtest(
         test = feat[feat["week_start"] == origin]
         if train.empty or test.empty:
             continue
-        fitted = {name: factory().fit(train) for name, factory in factories.items()}
-        naive = SeasonalNaive().fit(train)
+        fitted = {name: factory().fit(train, horizons) for name, factory in factories.items()}
+        naive = SeasonalNaive().fit(train, horizons)
         for h in horizons:
             y = test[f"target_h{h}"].to_numpy(dtype=float)
             if np.isnan(y).any():

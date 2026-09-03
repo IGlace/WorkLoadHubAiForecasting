@@ -7,12 +7,17 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 
+from whf.features import HORIZONS
+
 
 class ArrivalModel(Protocol):
     name: str
 
-    def fit(self, train: pd.DataFrame) -> ArrivalModel:
-        """Learn from feature-matrix rows (targets may be NaN for the newest rows)."""
+    def fit(self, train: pd.DataFrame, horizons: tuple[int, ...] = HORIZONS) -> ArrivalModel:
+        """Learn from feature-matrix rows (targets may be NaN for the newest rows).
+
+        Only the given horizons need to be trained; baselines accept and ignore this.
+        """
         ...
 
     def predict(self, rows: pd.DataFrame, horizon: int) -> np.ndarray:

@@ -29,7 +29,7 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 ## Layout
 
 ```
-service/   Python 3.12 service (package `whf`): FastAPI, Typer CLI, SQLite, models, generator, Copilot session
+service/   Python 3.11+ service (package `whf`): FastAPI, Typer CLI, SQLite, models, generator, Copilot session
 app/       Electron + React + TypeScript desktop app
 installer/ PyInstaller and electron-builder configuration
 scripts/   PowerShell and shell helpers

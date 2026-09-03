@@ -2,6 +2,7 @@ import datetime as dt
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from whf.features import build_feature_matrix, weekly_arrivals
 from whf.models import MODEL_FACTORIES
@@ -64,6 +65,15 @@ def test_gbm_copes_with_short_history_where_long_lags_are_all_missing() -> None:
     feat = _frame(weeks=10)  # lag13 is missing in every row
     model = GradientBoostingArrival().fit(feat)
     assert model.predict(feat.tail(3), horizon=1).shape == (3,)
+
+
+def test_gbm_fit_only_trains_requested_horizons() -> None:
+    feat = _frame()
+    model = GradientBoostingArrival().fit(feat, horizons=(2, 3))
+    assert model.predict(feat.tail(3), horizon=2).shape == (3,)
+    assert model.predict(feat.tail(3), horizon=3).shape == (3,)
+    with pytest.raises(KeyError):
+        model.predict(feat.tail(3), horizon=1)
 
 
 def test_gbm_is_deterministic() -> None:

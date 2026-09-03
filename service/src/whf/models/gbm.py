@@ -19,8 +19,8 @@ class GradientBoostingArrival:
         self._models: dict[int, HistGradientBoostingRegressor] = {}
         self._columns: dict[int, list[str]] = {}
 
-    def fit(self, train: pd.DataFrame) -> GradientBoostingArrival:
-        for h in HORIZONS:
+    def fit(self, train: pd.DataFrame, horizons: tuple[int, ...] = HORIZONS) -> GradientBoostingArrival:
+        for h in horizons:
             target = f"target_h{h}"
             rows = train.dropna(subset=[target])
             # scikit-learn rejects columns that are missing everywhere (short histories make lag13 empty)

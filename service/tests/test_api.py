@@ -37,6 +37,13 @@ def test_health_is_public_and_others_need_token(client) -> None:
     assert {"id", "name", "team_id", "role"} <= set(meta["members"][0])
 
 
+def test_non_ascii_token_header_is_rejected_not_500(client) -> None:
+    # raw bytes bypass httpx's client-side ascii check; the server decodes header
+    # bytes as latin-1 per the HTTP spec, so this arrives as a non-ASCII str.
+    response = client.get("/meta", headers={"X-WHF-Token": "wrong-token-café".encode()})
+    assert response.status_code == 401
+
+
 def test_run_and_fetch(client) -> None:
     created = client.post("/runs", json={"team_id": 1, "as_of": "2026-09-03"}, headers=_h())
     assert created.status_code == 200, created.text

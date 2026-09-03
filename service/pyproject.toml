@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.2",
     "numpy>=1.26",
-    "scikit-learn>=1.5",
+    "scikit-learn>=1.6",
     "holidays>=0.60",
     "pydantic>=2.7",
     "typer>=0.12",

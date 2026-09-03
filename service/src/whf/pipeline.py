@@ -146,7 +146,7 @@ def run_forecast(
     ]
     backtest = rolling_backtest(feat, MODEL_FACTORIES, origins, horizons)
     champion, champion_mase = select_champion(backtest.scores)
-    model = MODEL_FACTORIES[champion]().fit(feat)
+    model = MODEL_FACTORIES[champion]().fit(feat, horizons)
     latest = feat[(feat["week_start"] == origin) & (feat["member_id"].astype(int).isin(member_ids))]
     predicted_rows = []
     for week, h in zip((f1, f2), horizons, strict=True):
