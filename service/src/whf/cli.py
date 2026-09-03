@@ -39,7 +39,13 @@ def _conn(db: Path | None):
 
 
 def _date(value: str | None) -> dt.date | None:
-    return dt.date.fromisoformat(value) if value else None
+    if not value:
+        return None
+    try:
+        return dt.date.fromisoformat(value)
+    except ValueError:
+        typer.echo(f"error: invalid date {value!r}, expected YYYY-MM-DD")
+        raise typer.Exit(code=2) from None
 
 
 @app.callback()
@@ -157,7 +163,11 @@ def export(
     fmt: Annotated[str, typer.Option("--format")] = "csv",
 ) -> None:
     """Export a run's forecasts to CSV or JSON."""
-    payload = load_run(_conn(db), run_id)
+    try:
+        payload = load_run(_conn(db), run_id)
+    except KeyError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=1) from exc
     out.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "json":
         out.write_text(json.dumps(jsonable(payload), indent=1), encoding="utf-8")
@@ -191,14 +201,15 @@ def capacity_set(
     reason: Annotated[str | None, typer.Option("--reason")] = None,
 ) -> None:
     """Override a member's weekly capacity, permanently or for one week."""
+    week_date = _date(week).isoformat() if week else None
     conn = _conn(db)
     conn.execute(
         "INSERT INTO capacity_overrides (member_id, week_start, weekly_hours, reason) VALUES (?, ?, ?, ?)"
         " ON CONFLICT(member_id, week_start) DO UPDATE SET weekly_hours = excluded.weekly_hours, reason = excluded.reason",
-        (member, week, hours, reason),
+        (member, week_date, hours, reason),
     )
     conn.commit()
-    typer.echo(f"member {member}: {hours}h" + (f" for week {week}" if week else " permanently"))
+    typer.echo(f"member {member}: {hours}h" + (f" for week {week_date}" if week_date else " permanently"))
 
 
 @vacations_app.command("add")
@@ -210,12 +221,15 @@ def vacations_add(
     kind: Annotated[str, typer.Option("--type")] = "vacation",
 ) -> None:
     """Add planned time off for a member."""
+    start_date = _date(start).isoformat()
+    end_date = _date(end).isoformat()
     conn = _conn(db)
     conn.execute(
-        "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (?, ?, ?, ?)", (member, start, end, kind)
+        "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (?, ?, ?, ?)",
+        (member, start_date, end_date, kind),
     )
     conn.commit()
-    typer.echo(f"member {member}: {kind} {start} to {end}")
+    typer.echo(f"member {member}: {kind} {start_date} to {end_date}")
 
 
 @projects_app.command("add")

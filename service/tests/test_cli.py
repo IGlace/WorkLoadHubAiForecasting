@@ -99,3 +99,23 @@ def test_run_with_unknown_team_fails_cleanly(tmp_path) -> None:
     result = runner.invoke(app, ["run", "--db", str(db), "--team", "999", "--as-of", "2026-09-03"])
     assert result.exit_code == 1
     assert "no counted members" in result.output
+
+
+def test_export_unknown_run_fails_cleanly(tmp_path) -> None:
+    db = tmp_path / "t.db"
+    _generate(db)
+    out = tmp_path / "f.csv"
+    result = runner.invoke(app, ["export", "999", "--db", str(db), "--format", "csv", "--out", str(out)])
+    assert result.exit_code == 1
+    assert "not found" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_invalid_date_is_rejected_with_exit_code_2(tmp_path) -> None:
+    db = tmp_path / "t.db"
+    _generate(db)
+    result = runner.invoke(
+        app, ["vacations", "add", "--db", str(db), "--member", "2", "--start", "2026-13-40", "--end", "2026-09-25"]
+    )
+    assert result.exit_code == 2
+    assert "invalid date" in result.output
