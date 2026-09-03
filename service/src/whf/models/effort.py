@@ -51,14 +51,12 @@ class EffortModel:
         self._lateness_member: dict[int, float] = {}
         self._lateness_team: dict[int, float] = {}
         self._lateness_global = 0.0
-        self._team_of: dict[int, int] = {}
 
     def fit(self, done_tasks: pd.DataFrame) -> EffortModel:
         d = done_tasks.dropna(subset=["actual_hours", "completed_at"]).copy()
         d = d[d["estimated_hours"] > 0]
         d["ratio"] = d["actual_hours"] / d["estimated_hours"]
         d["cycle_days"] = [(c - a).days + 1 for a, c in zip(d["assigned_at"], d["completed_at"], strict=True)]
-        self._team_of = d.groupby("assignee_id")["team_id"].first().astype(int).to_dict()
         if len(d):
             self._ratio_global = float(d["ratio"].mean())
             self._cycle_global = float(d["cycle_days"].median())
@@ -150,24 +148,46 @@ def place_open_tasks(
     model: EffortModel,
     as_of: dt.date,
     off_by_member: dict[int, set[dt.date]],
+    *,
+    placement_start: dt.date | None = None,
 ) -> pd.DataFrame:
+    """Place each open task's remaining hours into weeks.
+
+    `as_of` drives elapsed time and the remaining-hours fraction. `placement_start`
+    (default `as_of`) is where hours actually start landing in the calendar — the
+    pipeline passes the first forecast week so hours in the current partial week are
+    not silently dropped. Every task gets a forward window of at least the member's
+    shrunken cycle days for its type, so an overdue task's remaining hours are spread
+    rather than collapsed onto a single day.
+
+    Elapsed time (and so the remaining-hours fraction) is measured from
+    `max(as_of, placement_start)`: when `placement_start` is left at its default
+    (`as_of`) this is exactly `as_of`, unchanged from before. When the pipeline moves
+    placement forward to the first forecast week, "remaining as of today" is measured
+    as of that same week so week-1 demand for already-open tasks does not itself swing
+    with the weekday the run happens to fall on.
+    """
     if len(open_tasks) == 0:
         return pd.DataFrame(columns=["member_id", "week_start", "hours"])
+    start_floor = placement_start if placement_start is not None else as_of
+    elapsed_reference = max(as_of, start_floor)
     cycles = model.predict_cycle_days(open_tasks)
     rows: list[dict] = []
     for (_, task), cycle in zip(open_tasks.iterrows(), cycles, strict=True):
         member = int(task["assignee_id"])
         team = int(task["team_id"])
         predicted_actual = float(task["estimated_hours"]) * model.estimate_ratio(member, str(task["type"]), team)
-        elapsed = max(0, (as_of - task["assigned_at"]).days)
+        elapsed = max(0, (elapsed_reference - task["assigned_at"]).days)
         remaining_fraction = float(np.clip(1.0 - elapsed / max(cycle, 1.0), MIN_REMAINING_FRACTION, 1.0))
         remaining = predicted_actual * remaining_fraction
+        start = max(start_floor, task["assigned_at"])
+        min_end = start + dt.timedelta(days=max(int(round(cycle)) - 1, 0))
         if pd.notna(task.get("due_date")):
             lateness = model.member_lateness_days(member, team)
-            end = max(as_of, task["due_date"] + dt.timedelta(days=int(round(lateness))))
+            end = max(min_end, task["due_date"] + dt.timedelta(days=int(round(lateness))))
         else:
-            end = max(as_of, task["assigned_at"] + dt.timedelta(days=int(round(cycle))))
-        for ws, hours in place_hours(remaining, as_of, end, off_by_member.get(member, set())).items():
+            end = max(min_end, task["assigned_at"] + dt.timedelta(days=int(round(cycle))))
+        for ws, hours in place_hours(remaining, start, end, off_by_member.get(member, set())).items():
             rows.append({"member_id": member, "week_start": ws, "hours": hours})
     out = pd.DataFrame(rows)
     return out.groupby(["member_id", "week_start"], as_index=False)["hours"].sum()

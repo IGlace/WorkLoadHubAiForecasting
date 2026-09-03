@@ -21,7 +21,7 @@ def test_run_forecast_produces_two_weeks_per_counted_member(db, generated) -> No
     assert set(result.forecasts["week_start"]) == {f1, f2}
     f = result.forecasts
     assert (f["demand_hours"] >= 0).all() and (f["capacity_hours"] <= 40.0 + 1e-9).all()
-    assert (f["overload_hours"] == (f["demand_hours"] - f["capacity_hours"]).clip(lower=0)).all()
+    assert (abs(f["overload_hours"] - (f["demand_hours"] - f["capacity_hours"]).clip(lower=0)) < 1e-6).all()
     assert (f["demand_low"] <= f["demand_hours"] + 1e-9).all() and (f["demand_high"] >= f["demand_hours"] - 1e-9).all()
     assert (abs(f["demand_hours"] - (f["open_task_hours"] + f["new_task_hours"])) < 1e-6).all()
     assert result.champion in {"seasonal_naive", "tsb", "gbm"}
@@ -72,6 +72,37 @@ def test_capacity_override_applies(db, generated) -> None:
     rows = result.forecasts[result.forecasts.member_id == member].set_index("week_start")
     assert rows.loc[f2, "capacity_hours"] <= 20.0
     assert rows.loc[f1, "capacity_hours"] > 20.0
+
+
+def test_week_one_demand_is_stable_across_run_weekdays(db, generated) -> None:
+    # Tuesday, Thursday, Friday and Monday all forecast the same two weeks (2026-09-07, 2026-09-14).
+    run_dates = [dt.date(2026, 9, 1), dt.date(2026, 9, 3), dt.date(2026, 9, 4), dt.date(2026, 9, 7)]
+    f1, f2 = dt.date(2026, 9, 7), dt.date(2026, 9, 14)
+    results = [run_forecast(db, team_id=1, as_of=d) for d in run_dates]
+    for result in results:
+        assert result.weeks == (f1, f2)
+
+    week1_open = [
+        result.forecasts[result.forecasts.week_start == f1].set_index("member_id")["open_task_hours"].sort_index()
+        for result in results
+    ]
+    for other in week1_open[1:]:
+        pd.testing.assert_series_equal(other, week1_open[0], check_exact=True)
+
+    week1_demand = [
+        result.forecasts[result.forecasts.week_start == f1].set_index("member_id")["demand_hours"].sort_index()
+        for result in results
+    ]
+    base = week1_demand[0]
+    for other in week1_demand[1:]:
+        denominator = pd.concat([base, other], axis=1).max(axis=1).clip(lower=1.0)
+        relative_diff = (other - base).abs() / denominator
+        assert (relative_diff < 0.35).all()
+
+    facts = json.loads(read_df(db, "SELECT json FROM run_facts WHERE run_id = ?", (results[0].run_id,))["json"][0])
+    assert facts["model"]["limitations"] == (
+        "arrivals during the current partial week are not modelled; open tasks are placed from the first forecast week"
+    )
 
 
 def test_jsonable_converts_dates_and_numpy() -> None:

@@ -1,3 +1,4 @@
+import copy
 import datetime as dt
 
 import numpy as np
@@ -147,12 +148,46 @@ def test_cycle_shrinkage_blends_member_and_team(_model: EffortModel) -> None:
     team_cycle = model.member_cycle_days(999, 1)  # unknown member uses team
     assert m1_cycle < team_cycle
     assert m1_cycle > 1.0  # floor
+    # the shrunk value is a genuine blend: strictly between the member's raw median and the team prior,
+    # not equal to either endpoint
+    n, member_median = model._cycle_member[1]
+    assert n > 0
+    assert member_median < m1_cycle < team_cycle
+
+
+def test_overdue_task_spreads_over_its_cycle(_model: EffortModel) -> None:
+    model = _model
+    as_of = dt.date(2026, 9, 3)
+    assigned_at = as_of - dt.timedelta(days=60)
+    due_date = as_of - dt.timedelta(days=50)
+    open_tasks = pd.DataFrame(
+        [
+            {
+                "id": 1,
+                "assignee_id": 3,  # member 3 has a ~12-day cycle for "feature"
+                "team_id": 1,
+                "type": "feature",
+                "priority": "medium",
+                "estimated_hours": 40.0,
+                "assigned_at": assigned_at,
+                "due_date": due_date,
+            },
+        ]
+    )
+    placed = place_open_tasks(open_tasks, model, as_of, {})
+    cycle = float(model.predict_cycle_days(open_tasks)[0])
+    assert cycle == pytest.approx(12.0, abs=4.0)
+    predicted_actual = 40.0 * model.estimate_ratio(3, "feature", 1)
+    elapsed = max(0, (as_of - assigned_at).days)
+    remaining_fraction = float(np.clip(1.0 - elapsed / max(cycle, 1.0), MIN_REMAINING_FRACTION, 1.0))
+    remaining = predicted_actual * remaining_fraction
+    assert placed["week_start"].nunique() >= 2
+    assert abs(float(placed["hours"].sum()) - remaining) < 1e-6
 
 
 def test_place_open_tasks_shifts_by_lateness(_model: EffortModel) -> None:
     model = _model
     as_of = dt.date(2026, 9, 3)
-    # Member 2 is typically on-time; task due soon but estimated work spreads past due
     open_tasks = pd.DataFrame(
         [
             {
@@ -163,12 +198,22 @@ def test_place_open_tasks_shifts_by_lateness(_model: EffortModel) -> None:
                 "priority": "medium",
                 "estimated_hours": 12.0,
                 "assigned_at": dt.date(2026, 9, 1),
-                "due_date": dt.date(2026, 9, 5),
+                "due_date": dt.date(2026, 9, 20),  # a Sunday, far past the member's cycle window
             },
         ]
     )
     placed = place_open_tasks(open_tasks, model, as_of, {})
     assert placed["hours"].sum() > 0
+    lateness = model.member_lateness_days(2, 1)
+    assert lateness > 0  # the fixture must actually exercise the shift
+
+    zero_lateness_model = copy.copy(model)
+    zero_lateness_model._lateness_member = {}
+    zero_lateness_model._lateness_team = {}
+    zero_lateness_model._lateness_global = 0.0
+    placed_no_shift = place_open_tasks(open_tasks, zero_lateness_model, as_of, {})
+
+    assert placed["week_start"].max() > placed_no_shift["week_start"].max()
 
 
 @settings(max_examples=50, deadline=None)

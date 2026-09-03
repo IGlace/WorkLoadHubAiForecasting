@@ -159,7 +159,7 @@ def run_forecast(
     done = tasks.dropna(subset=["completed_at", "actual_hours"])
     effort = EffortModel().fit(done)
     open_tasks = tasks[(tasks["completed_at"].isna()) & (tasks["assignee_id"].isin(member_ids))]
-    open_placed = place_open_tasks(open_tasks, effort, as_of, off_by_member)
+    open_placed = place_open_tasks(open_tasks, effort, as_of, off_by_member, placement_start=f1)
     team_of = {int(m): int(t) for m, t in zip(members["id"], members["team_id"].fillna(0), strict=True)}
     new_placed = place_new_arrivals(predicted[["member_id", "week_start", "est_hours"]], effort, off_by_member, team_of)
     capacity = _capacity_rows(frames, member_ids, (f1, f2), off_by_member)
@@ -378,6 +378,10 @@ def _build_facts(
             "mase_by_model": mase_by_model,
             "backtest_origins": origins,
             "horizons": list(horizons),
+            "limitations": (
+                "arrivals during the current partial week are not modelled; "
+                "open tasks are placed from the first forecast week"
+            ),
         },
         "rebalancing_candidates": {"overloaded": overloaded, "underloaded": underloaded},
     }
