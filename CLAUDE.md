@@ -55,8 +55,7 @@ at the end. Upstream names `superpowers:<name>` map to plain `<name>` here.
 External skills: `copilot-sdk` (Copilot SDK usage), `pydantic-models-py`,
 `modern-python`, `property-based-testing`. Index and licenses in `.claude/skills/README.md`.
 
-Product skills `whf-*` are shipped to the Copilot agent inside the product and are
-also loaded by Claude Code; keep them factual, short and specific to this domain.
+Product skills `whf-*` live in `service/src/whf/ai/skills/` and are shipped inside the service; the Copilot session loads them through `skill_directories`. Edit them there; keep them factual, short and specific to this domain.
 
 Subagents in `.claude/agents/` (VoltAgent selection): python-pro, typescript-pro,
 electron-pro, react-specialist, cli-developer, data-scientist, data-engineer,

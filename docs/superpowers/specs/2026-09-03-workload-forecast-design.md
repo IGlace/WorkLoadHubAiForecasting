@@ -200,9 +200,7 @@ rows and features for the same pipeline, which is the feedback loop the owner wa
   (how to explain demand, capacity, overload, intervals, champion model, backtest
   score), `whf-rebalancing-advice` (rules for suggesting moves: same team first,
   matching task types, respect capacity, prefer under-loaded members), `whf-report-style`
-  (tone, length, language, structure). They live in `.claude/skills/whf-*` in the
-  repository, so Claude Code and Copilot CLI read them during development, and the
-  service build copies them into the bundle.
+  (tone, length, language, structure). (Implementation note, 2026-09-03: the skills live in `service/src/whf/ai/skills/` and are loaded through the SDK's `skill_directories`; the `.claude/skills/whf-*` location was dropped to keep one source of truth.)
 - **Output**: strict JSON validated with Pydantic: run summary; per member the
   discovered patterns with evidence, a short narrative, a risk level and warnings;
   team-level risks; rebalancing suggestions (from member, to member, hours, week,
@@ -292,3 +290,4 @@ scripts/        PowerShell and shell helpers for dev, build, package
 | One year of weekly data is short for seasonality | Seasonal naive falls back to recent mean; the gradient boosting model uses calendar features; backtest decides |
 | Weekly hours cannot be validated on real data without time logs | Dummy data has a hidden effort log; on real data, evaluation later compares arrivals and completions, which are observable |
 | Frozen service size and start time | One-folder PyInstaller mode, lazy imports, health check with a splash screen |
+| The Copilot SDK downloads the CLI on first use into the user's cache | The packaging plan pre-downloads the pinned CLI version and sets `COPILOT_CLI_PATH`; `whf copilot status` reports where the CLI was found |

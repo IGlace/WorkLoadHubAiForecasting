@@ -21,3 +21,14 @@ uv run whf runs list ; uv run whf runs show 1 --json
 uv run whf export 1 --format csv --out forecast.csv
 uv run whf serve                         # prints {"port": ..., "token": ...} then serves on 127.0.0.1
 ```
+
+## Copilot narrative
+
+```powershell
+uv run whf copilot status          # where the CLI is and whether you are signed in (exit 3 if not ready)
+uv run whf copilot login           # device-flow sign-in in this terminal
+uv run whf run --team 1 --ai       # forecast, then ask Copilot for the narrative
+uv run whf narrate 1               # narrate an existing run; --json prints the stored document
+```
+
+The narrative is stored with the run (`run_narratives`) and `runs.ai_status` records `ok`, `unverified` (a number in the text is not in the facts) or `failed:<reason>`. Set `WHF_COPILOT_LIVE=1` to run the one live test.

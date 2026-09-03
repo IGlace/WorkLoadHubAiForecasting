@@ -57,9 +57,8 @@ Each directory carries its upstream LICENSE file. These were selected from the
 [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills)
 index, which is a list of links rather than a collection of files.
 
-## Product skills (to be written)
+## Product skills
 
-Skills prefixed `whf-` are shipped inside the product for the Copilot agent and
-are also read by Claude Code during development: `whf-domain`,
-`whf-pattern-discovery`, `whf-forecast-interpretation`, `whf-rebalancing-advice`,
-`whf-report-style`. See the design spec, section 6.
+Skills prefixed `whf-` live in `service/src/whf/ai/skills/` (one source of truth).
+The Copilot session loads them through `skill_directories`; they are shipped inside
+the service bundle. See the design spec, section 6.
