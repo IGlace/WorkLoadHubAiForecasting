@@ -43,3 +43,23 @@ cp /tmp/superpowers/LICENSE .claude/skills/SUPERPOWERS-LICENSE
 ```
 
 Then update the version line above.
+
+## External skills (vendored)
+
+| Skill | Source | License | Used for |
+|-------|--------|---------|----------|
+| copilot-sdk | [microsoft/skills](https://github.com/microsoft/skills) `.github/skills/copilot-sdk`, commit `c6dec4a` | MIT | Copilot SDK sessions, custom tools, agents, skills |
+| pydantic-models-py | [microsoft/skills](https://github.com/microsoft/skills) `.github/plugins/azure-sdk-python/skills/pydantic-models-py`, commit `c6dec4a` | MIT | API and data schemas in the service |
+| modern-python | [trailofbits/skills](https://github.com/trailofbits/skills) `plugins/modern-python`, commit `d3323ce` | CC BY-SA 4.0 | uv, ruff, ty, pytest project setup |
+| property-based-testing | [trailofbits/skills](https://github.com/trailofbits/skills) `plugins/property-based-testing`, commit `d3323ce` | CC BY-SA 4.0 | Hypothesis tests for capacity, placement and generator invariants |
+
+Each directory carries its upstream LICENSE file. These were selected from the
+[VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills)
+index, which is a list of links rather than a collection of files.
+
+## Product skills (to be written)
+
+Skills prefixed `whf-` are shipped inside the product for the Copilot agent and
+are also read by Claude Code during development: `whf-domain`,
+`whf-pattern-discovery`, `whf-forecast-interpretation`, `whf-rebalancing-advice`,
+`whf-report-style`. See the design spec, section 6.
