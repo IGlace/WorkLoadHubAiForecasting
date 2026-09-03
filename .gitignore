@@ -7,3 +7,13 @@
 
 # OS / editor
 .DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+service/dist/
+service/build/
