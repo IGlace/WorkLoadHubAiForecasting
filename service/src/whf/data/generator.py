@@ -7,11 +7,11 @@ Part B (next task): day-by-day task arrival and effort simulation, answer key.
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
-from whf.calendar import ONE_DAY, ONE_WEEK, week_start
+from whf.calendar import ONE_DAY, ONE_WEEK, days_in_ranges, morocco_holidays, week_start
 
 TASK_TYPES = ("feature", "bug", "support", "analysis", "maintenance")
 TYPE_PROBS = (0.30, 0.25, 0.20, 0.15, 0.10)
@@ -324,5 +324,208 @@ def build_vacations(rng: np.random.Generator, org: Org, config: GeneratorConfig)
     return vacations
 
 
-def _unused() -> None:  # keeps ONE_DAY imported for part B; removed in Task 6
-    _ = ONE_DAY
+@dataclass
+class GeneratedData:
+    config: GeneratorConfig
+    departments: list[dict]
+    teams: list[dict]
+    members: list[dict]
+    projects: list[dict]
+    project_teams: list[dict]
+    vacations: list[dict]
+    holidays: list[dict]
+    tasks: list[dict]
+    answer_key: dict
+
+
+def _vacation_days(vacations: list[dict]) -> dict[int, set[dt.date]]:
+    out: dict[int, set[dt.date]] = {}
+    for v in vacations:
+        out.setdefault(v["member_id"], set()).update(days_in_ranges([(v["start_date"], v["end_date"])]))
+    return out
+
+
+def _new_task(
+    rng: np.random.Generator,
+    task_id: int,
+    day: dt.date,
+    member: dict,
+    profile: MemberProfile,
+    mode: str,
+    team_projects: list[dict],
+    intensity: dict[int, float],
+    team_leader_id: int | None,
+) -> tuple[dict, float]:
+    task_type = str(rng.choice(TASK_TYPES, p=TYPE_PROBS))
+    estimated = float(np.clip(np.exp(rng.normal(np.log(TYPE_BASE_HOURS[task_type]), 0.4)), 1.0, 40.0))
+    project = None
+    if team_projects:
+        weights = np.array([intensity[p["id"]] + 0.1 for p in team_projects])
+        project = team_projects[int(rng.choice(len(team_projects), p=weights / weights.sum()))]
+    cycle_days = TYPE_BASE_CYCLE_DAYS[task_type] * profile.cycle_factor * float(np.exp(rng.normal(0.0, 0.3)))
+    actual_total = estimated * profile.est_bias * float(np.exp(rng.normal(0.0, 0.15)))
+    task = {
+        "id": task_id,
+        "title": f"{task_type.title()} task {task_id}",
+        "project_id": project["id"] if project else None,
+        "assignee_id": member["id"],
+        "team_id": member["team_id"],
+        "type": task_type,
+        "priority": str(rng.choice(PRIORITIES, p=PRIORITY_PROBS)),
+        "status": "todo",
+        "created_at": day,
+        "assigned_at": day,
+        "due_date": day + dt.timedelta(days=max(1, int(round(cycle_days)))),
+        "completed_at": None,
+        "estimated_hours": round(estimated, 1),
+        "actual_hours": None,
+        "created_by": team_leader_id if mode == "manual" else member["id"],
+        "assignment_mode": mode,
+    }
+    return task, actual_total
+
+
+def simulate_tasks(
+    rng: np.random.Generator,
+    org: Org,
+    projects: list[dict],
+    project_teams: list[dict],
+    curves: dict[int, ProjectCurve],
+    vacations: list[dict],
+    off: set[dt.date],
+    config: GeneratorConfig,
+) -> tuple[list[dict], list[dict]]:
+    """Day-by-day arrivals and effort. Returns (tasks, effort_log rows)."""
+    start = history_start(config)
+    projects_by_team: dict[int, list[dict]] = {t["id"]: [] for t in org.teams}
+    for p, pt in zip(projects, project_teams, strict=True):
+        projects_by_team[pt["team_id"]].append(p)
+    leader_by_team = {t["id"]: t["team_leader_id"] for t in org.teams}
+    vac_days = _vacation_days(vacations)
+    workers = [m for m in org.members if m["counted_in_workload"]]
+    tasks: list[dict] = []
+    remaining: dict[int, float] = {}
+    actual_total: dict[int, float] = {}
+    open_by_member: dict[int, list[dict]] = {m["id"]: [] for m in workers}
+    effort_log: list[dict] = []
+    task_id = 0
+    day = start
+    while day <= config.as_of:
+        is_working_day = day.weekday() < 5 and day not in off
+        for member in workers:
+            profile = org.profiles[member["id"]]
+            if not is_working_day or day in vac_days.get(member["id"], set()):
+                continue
+            team_projects = [p for p in projects_by_team[member["team_id"]] if p["start_date"] <= day <= p["deadline"]]
+            intensity = {
+                p["id"]: phase_intensity(day, p["start_date"], p["deadline"], curves[p["id"]]) for p in team_projects
+            }
+            project_factor = (0.6 + 0.4 * float(np.mean(list(intensity.values())))) if intensity else 0.7
+            rate = (
+                profile.base_rate / 5.0 * profile.weekday_weights[day.weekday()] * seasonal_factor(day) * project_factor
+            )
+            lam = rng.gamma(1.0 / profile.dispersion, rate * profile.dispersion)
+            for _ in range(int(rng.poisson(lam))):
+                mode = str(rng.choice(ASSIGNMENT_MODES, p=[profile.style[m] for m in ASSIGNMENT_MODES]))
+                if mode == "manual" and day.weekday() > 1 and rng.random() < 0.6:
+                    continue  # manual assignments cluster on Monday and Tuesday
+                task_id += 1
+                task, total = _new_task(
+                    rng,
+                    task_id,
+                    day,
+                    member,
+                    profile,
+                    mode,
+                    team_projects,
+                    intensity,
+                    leader_by_team[member["team_id"]],
+                )
+                tasks.append(task)
+                remaining[task_id] = total
+                actual_total[task_id] = total
+                open_by_member[member["id"]].append(task)
+            budget = 8.0
+            queue = sorted(open_by_member[member["id"]], key=lambda t: (t["due_date"], t["priority"] != "high"))
+            for task in queue:
+                if budget <= 1e-9:
+                    break
+                spend = min(budget, remaining[task["id"]], 6.0)
+                remaining[task["id"]] -= spend
+                budget -= spend
+                task["status"] = "in_progress"
+                effort_log.append(
+                    {"member_id": member["id"], "date": day, "task_id": task["id"], "hours": round(spend, 2)}
+                )
+                if remaining[task["id"]] <= 1e-9:
+                    task["status"] = "done"
+                    task["completed_at"] = day
+                    task["actual_hours"] = round(actual_total[task["id"]], 1)
+            open_by_member[member["id"]] = [t for t in open_by_member[member["id"]] if t["status"] != "done"]
+        day += ONE_DAY
+    return tasks, effort_log
+
+
+def generate(config: GeneratorConfig = GeneratorConfig()) -> GeneratedData:
+    rng = np.random.default_rng(config.seed)
+    org = build_org(rng)
+    projects, project_teams, curves = build_projects(rng, org, config)
+    vacations = build_vacations(rng, org, config)
+    start = history_start(config)
+    horizon_end = config.as_of + dt.timedelta(days=config.horizon_days)
+    holiday_map = morocco_holidays(range(start.year, horizon_end.year + 1))
+    holidays_rows = [{"date": d, "name": n, "country": "MA"} for d, n in sorted(holiday_map.items())]
+    tasks, effort_log = simulate_tasks(rng, org, projects, project_teams, curves, vacations, set(holiday_map), config)
+    weekly: dict[tuple[int, dt.date], float] = {}
+    for row in effort_log:
+        key = (row["member_id"], week_start(row["date"]))
+        weekly[key] = weekly.get(key, 0.0) + row["hours"]
+    answer_key = {
+        "profiles": {str(k): asdict(v) for k, v in org.profiles.items()},
+        "curves": {str(k): asdict(v) for k, v in curves.items()},
+        "effort_log": [{**r, "date": r["date"].isoformat()} for r in effort_log],
+        "effort_by_member_week": [
+            {"member_id": m, "week_start": w.isoformat(), "hours": round(h, 2)} for (m, w), h in sorted(weekly.items())
+        ],
+    }
+    return GeneratedData(
+        config=config,
+        departments=org.departments,
+        teams=org.teams,
+        members=org.members,
+        projects=projects,
+        project_teams=project_teams,
+        vacations=vacations,
+        holidays=holidays_rows,
+        tasks=tasks,
+        answer_key=answer_key,
+    )
+
+
+def truncate_to(data: GeneratedData, as_of: dt.date) -> GeneratedData:
+    """A copy of `data` as the database would have looked on `as_of`."""
+    tasks: list[dict] = []
+    for t in data.tasks:
+        if t["assigned_at"] > as_of:
+            continue
+        t2 = dict(t)
+        if t2["completed_at"] is not None and t2["completed_at"] > as_of:
+            t2["completed_at"] = None
+            t2["actual_hours"] = None
+            t2["status"] = "in_progress"
+        tasks.append(t2)
+    config = GeneratorConfig(
+        seed=data.config.seed, months=data.config.months, as_of=as_of, horizon_days=data.config.horizon_days
+    )
+    return GeneratedData(
+        config=config,
+        departments=data.departments,
+        teams=data.teams,
+        members=data.members,
+        projects=data.projects,
+        project_teams=data.project_teams,
+        vacations=data.vacations,
+        holidays=data.holidays,
+        tasks=tasks,
+        answer_key=data.answer_key,
+    )
