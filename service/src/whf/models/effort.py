@@ -43,11 +43,14 @@ class EffortModel:
         self._ratio_team_type: dict[tuple[int, str], float] = {}
         self._ratio_team: dict[int, float] = {}
         self._ratio_global = 1.0
-        self._cycle_member: dict[int, float] = {}
-        self._cycle_member_type: dict[tuple[int, str], float] = {}
+        self._cycle_member: dict[int, tuple[int, float]] = {}
+        self._cycle_member_type: dict[tuple[int, str], tuple[int, float]] = {}
         self._cycle_team_type: dict[tuple[int, str], float] = {}
         self._cycle_team: dict[int, float] = {}
         self._cycle_global = 5.0
+        self._lateness_member: dict[int, float] = {}
+        self._lateness_team: dict[int, float] = {}
+        self._lateness_global = 0.0
         self._team_of: dict[int, int] = {}
 
     def fit(self, done_tasks: pd.DataFrame) -> EffortModel:
@@ -61,16 +64,27 @@ class EffortModel:
             self._cycle_global = float(d["cycle_days"].median())
         for (m, t), g in d.groupby(["assignee_id", "type"]):
             self._ratio_member_type[(int(m), str(t))] = (len(g), float(g["ratio"].mean()))
-            self._cycle_member_type[(int(m), str(t))] = float(g["cycle_days"].median())
+            self._cycle_member_type[(int(m), str(t))] = (len(g), float(g["cycle_days"].median()))
         for m, g in d.groupby("assignee_id"):
             self._ratio_member[int(m)] = (len(g), float(g["ratio"].mean()))
-            self._cycle_member[int(m)] = float(g["cycle_days"].median())
+            self._cycle_member[int(m)] = (len(g), float(g["cycle_days"].median()))
         for (team, t), g in d.groupby(["team_id", "type"]):
             self._ratio_team_type[(int(team), str(t))] = float(g["ratio"].mean())
             self._cycle_team_type[(int(team), str(t))] = float(g["cycle_days"].median())
         for team, g in d.groupby("team_id"):
             self._ratio_team[int(team)] = float(g["ratio"].mean())
             self._cycle_team[int(team)] = float(g["cycle_days"].median())
+        if "due_date" in d.columns:
+            d_with_due = d.dropna(subset=["due_date"])
+            d_with_due["lateness_days"] = [
+                (c - due).days for c, due in zip(d_with_due["completed_at"], d_with_due["due_date"], strict=True)
+            ]
+            if len(d_with_due):
+                self._lateness_global = float(d_with_due["lateness_days"].median())
+                for m, g in d_with_due.groupby("assignee_id"):
+                    self._lateness_member[int(m)] = float(g["lateness_days"].median())
+                for team, g in d_with_due.groupby("team_id"):
+                    self._lateness_team[int(team)] = float(g["lateness_days"].median())
         if len(d) >= self.min_rows_for_gbm:
             x = self._cycle_frame(d)
             self._gbm = HistGradientBoostingRegressor(
@@ -90,6 +104,9 @@ class EffortModel:
         x["assignee_id"] = x["assignee_id"].astype(int).astype("category")
         return x
 
+    def _shrunk_cycle(self, n: int, median: float, prior: float) -> float:
+        return _shrunk_mean(n, median, prior, self.shrink_k)
+
     def estimate_ratio(self, member_id: int, task_type: str | None, team_id: int) -> float:
         team_prior = self._ratio_team.get(team_id, self._ratio_global)
         if task_type is not None:
@@ -101,13 +118,17 @@ class EffortModel:
         return float(np.clip(_shrunk_mean(n, mean, prior, self.shrink_k), RATIO_MIN, RATIO_MAX))
 
     def member_cycle_days(self, member_id: int, team_id: int) -> float:
-        return self._cycle_member.get(member_id, self._cycle_team.get(team_id, self._cycle_global))
+        prior = self._cycle_team.get(team_id, self._cycle_global)
+        n, median = self._cycle_member.get(member_id, (0, prior))
+        return max(1.0, self._shrunk_cycle(n, median, prior))
+
+    def member_lateness_days(self, member_id: int, team_id: int) -> float:
+        return self._lateness_member.get(member_id, self._lateness_team.get(team_id, self._lateness_global))
 
     def _fallback_cycle(self, member_id: int, task_type: str, team_id: int) -> float:
-        return self._cycle_member_type.get(
-            (member_id, task_type),
-            self._cycle_team_type.get((team_id, task_type), self.member_cycle_days(member_id, team_id)),
-        )
+        prior = self._cycle_team_type.get((team_id, task_type), self.member_cycle_days(member_id, team_id))
+        n, median = self._cycle_member_type.get((member_id, task_type), (0, prior))
+        return max(1.0, self._shrunk_cycle(n, median, prior))
 
     def predict_cycle_days(self, tasks: pd.DataFrame) -> np.ndarray:
         fallback = np.array(
@@ -141,7 +162,11 @@ def place_open_tasks(
         elapsed = max(0, (as_of - task["assigned_at"]).days)
         remaining_fraction = float(np.clip(1.0 - elapsed / max(cycle, 1.0), MIN_REMAINING_FRACTION, 1.0))
         remaining = predicted_actual * remaining_fraction
-        end = max(as_of, task["assigned_at"] + dt.timedelta(days=int(round(cycle))))
+        if pd.notna(task.get("due_date")):
+            lateness = model.member_lateness_days(member, team)
+            end = max(as_of, task["due_date"] + dt.timedelta(days=int(round(lateness))))
+        else:
+            end = max(as_of, task["assigned_at"] + dt.timedelta(days=int(round(cycle))))
         for ws, hours in place_hours(remaining, as_of, end, off_by_member.get(member, set())).items():
             rows.append({"member_id": member, "week_start": ws, "hours": hours})
     out = pd.DataFrame(rows)
