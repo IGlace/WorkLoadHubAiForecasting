@@ -26,6 +26,12 @@ def test_health_is_public_and_others_need_token(client) -> None:
     assert client.get("/health").json()["status"] == "ok"
     assert client.get("/meta").status_code == 401
     assert client.get("/meta", headers={"X-WHF-Token": "wrong"}).status_code == 401
+    assert (
+        client.post(
+            "/vacations", json={"member_id": 1, "start_date": "2026-09-21", "end_date": "2026-09-23"}
+        ).status_code
+        == 401
+    )
     meta = client.get("/meta", headers=_h()).json()
     assert len(meta["departments"]) == 3 and meta["capacity_default"] == 40.0
     assert {"id", "name", "team_id", "role"} <= set(meta["members"][0])
@@ -74,6 +80,11 @@ def test_projects_capacity_and_vacations(client) -> None:
     )
     cap = client.get("/capacity", headers=_h()).json()
     assert cap["default_weekly_hours"] == 36.0 and cap["overrides"][0]["member_id"] == 2
+    client.put("/capacity/overrides", json={"member_id": 3, "week_start": None, "weekly_hours": 20}, headers=_h())
+    client.put("/capacity/overrides", json={"member_id": 3, "week_start": None, "weekly_hours": 24}, headers=_h())
+    cap2 = client.get("/capacity", headers=_h()).json()
+    permanent_for_3 = [o for o in cap2["overrides"] if o["member_id"] == 3 and o["week_start"] is None]
+    assert len(permanent_for_3) == 1 and permanent_for_3[0]["weekly_hours"] == 24.0
     vac = client.post(
         "/vacations", json={"member_id": 2, "start_date": "2026-09-21", "end_date": "2026-09-23"}, headers=_h()
     )

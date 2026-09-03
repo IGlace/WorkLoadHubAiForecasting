@@ -184,9 +184,9 @@ def export(
 @capacity_app.command("default")
 def capacity_default(hours: Annotated[float, typer.Option("--hours")], db: DbOption = None) -> None:
     """Set the default weekly capacity for everyone."""
-    conn = _conn(db)
-    conn.execute("UPDATE capacity_defaults SET weekly_hours = ? WHERE id = 1", (hours,))
-    conn.commit()
+    from whf.admin import set_capacity_default
+
+    set_capacity_default(_conn(db), hours)
     typer.echo(f"default weekly capacity set to {hours}h")
 
 
@@ -201,15 +201,12 @@ def capacity_set(
     reason: Annotated[str | None, typer.Option("--reason")] = None,
 ) -> None:
     """Override a member's weekly capacity, permanently or for one week."""
-    week_date = _date(week).isoformat() if week else None
-    conn = _conn(db)
-    conn.execute(
-        "INSERT INTO capacity_overrides (member_id, week_start, weekly_hours, reason) VALUES (?, ?, ?, ?)"
-        " ON CONFLICT(member_id, week_start) DO UPDATE SET weekly_hours = excluded.weekly_hours, reason = excluded.reason",
-        (member, week_date, hours, reason),
-    )
-    conn.commit()
-    typer.echo(f"member {member}: {hours}h" + (f" for week {week_date}" if week_date else " permanently"))
+    from whf.admin import set_capacity_override
+
+    week_date = _date(week)
+    set_capacity_override(_conn(db), member, hours, week_date, reason)
+    week_iso = week_date.isoformat() if week_date else None
+    typer.echo(f"member {member}: {hours}h" + (f" for week {week_iso}" if week_iso else " permanently"))
 
 
 @vacations_app.command("add")
@@ -221,15 +218,12 @@ def vacations_add(
     kind: Annotated[str, typer.Option("--type")] = "vacation",
 ) -> None:
     """Add planned time off for a member."""
-    start_date = _date(start).isoformat()
-    end_date = _date(end).isoformat()
-    conn = _conn(db)
-    conn.execute(
-        "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (?, ?, ?, ?)",
-        (member, start_date, end_date, kind),
-    )
-    conn.commit()
-    typer.echo(f"member {member}: {kind} {start_date} to {end_date}")
+    from whf.admin import add_vacation
+
+    start_date = _date(start)
+    end_date = _date(end)
+    add_vacation(_conn(db), member, start_date, end_date, kind)
+    typer.echo(f"member {member}: {kind} {start_date.isoformat()} to {end_date.isoformat()}")
 
 
 @projects_app.command("add")
@@ -244,17 +238,13 @@ def projects_add(
     created_by: Annotated[int | None, typer.Option("--created-by")] = None,
 ) -> None:
     """Create a project with a start date, a deadline and its teams."""
-    if _date(deadline) <= _date(start):
-        typer.echo("error: deadline must be after start")
-        raise typer.Exit(code=2)
-    conn = _conn(db)
-    cur = conn.execute(
-        "INSERT INTO projects (name, department_id, start_date, deadline, type, status, created_by) VALUES (?, ?, ?, ?, ?, 'planned', ?)",
-        (name, department, start, deadline, kind, created_by),
-    )
-    project_id = cur.lastrowid
-    conn.executemany("INSERT INTO project_teams (project_id, team_id) VALUES (?, ?)", [(project_id, t) for t in team])
-    conn.commit()
+    from whf.admin import add_project
+
+    try:
+        project_id = add_project(_conn(db), name, department, _date(start), _date(deadline), team, kind, created_by)
+    except ValueError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=2) from exc
     typer.echo(f"project {project_id} '{name}' {start} to {deadline} for teams {team}")
 
 

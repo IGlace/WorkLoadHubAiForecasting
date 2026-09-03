@@ -144,22 +144,18 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
 
     @app.post("/projects", dependencies=guarded)
     def post_project(body: ProjectCreate, conn: sqlite3.Connection = Depends(db)) -> dict:
-        cur = conn.execute(
-            "INSERT INTO projects (name, department_id, start_date, deadline, type, status, created_by) VALUES (?, ?, ?, ?, ?, 'planned', ?)",
-            (
-                body.name,
-                body.department_id,
-                body.start_date.isoformat(),
-                body.deadline.isoformat(),
-                body.type,
-                body.created_by,
-            ),
+        from whf.admin import add_project
+
+        project_id = add_project(
+            conn,
+            body.name,
+            body.department_id,
+            body.start_date,
+            body.deadline,
+            body.team_ids,
+            body.type,
+            body.created_by,
         )
-        project_id = int(cur.lastrowid)
-        conn.executemany(
-            "INSERT INTO project_teams (project_id, team_id) VALUES (?, ?)", [(project_id, t) for t in body.team_ids]
-        )
-        conn.commit()
         return {"id": project_id}
 
     @app.get("/capacity", dependencies=guarded)
@@ -177,18 +173,16 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
 
     @app.put("/capacity/default", dependencies=guarded)
     def put_capacity_default(body: CapacityDefault, conn: sqlite3.Connection = Depends(db)) -> dict:
-        conn.execute("UPDATE capacity_defaults SET weekly_hours = ? WHERE id = 1", (body.weekly_hours,))
-        conn.commit()
+        from whf.admin import set_capacity_default
+
+        set_capacity_default(conn, body.weekly_hours)
         return {"default_weekly_hours": body.weekly_hours}
 
     @app.put("/capacity/overrides", dependencies=guarded)
     def put_capacity_override(body: CapacityOverride, conn: sqlite3.Connection = Depends(db)) -> dict:
-        conn.execute(
-            "INSERT INTO capacity_overrides (member_id, week_start, weekly_hours, reason) VALUES (?, ?, ?, ?)"
-            " ON CONFLICT(member_id, week_start) DO UPDATE SET weekly_hours = excluded.weekly_hours, reason = excluded.reason",
-            (body.member_id, body.week_start.isoformat() if body.week_start else None, body.weekly_hours, body.reason),
-        )
-        conn.commit()
+        from whf.admin import set_capacity_override
+
+        set_capacity_override(conn, body.member_id, body.weekly_hours, body.week_start, body.reason)
         return jsonable(body.model_dump())
 
     @app.get("/vacations", dependencies=guarded)
@@ -201,11 +195,9 @@ def create_app(db_path: Path | str, token: str) -> FastAPI:
 
     @app.post("/vacations", dependencies=guarded)
     def post_vacation(body: VacationCreate, conn: sqlite3.Connection = Depends(db)) -> dict:
-        cur = conn.execute(
-            "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (?, ?, ?, ?)",
-            (body.member_id, body.start_date.isoformat(), body.end_date.isoformat(), body.type),
-        )
-        conn.commit()
-        return {"id": int(cur.lastrowid)}
+        from whf.admin import add_vacation
+
+        vacation_id = add_vacation(conn, body.member_id, body.start_date, body.end_date, body.type)
+        return {"id": vacation_id}
 
     return app
