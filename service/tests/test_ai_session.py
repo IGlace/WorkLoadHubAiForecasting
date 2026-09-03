@@ -78,3 +78,29 @@ def test_model_error_is_reported(facts) -> None:
     client = FakeClient(replies=[RuntimeError("model call failed: quota")])
     outcome = _narrator(client).narrate_sync(facts)
     assert outcome.reason == "model_error" and "quota" in outcome.error
+
+
+def test_auth_status_failure_maps_to_other(facts) -> None:
+    client = FakeClient(replies=[], auth_error=RuntimeError("auth server unreachable"))
+    outcome = _narrator(client).narrate_sync(facts)
+    assert outcome.status == "failed" and outcome.reason == "other"
+    assert "auth server unreachable" in outcome.error and client.stopped
+
+
+def test_create_session_failure_maps_to_other(facts) -> None:
+    client = FakeClient(replies=[], session_error=RuntimeError("bad skill dir"))
+    outcome = _narrator(client).narrate_sync(facts)
+    assert outcome.status == "failed" and outcome.reason == "other"
+    assert "bad skill dir" in outcome.error and client.stopped
+
+
+def test_none_reply_is_treated_as_invalid_output(facts) -> None:
+    client = FakeClient(replies=[], reply_none=True)
+    outcome = _narrator(client, max_attempts=1).narrate_sync(facts)
+    assert outcome.reason == "invalid_output" and outcome.raw_text == ""
+
+
+def test_session_error_event_enriches_model_error(facts) -> None:
+    client = FakeClient(replies=[RuntimeError("model call failed")], emit_session_error="rate limited")
+    outcome = _narrator(client).narrate_sync(facts)
+    assert outcome.reason == "model_error" and "rate limited" in outcome.error

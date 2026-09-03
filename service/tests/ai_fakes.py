@@ -22,6 +22,8 @@ class FakeSession:
     handlers: list[Any] = field(default_factory=list)
     disconnected: bool = False
     call_tools_first: bool = True
+    return_none: bool = False
+    emit_session_error: str | None = None
 
     def on(self, handler):
         self.handlers.append(handler)
@@ -37,6 +39,11 @@ class FakeSession:
                             SessionEventType.TOOL_EXECUTION_START, tool_name=tool.name, tool_call_id="c1", arguments={}
                         )
                     )
+        if self.return_none:
+            return None
+        if self.emit_session_error:
+            for h in self.handlers:
+                h(make_event(SessionEventType.SESSION_ERROR, message=self.emit_session_error, error_type="model"))
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
@@ -56,6 +63,10 @@ class FakeClient:
     replies: list[str | Exception]
     authenticated: bool = True
     start_error: Exception | None = None
+    auth_error: Exception | None = None
+    session_error: Exception | None = None
+    reply_none: bool = False
+    emit_session_error: str | None = None
     started: bool = False
     stopped: bool = False
     session: FakeSession | None = None
@@ -67,13 +78,22 @@ class FakeClient:
         self.started = True
 
     async def get_auth_status(self):
+        if self.auth_error:
+            raise self.auth_error
         return SimpleNamespace(
             isAuthenticated=self.authenticated, login="sara" if self.authenticated else None, statusMessage=None
         )
 
     async def create_session(self, **kwargs):
+        if self.session_error:
+            raise self.session_error
         self.session_kwargs = kwargs
-        self.session = FakeSession(replies=self.replies, tools=list(kwargs.get("tools") or []))
+        self.session = FakeSession(
+            replies=self.replies,
+            tools=list(kwargs.get("tools") or []),
+            return_none=self.reply_none,
+            emit_session_error=self.emit_session_error,
+        )
         if kwargs.get("on_event"):
             self.session.on(kwargs["on_event"])
         return self.session

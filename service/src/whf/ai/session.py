@@ -75,7 +75,12 @@ class CopilotNarrator:
                 await client.start()
             except Exception as exc:  # the SDK raises RuntimeError when the CLI is missing or cannot start
                 return NarrativeOutcome(status="failed", reason="cli_unavailable", error=str(exc))
-            auth = await client.get_auth_status()
+            try:
+                auth = await client.get_auth_status()
+            except Exception as exc:
+                return NarrativeOutcome(
+                    status="failed", reason="other", error=f"could not read Copilot sign-in status: {exc}"
+                )
             if not getattr(auth, "isAuthenticated", False):
                 return NarrativeOutcome(
                     status="failed",
@@ -105,35 +110,45 @@ class CopilotNarrator:
             from copilot import ToolSet
 
             say("creating session")
-            session = await client.create_session(
-                model=self.config.model,
-                tools=toolbox.tools(),
-                system_message={"mode": "replace", "content": SYSTEM_PROMPT},
-                available_tools=ToolSet().add_custom("*"),
-                skill_directories=self.config.skill_directories or skill_directories(),
-                streaming=False,
-                on_event=on_event,
-            )
+            try:
+                session = await client.create_session(
+                    model=self.config.model,
+                    tools=toolbox.tools(),
+                    system_message={"mode": "replace", "content": SYSTEM_PROMPT},
+                    available_tools=ToolSet().add_custom("*"),
+                    skill_directories=self.config.skill_directories or skill_directories(),
+                    streaming=False,
+                    on_event=on_event,
+                )
+            except Exception as exc:
+                return NarrativeOutcome(
+                    status="failed", reason="other", error=f"could not create Copilot session: {exc}"
+                )
             try:
                 prompt = build_user_prompt(facts)
                 raw = ""
-                for attempt in range(1, self.config.max_attempts + 1):
+                problems: list[str] = []
+                for attempt in range(1, max(1, self.config.max_attempts) + 1):
                     outcome.attempts = attempt
                     say(f"asking Copilot (attempt {attempt})")
                     try:
                         event = await session.send_and_wait(prompt, timeout=self.config.timeout_seconds)
                     except TimeoutError as exc:  # asyncio.TimeoutError is an alias since Python 3.11
+                        detail = f" ({exc})" if str(exc) else ""
                         return self._finish(
                             outcome,
                             state,
                             status="failed",
                             reason="timeout",
-                            error=f"no answer within {self.config.timeout_seconds:.0f} s ({exc})",
+                            error=f"no answer within {self.config.timeout_seconds:.0f} s{detail}",
                         )
                     except Exception as exc:
-                        return self._finish(outcome, state, status="failed", reason="model_error", error=str(exc))
+                        error = str(exc)
+                        if state.get("error"):
+                            error = f"{error}; session error: {state['error']}"
+                        return self._finish(outcome, state, status="failed", reason="model_error", error=error)
                     raw = self._content_of(event, state)
-                    problems: list[str] = []
+                    problems = []
                     try:
                         narrative = parse_narrative(raw)
                         problems = narrative.validate_against_facts(facts)
