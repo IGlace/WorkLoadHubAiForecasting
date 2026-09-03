@@ -103,3 +103,10 @@ def test_rebalancing_hours_must_be_positive_and_members_distinct() -> None:
     same = _good()
     same["rebalancing"][0]["to_member_id"] = 4
     assert any("same member" in p for p in Narrative.model_validate(same).validate_against_facts(FACTS))
+
+
+def test_validate_flags_duplicate_members() -> None:
+    dup = _good()
+    dup["members"].append(dup["members"][0])
+    problems = Narrative.model_validate(dup).validate_against_facts(FACTS)
+    assert any("appears more than once" in p and "4" in p for p in problems)
