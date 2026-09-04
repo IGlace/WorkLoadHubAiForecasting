@@ -197,7 +197,10 @@ def create_app(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except RunHasNoFactsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return jsonable({**outcome.__dict__, "ai_status": outcome.ai_status, "run_id": run_id})
+        # raw_text is the model's unparsed reply: useful for audit (kept in the stored run_narratives row
+        # via narrate_run and in NarrativeOutcome), but not something the desktop app's UI needs over HTTP.
+        body = {k: v for k, v in outcome.__dict__.items() if k != "raw_text"}
+        return jsonable({**body, "ai_status": outcome.ai_status, "run_id": run_id})
 
     @app.get("/projects", dependencies=guarded)
     def get_projects(conn: sqlite3.Connection = Depends(db)) -> list:
@@ -212,16 +215,19 @@ def create_app(
 
     @app.post("/projects", dependencies=guarded)
     def post_project(body: ProjectCreate, conn: sqlite3.Connection = Depends(db)) -> dict:
-        project_id = add_project(
-            conn,
-            body.name,
-            body.department_id,
-            body.start_date,
-            body.deadline,
-            body.team_ids,
-            body.type,
-            body.created_by,
-        )
+        try:
+            project_id = add_project(
+                conn,
+                body.name,
+                body.department_id,
+                body.start_date,
+                body.deadline,
+                body.team_ids,
+                body.type,
+                body.created_by,
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(status_code=422, detail=f"unknown department or team id: {exc}") from exc
         return {"id": project_id}
 
     @app.get("/capacity", dependencies=guarded)
@@ -299,6 +305,8 @@ def create_app(
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(status_code=422, detail=f"unknown team id: {exc}") from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return jsonable({"id": project_id, **body.model_dump()})

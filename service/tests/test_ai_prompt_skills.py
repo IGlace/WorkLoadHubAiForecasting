@@ -43,6 +43,21 @@ def test_retry_prompt_lists_problems() -> None:
     assert "member 5 is missing" in text and "only the JSON" in text
 
 
+def test_skill_directories_resolve_from_package_path() -> None:
+    """Every entry skill_directories() returns must exist on disk with a SKILL.md next to it.
+
+    The Copilot SDK opens these paths directly (no importlib.resources indirection at call time), and
+    that is exactly what a PyInstaller-frozen build depends on: skills_root() must resolve to a real,
+    unpacked directory rather than something living only inside a wheel/zip.
+    """
+    dirs = skill_directories()
+    assert dirs
+    for d in dirs:
+        path = Path(d)
+        assert path.is_dir(), f"{d} does not exist on disk"
+        assert (path / "SKILL.md").is_file(), f"{d} has no SKILL.md"
+
+
 def test_skills_are_packaged_with_valid_frontmatter() -> None:
     root = skills_root()
     assert root.is_dir()

@@ -15,7 +15,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .hypothesis/
-service/dist/
 service/build/
 
 # Build outputs
@@ -25,4 +24,3 @@ installer/pyinstaller/build/
 # Node / Electron
 node_modules/
 app/out/
-app/dist/

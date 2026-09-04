@@ -12,7 +12,13 @@ SMALL_INTEGER_ALLOWANCE = 20
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _TIME = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 _PERCENT = re.compile(r"-?\d+(?:[.,]\d+)?\s*%")
-_NUMBER = re.compile(r"(?<![\d.])-?\d+(?:[.,]\d+)?(?![\w.]*\d)")
+# A thousands-separated token (groups of exactly three digits split by a space or comma, optional
+# decimal part) is tried first so "1,200" and "1 200,5" are not mistaken for a decimal comma; a plain
+# number falls through to the second alternative, which keeps today's "," -> "." behaviour.
+_NUMBER = re.compile(
+    r"(?<![\d.])-?\d{1,3}(?:[ ,]\d{3})+(?:[.,]\d+)?(?![\w.]*\d)|(?<![\d.])-?\d+(?:[.,]\d+)?(?![\w.]*\d)"
+)
+_THOUSANDS = re.compile(r"^(-?)(\d{1,3}(?:[ ,]\d{3})+)(?:([.,])(\d+))?$")
 
 
 def _walk(value: Any, out: set[float]) -> None:
@@ -35,9 +41,18 @@ def fact_numbers(facts: dict) -> set[float]:
     return out
 
 
+def _parse_number(token: str) -> float:
+    m = _THOUSANDS.match(token)
+    if not m:
+        return float(token.replace(",", "."))
+    sign, int_part, _dec_sep, dec_digits = m.groups()
+    digits = re.sub(r"[ ,]", "", int_part)
+    return float(f"{sign}{digits}.{dec_digits}" if dec_digits else f"{sign}{digits}")
+
+
 def numbers_in_text(text: str) -> list[float]:
     cleaned = _PERCENT.sub(" ", _TIME.sub(" ", _DATE.sub(" ", text)))
-    return [float(m.group(0).replace(",", ".")) for m in _NUMBER.finditer(cleaned)]
+    return [_parse_number(m.group(0)) for m in _NUMBER.finditer(cleaned)]
 
 
 @dataclass

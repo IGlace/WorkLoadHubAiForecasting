@@ -78,12 +78,27 @@ def test_cli_run_json_ai_prints_a_single_json_document(monkeypatch, tmp_path) ->
     assert payload["ai_status"] == "ok" and payload["team_id"] == 1 and "forecasts" in payload
 
 
+def test_cli_run_ai_exits_4_when_narration_fails_but_still_prints_the_forecast(monkeypatch, tmp_path) -> None:
+    db = _db(tmp_path)
+    failed = FakeNarrator(NarrativeOutcome(status="failed", reason="not_signed_in", error="sign in first"))
+    monkeypatch.setattr("whf.cli.default_narrator", lambda model=None: failed)
+    out = runner.invoke(app, ["run", "--db", str(db), "--team", "1", "--as-of", "2026-09-03", "--ai"])
+    assert out.exit_code == 4
+    assert "narrative: failed:not_signed_in" in out.output
+
+    out_json = runner.invoke(app, ["run", "--db", str(db), "--team", "1", "--as-of", "2026-09-03", "--json", "--ai"])
+    assert out_json.exit_code == 4
+    payload = json.loads(out_json.output)  # the forecast must still be the single JSON document on stdout
+    assert payload["team_id"] == 1 and "forecasts" in payload and payload["ai_status"].startswith("failed")
+
+
 def test_api_copilot_status_and_narrative(tmp_path) -> None:
     db = _db(tmp_path)
     ok = FakeNarrator(
         NarrativeOutcome(
             status="unverified",
             narrative={"run_summary": "x", "members": []},
+            raw_text='{"run_summary": "x", "members": []}',
             verification={"checked": 1, "unverified": ["run_summary: 5.5 is not in the facts"], "fields": {}},
         )
     )
@@ -95,6 +110,7 @@ def test_api_copilot_status_and_narrative(tmp_path) -> None:
     run_id = client.post("/runs", json={"team_id": 1, "as_of": "2026-09-03"}, headers=h).json()["run_id"]
     body = client.post(f"/runs/{run_id}/narrative", json={}, headers=h).json()
     assert body["ai_status"] == "unverified" and body["verification"]["unverified"]
+    assert "raw_text" not in body  # not sent over HTTP; kept in the stored document only
     assert client.get(f"/runs/{run_id}", headers=h).json()["run"]["ai_status"] == "unverified"
     assert client.post("/runs/999/narrative", json={}, headers=h).status_code == 404
     conn = connect(db)

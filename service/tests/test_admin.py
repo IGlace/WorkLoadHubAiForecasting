@@ -157,6 +157,17 @@ def test_update_project_validates(db) -> None:
             kind="delivery",
             status="planned",
         )
+    with pytest.raises(ValueError, match="status"):
+        update_project(
+            db,
+            pid,
+            name="B",
+            start_date=dt.date(2026, 10, 5),
+            deadline=dt.date(2026, 10, 9),
+            team_ids=[1],
+            kind="delivery",
+            status="cancelled",
+        )
     with pytest.raises(KeyError):
         update_project(
             db,

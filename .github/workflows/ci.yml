@@ -40,6 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
       - run: uv python install 3.11
       - run: bash scripts/build-service.sh
         env: { WHF_SKIP_CLI_DOWNLOAD: "1" }
@@ -51,6 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
       - run: uv python install 3.11
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: app/package-lock.json }

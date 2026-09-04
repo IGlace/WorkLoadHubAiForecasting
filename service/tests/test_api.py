@@ -78,6 +78,18 @@ def test_projects_capacity_and_vacations(client) -> None:
     assert ok.status_code == 200 and ok.json()["id"] > 0
     projects = client.get("/projects", headers=_h()).json()
     assert any(p["name"] == "X" and p["team_ids"] == [1, 2] for p in projects)
+    unknown_team = client.post(
+        "/projects",
+        json={
+            "name": "Bad Team",
+            "department_id": 1,
+            "start_date": "2026-09-10",
+            "deadline": "2026-11-01",
+            "team_ids": [999999],
+        },
+        headers=_h(),
+    )
+    assert unknown_team.status_code == 422
     assert client.put("/capacity/default", json={"weekly_hours": 36}, headers=_h()).status_code == 200
     assert (
         client.put(
@@ -145,6 +157,8 @@ def test_project_update_and_deletes(client) -> None:
     assert client.put("/projects/999999", json=body, headers=_h()).status_code == 404
     bad = {**body, "deadline": "2026-10-12"}
     assert client.put(f"/projects/{created['id']}", json=bad, headers=_h()).status_code == 422
+    unknown_team = {**body, "team_ids": [999999]}
+    assert client.put(f"/projects/{created['id']}", json=unknown_team, headers=_h()).status_code == 422
 
     client.put(
         "/capacity/overrides", json={"member_id": 1, "weekly_hours": 30, "week_start": "2026-10-05"}, headers=_h()

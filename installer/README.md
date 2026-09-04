@@ -37,7 +37,9 @@ pull request and manual dispatch.
 
 1. Copy `WorkloadHub-Forecast-Setup-<version>.exe` to the target machine and
    run it. It installs per user (no administrator prompt) into the user's
-   local app data and adds Desktop and Start Menu shortcuts.
+   local app data and adds Desktop and Start Menu shortcuts. When the
+   installer finishes it launches the app itself (`runAfterFinish: true` in
+   `installer/electron-builder.yml`), so step 2 below is usually already done.
 2. Start the app from the Start Menu.
 3. Settings → choose your profile (department, team, member).
 4. Settings → "Sign in to GitHub Copilot". A PowerShell window opens showing

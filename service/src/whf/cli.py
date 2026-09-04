@@ -113,12 +113,16 @@ def run(
             "backtest_mase": result.backtest_mase,
             "forecasts": result.forecasts.to_dict(orient="records"),
         }
+        ai_failed = False
         if ai:
             outcome = narrate_run(conn, result.run_id, narrator=default_narrator())
             payload["ai_status"] = outcome.ai_status
             if outcome.error:
                 payload["error"] = outcome.error
+            ai_failed = outcome.status == "failed"
         typer.echo(json.dumps(jsonable(payload)))
+        if ai_failed:
+            raise typer.Exit(code=4)
         return
     typer.echo(
         f"run {result.run_id}: team {team}, weeks {result.weeks[0]} and {result.weeks[1]}, champion {result.champion} (MASE {result.backtest_mase:.2f})"
@@ -136,6 +140,8 @@ def run(
             progress=None if as_json else lambda m: typer.echo(f"  {m}"),
         )
         typer.echo(f"narrative: {outcome.ai_status}" + (f" ({outcome.error})" if outcome.error else ""))
+        if outcome.status == "failed":
+            raise typer.Exit(code=4)
 
 
 @copilot_app.command("status")

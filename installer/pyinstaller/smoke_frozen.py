@@ -46,6 +46,25 @@ def _get(url: str, token: str | None = None) -> tuple[int, dict]:
         return exc.code, body
 
 
+def _last_json_object(stdout: str) -> dict:
+    """Parse the `run --json` payload from stdout, tolerating stray lines before or after it.
+
+    `whf run --json` is documented to print exactly one JSON document, but a dependency writing a stray
+    line to stdout (a warning, a progress message) should not make this smoke test crash with a
+    JSONDecodeError on the whole blob — so take the last line that starts with `{` and parse only that.
+    """
+    candidates = [line for line in stdout.splitlines() if line.strip().startswith("{")]
+    if not candidates:
+        raise SystemExit(f"whf run --json printed no JSON object line: {stdout}")
+    try:
+        payload = json.loads(candidates[-1])
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"whf run --json did not print valid JSON: {candidates[-1]}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"whf run --json did not print a JSON object: {candidates[-1]}")
+    return payload
+
+
 def _valid_handshake(line: str) -> dict | None:
     if not line:
         return None
@@ -71,11 +90,8 @@ def main(dist_dir: str) -> int:
         print("ok data generate")
 
         run_out = _run(exe, "run", "--team", "1", "--db", str(db), "--json")
-        try:
-            run_payload = json.loads(run_out)
-        except json.JSONDecodeError as exc:
-            raise SystemExit(f"whf run --json did not print JSON: {run_out}") from exc
-        if not isinstance(run_payload, dict) or "run_id" not in run_payload:
+        run_payload = _last_json_object(run_out)
+        if "run_id" not in run_payload:
             raise SystemExit(f"whf run --json missing run_id: {run_out}")
         print("ok run")
 

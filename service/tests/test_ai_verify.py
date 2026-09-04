@@ -49,6 +49,13 @@ def test_numbers_in_text_extracts_numbers_glued_to_a_preceding_word() -> None:
     assert numbers_in_text("demand52.5h") == [52.5]
 
 
+def test_numbers_in_text_handles_thousands_separators_without_breaking_decimal_commas() -> None:
+    assert numbers_in_text("1,200 h") == [1200.0]
+    assert numbers_in_text("1 200,5 h") == [1200.5]
+    assert numbers_in_text("52,5 h") == [52.5]
+    assert numbers_in_text("12,34") == [12.34]
+
+
 def test_verified_when_every_number_matches_facts() -> None:
     report = verify_narrative(_narrative("Demand 52.0 h against 40 h, overload 12.0 h in week 2026-09-07."), FACTS)
     assert report.ok and report.checked == 3 and report.unverified == []
