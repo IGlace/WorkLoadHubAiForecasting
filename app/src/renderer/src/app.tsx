@@ -4,6 +4,8 @@ import { StatusMessage } from './components/StatusMessage'
 import { AppProvider, useApp } from './context'
 import { t } from './i18n'
 import { Dashboard } from './pages/Dashboard'
+import { MemberDetail } from './pages/MemberDetail'
+import { Rebalancing } from './pages/Rebalancing'
 import { Run } from './pages/Run'
 import { Runs } from './pages/Runs'
 import { Settings } from './pages/Settings'
@@ -35,8 +37,8 @@ function Shell(): React.JSX.Element {
           <Route path="/run" element={<Run />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:runId" element={<TeamResult />} />
-          <Route path="/runs/:runId/members/:memberId" element={<Placeholder title={t('member.title')} />} />
-          <Route path="/rebalancing" element={<Placeholder title={t('nav.rebalancing')} />} />
+          <Route path="/runs/:runId/members/:memberId" element={<MemberDetail />} />
+          <Route path="/rebalancing" element={<Rebalancing />} />
           <Route path="/projects" element={<Placeholder title={t('nav.projects')} />} />
           <Route path="/capacity" element={<Placeholder title={t('nav.capacity')} />} />
           <Route path="/timeoff" element={<Placeholder title={t('nav.timeoff')} />} />
