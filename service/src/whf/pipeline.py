@@ -413,11 +413,23 @@ def load_run(conn: sqlite3.Connection, run_id: int) -> dict:
     forecasts = read_df(conn, "SELECT * FROM forecasts WHERE run_id = ? ORDER BY member_id, week_start", (run_id,))
     facts = read_df(conn, "SELECT json FROM run_facts WHERE run_id = ?", (run_id,))
     narrative = read_df(conn, "SELECT json FROM run_narratives WHERE run_id = ?", (run_id,))
+    # `run_narratives.json` stores the whole outcome envelope (status, narrative, error, reason,
+    # raw_text, verification, model, usage, attempts, tool_calls, generated_at) for audit — see
+    # narrate.py. The app only knows the bare narrative document (app/src/shared/types.ts
+    # `Narrative`), so unwrap the envelope here, on the way out; the stored row is untouched.
+    narrative_doc = None
+    if len(narrative):
+        envelope = json.loads(narrative["json"][0])
+        # An envelope is a dict with a "status" key (see NarrativeOutcome); only such a document
+        # gets unwrapped. A row that predates this change or is otherwise missing the key is not
+        # an envelope, so it is treated as "no narrative" rather than passed through as-is.
+        if isinstance(envelope, dict) and "status" in envelope:
+            narrative_doc = envelope.get("narrative")
     return {
         "run": run.iloc[0].to_dict(),
         "forecasts": forecasts.to_dict(orient="records"),
         "facts": json.loads(facts["json"][0]) if len(facts) else None,
-        "narrative": json.loads(narrative["json"][0]) if len(narrative) else None,
+        "narrative": narrative_doc,
     }
 
 

@@ -1,10 +1,15 @@
+import json
+
 import pytest
+from ai_fakes import FakeNarrator, good_narrative
 from fastapi.testclient import TestClient
 
+from whf.ai.session import NarrativeOutcome
 from whf.api import create_app
 from whf.data.generator import GeneratorConfig, generate
 from whf.data.loader import load_generated
 from whf.db.connection import connect
+from whf.narrate import narrate_run
 
 TOKEN = "secret-token"
 
@@ -55,6 +60,32 @@ def test_run_and_fetch(client) -> None:
     assert one["run"]["id"] == 1 and one["facts"]["team"]["id"] == 1 and one["narrative"] is None
     assert client.get("/runs/99", headers=_h()).status_code == 404
     assert client.post("/runs", json={"team_id": 999}, headers=_h()).status_code == 404
+
+
+def test_get_run_serves_the_bare_narrative_over_http(client, tmp_path) -> None:
+    """Round trip through `GET /runs/{id}`, not just `load_run` directly.
+
+    The stored `run_narratives` row is the whole outcome envelope (see `whf.narrate`); the app's
+    `RunDetail.narrative` type (`app/src/shared/types.ts`) expects the bare narrative document.
+    """
+    created = client.post("/runs", json={"team_id": 1, "as_of": "2026-09-03"}, headers=_h())
+    run_id = created.json()["run_id"]
+    facts = client.get(f"/runs/{run_id}", headers=_h()).json()["facts"]
+    outcome = NarrativeOutcome(status="ok", narrative=json.loads(good_narrative(facts)), model="gpt-5")
+    conn = connect(tmp_path / "api.db")
+    try:
+        narrate_run(conn, run_id, narrator=FakeNarrator(outcome))
+    finally:
+        conn.close()
+    narrative = client.get(f"/runs/{run_id}", headers=_h()).json()["narrative"]
+    assert set(narrative) == {
+        "run_summary",
+        "members",
+        "team_risks",
+        "rebalancing",
+        "suggested_adjustments",
+        "model_notes",
+    }
 
 
 def test_projects_capacity_and_vacations(client) -> None:

@@ -13,7 +13,14 @@ from whf.pipeline import load_run, run_forecast
 def _ok_outcome(facts: dict) -> NarrativeOutcome:
     return NarrativeOutcome(
         status="ok",
-        narrative={"run_summary": "fine", "members": []},
+        narrative={
+            "run_summary": "fine",
+            "members": [],
+            "team_risks": [],
+            "rebalancing": [],
+            "suggested_adjustments": [],
+            "model_notes": "",
+        },
         verification={"checked": 1, "unverified": [], "fields": {}},
         model="gpt-5",
         usage={"input_tokens": 1, "output_tokens": 1},
@@ -31,10 +38,33 @@ def test_narrate_persists_document_and_status(db, generated) -> None:
     assert narrator.calls[0]["run"]["id"] == result.run_id  # the stored facts, id included
     row = read_df(db, "SELECT ai_status FROM runs WHERE id = ?", (result.run_id,))
     assert row["ai_status"][0] == "ok"
+    # The stored row keeps the whole envelope (status, model, tool_calls, ...) for audit.
     doc = json.loads(read_df(db, "SELECT json FROM run_narratives WHERE run_id = ?", (result.run_id,))["json"][0])
     assert doc["status"] == "ok" and doc["narrative"]["run_summary"] == "fine" and doc["model"] == "gpt-5"
     assert doc["tool_calls"] == ["get_run_overview"] and "generated_at" in doc
-    assert load_run(db, result.run_id)["narrative"]["status"] == "ok"
+    # `load_run` unwraps the envelope: the app only ever sees the bare narrative document.
+    assert load_run(db, result.run_id)["narrative"]["run_summary"] == "fine"
+
+
+def test_load_run_narrative_matches_the_apps_declared_shape(db, generated) -> None:
+    """The contract test, and the reason this task exists.
+
+    `load_run(...)["narrative"]` must have exactly the six keys the app's `Narrative` interface
+    declares (`app/src/shared/types.ts`): `run_summary`, `members`, `team_risks`, `rebalancing`,
+    `suggested_adjustments`, `model_notes` — no envelope fields like `status` or `raw_text` mixed
+    in. The original bug was an extra-keys bug, so this asserts the exact set, not a subset.
+    """
+    result = run_forecast(db, team_id=1, as_of=generated.config.as_of)
+    narrate_run(db, result.run_id, narrator=FakeNarrator(_ok_outcome(result.facts)))
+    narrative = load_run(db, result.run_id)["narrative"]
+    assert set(narrative) == {
+        "run_summary",
+        "members",
+        "team_risks",
+        "rebalancing",
+        "suggested_adjustments",
+        "model_notes",
+    }
 
 
 def test_failed_outcome_is_stored_with_reason(db, generated) -> None:
@@ -45,8 +75,16 @@ def test_failed_outcome_is_stored_with_reason(db, generated) -> None:
         read_df(db, "SELECT ai_status FROM runs WHERE id = ?", (result.run_id,))["ai_status"][0]
         == "failed:not_signed_in"
     )
-    doc = load_run(db, result.run_id)["narrative"]
-    assert doc["narrative"] is None and doc["reason"] == "not_signed_in"
+    # The stored row keeps the full envelope, reason included, for audit.
+    stored = json.loads(read_df(db, "SELECT json FROM run_narratives WHERE run_id = ?", (result.run_id,))["json"][0])
+    assert stored["narrative"] is None and stored["reason"] == "not_signed_in"
+    # `load_run` unwraps to `None` for a failed narration: this is what restores the app's retry
+    # button, since `{!narrative && <button>}` would otherwise stay hidden behind a truthy envelope.
+    assert load_run(db, result.run_id)["narrative"] is None
+    assert (
+        read_df(db, "SELECT ai_status FROM runs WHERE id = ?", (result.run_id,))["ai_status"][0]
+        == "failed:not_signed_in"
+    )
 
 
 def test_second_narration_replaces_the_first(db, generated) -> None:
