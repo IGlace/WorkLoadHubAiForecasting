@@ -7,6 +7,9 @@ $dist = Join-Path $root "service\dist"
 Push-Location (Join-Path $root "service")
 try {
     uv sync --group build
+    # Native commands do not throw under $ErrorActionPreference = "Stop" on Windows PowerShell 5.1, so every
+    # external command below is followed by an explicit $LASTEXITCODE check.
+    if ($LASTEXITCODE -ne 0) { throw "uv sync failed" }
     if (Test-Path (Join-Path $dist "whf")) { Remove-Item -Recurse -Force (Join-Path $dist "whf") }
     uv run pyinstaller --noconfirm --clean --distpath $dist --workpath (Join-Path $root "installer\pyinstaller\build") (Join-Path $root "installer\pyinstaller\whf.spec")
     if ($LASTEXITCODE -ne 0) { throw "pyinstaller failed" }
