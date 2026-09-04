@@ -56,11 +56,17 @@ export class AppController {
   }
 
   async afterRun(run: RunCreated): Promise<void> {
-    const meta = await this.client?.request({ method: 'GET', path: '/meta' })
-    if (!meta || !meta.ok) return
-    const m = meta.data as Meta
-    const team = m.teams.find((t: Team) => t.id === run.team_id)
-    notifyOverload(electronNotify, team?.name ?? `team ${run.team_id}`, overloadedMembers(run.forecasts, m.members))
+    try {
+      if (!Array.isArray(run.forecasts)) return
+      const meta = await this.client?.request({ method: 'GET', path: '/meta' })
+      if (!meta || !meta.ok) return
+      const m = meta.data as Meta
+      if (!Array.isArray(m.teams) || !Array.isArray(m.members)) return
+      const team = m.teams.find((t: Team) => t.id === run.team_id)
+      notifyOverload(electronNotify, team?.name ?? `team ${run.team_id}`, overloadedMembers(run.forecasts, m.members))
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   async copilotStatus(): Promise<{ cli_path: string | null; message: string }> {
@@ -114,7 +120,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain, getClient: () => controller.getClient(), settings: controller.settings, getState: () => controller.getState(),
     login: () => startCopilotLogin({ status: () => controller.copilotStatus(), spawnFn: spawn, platform: process.platform }),
     openExternal: (url) => shell.openExternal(url), applyLaunchAtLogin: (on) => controller.applyLaunchAtLogin(on),
-    onRunCreated: (run) => { void controller.afterRun(run) },
+    onRunCreated: (run) => { controller.afterRun(run).catch((err: unknown) => console.error(err)) },
   })
   void app.whenReady().then(async () => {
     if (!process.argv.includes('--hidden')) controller.createWindow()
