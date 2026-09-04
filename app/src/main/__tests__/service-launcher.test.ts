@@ -82,4 +82,27 @@ describe('ServiceProcess', () => {
     child.emit('exit', 1)
     await expect(started).rejects.toThrow(/exited with code 1.*boom/s)
   })
+  it('rejects when the process exits while still waiting for health', async () => {
+    const { child } = fakeChild()
+    // Never settles: represents a health check that is still in flight, without
+    // spinning the microtask queue (an always-rejecting fetchFn combined with a
+    // no-op sleep never yields to real timers, so it starves vi.waitFor below).
+    const fetchFn = vi.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch
+    const proc = new ServiceProcess({
+      spawnFn: (() => child) as never,
+      fetchFn,
+      command: 'whf',
+      args: ['serve'],
+      cwd: '/x',
+      env: {},
+      log: () => {},
+      sleep: async () => {},
+      healthTimeoutMs: 1_000_000,
+    })
+    const started = proc.start()
+    child.stdout.write('{"port": 6001, "token": "tok"}\n')
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalled())
+    child.emit('exit', 1)
+    await expect(started).rejects.toThrow(/exited with code 1/)
+  })
 })

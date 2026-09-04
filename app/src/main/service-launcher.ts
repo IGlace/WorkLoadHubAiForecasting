@@ -80,21 +80,26 @@ export class ServiceProcess {
     })
     this.child = child
     return new Promise((resolve, reject) => {
-      let settled = false
+      let done = false
+      const finish = (fn: () => void): void => { if (!done) { done = true; fn() } }
+      let handshakeSeen = false
       const stderr = createInterface({ input: child.stderr! })
       stderr.on('line', (line) => { this.opts.log(`[service] ${line}`); this.stderrTail = [...this.stderrTail.slice(-19), line] })
       const stdout = createInterface({ input: child.stdout! })
       stdout.on('line', (line) => {
         const hs = parseHandshake(line)
-        if (hs && !settled) {
-          settled = true
+        if (hs && !handshakeSeen) {
+          handshakeSeen = true
           waitForHealth(hs.port, { fetchFn: this.opts.fetchFn, timeoutMs: this.opts.healthTimeoutMs ?? 60_000, intervalMs: 250, sleep: this.opts.sleep })
-            .then(() => resolve(hs), reject)
+            .then(
+              () => finish(() => resolve(hs)),
+              (err: unknown) => finish(() => reject(err instanceof Error ? err : new Error(String(err)))),
+            )
         } else this.opts.log(`[service] ${line}`)
       })
-      child.on('error', (err) => { if (!settled) { settled = true; reject(err) } })
+      child.on('error', (err) => finish(() => reject(err)))
       child.on('exit', (code) => {
-        if (!settled) { settled = true; reject(new Error(`service exited with code ${code} before it was ready\n${this.stderrTail.join('\n')}`)) }
+        finish(() => reject(new Error(`service exited with code ${code} before it was ready\n${this.stderrTail.join('\n')}`)))
         for (const l of this.exitListeners) l(code)
       })
     })
