@@ -16,7 +16,14 @@ describe('Run', () => {
       'POST /runs': RUN_CREATED, 'POST /runs/5/narrative': { run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: ['get_run_overview'] },
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
+    const button = await screen.findByRole('button', { name: 'Run forecast' })
+    // The "with AI" checkbox — and therefore whether the run reaches the narrating phase this test's
+    // last assertion depends on — only enables once the unawaited copilot-status mount effect
+    // resolves (Run.tsx:28,71). That effect races the button's own readiness, so wait for the
+    // checkbox before clicking, or the click may fire while `aiPossible` is still false and the run
+    // will skip narration entirely.
+    await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
+    await userEvent.click(button)
     expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open the result' })).toHaveAttribute('href', '/runs/5')
     await waitFor(() => expect(fake.calls.some((c) => c.path === '/runs/5/narrative')).toBe(true))
@@ -72,9 +79,7 @@ describe('Run', () => {
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
     const button = await screen.findByRole('button', { name: 'Run forecast' })
-    // See the "stops polling" test below for why this wait matters: the "with AI" checkbox only
-    // enables once the unawaited copilot-status mount effect resolves, and that race decides whether
-    // the run ever reaches the narrating phase this test depends on.
+    // Same copilot-status race as the first test above: wait for it to resolve before clicking.
     await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
     // Fake timers so the elapsed counter shown next to the step label can be pinned to an exact value.
     vi.useFakeTimers()
@@ -111,9 +116,7 @@ describe('Run', () => {
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
     const button = await screen.findByRole('button', { name: 'Run forecast' })
-    // See the "stops polling" test below for why this wait matters: the "with AI" checkbox only
-    // enables once the unawaited copilot-status mount effect resolves, and that race decides whether
-    // the run ever reaches the narrating phase this test depends on.
+    // Same copilot-status race as the first test above: wait for it to resolve before clicking.
     await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
     vi.useFakeTimers()
     try {
@@ -147,10 +150,7 @@ describe('Run', () => {
     // fake ones: the interval this test cares about is only created once the run reaches the narrating
     // phase, so it must be created — and ticked — entirely under the fake clock to mean anything.
     const button = await screen.findByRole('button', { name: 'Run forecast' })
-    // The "with AI" checkbox is disabled until copilot status has arrived (Run.tsx:71); that status is
-    // set by an unawaited mount effect racing the button's own readiness. Wait for the checkbox to be
-    // enabled under real timers before installing fake ones, or a slow status response makes the run
-    // skip straight from forecasting to done with no narration and zero polls.
+    // Same copilot-status race as the first test above: wait for it to resolve before clicking.
     await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
     vi.useFakeTimers()
     try {
