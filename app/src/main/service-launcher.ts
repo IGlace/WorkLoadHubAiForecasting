@@ -69,6 +69,7 @@ export class ServiceProcess {
     private readonly opts: {
       spawnFn: SpawnFn; fetchFn: typeof fetch; command: string; args: string[]; cwd: string
       env: NodeJS.ProcessEnv; log: (line: string) => void; sleep?: (ms: number) => Promise<void>; healthTimeoutMs?: number
+      startTimeoutMs?: number; setTimeoutFn?: typeof setTimeout; clearTimeoutFn?: typeof clearTimeout
     },
   ) {}
 
@@ -81,7 +82,13 @@ export class ServiceProcess {
     this.child = child
     return new Promise((resolve, reject) => {
       let done = false
-      const finish = (fn: () => void): void => { if (!done) { done = true; fn() } }
+      const setTimeoutFn = this.opts.setTimeoutFn ?? setTimeout
+      const clearTimeoutFn = this.opts.clearTimeoutFn ?? clearTimeout
+      const startTimeoutMs = this.opts.startTimeoutMs ?? 90_000
+      const finish = (fn: () => void): void => { if (!done) { done = true; clearTimeoutFn(startTimer); fn() } }
+      const startTimer = setTimeoutFn(() => {
+        finish(() => { child.kill(); reject(new Error(`service did not start within ${startTimeoutMs} ms`)) })
+      }, startTimeoutMs)
       let handshakeSeen = false
       const stderr = createInterface({ input: child.stderr! })
       stderr.on('line', (line) => { this.opts.log(`[service] ${line}`); this.stderrTail = [...this.stderrTail.slice(-19), line] })

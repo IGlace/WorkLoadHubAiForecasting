@@ -35,10 +35,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     void window.whf.getSettings().then((s) => { setSettings(s); setLanguage(s.language); bump((n) => n + 1) })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
     void window.whf.getState().then((s) => { setState(s); void refresh() })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err))
-        setState((prev) => ({ ...prev, service: 'ready' }))
-      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
     const off = window.whf.onStateChanged((s) => { setState(s); if (s.service === 'ready') void refresh() })
     return off
   }, [refresh])

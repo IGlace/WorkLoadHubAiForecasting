@@ -31,6 +31,7 @@ const en: Record<string, string> = {
   'rebalancing.from': 'From', 'rebalancing.to': 'To', 'rebalancing.hours': 'Hours', 'rebalancing.reason': 'Reason', 'rebalancing.confidence': 'Confidence',
   'projects.title': 'Projects', 'projects.new': 'New project', 'projects.name': 'Name', 'projects.start': 'Start date', 'projects.deadline': 'Deadline',
   'projects.teams': 'Teams', 'projects.type': 'Type', 'projects.status': 'Status', 'projects.save': 'Save', 'projects.edit': 'Edit', 'projects.cancel': 'Cancel',
+  'projects.nameError': 'Enter a project name.',
   'projects.deadlineError': 'The deadline must be after the start date.', 'projects.teamsError': 'Pick at least one team.',
   'projects.type.delivery': 'delivery', 'projects.type.maintenance': 'maintenance', 'projects.type.internal': 'internal',
   'projects.status.planned': 'planned', 'projects.status.active': 'active', 'projects.status.done': 'done',

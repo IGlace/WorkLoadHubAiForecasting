@@ -33,6 +33,14 @@ describe('Projects', () => {
     const body = fake.calls.find((c) => c.method === 'POST')!.body as { name: string; team_ids: number[]; department_id: number }
     expect(body).toMatchObject({ name: 'Search', team_ids: [2], department_id: 1 })
   })
+  it('shows a proper message when the name is left empty', async () => {
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 10, role: 'skill_team_leader' }, 'GET /projects': existing })
+    render(<MemoryRouter><AppProvider><Projects /></AppProvider></MemoryRouter>)
+    await screen.findByText('Billing v2')
+    await userEvent.click(screen.getByRole('button', { name: 'New project' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Enter a project name.')).toBeInTheDocument()
+  })
   it('edits status and deadline of an existing project', async () => {
     const fake = installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /projects': existing, 'PUT /projects/3': (b: unknown) => ({ id: 3, ...(b as object) }) })
     render(<MemoryRouter><AppProvider><Projects /></AppProvider></MemoryRouter>)

@@ -11,7 +11,7 @@ interface Draft { name: string; start_date: string; deadline: string; team_ids: 
 const empty: Draft = { name: '', start_date: '', deadline: '', team_ids: [], type: 'delivery', status: 'planned' }
 
 function validate(d: Draft): string | null {
-  if (!d.name.trim()) return t('projects.name')
+  if (!d.name.trim()) return t('projects.nameError')
   if (!d.start_date || !d.deadline || d.deadline <= d.start_date) return t('projects.deadlineError')
   if (d.team_ids.length === 0) return t('projects.teamsError')
   return null

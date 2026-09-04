@@ -29,7 +29,7 @@ export function TimeOff(): React.JSX.Element {
   return (
     <div>
       <h1>{t('timeoff.title')}</h1>
-      {error && <StatusMessage kind="error">{error}</StatusMessage>}
+      {error && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
       <div className="grid-2">
         <section className="panel">
           <h2>{t('timeoff.holidays')}</h2>

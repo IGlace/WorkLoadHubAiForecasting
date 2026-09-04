@@ -31,7 +31,7 @@ function Shell(): React.JSX.Element {
       <main className="content">
         {state.service === 'starting' && <StatusMessage kind="info">{t('service.starting')}</StatusMessage>}
         {state.service === 'failed' && <StatusMessage kind="error">{state.serviceMessage}</StatusMessage>}
-        {error && state.service === 'ready' && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
+        {error && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
         {!me && state.service === 'ready' && <StatusMessage kind="info">{t('profile.none')}</StatusMessage>}
         <Routes>
           <Route path="/" element={<Dashboard />} />

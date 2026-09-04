@@ -239,6 +239,8 @@ says a forecast is due. After a run, a notification lists members with overload.
 
 (Implementation note, 2026-09-04: the Settings language switch stores `en` or `fr`; version 1 ships a complete English dictionary and a French dictionary for navigation and common labels that falls back to English; full French copy is a later task.)
 
+(Implementation note, 2026-09-04: Copilot sign-in opens a PowerShell window running the CLI's device-login flow instead of an in-app screen; the app re-checks the status afterwards.)
+
 ## 8. CLI
 
 `whf run --team <id>`, `whf runs list`, `whf runs show <id> --json`, `whf export

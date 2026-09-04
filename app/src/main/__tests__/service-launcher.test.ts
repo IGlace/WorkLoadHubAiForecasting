@@ -105,4 +105,19 @@ describe('ServiceProcess', () => {
     child.emit('exit', 1)
     await expect(started).rejects.toThrow(/exited with code 1/)
   })
+  it('rejects with an overall start timeout when the child prints nothing and never exits', async () => {
+    const { child } = fakeChild()
+    let fired: (() => void) | null = null
+    const setTimeoutFn = vi.fn((fn: () => void, _ms: number) => { fired = fn; return 0 as unknown as ReturnType<typeof setTimeout> })
+    const clearTimeoutFn = vi.fn()
+    const proc = new ServiceProcess({
+      spawnFn: (() => child) as never, fetchFn: fetch, command: 'whf', args: [], cwd: '/x', env: {}, log: () => {}, sleep: async () => {},
+      startTimeoutMs: 5000, setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout, clearTimeoutFn: clearTimeoutFn as unknown as typeof clearTimeout,
+    })
+    const started = proc.start()
+    expect(setTimeoutFn).toHaveBeenCalledWith(expect.any(Function), 5000)
+    fired!()
+    await expect(started).rejects.toThrow('service did not start within 5000 ms')
+    expect(child.kill).toHaveBeenCalled()
+  })
 })

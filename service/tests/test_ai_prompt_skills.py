@@ -10,7 +10,6 @@ from whf.ai.prompt import (
     skill_directories,
     skills_root,
 )
-
 from whf.ai.schema import Narrative
 
 FACTS = {
