@@ -1,5 +1,6 @@
 import datetime as dt
 import sqlite3
+import threading
 
 import pytest
 
@@ -74,3 +75,23 @@ def test_connect_is_idempotent_on_disk(tmp_path) -> None:
     connect(path).close()
     conn = connect(path)
     assert EXPECTED_TABLES <= set(table_names(conn))
+
+
+def test_connection_can_be_used_from_another_thread() -> None:
+    # FastAPI runs the sync `db()` dependency and the endpoint body in different
+    # threadpool threads under uvicorn; sqlite3's default check_same_thread=True
+    # rejects that, even though each connection is only ever used sequentially
+    # within one request (or one CLI command).
+    conn = connect(":memory:")
+    errors: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            conn.execute("SELECT COUNT(*) FROM departments").fetchone()
+        except BaseException as exc:  # noqa: BLE001 - captured for the assertion below
+            errors.append(exc)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    thread.join()
+    assert errors == []

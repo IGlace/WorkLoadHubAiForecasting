@@ -16,7 +16,11 @@ def _schema_sql() -> str:
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
     """Open (and initialise) the database. Pass ':memory:' for tests."""
     target = ":memory:" if path == ":memory:" else str(path or db_path())
-    conn = sqlite3.connect(target)
+    # FastAPI runs the sync `db()` dependency and the endpoint body in different
+    # threadpool threads under uvicorn; each connection is only ever used
+    # sequentially within one request (or one CLI command), so it is safe to
+    # hand it across threads.
+    conn = sqlite3.connect(target, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_schema_sql())

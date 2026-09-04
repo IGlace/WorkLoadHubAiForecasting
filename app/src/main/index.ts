@@ -132,6 +132,7 @@ function armSmoke(win: BrowserWindow): void {
         const phase = controller.getState().service
         if (phase === 'ready' || phase === 'failed' || Date.now() >= deadline) {
           console.log(`SMOKE service=${phase}`)
+          controller.shutdown()
           app.exit(whf === 'object' ? 0 : 1)
         } else {
           setTimeout(check, 250)
