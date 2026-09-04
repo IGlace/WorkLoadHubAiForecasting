@@ -6,12 +6,11 @@ version 1. Dated 2026-09-04; update this file when an item lands.
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
-State on 2026-09-04: `main` is at `4fba18a`; `dev` carries the team-page live progress on top of it, so that
-one item is landed but not yet released. "Upcoming events" was brainstormed on 2026-09-04 and closed as
-already covered, the Playwright smoke path was deferred the same day, and the "Ask Copilot" button was
-scoped to the run on screen. The review of that last change turned up a serious pre-existing defect — the
-app cannot render a narrative the service returns — which is now the first item under "Approved, not yet
-built" and should be the next thing done.
+State on 2026-09-04: `main` is at `4fba18a`; `dev` carries the team-page live progress, the "Ask Copilot"
+button scoping and the narrative-envelope fix below it, so those are landed but not yet released. "Upcoming
+events" was brainstormed on 2026-09-04 and closed as already covered, and the Playwright smoke path was
+deferred the same day. The review of the button-scoping change turned up a serious pre-existing defect —
+the app could not render a narrative the service returns — which has since been fixed; see "Landed" below.
 
 ## Landed
 
@@ -65,25 +64,34 @@ built" and should be the next thing done.
   finishing no longer drops tracking of another, which is the test that fails against any single-id version.
   Accepted with it: navigating away from a narrating run and back restarts its elapsed counter at zero,
   because the progress hook resets whenever its run id changes; the step label recovers on the next poll.
+- **The app could not render a narrative that came back from the service** (found by the review of the
+  "Ask Copilot" scoping work, 2026-09-04; fixed the same day). `narrate_run` stores the whole outcome
+  envelope in `run_narratives` — `{**asdict(NarrativeOutcome), generated_at}`, so top-level `status`,
+  `narrative`, `error`, `reason`, `raw_text`, `verification`, `model`, `usage`, `attempts`, `tool_calls` — on
+  purpose, because the exact facts and reply sent to and from Copilot are the audit trail. But `load_run`
+  returned that envelope verbatim as `RunDetail.narrative`, while the app declares that field as the bare
+  `Narrative` (`app/src/shared/types.ts`): `run_summary`, `members`, `team_risks`, `rebalancing`,
+  `suggested_adjustments`, `model_notes`. Nothing transformed it in between, so on real service data
+  `detail.narrative` was truthy with no `members`, and `TeamResult.tsx`'s `narrative?.members.map(...)`
+  threw — the optional chain guards the object, not the field. `MemberDetail.tsx` had the same line. Worse
+  for the button: a *failed* narration also wrote a `run_narratives` row, so the envelope was truthy and
+  `{!narrative && <button>}` hid "Ask Copilot" for precisely the runs that needed a retry. Every renderer
+  test used a hand-written fixture in the bare shape and every service test asserted the envelope shape, so
+  the suites agreed with themselves and nothing caught the seam. Fixed by unwrapping in `load_run` only: the
+  stored `run_narratives` row is untouched (still the full envelope, for audit), and the payload's
+  `narrative` key becomes the inner document, or `None` for all three of no row, a row whose narrative is
+  `null` (a failed narration — this is what restores the retry button), and a row that predates the change
+  or is otherwise missing the key. No app file changed; the app's types were already correct. One visible
+  side effect: `whf runs show --json` and `whf export --format json` dump the whole `load_run` payload, so
+  they now also drop the envelope (including the model's raw unparsed reply) from their output — intended,
+  since that raw reply was never meant to leave the database over these paths either. A contract test now
+  asserts the exact six keys of `load_run(...)["narrative"]` against the app's `Narrative` interface, so a
+  future extra-keys regression fails a service test instead of only showing up on real data.
 
 ## Approved, not yet built
 
 Ordered roughly by value. Each of these has an owner decision behind it.
 
-- **The app cannot render a narrative that came back from the service** (found by the review of the
-  "Ask Copilot" scoping work, 2026-09-04; verified against the code, not yet reproduced by hand). This is
-  the most serious item on this list and it predates all the live-progress work. `narrate_run` stores the
-  whole outcome envelope — `{**asdict(NarrativeOutcome), generated_at}`, so top-level `status`, `narrative`,
-  `error`, `reason` — and `load_run` returns that verbatim as `RunDetail.narrative`, but the app declares
-  that field as the bare `Narrative` (`app/src/shared/types.ts`). Nothing transforms it in between. So on
-  real service data `detail.narrative` is truthy with no `members`, and `TeamResult.tsx`'s
-  `narrative?.members.map(...)` throws — the optional chain guards the object, not the field. `MemberDetail.tsx`
-  has the same line. Worse for the button: a *failed* narration also writes a `run_narratives` row, so the
-  envelope is truthy and `{!narrative && <button>}` hides "Ask Copilot" for precisely the runs that need a
-  retry. Every renderer test uses a hand-written fixture in the bare shape and every service test asserts
-  the envelope shape, so the suites agree with themselves and nothing catches the seam. The fix is to decide
-  which shape is canonical and make one side match, plus a test that crosses the seam with a service-shaped
-  payload. Until it lands, the AI narrative is effectively unusable outside the tests.
 - **A narration that fails for a run you have navigated away from says nothing** (raised by the same review).
   `narrate()`'s error path is guarded on the displayed run, so if run A's `POST` throws while run B is on
   screen, the error is dropped and A's button simply re-enables as though nothing happened. The guard is
