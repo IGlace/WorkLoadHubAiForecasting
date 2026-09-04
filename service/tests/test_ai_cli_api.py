@@ -132,9 +132,8 @@ def test_progress_of_an_unknown_run_is_empty_rather_than_an_error(client) -> Non
 
 
 def test_narrative_of_an_unknown_run_does_not_evict_a_real_run_being_narrated(client) -> None:
-    """`begin` must run only after the run is known to exist, or a run of 404s can push a real run's
-
-    steps out of the store's bounded eight-run history while it is still being narrated.
+    """`begin` must run only after the run is known to exist, or a run of 404s can push a real
+    run's steps out of the store's bounded eight-run history while it is still being narrated.
     """
     run_id = _run_id(client)
     client.post(f"/runs/{run_id}/narrative", json={"model": None})

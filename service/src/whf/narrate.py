@@ -30,8 +30,9 @@ def narrate_run(
 ) -> NarrativeOutcome:
     """Attach a narrative to `run_id`.
 
-    `on_valid`, if given, runs once the run is known to exist and have facts, before Copilot is
-    asked anything: the caller uses it to start tracking progress only for requests worth tracking.
+    `on_valid`, if given, runs after both reads have shown the run to exist and have facts, and
+    before Copilot is asked anything: the caller uses it to start tracking progress only for
+    requests worth tracking.
     """
     run_rows = read_df(conn, "SELECT id FROM runs WHERE id = ?", (run_id,))
     if run_rows.empty:

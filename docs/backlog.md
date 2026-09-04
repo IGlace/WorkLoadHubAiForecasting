@@ -49,6 +49,13 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   named members), an effect type (reduces capacity or adds demand) and optional hours. With hours,
   deterministic code applies the effect and shows it as a named line in the forecast; without hours it is
   context for the narrative only. This closes the gap where a known future event could not be expressed.
+- **Live progress on the team page too** (raised by the final review of the live-progress work,
+  2026-09-04, owner has not yet decided). `TeamResult.tsx` starts the same multi-minute narration from its
+  "Ask Copilot" button and shows nothing at all while it runs — only a greyed-out button, which is worse
+  than the static line the Run page used to have. `getNarrativeProgress` and `progressLabel` already exist,
+  so reusing them there is under ten lines plus a test. Left out of the live-progress plan because the
+  approved item said "on the Run page"; until this lands, "the app no longer looks hung" is only true of one
+  of the two places a narration starts.
 - **One Playwright smoke path**: launch the packaged app, confirm the window opens and the service handshake
   succeeds. Not a full end-to-end suite; that stays deferred.
 - **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual
