@@ -40,8 +40,8 @@ docs/      research, requirements, specs, plans
 ## Toolchain
 
 - Python: `uv`, `ruff`, `ty`, `pytest`, `hypothesis`; see the `modern-python` skill.
-- Node: Node 22, `npm`, `vite`, `vitest`, `electron-builder`, `eslint`, `tsc`.
-- Commands (once scaffolded): `uv run pytest` in `service/`; `npm test` in `app/`.
+- Node: Node 22, `npm`, `electron-vite` (Vite 7), `vitest`, `eslint` 10, `tsc`; `electron-builder` in plan 4.
+- Commands: `uv run pytest` in `service/`; `npm test`, `npm run lint`, `npm run typecheck` in `app/`.
 
 ## Skills and agents
 
