@@ -3,6 +3,7 @@ from whf.ai.verify import SMALL_INTEGER_ALLOWANCE, fact_numbers, numbers_in_text
 
 FACTS = {
     "run": {"id": 3, "weeks": ["2026-09-07", "2026-09-14"], "generated_at": "2026-09-03T10:00:00"},
+    "team": {"id": 1, "totals": [{"week": "2026-09-07", "demand": 72.5, "capacity": 88.0}]},
     "members": [
         {
             "id": 4,
@@ -12,13 +13,23 @@ FACTS = {
         {"id": 5, "name": "B", "forecast": [{"week": "2026-09-07", "demand": 20.5, "capacity": 40.0, "overload": 0.0}]},
     ],
     "model": {"champion": "gbm", "champion_mase": 0.913},
+    "rebalancing_candidates": {
+        "overloaded": [{"member_id": 4, "name": "A", "overload_hours": 12.0}],
+        "underloaded": [{"member_id": 5, "name": "B", "spare_hours": 19.5}],
+    },
 }
 
 
-def _narrative(summary: str, warnings: list[str] | None = None) -> Narrative:
+def _narrative(
+    summary: str,
+    warnings: list[str] | None = None,
+    *,
+    run_summary: str = "ok",
+    extra: dict | None = None,
+) -> Narrative:
     return Narrative.model_validate(
         {
-            "run_summary": "ok",
+            "run_summary": run_summary,
             "members": [
                 {
                     "member_id": 4,
@@ -30,6 +41,7 @@ def _narrative(summary: str, warnings: list[str] | None = None) -> Narrative:
                 },
                 {"member_id": 5, "name": "B", "risk_level": "low", "summary": "fine", "patterns": [], "warnings": []},
             ],
+            **(extra or {}),
         }
     )
 
@@ -65,11 +77,81 @@ def test_unverified_number_is_reported_with_its_field() -> None:
     report = verify_narrative(_narrative("Demand will reach 63.5 h.", ["Expect 12 h overload."]), FACTS)
     assert not report.ok
     assert any("63.5" in u and "members[0].summary" in u for u in report.unverified)
-    assert report.checked == 2  # 12 is a small integer, counted but never flagged
+    assert report.checked == 2  # 12 h matches member 4's own overload of 12.04, rounded
 
 
-def test_small_integers_are_never_flagged() -> None:
+def test_small_integers_without_an_hours_unit_are_never_flagged() -> None:
     report = verify_narrative(
         _narrative(f"Over {SMALL_INTEGER_ALLOWANCE} tasks in 2 weeks, 13 weeks of history."), FACTS
     )
+    assert report.ok
+
+
+def test_a_small_number_written_as_hours_is_checked() -> None:
+    """The small-integer allowance exists for counts, not for hours: 8 h is nowhere in the facts."""
+    report = verify_narrative(_narrative("Overload of 8 h in week 2026-09-07."), FACTS)
+    assert not report.ok
+    assert any("8" in u and "members[0].summary" in u for u in report.unverified)
+
+
+def test_hours_unit_is_recognised_in_its_common_spellings() -> None:
+    for written in ("8 h", "8h", "8 hrs", "8 hours", "8 hour", "8 heures"):
+        assert not verify_narrative(_narrative(f"Overload of {written}."), FACTS).ok, written
+    # a word merely starting with "h" is not an hours unit, so the count allowance still applies
+    assert verify_narrative(_narrative("8 high-priority tasks arrive."), FACTS).ok
+
+
+def test_a_members_text_may_not_cite_another_members_number() -> None:
+    """20.5 h is member 5's demand; in member 4's summary it is a misattribution, not a fact about A."""
+    report = verify_narrative(_narrative("Demand is 20.5 h."), FACTS)
+    assert not report.ok
+    assert any("20.5" in u and "members[0].summary" in u for u in report.unverified)
+
+
+def test_a_members_text_may_cite_run_team_and_model_numbers() -> None:
+    report = verify_narrative(_narrative("Demand 52.0 h of the team's 72.5 h against 88.0 h, MASE 0.91."), FACTS)
+    assert report.ok
+
+
+def test_a_members_text_may_cite_their_own_rebalancing_candidacy() -> None:
+    report = verify_narrative(_narrative("Overload of 12.0 h; B has 19.5 h spare."), FACTS)
+    assert any("19.5" in u for u in report.unverified)  # B's spare hours belong in B's section
+    report_b = verify_narrative(_narrative("Overload of 12.0 h."), FACTS)
+    assert report_b.ok
+
+
+def test_team_level_text_may_cite_any_members_number() -> None:
+    report = verify_narrative(_narrative("fine", run_summary="A is at 52.0 h, B at 20.5 h against 40.0 h."), FACTS)
+    assert report.ok
+
+
+def test_rebalancing_reason_may_cite_the_moves_own_hours() -> None:
+    """A partial move of 3.5 h is a number the model chose, bounded by the schema, not a fact of the run."""
+    move = {
+        "from_member_id": 4,
+        "to_member_id": 5,
+        "week": "2026-09-07",
+        "hours": 6.5,
+        "reason": "Move 6.5 h of A's 12.0 h overload to B, who has 19.5 h spare.",
+        "confidence": "high",
+    }
+    report = verify_narrative(_narrative("fine", extra={"rebalancing": [move]}), FACTS)
+    assert report.ok
+
+
+def test_a_value_that_only_rounds_onto_an_unrelated_fact_is_flagged() -> None:
+    """3.5 h is no fact of this run; that round(3.5) equals member 4's id is a collision, not evidence."""
+    report = verify_narrative(_narrative("Overload of 3.5 h."), FACTS)
+    assert not report.ok
+    assert any("3.5" in u for u in report.unverified)
+
+
+def test_adjustment_reason_may_cite_its_own_delta_hours() -> None:
+    adjustment = {
+        "member_id": 4,
+        "week": "2026-09-07",
+        "delta_hours": -2.5,
+        "reason": "Trim 2.5 h: the audit day is already counted in capacity.",
+    }
+    report = verify_narrative(_narrative("fine", extra={"suggested_adjustments": [adjustment]}), FACTS)
     assert report.ok

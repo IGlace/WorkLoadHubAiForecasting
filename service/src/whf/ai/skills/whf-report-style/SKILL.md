@@ -12,4 +12,5 @@ description: Tone, length and structure for the narrative fields returned to a t
 - Warnings: one line each, starting with the week.
 - Team risks: a title of at most eight words and a two-sentence detail.
 - No praise, no hedging words such as "might" when the facts are clear, no repetition of the same figure in several fields.
+- Inside a member's summary, patterns and warnings, cite only that member's own numbers plus the run-wide ones (team totals, project dates, model quality). Another member's hours belong in that member's section, in a team risk or in a rebalancing reason, where comparing people is the point.
 - Language: the language given in the facts; keep member names as given.
