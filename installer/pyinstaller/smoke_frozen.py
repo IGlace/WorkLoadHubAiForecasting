@@ -1,4 +1,5 @@
-"""Smoke-test a frozen service folder: version, data generation, serve handshake, health and one guarded route.
+"""Smoke-test a frozen service folder: version, data generation, forecast run, Copilot status,
+serve handshake, health and one guarded route.
 
 Usage: python installer/pyinstaller/smoke_frozen.py <dist-dir>   (dist-dir contains whf or whf.exe)
 Exit code 0 on success. Standard library only, so it runs on the Windows build machine and on Linux CI.
@@ -12,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -32,8 +34,30 @@ def _run(exe: Path, *args: str, timeout: int = 300) -> str:
 
 def _get(url: str, token: str | None = None) -> tuple[int, dict]:
     req = urllib.request.Request(url, headers={"X-WHF-Token": token} if token else {})
-    with urllib.request.urlopen(req, timeout=10) as res:
-        return res.status, json.loads(res.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            return res.status, json.loads(res.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8")
+        try:
+            body = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            body = {}
+        return exc.code, body
+
+
+def _valid_handshake(line: str) -> dict | None:
+    if not line:
+        return None
+    try:
+        candidate = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(candidate, dict):
+        return None
+    if not isinstance(candidate.get("port"), int) or not isinstance(candidate.get("token"), str):
+        return None
+    return candidate
 
 
 def main(dist_dir: str) -> int:
@@ -45,12 +69,44 @@ def main(dist_dir: str) -> int:
         db = Path(tmp) / "smoke.db"
         _run(exe, "data", "generate", "--db", str(db), "--months", "3")
         print("ok data generate")
+
+        run_out = _run(exe, "run", "--team", "1", "--db", str(db), "--json")
+        try:
+            run_payload = json.loads(run_out)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"whf run --json did not print JSON: {run_out}") from exc
+        if not isinstance(run_payload, dict) or "run_id" not in run_payload:
+            raise SystemExit(f"whf run --json missing run_id: {run_out}")
+        print("ok run")
+
+        copilot_out = subprocess.run(
+            [str(exe), "copilot", "status", "--json"], capture_output=True, text=True, timeout=60
+        )
+        if copilot_out.returncode not in (0, 3):
+            raise SystemExit(
+                f"whf copilot status --json failed ({copilot_out.returncode}):\n"
+                f"{copilot_out.stdout}\n{copilot_out.stderr}"
+            )
+        if "Traceback" in copilot_out.stderr:
+            raise SystemExit(f"whf copilot status --json printed a traceback:\n{copilot_out.stderr}")
+        print("ok copilot status")
+
         proc = subprocess.Popen(
             [str(exe), "serve", "--db", str(db)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         try:
-            line = proc.stdout.readline() if proc.stdout else ""
-            handshake = json.loads(line)
+            raw_line = proc.stdout.readline() if proc.stdout else ""
+            handshake = _valid_handshake(raw_line)
+            if handshake is None:
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+                stderr = proc.stderr.read() if proc.stderr else ""
+                raise SystemExit(
+                    f"serve printed no valid handshake (exit code {proc.returncode}): "
+                    f"line={raw_line!r}\nstderr:\n{stderr}"
+                )
             port, token = int(handshake["port"]), str(handshake["token"])
             print(f"ok handshake on port {port}")
             deadline = time.time() + 60
