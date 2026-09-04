@@ -31,4 +31,18 @@ describe('Dashboard', () => {
     expect(await screen.findByText('Core')).toBeInTheDocument()
     expect(screen.queryByText('Data')).not.toBeInTheDocument()
   })
+  it('shows an error banner on a failed fetch, then loads cleanly with no banner once the fetch succeeds', async () => {
+    let call = 0
+    installFakeWhf({
+      'GET /meta': META,
+      'GET /profile': { member_id: 10, role: 'skill_team_leader' },
+      'GET /departments/1/overview': () => { call += 1; return call === 1 ? new Error('boom') : overview },
+    })
+    const { unmount } = render(<MemoryRouter><AppProvider><Dashboard /></AppProvider></MemoryRouter>)
+    expect(await screen.findByText('Something went wrong: boom')).toBeInTheDocument()
+    unmount()
+    render(<MemoryRouter><AppProvider><Dashboard /></AppProvider></MemoryRouter>)
+    expect(await screen.findByText('Core')).toBeInTheDocument()
+    expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument()
+  })
 })

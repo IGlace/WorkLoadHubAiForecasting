@@ -17,6 +17,7 @@ const en: Record<string, string> = {
   'run.onBehalf': 'You are running this forecast on behalf of {leader}.',
   'dashboard.title': 'Dashboard', 'dashboard.due': 'Forecast due', 'dashboard.lastRun': 'Last run {date}', 'dashboard.noRun': 'No forecast yet',
   'dashboard.overloaded': 'Overloaded', 'dashboard.demand': 'Demand', 'dashboard.capacity': 'Capacity', 'dashboard.overload': 'Overload',
+  'dashboard.open': 'Open result',
   'team.title': 'Team result', 'team.member': 'Member', 'team.champion': 'Champion model', 'team.mase': 'Backtest MASE',
   'team.summary': 'AI summary', 'team.warnings': 'Warnings', 'team.risks': 'Team risks', 'team.narrate': 'Ask Copilot',
   'team.narrativeStatus': 'Narrative status: {status}', 'team.unverified': 'Some numbers in this narrative could not be matched to the forecast facts.',

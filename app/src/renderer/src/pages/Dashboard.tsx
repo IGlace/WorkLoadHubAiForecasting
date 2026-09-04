@@ -31,7 +31,7 @@ function TeamCard({ team }: { team: OverviewTeam }): React.JSX.Element {
         <p>{t('dashboard.overloaded')}: {team.overloaded.map((m) => <span key={m.member_id} className="badge high" style={{ marginRight: 6 }}><span>{m.name}</span> +{m.overload_hours.toFixed(1)} h</span>)}</p>
       )}
       <p>
-        {team.run_id && <Link to={`/runs/${team.run_id}`}>Open result</Link>}{' '}
+        {team.run_id && <Link to={`/runs/${team.run_id}`}>{t('dashboard.open')}</Link>}{' '}
         <Link to={`/run?team=${team.team_id}`}>{t('nav.run')}</Link>
       </p>
     </section>
@@ -44,7 +44,18 @@ export function Dashboard(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     if (!me) return
-    getDepartmentOverview(me.department_id).then(setOverview).catch((e: Error) => setError(e.message))
+    let cancelled = false
+    getDepartmentOverview(me.department_id)
+      .then((d) => {
+        if (cancelled) return
+        setOverview(d)
+        setError(null)
+      })
+      .catch((e: Error) => {
+        if (cancelled) return
+        setError(e.message)
+      })
+    return () => { cancelled = true }
   }, [me])
   if (!me) return <h1>{t('dashboard.title')}</h1>
   const visible = new Set(visibleTeams.map((tm) => tm.id))
