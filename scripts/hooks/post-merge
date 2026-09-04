@@ -1,0 +1,20 @@
+#!/bin/sh
+# A merge landed. On main, say whether the result is green.
+#
+# This cannot block anything: git runs post-merge after the merge is already recorded, and there is
+# no pre-merge hook for a fast-forward. Use scripts/release.ps1 to gate before merging; this hook is
+# the safety net for a merge done by hand. Its exit code is ignored by git, so the message matters.
+if [ -n "$WHF_SKIP_HOOKS" ]; then
+    exit 0
+fi
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+    exit 0
+fi
+root=$(git rev-parse --show-toplevel) || exit 1
+echo "post-merge: main changed, running the full gate (about ten minutes)"
+if ! pwsh -NoProfile -File "$root/scripts/check.ps1" -Full; then
+    echo ""
+    echo "post-merge: main is NOT green. Fix it on dev and release again, or move main back with:"
+    echo "    git branch -f main <last good commit>"
+    exit 1
+fi

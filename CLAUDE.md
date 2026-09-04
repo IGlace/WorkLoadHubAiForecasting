@@ -47,9 +47,17 @@ docs/      research, requirements, specs, plans
 - Python: `uv`, `ruff`, `ty`, `pytest`, `hypothesis`; see the `modern-python` skill.
 - Node: Node 22, `npm`, `electron-vite` (Vite 7), `vitest`, `eslint` 10, `tsc`, `electron-builder`.
 - Commands: `uv run pytest` in `service/`; `npm test`, `npm run lint`, `npm run typecheck` in `app/`.
+- Local gate (there is no CI; the remote was removed): `pwsh scripts/check.ps1` runs the fast
+  checks in about two and a half minutes, `-Full` adds the slow pytest suite and the app build,
+  `-Package` adds the installer. `pwsh scripts/release.ps1` runs the full gate and then
+  fast-forwards `main` to `dev`; it is the only thing that can refuse a bad release, because git
+  has no pre-merge hook for a fast-forward. Activate the hooks once per clone with
+  `git config core.hooksPath scripts/hooks`; escape them with `git commit --no-verify` or
+  `WHF_SKIP_HOOKS=1`.
 - Packaging: PyInstaller (`installer/pyinstaller/whf.spec`), electron-builder
   (`installer/electron-builder.yml`); `pwsh scripts/build-installer.ps1` builds the
-  installer; CI in `.github/workflows/ci.yml`.
+  installer. `.github/workflows/ci.yml` is kept as the written definition of "green" but is
+  inert, since there is no remote to trigger it.
 
 ## Skills and agents
 

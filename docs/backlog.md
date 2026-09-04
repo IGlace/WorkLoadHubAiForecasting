@@ -6,6 +6,19 @@ version 1. Dated 2026-09-04; update this file when an item lands.
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
+## Landed
+
+- **Local checks in place of CI** (2026-09-04): `scripts/check.ps1` (fast, `-Full`, `-Package`),
+  `scripts/release.ps1` (gate then fast-forward `main`) and the hooks in `scripts/hooks/`, activated by
+  `git config core.hooksPath scripts/hooks`. A committed `app/.npmrc` was needed alongside it: the
+  machine-wide registry is a corporate Artifactory with expired credentials, so `npm ci` failed with E401
+  and took the installer build with it. Plan: `docs/superpowers/plans/2026-09-04-local-checks.md`.
+  See the Toolchain section of `CLAUDE.md`.
+- **The fast gate made fast enough to sit in front of every commit** (2026-09-04): it started at 8.4
+  minutes, which nobody would have kept. The AI tests each recomputed a ten-second forecast, so that now
+  runs once per session and is handed out as a copy, and pytest runs on six xdist workers. 8.4 minutes
+  down to about 2.5.
+
 ## Approved, not yet built
 
 Ordered roughly by value. Each of these has an owner decision behind it.
@@ -18,12 +31,6 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   between them. Today the `fr` dictionary in `app/src/renderer/src/i18n.ts` covers navigation, common labels
   and notifications only, and pages fall back to English silently. The narrative language already works.
   No third language: `en` and `fr` only.
-- **Local checks in place of CI.** The remote was removed on 2026-09-04, so GitHub Actions can never run.
-  Replace it with `scripts/check.ps1` plus versioned hooks in `scripts/hooks/`, activated by
-  `git config core.hooksPath scripts/hooks`:
-  - fast gate on every commit: ruff, `pytest -m "not slow"`, app lint, typecheck and tests;
-  - full gate on every merge into `main` (`post-merge`, because a fast-forward merge creates no commit and
-    would never fire `post-commit`): both pytest suites, the whole app suite, and the installer build.
 - **Live progress for the Copilot narrative** on the Run page; today the step shows only "Asking Copilot…",
   which is where a user assumes the app has hung.
 - **Small polish**, all approved:

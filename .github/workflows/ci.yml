@@ -1,3 +1,6 @@
+# INERT. The repository has no remote as of 2026-09-04, so nothing here can ever trigger. It is kept
+# as the written definition of "green", which scripts/check.ps1 reproduces locally. If a remote is
+# ever added back, check that the two have not drifted apart.
 name: CI
 
 on:
