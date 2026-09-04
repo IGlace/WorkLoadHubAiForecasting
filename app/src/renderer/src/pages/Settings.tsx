@@ -45,7 +45,7 @@ export function Settings(): React.JSX.Element {
             {copilot.cli_path && <span className="muted"> · {copilot.cli_path}</span>}</p>
         )}
         {loginMessage && <StatusMessage kind="info">{loginMessage}</StatusMessage>}
-        <button className="primary" onClick={() => { void window.whf.copilotLogin().then((r) => setLoginMessage(r.message)) }}>{t('settings.signin')}</button>{' '}
+        <button className="primary" onClick={() => { void window.whf.copilotLogin().then((r) => setLoginMessage(r.message)).catch((e: Error) => setError(e.message)) }}>{t('settings.signin')}</button>{' '}
         <button onClick={loadStatus}>{t('settings.recheck')}</button>
       </section>
       <section className="panel">

@@ -37,4 +37,11 @@ describe('Settings', () => {
     await userEvent.click(screen.getByLabelText(/Windows/))
     await waitFor(() => expect(fake.settings.launchAtLogin).toBe(true))
   })
+  it('shows an error when Copilot sign-in rejects', async () => {
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', ready: false } })
+    window.whf.copilotLogin = () => Promise.reject(new Error('login failed'))
+    mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign in to GitHub Copilot' }))
+    expect(await screen.findByText('Something went wrong: login failed')).toBeInTheDocument()
+  })
 })

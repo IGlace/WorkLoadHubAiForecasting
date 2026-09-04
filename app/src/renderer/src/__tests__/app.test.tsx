@@ -17,4 +17,10 @@ describe('App shell', () => {
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>)
     expect(await screen.findByText('Choose who you are in Settings to see your teams.')).toBeInTheDocument()
   })
+  it('shows the error banner when getState rejects', async () => {
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: null, role: null } })
+    window.whf.getState = () => Promise.reject(new Error('state unavailable'))
+    render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>)
+    expect(await screen.findByText('Something went wrong: state unavailable')).toBeInTheDocument()
+  })
 })
