@@ -159,3 +159,15 @@ def test_project_update_and_deletes(client) -> None:
     ).json()["id"]
     assert client.delete(f"/vacations/{vid}", headers=_h()).json() == {"deleted": True}
     assert client.delete(f"/vacations/{vid}", headers=_h()).status_code == 404
+
+
+def test_due_and_overview_routes(client) -> None:
+    due = client.get("/teams/1/due", headers=_h()).json()
+    assert due == {"team_id": 1, "due": True, "last_run_id": None, "last_finished_at": None}
+    run = client.post("/runs", json={"team_id": 1}, headers=_h()).json()
+    due = client.get("/teams/1/due", headers=_h()).json()
+    assert due["due"] is False and due["last_run_id"] == run["run_id"]
+    overview = client.get("/departments/1/overview", headers=_h()).json()
+    team = next(t for t in overview["teams"] if t["team_id"] == 1)
+    assert team["run_id"] == run["run_id"] and len(team["weeks"]) == 2
+    assert client.get("/departments/999/overview", headers=_h()).json()["teams"] == []

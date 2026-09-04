@@ -28,6 +28,7 @@ from whf.ai.status import CopilotStatus, copilot_status_sync
 from whf.db.connection import connect
 from whf.db.repo import read_df
 from whf.narrate import RunHasNoFactsError, RunNotFoundError, narrate_run
+from whf.overview import department_overview, team_due
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
 
 
@@ -313,5 +314,13 @@ def create_app(
         if not delete_vacation(conn, vacation_id):
             raise HTTPException(status_code=404, detail=f"vacation {vacation_id} not found")
         return {"deleted": True}
+
+    @app.get("/teams/{team_id}/due", dependencies=guarded)
+    def get_team_due(team_id: int, conn: sqlite3.Connection = Depends(db)) -> dict:
+        return team_due(conn, team_id, dt.datetime.now())
+
+    @app.get("/departments/{department_id}/overview", dependencies=guarded)
+    def get_department_overview(department_id: int, conn: sqlite3.Connection = Depends(db)) -> dict:
+        return jsonable(department_overview(conn, department_id, dt.datetime.now()))
 
     return app
