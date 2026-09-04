@@ -1,13 +1,8 @@
-import pytest
 from ai_fakes import FakeClient, good_narrative
 
 from whf.ai.session import CopilotNarrator, NarratorConfig, _default_client_factory
-from whf.pipeline import jsonable, run_forecast
 
-
-@pytest.fixture()
-def facts(db, generated) -> dict:
-    return jsonable(run_forecast(db, team_id=1, as_of=generated.config.as_of).facts)
+# `facts` comes from tests/conftest.py: one real forecast for team 1, shared and copied per test.
 
 
 def _narrator(client: FakeClient, **cfg) -> CopilotNarrator:

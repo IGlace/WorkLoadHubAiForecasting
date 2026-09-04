@@ -1,17 +1,11 @@
 import asyncio
 import json
 
-import pytest
 from copilot import ToolInvocation
 
 from whf.ai.facts_tools import TOOL_NAMES, FactsToolbox
-from whf.pipeline import jsonable, run_forecast
 
-
-@pytest.fixture()
-def facts(db, generated) -> dict:
-    result = run_forecast(db, team_id=1, as_of=generated.config.as_of)
-    return jsonable(result.facts)
+# `facts` comes from tests/conftest.py: one real forecast for team 1, shared and copied per test.
 
 
 def test_overview_lists_members_and_model(facts) -> None:
