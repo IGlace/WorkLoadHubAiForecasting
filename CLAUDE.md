@@ -30,9 +30,9 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 
 ```
 service/   Python 3.11+ service (package `whf`): FastAPI, Typer CLI, SQLite, models, generator, Copilot session
-app/       Electron + React + TypeScript desktop app
+app/       Electron + React + TypeScript desktop app (`src/main`, `src/preload`, `src/renderer`, `src/shared`)
 installer/ PyInstaller and electron-builder configuration
-scripts/   PowerShell and shell helpers
+scripts/   PowerShell helpers (`dev-app.ps1`)
 docs/      research, requirements, specs, plans
 .claude/   skills, agents, hooks, settings
 ```

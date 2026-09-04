@@ -235,6 +235,10 @@ Notifications: at app start and every 24 hours the tray process asks the service
 whether the user's team has a run in the last 14 days; if not, a Windows notification
 says a forecast is due. After a run, a notification lists members with overload.
 
+(Implementation note, 2026-09-04: the renderer does not call the local API directly; it calls `window.whf.request` and the main process forwards the call with the token, so the token never enters the renderer and no CORS configuration is needed in the service.)
+
+(Implementation note, 2026-09-04: the Settings language switch stores `en` or `fr`; version 1 ships a complete English dictionary and a French dictionary for navigation and common labels that falls back to English; full French copy is a later task.)
+
 ## 8. CLI
 
 `whf run --team <id>`, `whf runs list`, `whf runs show <id> --json`, `whf export

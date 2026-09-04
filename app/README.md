@@ -22,3 +22,20 @@ Set `WHF_SERVICE_COMMAND` to override how the service is started, as a JSON arra
 - `src/preload`: the `window.whf` bridge
 - `src/renderer`: React app (pages, components, typed API client)
 - `src/shared`: types shared by all three
+
+## Screens
+
+- Dashboard `/`
+- Run `/run` (accepts `?team=<id>`)
+- Team result `/runs/:runId`
+- Member detail `/runs/:runId/members/:memberId`
+- Rebalancing `/rebalancing`
+- Projects `/projects`
+- Capacity `/capacity`
+- Time off `/timeoff`
+- Runs `/runs`
+- Settings `/settings`
+
+## Notifications
+
+The app checks whether a forecast is due at startup and every 24 hours. If the user's team has no run in the last 14 days, a Windows notification prompts them to run a forecast. After each run completes, a notification lists any team members with overload. Windows toast notifications require the app user model ID, which is set in `src/main/index.ts`.
