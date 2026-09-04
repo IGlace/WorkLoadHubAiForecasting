@@ -68,7 +68,8 @@ security-auditor, technical-writer. Index in `.claude/agents/README.md`.
 
 ## Conventions
 
-- Branch work goes to `claude/skills-installation-approach-su979o` until told otherwise.
+- Branches: `dev` is the development branch; all work lands there first. `main` is the release branch and only
+  receives fast-forward merges from `dev` once a plan or fix batch is reviewed and every suite is green.
 - Commit messages: imperative subject, short body explaining why.
 - Domain vocabulary: department (skill team leader), team (team leader), member;
   demand, capacity, overload; arrival model, effort model, champion model, backtest.
