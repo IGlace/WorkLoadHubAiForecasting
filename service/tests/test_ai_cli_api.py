@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from ai_fakes import FakeNarrator
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
@@ -92,6 +93,46 @@ def test_cli_run_ai_exits_4_when_narration_fails_but_still_prints_the_forecast(m
     assert out_json.exit_code == 4
     payload = json.loads(out_json.output)  # the forecast must still be the single JSON document on stdout
     assert payload["team_id"] == 1 and "forecasts" in payload and payload["ai_status"].startswith("failed")
+
+
+@pytest.fixture()
+def client(tmp_path):
+    """A client with the token already set, backed by a fake narrator that reports one step."""
+    db = _db(tmp_path)
+    narrator = FakeNarrator(NarrativeOutcome(status="ok", narrative={"run_summary": "fine", "members": []}))
+    test_client = TestClient(
+        create_app(db, TOKEN, narrator_factory=lambda model=None: narrator, status_provider=_ready)
+    )
+    test_client.headers.update({"X-WHF-Token": TOKEN})
+    return test_client
+
+
+@pytest.fixture()
+def client_without_token(tmp_path):
+    db = _db(tmp_path)
+    return TestClient(create_app(db, TOKEN, status_provider=_ready))
+
+
+def _run_id(client) -> int:
+    return client.post("/runs", json={"team_id": 1, "as_of": "2026-09-03"}).json()["run_id"]
+
+
+def test_narrating_records_the_steps_the_app_polls_for(client) -> None:
+    """The POST blocks while Copilot works, so the app polls this route to show what is happening."""
+    run_id = _run_id(client)
+    assert client.get(f"/runs/{run_id}/narrative/progress").json()["steps"] == []
+    client.post(f"/runs/{run_id}/narrative", json={"model": None})
+    steps = client.get(f"/runs/{run_id}/narrative/progress").json()["steps"]
+    assert [s["code"] for s in steps] == ["asking"]
+
+
+def test_progress_of_an_unknown_run_is_empty_rather_than_an_error(client) -> None:
+    """The app polls as soon as it sends the POST; a poll that arrives first must not be a 404."""
+    assert client.get("/runs/999/narrative/progress").json() == {"run_id": 999, "steps": []}
+
+
+def test_the_progress_route_needs_the_token(client_without_token) -> None:
+    assert client_without_token.get("/runs/1/narrative/progress").status_code == 401
 
 
 def test_api_copilot_status_and_narrative(tmp_path) -> None:

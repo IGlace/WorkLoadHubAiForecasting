@@ -23,6 +23,7 @@ from whf.admin import (
     set_profile,
     update_project,
 )
+from whf.ai.progress import ProgressStore
 from whf.ai.session import Narrator, default_narrator
 from whf.ai.status import CopilotStatus, copilot_status_sync
 from whf.db.connection import connect
@@ -136,6 +137,10 @@ def create_app(
 
     guarded = [Depends(require_token)]
 
+    # Progress of the narration that is running now, so the desktop app can poll it while the POST
+    # below is still blocked on Copilot. In memory only: it is worthless once the run has finished.
+    narrative_progress = ProgressStore()
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok", "version": __version__}
@@ -191,8 +196,14 @@ def create_app(
 
     @app.post("/runs/{run_id}/narrative", dependencies=guarded)
     def create_narrative(run_id: int, body: NarrativeRequest, conn: sqlite3.Connection = Depends(db)) -> dict:
+        narrative_progress.begin(run_id)
         try:
-            outcome = narrate_run(conn, run_id, narrator=narrator_factory(body.model))
+            outcome = narrate_run(
+                conn,
+                run_id,
+                narrator=narrator_factory(body.model),
+                progress=lambda event: narrative_progress.record(run_id, event),
+            )
         except RunNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except RunHasNoFactsError as exc:
@@ -201,6 +212,12 @@ def create_app(
         # via narrate_run and in NarrativeOutcome), but not something the desktop app's UI needs over HTTP.
         payload = {k: v for k, v in outcome.__dict__.items() if k != "raw_text"}
         return jsonable({**payload, "ai_status": outcome.ai_status, "run_id": run_id})
+
+    @app.get("/runs/{run_id}/narrative/progress", dependencies=guarded)
+    def narrative_progress_route(run_id: int) -> dict:
+        # No 404 for an unknown run: the app polls this the moment it sends the POST, and an empty
+        # list is the honest answer both before the first step and long after the last one.
+        return {"run_id": run_id, "steps": narrative_progress.steps(run_id)}
 
     @app.get("/projects", dependencies=guarded)
     def get_projects(conn: sqlite3.Connection = Depends(db)) -> list:
