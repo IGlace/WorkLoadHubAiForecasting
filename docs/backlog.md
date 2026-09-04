@@ -6,8 +6,8 @@ version 1. Dated 2026-09-04; update this file when an item lands.
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
-State on 2026-09-04: `main` was fast-forwarded to `9675d3f`, so it is level with `dev` and everything under
-"Landed" is released. The next item to start is "Upcoming events".
+State on 2026-09-04: `main` is at `4fba18a`; `dev` carries the team-page live progress on top of it, so that
+one item is landed but not yet released. The next item to start is "Upcoming events".
 
 ## Landed
 
@@ -39,6 +39,14 @@ State on 2026-09-04: `main` was fast-forwarded to `9675d3f`, so it is level with
   synchronous `def`s that FastAPI hands to its threadpool, so the progress GET runs on a different worker
   while the narration holds one — concurrent with no new channel to build. Plan:
   `docs/superpowers/plans/2026-09-04-live-copilot-progress.md`.
+- **Live progress on the team page too** (2026-09-04): `TeamResult.tsx` starts the same multi-minute
+  narration as the Run page and used to show nothing while it ran. The Run page's polling effect is now a
+  `useNarrativeProgress(runId)` hook in `app/src/renderer/src/narrative-progress.ts` that both pages use, so
+  the two non-obvious behaviours live in one place: an empty poll keeps the last known step, and a failed
+  poll does not fail the run. The team page passes the id `narrate()` was called for rather than a bare busy
+  flag — with a bare flag, navigating to another run mid-narration fed the new id to the hook and showed the
+  first run's progress under the second run's identity. The hook resets its step and elapsed counter whenever
+  its `runId` changes, which is why no separate reset call is needed at either call site.
 - **The fast gate made fast enough to sit in front of every commit** (2026-09-04): it started at 8.4
   minutes, which nobody would have kept. The AI tests each recomputed a ten-second forecast, so that now
   runs once per session and is handed out as a copy, and pytest runs on six xdist workers. 8.4 minutes
@@ -56,13 +64,12 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   what happens when an event's hours exceed a member's remaining capacity for the range (clamp, or report
   it as overload the way demand already is), and whether a capacity-reducing event that overlaps a holiday
   or a vacation subtracts twice or is absorbed. Start with a brainstorming pass, not a plan.
-- **Live progress on the team page too** (raised by the final review of the live-progress work,
-  2026-09-04, owner has not yet decided). `TeamResult.tsx` starts the same multi-minute narration from its
-  "Ask Copilot" button and shows nothing at all while it runs — only a greyed-out button, which is worse
-  than the static line the Run page used to have. `getNarrativeProgress` and `progressLabel` already exist,
-  so reusing them there is under ten lines plus a test. Left out of the live-progress plan because the
-  approved item said "on the Run page"; until this lands, "the app no longer looks hung" is only true of one
-  of the two places a narration starts.
+- **The team page's "Ask Copilot" button is disabled for every run at once** (raised by the review of the
+  team-page live-progress work, 2026-09-04, owner has not yet decided). The button is disabled from the
+  single narrating-run state, so while run A's narration is in flight, run B's button is disabled too even
+  though nothing is running for B. It predates the live-progress work and was left alone by it. Scoping the
+  disable to the displayed run is a one-line change plus a test; the question for the owner is whether two
+  narrations should be allowed to run at once at all, which is a service question, not a button question.
 - **One Playwright smoke path**: launch the packaged app, confirm the window opens and the service handshake
   succeeds. Not a full end-to-end suite; that stays deferred.
 - **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual
