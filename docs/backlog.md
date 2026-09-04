@@ -1,16 +1,18 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-05; update this file when an item lands.
 
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
-State on 2026-09-04: `main` is at `4fba18a`; `dev` carries the team-page live progress, the "Ask Copilot"
-button scoping and the narrative-envelope fix below it, so those are landed but not yet released. "Upcoming
-events" was brainstormed on 2026-09-04 and closed as already covered, and the Playwright smoke path was
-deferred the same day. The review of the button-scoping change turned up a serious pre-existing defect —
-the app could not render a narrative the service returns — which has since been fixed; see "Landed" below.
+State on 2026-09-05: released — `scripts/release.ps1` fast-forwarded `main` to `dev` at `0f3eb03` on
+2026-09-04, so both branches carry the team-page live progress, the "Ask Copilot" button scoping and the
+narrative-envelope fix. "Upcoming events" was brainstormed on 2026-09-04 and closed as already covered, and
+the Playwright smoke path was deferred the same day. The review of the button-scoping change turned up a
+serious pre-existing defect — the app could not render a narrative the service returns — which has since
+been fixed; see "Landed" below. The owner began the Windows verification on 2026-09-05 and hit the empty
+first install straight away; that is the seeding item below.
 
 ## Landed
 
@@ -92,6 +94,24 @@ the app could not render a narrative the service returns — which has since bee
   seam: an envelope leaking through `load_run` again, and a seventh field added to `whf.ai.schema.Narrative`
   that the app's interface does not declare. Both were confirmed to fail the test before it was accepted.
 
+- **A fresh install has no data, and the first-run checklist did not say so** (found by the owner on
+  2026-09-05, on the first real walkthrough of the packaged app; documented the same day). Version 1
+  forecasts from generated dummy data, but nothing seeds it: the installer ships only the empty schema, the
+  app creates the database on first launch and leaves it empty, there is no API route for generation and no
+  action for it in the interface. `whf data generate` is the only path, and `installer/README.md` never
+  mentioned it — so the walkthrough died at "choose your profile", with every picker empty and no team to
+  forecast. The bundled `whf.exe` under `resources/service/whf` runs it and defaults to the same
+  `%LOCALAPPDATA%\WorkloadHubForecast\whf.db` the app uses, so no `--db` argument is needed; it produced 3
+  departments, 8 teams, 48 members, 42 projects and 6,522 tasks on the owner's machine, which incidentally
+  is the first evidence that the frozen PyInstaller build runs the generator correctly. Two traps the new
+  step calls out: the app must be restarted afterwards, because it reads the database at startup and
+  otherwise keeps showing empty lists, and `data generate` *replaces* everything, so running it after a
+  forecast destroys the stored runs and their narratives. Fixed as documentation only — a new step 2 in the
+  first-run checklist. **Still undecided, and the owner's call:** whether the app should offer this itself
+  (a "Load sample data" action in Settings, guarded by a confirmation because of the replace). Documentation
+  is enough while one person installs this on one machine; it stops being enough as soon as someone who
+  will not open PowerShell has to install it.
+
 ## Approved, not yet built
 
 Ordered roughly by value. Each of these has an owner decision behind it.
@@ -113,11 +133,15 @@ Ordered roughly by value. Each of these has an owner decision behind it.
 ## Verification on Windows (owner)
 
 To be run once the approved work above has landed, so the owner verifies the final state rather than an
-intermediate one.
+intermediate one. **In progress**, started 2026-09-05 against the 0.1.0 installer built from `0f3eb03`.
 
 - Build the installer with `pwsh scripts/build-installer.ps1` and walk the first-run checklist in
-  `installer/README.md`: per-user install, Copilot sign-in, one run with the AI narrative, toast, tray, quit
-  without an orphaned `whf.exe`, uninstall.
+  `installer/README.md`: per-user install, dummy-data seeding, Copilot sign-in, one run with the AI
+  narrative, toast, tray, quit without an orphaned `whf.exe`, uninstall.
+- Confirm the team page renders a real narrative and that "Ask Copilot" comes back after a failed narration.
+  Both shipped in `0f3eb03` reasoned out against tests only; neither has ever run against a signed-in
+  Copilot seat, and the envelope defect they fixed survived precisely because the app and service suites
+  each asserted their own side of the seam.
 - Run the live Copilot test (`WHF_COPILOT_LIVE=1 uv run pytest tests/test_ai_live.py -v -s` in `service/`) and
   confirm a `whf-*` skill is loaded in the session. This is also how skill loading in the frozen build gets
   proved: the owner chose the manual check over a frozen-environment substitute test.

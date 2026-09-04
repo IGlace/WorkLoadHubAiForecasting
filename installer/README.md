@@ -40,23 +40,46 @@ pull request and manual dispatch.
    local app data and adds Desktop and Start Menu shortcuts. When the
    installer finishes it launches the app itself (`runAfterFinish: true` in
    `installer/electron-builder.yml`), so step 2 below is usually already done.
-2. Start the app from the Start Menu.
-3. Settings → choose your profile (department, team, member).
-4. Settings → "Sign in to GitHub Copilot". A PowerShell window opens showing
+2. Load the dummy data. Version 1 forecasts from generated data, and a fresh
+   install has none — the database holds only the empty schema, so the
+   profile pickers in step 4 have nothing to offer and no team can be
+   forecast. Nothing seeds it automatically and there is no button for it in
+   the app; run the bundled service binary once:
+
+   ```powershell
+   & "$env:LOCALAPPDATA\Programs\WorkloadHub Forecast\resources\service\whf\whf.exe" data generate
+   ```
+
+   It writes to the same `%LOCALAPPDATA%\WorkloadHubForecast\whf.db` the app
+   uses, so no `--db` is needed; adjust the path if the install directory was
+   changed (`allowToChangeInstallationDirectory: true`). The defaults produce
+   3 departments, 8 teams, 48 members and 12 months of task history, plus
+   `answer_key.json` beside the database — the ground truth the backtest
+   compares against, which is why the two are always written together.
+   `data generate` **replaces** all existing data, including stored runs and
+   their narratives, so run it before the first forecast and not after.
+3. Start the app from the Start Menu. If the installer already launched it
+   (step 1), quit it from the tray icon first and start it again: it read an
+   empty database at startup and will keep showing empty lists otherwise.
+4. Settings → choose your profile (department, team, member).
+5. Settings → "Sign in to GitHub Copilot". A PowerShell window opens showing
    a device code; this first sign-in must use the company GitHub account
    with the Copilot Enterprise seat. The Copilot CLI itself is bundled with
    the installer, so nothing downloads at this step — only the device-flow
    sign-in talks to GitHub.
-5. Click "Check again" in Settings until it reports signed in.
-6. Run → pick the team → "Run forecast" with the AI box ticked.
-7. Expect an overload notification if any team member is over capacity.
-8. Close the window and confirm the app is still running from its tray icon
+6. Click "Check again" in Settings until it reports signed in.
+7. Run → pick the team → "Run forecast" with the AI box ticked.
+8. Expect an overload notification if any team member is over capacity.
+9. Close the window and confirm the app is still running from its tray icon
    (closing the window hides it to the tray by default; Quit from the tray
    menu exits it).
 
 ## Data, logs and uninstall
 
 - Database: `%LOCALAPPDATA%\WorkloadHubForecast\whf.db`
+- Answer key for the generated data:
+  `%LOCALAPPDATA%\WorkloadHubForecast\answer_key.json`, rewritten by every
+  `data generate` so it always describes the data currently in the database
 - App settings: `%LOCALAPPDATA%\WorkloadHubForecast\app\settings.json`
 - Logs: `%LOCALAPPDATA%\WorkloadHubForecast\logs\app.log` (rotates at 1 MB,
   keeps 5 files)
