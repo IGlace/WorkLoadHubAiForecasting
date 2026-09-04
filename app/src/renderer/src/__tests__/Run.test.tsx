@@ -107,6 +107,10 @@ describe('Run', () => {
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
     const button = await screen.findByRole('button', { name: 'Run forecast' })
+    // See the "stops polling" test below for why this wait matters: the "with AI" checkbox only
+    // enables once the unawaited copilot-status mount effect resolves, and that race decides whether
+    // the run ever reaches the narrating phase this test depends on.
+    await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
     vi.useFakeTimers()
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
@@ -139,6 +143,11 @@ describe('Run', () => {
     // fake ones: the interval this test cares about is only created once the run reaches the narrating
     // phase, so it must be created — and ticked — entirely under the fake clock to mean anything.
     const button = await screen.findByRole('button', { name: 'Run forecast' })
+    // The "with AI" checkbox is disabled until copilot status has arrived (Run.tsx:71); that status is
+    // set by an unawaited mount effect racing the button's own readiness. Wait for the checkbox to be
+    // enabled under real timers before installing fake ones, or a slow status response makes the run
+    // skip straight from forecasting to done with no narration and zero polls.
+    await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
     vi.useFakeTimers()
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
