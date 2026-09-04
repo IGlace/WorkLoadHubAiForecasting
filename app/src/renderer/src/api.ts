@@ -1,7 +1,7 @@
 import type { HttpMethod } from '../../shared/ipc'
 import type {
-  Capacity, CapacityOverride, CopilotStatus, DepartmentOverview, Holiday, Meta, NarrativeOutcome, Profile, Project,
-  ProjectInput, ProjectUpdate, RunCreated, RunDetail, RunSummary, TeamDue, Vacation,
+  Capacity, CapacityOverride, CopilotStatus, DepartmentOverview, Holiday, Meta, NarrativeOutcome, NarrativeProgress, Profile,
+  Project, ProjectInput, ProjectUpdate, RunCreated, RunDetail, RunSummary, TeamDue, Vacation,
 } from '../../shared/types'
 
 export class ApiError extends Error {
@@ -27,6 +27,7 @@ export const getRun = (id: number) => call<RunDetail>('GET', `/runs/${id}`)
 export const createRun = (team_id: number, as_of?: string, requested_by?: number | null) =>
   call<RunCreated>('POST', '/runs', { team_id, as_of, requested_by })
 export const createNarrative = (run_id: number, model: string | null) => call<NarrativeOutcome>('POST', `/runs/${run_id}/narrative`, { model })
+export const getNarrativeProgress = (run_id: number) => call<NarrativeProgress>('GET', `/runs/${run_id}/narrative/progress`)
 export const getCopilotStatus = () => call<CopilotStatus>('GET', '/copilot/status')
 export const getProjects = () => call<Project[]>('GET', '/projects')
 export const createProject = (input: ProjectInput) => call<{ id: number }>('POST', '/projects', input)

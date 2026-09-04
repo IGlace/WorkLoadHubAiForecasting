@@ -79,6 +79,11 @@ export interface NarrativeOutcome {
   error: string | null; reason: string | null; attempts: number; tool_calls: string[]
 }
 
+/** What the Copilot session is doing right now. `code` is language-independent; the app phrases it. */
+export type NarrativeProgressCode = 'starting' | 'session' | 'asking' | 'tool' | 'checking'
+export interface NarrativeProgressStep { code: NarrativeProgressCode; detail: string | null; at: string }
+export interface NarrativeProgress { run_id: number; steps: NarrativeProgressStep[] }
+
 /** `code` is language-independent, so the app can phrase it; `message` is the service's English detail. */
 export type CopilotStatusCode = 'signed_in' | 'not_signed_in' | 'start_failed'
 
