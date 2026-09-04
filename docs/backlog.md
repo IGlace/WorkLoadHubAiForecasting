@@ -14,6 +14,12 @@ item, so a later reader knows whether something is waiting, accepted as it is, o
   machine-wide registry is a corporate Artifactory with expired credentials, so `npm ci` failed with E401
   and took the installer build with it. Plan: `docs/superpowers/plans/2026-09-04-local-checks.md`.
   See the Toolchain section of `CLAUDE.md`.
+- **Full French parity** (2026-09-04): every one of the roughly 140 renderer keys is translated, and
+  `untranslatedKeys` in `app/src/renderer/src/i18n.ts` is asserted empty so a new English key cannot land
+  alone. Three places had been shipping English regardless of the setting and were fixed with it: the tray
+  menu, the Copilot sign-in messages and the service-failure banner. Those come from the main process or the
+  Python service, so they now travel as language-independent codes (`CopilotStatus.code`, `LoginResult.code`)
+  and the window supplies the wording; raw English detail from the CLI stays beside it as technical detail.
 - **The fast gate made fast enough to sit in front of every commit** (2026-09-04): it started at 8.4
   minutes, which nobody would have kept. The AI tests each recomputed a ten-second forecast, so that now
   runs once per session and is handed out as a copy, and pytest runs on six xdist workers. 8.4 minutes
@@ -27,10 +33,6 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   named members), an effect type (reduces capacity or adds demand) and optional hours. With hours,
   deterministic code applies the effect and shows it as a named line in the forecast; without hours it is
   context for the narrative only. This closes the gap where a known future event could not be expressed.
-- **Full French parity.** The app must support English and French completely, so the user can choose freely
-  between them. Today the `fr` dictionary in `app/src/renderer/src/i18n.ts` covers navigation, common labels
-  and notifications only, and pages fall back to English silently. The narrative language already works.
-  No third language: `en` and `fr` only.
 - **Live progress for the Copilot narrative** on the Run page; today the step shows only "Asking Copilot…",
   which is where a user assumes the app has hung.
 - **Small polish**, all approved:

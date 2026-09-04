@@ -21,11 +21,23 @@ export const DEFAULT_SETTINGS: Settings = { language: 'en', model: null, launchA
 export type ServicePhase = 'starting' | 'ready' | 'failed' | 'stopped'
 export interface AppState { service: ServicePhase; serviceMessage: string; version: string; platform: string }
 
+/**
+ * What the sign-in attempt did, as a renderer dictionary key rather than a sentence: the main
+ * process starts the login but the window that reports it may be in either language.
+ */
+export type LoginCode = 'copilot.login.started' | 'copilot.login.noCli'
+export interface LoginResult {
+  started: boolean
+  code: LoginCode
+  /** Technical detail from the service, in English, shown beside the translated sentence. */
+  detail?: string
+}
+
 export interface WhfBridge {
   request(req: ApiRequest): Promise<ApiResponse>
   getSettings(): Promise<Settings>
   setSettings(patch: Partial<Settings>): Promise<Settings>
-  copilotLogin(): Promise<{ started: boolean; message: string }>
+  copilotLogin(): Promise<LoginResult>
   getState(): Promise<AppState>
   onStateChanged(listener: (state: AppState) => void): () => void
 }

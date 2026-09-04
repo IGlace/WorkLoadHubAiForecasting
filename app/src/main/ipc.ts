@@ -1,5 +1,5 @@
 import type { IpcMain } from 'electron'
-import { IPC, type ApiRequest, type ApiResponse, type AppState, type Settings } from '../shared/ipc'
+import { IPC, type ApiRequest, type ApiResponse, type AppState, type Language, type LoginResult, type Settings } from '../shared/ipc'
 import type { RunCreated } from '../shared/types'
 import type { ApiClient } from './api-client'
 import type { SettingsStore } from './settings-store'
@@ -9,7 +9,8 @@ export interface IpcDeps {
   getClient: () => ApiClient | null
   settings: SettingsStore
   getState: () => AppState
-  login: () => Promise<{ started: boolean; message: string }>
+  login: () => Promise<LoginResult>
+  onLanguageChanged?: (lang: Language) => void
   applyLaunchAtLogin: (on: boolean) => void
   onRunCreated?: (run: RunCreated) => void
 }
@@ -50,6 +51,8 @@ export function registerIpc(deps: IpcDeps): void {
     if (!isValidSettingsPatch(patch)) return deps.settings.get()
     const next = deps.settings.set(patch)
     if ('launchAtLogin' in patch) deps.applyLaunchAtLogin(next.launchAtLogin)
+    // The tray menu is built once in the main process, so it has to be told to relabel itself.
+    if ('language' in patch) deps.onLanguageChanged?.(next.language)
     return next
   })
   deps.ipcMain.handle(IPC.appState, () => deps.getState())

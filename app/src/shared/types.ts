@@ -79,8 +79,12 @@ export interface NarrativeOutcome {
   error: string | null; reason: string | null; attempts: number; tool_calls: string[]
 }
 
+/** `code` is language-independent, so the app can phrase it; `message` is the service's English detail. */
+export type CopilotStatusCode = 'signed_in' | 'not_signed_in' | 'start_failed'
+
 export interface CopilotStatus {
   cli_path: string | null; cli_source: string; authenticated: boolean | null; login: string | null; message: string
+  code: CopilotStatusCode
   ready: boolean
 }
 

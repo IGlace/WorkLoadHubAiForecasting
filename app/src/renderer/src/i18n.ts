@@ -7,7 +7,13 @@ const en: Record<string, string> = {
   'nav.capacity': 'Capacity', 'nav.timeoff': 'Time off', 'nav.runs': 'Runs', 'nav.settings': 'Settings',
   'profile.none': 'Choose who you are in Settings to see your teams.',
   'service.starting': 'Starting the forecast service…',
+  'service.failed': 'The forecast service stopped. Restart the application.',
+  'copilot.signed_in': 'Signed in to GitHub Copilot.', 'copilot.not_signed_in': 'Not signed in to GitHub Copilot yet.',
+  'copilot.start_failed': 'The Copilot CLI could not start.',
+  'copilot.login.started': 'A terminal window opened with the GitHub device-login flow. Return here when it says you are signed in.',
+  'copilot.login.noCli': 'The Copilot CLI could not be found.',
   'settings.title': 'Settings', 'settings.profile': 'Profile', 'settings.iam': 'I am', 'settings.nobody': 'Nobody selected',
+  'role.skill_team_leader': 'department leader', 'role.team_leader': 'team leader', 'role.member': 'member',
   'settings.copilot': 'GitHub Copilot', 'settings.signin': 'Sign in to GitHub Copilot', 'settings.recheck': 'Check again',
   'settings.language': 'Language', 'settings.model': 'Model (blank uses your Copilot default)',
   'settings.launch': 'Start with Windows (hidden in the tray)', 'settings.tray': 'Keep running in the tray when the window is closed',
@@ -48,13 +54,77 @@ const en: Record<string, string> = {
   'common.loading': 'Loading…', 'common.error': 'Something went wrong: {message}', 'common.week': 'Week of {date}', 'common.all': 'All teams',
 }
 
+// Keep this in the same order as `en`; `untranslatedKeys` proves nothing is missing.
+// Glossary, so the two languages stay consistent with each other and with the narrative:
+// demand = charge, capacity = capacité, overload = surcharge, run = prévision, member = membre.
 const fr: Record<string, string> = {
   'app.title': 'WorkloadHub Forecast',
   'nav.dashboard': 'Tableau de bord', 'nav.run': 'Lancer', 'nav.rebalancing': 'Rééquilibrage', 'nav.projects': 'Projets',
   'nav.capacity': 'Capacité', 'nav.timeoff': 'Absences', 'nav.runs': 'Historique', 'nav.settings': 'Paramètres',
   'profile.none': 'Choisissez qui vous êtes dans Paramètres pour voir vos équipes.',
-  'common.loading': 'Chargement…',
-  'member.week': 'Semaine',
+  'service.starting': 'Démarrage du service de prévision…',
+  'service.failed': 'Le service de prévision s’est arrêté. Redémarrez l’application.',
+  'copilot.signed_in': 'Connecté à GitHub Copilot.', 'copilot.not_signed_in': 'Pas encore connecté à GitHub Copilot.',
+  'copilot.start_failed': 'Le CLI Copilot n’a pas pu démarrer.',
+  'copilot.login.started': 'Une fenêtre de terminal s’est ouverte avec la connexion par code GitHub. Revenez ici lorsqu’elle indique que vous êtes connecté.',
+  'copilot.login.noCli': 'Le CLI Copilot est introuvable.',
+  'settings.title': 'Paramètres', 'settings.profile': 'Profil', 'settings.iam': 'Je suis', 'settings.nobody': 'Personne de sélectionné',
+  'role.skill_team_leader': 'responsable de département', 'role.team_leader': 'responsable d’équipe', 'role.member': 'membre',
+  'settings.copilot': 'GitHub Copilot', 'settings.signin': 'Se connecter à GitHub Copilot', 'settings.recheck': 'Vérifier à nouveau',
+  'settings.language': 'Langue', 'settings.model': 'Modèle (vide = votre modèle Copilot par défaut)',
+  'settings.launch': 'Démarrer avec Windows (masqué dans la zone de notification)',
+  'settings.tray': 'Continuer en arrière-plan quand la fenêtre est fermée',
+  'settings.ready': 'Connecté en tant que {login}', 'settings.saved': 'Enregistré',
+  'run.title': 'Lancer une prévision', 'run.team': 'Équipe', 'run.asof': 'À la date du', 'run.start': 'Lancer la prévision',
+  'run.withai': 'Demander l’analyse à Copilot',
+  'run.progress.forecasting': 'Prévision pour {team}…', 'run.progress.narrating': 'Copilot rédige l’explication de la prévision…',
+  'run.done': 'Prévision terminée', 'run.open': 'Ouvrir le résultat', 'run.aiFailed': 'L’analyse Copilot a échoué : {reason}',
+  'run.onBehalf': 'Vous lancez cette prévision pour le compte de {leader}.',
+  'dashboard.title': 'Tableau de bord', 'dashboard.due': 'Prévision à faire', 'dashboard.lastRun': 'Dernière prévision {date}',
+  'dashboard.noRun': 'Aucune prévision pour l’instant',
+  'dashboard.overloaded': 'En surcharge', 'dashboard.demand': 'Charge', 'dashboard.capacity': 'Capacité', 'dashboard.overload': 'Surcharge',
+  'dashboard.open': 'Ouvrir le résultat',
+  'team.title': 'Résultat de l’équipe', 'team.member': 'Membre', 'team.champion': 'Modèle retenu', 'team.mase': 'MASE du backtest',
+  'team.summary': 'Synthèse IA', 'team.warnings': 'Avertissements', 'team.risks': 'Risques pour l’équipe', 'team.narrate': 'Demander à Copilot',
+  'team.narrativeStatus': 'État de l’analyse : {status}',
+  'team.unverified': 'Certains chiffres de cette analyse n’ont pas pu être rattachés aux données de la prévision.',
+  'team.notes': 'Notes sur le modèle', 'team.interval': 'Intervalle', 'team.total': 'Total',
+  'member.title': 'Détail du membre', 'member.history': 'Arrivées des 13 dernières semaines', 'member.forecast': 'Prévision',
+  'member.patterns': 'Tendances',
+  'member.open': 'Tâches en cours', 'member.narrative': 'Analyse', 'member.week': 'Semaine', 'member.demand': 'Charge', 'member.range': 'Fourchette',
+  'member.capacity': 'Capacité', 'member.overload': 'Surcharge', 'member.openHours': 'Depuis les tâches en cours',
+  'member.newHours': 'Depuis les nouvelles tâches',
+  'rebalancing.title': 'Rééquilibrage', 'rebalancing.overloaded': 'En surcharge', 'rebalancing.underloaded': 'Sous-chargé',
+  'rebalancing.moves': 'Transferts proposés',
+  'rebalancing.none': 'Aucun transfert proposé pour cette prévision.', 'rebalancing.spare': '{hours} disponibles',
+  'rebalancing.over': '{hours} en trop',
+  'rebalancing.adjustments': 'Ajustements proposés (non appliqués)',
+  'rebalancing.from': 'De', 'rebalancing.to': 'Vers', 'rebalancing.hours': 'Heures', 'rebalancing.reason': 'Motif',
+  'rebalancing.confidence': 'Confiance',
+  'projects.title': 'Projets', 'projects.new': 'Nouveau projet', 'projects.name': 'Nom', 'projects.start': 'Date de début',
+  'projects.deadline': 'Échéance',
+  'projects.teams': 'Équipes', 'projects.type': 'Type', 'projects.status': 'Statut', 'projects.save': 'Enregistrer',
+  'projects.edit': 'Modifier', 'projects.cancel': 'Annuler',
+  'projects.nameError': 'Saisissez un nom de projet.',
+  'projects.deadlineError': 'L’échéance doit être postérieure à la date de début.',
+  'projects.teamsError': 'Choisissez au moins une équipe.',
+  'projects.type.delivery': 'livraison', 'projects.type.maintenance': 'maintenance', 'projects.type.internal': 'interne',
+  'projects.status.planned': 'planifié', 'projects.status.active': 'actif', 'projects.status.done': 'terminé',
+  'capacity.title': 'Capacité', 'capacity.default': 'Heures hebdomadaires par défaut', 'capacity.overrides': 'Exceptions',
+  'capacity.member': 'Membre',
+  'capacity.week': 'Semaine (vide = permanent)', 'capacity.hours': 'Heures hebdomadaires', 'capacity.reason': 'Motif',
+  'capacity.add': 'Ajouter une exception',
+  'capacity.remove': 'Supprimer', 'capacity.permanent': 'permanent',
+  'timeoff.title': 'Absences', 'timeoff.holidays': 'Jours fériés', 'timeoff.vacations': 'Congés', 'timeoff.year': 'Année',
+  'timeoff.member': 'Membre', 'timeoff.from': 'Du', 'timeoff.to': 'Au', 'timeoff.type': 'Type', 'timeoff.add': 'Ajouter un congé',
+  'timeoff.remove': 'Supprimer',
+  'timeoff.rangeError': 'La date de fin ne doit pas être antérieure à la date de début.',
+  'timeoff.type.vacation': 'congé', 'timeoff.type.sick': 'maladie', 'timeoff.type.other': 'autre',
+  'runs.title': 'Historique', 'runs.id': 'Prévision', 'runs.team': 'Équipe', 'runs.asof': 'À la date du', 'runs.status': 'Statut',
+  'runs.ai': 'IA', 'runs.champion': 'Modèle',
+  'runs.open': 'Ouvrir', 'runs.empty': 'Aucune prévision pour l’instant.',
+  'common.loading': 'Chargement…', 'common.error': 'Une erreur est survenue : {message}', 'common.week': 'Semaine du {date}',
+  'common.all': 'Toutes les équipes',
 }
 
 const dictionaries: Record<Language, Record<string, string>> = { en, fr }
@@ -67,6 +137,14 @@ export function setLanguage(lang: Language): void {
   for (const listener of listeners) listener()
 }
 export function getLanguage(): Language { return current }
+
+/**
+ * The keys `lang` has no translation for, and would therefore silently show in English.
+ * English and French must both be complete, so a test asserts this is empty.
+ */
+export function untranslatedKeys(lang: Language): string[] {
+  return Object.keys(en).filter((key) => !dictionaries[lang][key])
+}
 export function t(key: string, vars: Record<string, string | number> = {}): string {
   const template = dictionaries[current][key] ?? en[key] ?? key
   return template.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`))

@@ -30,7 +30,10 @@ function Shell(): React.JSX.Element {
       </nav>
       <main className="content">
         {state.service === 'starting' && <StatusMessage kind="info">{t('service.starting')}</StatusMessage>}
-        {state.service === 'failed' && <StatusMessage kind="error">{state.serviceMessage}</StatusMessage>}
+        {state.service === 'failed' && (
+          <StatusMessage kind="error">{t('service.failed')}
+            {state.serviceMessage && <span className="muted"> · {state.serviceMessage}</span>}</StatusMessage>
+        )}
         {error && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
         {!me && state.service === 'ready' && <StatusMessage kind="info">{t('profile.none')}</StatusMessage>}
         <Routes>

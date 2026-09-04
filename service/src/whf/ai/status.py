@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 CliSource = Literal["environment", "path", "cache", "none"]
+# What happened, independent of language. `message` is English prose (partly the CLI's own), so the
+# desktop app keys its own translated wording off this instead.
+StatusCode = Literal["signed_in", "not_signed_in", "start_failed"]
 
 
 def get_cached_cli_path() -> str | None:
@@ -33,6 +36,7 @@ class CopilotStatus:
     authenticated: bool | None
     login: str | None
     message: str
+    code: StatusCode
 
     @property
     def ready(self) -> bool:
@@ -66,7 +70,7 @@ async def copilot_status(client_factory: Callable[[], Any] | None = None) -> Cop
         try:
             await client.start()
         except Exception as exc:
-            return CopilotStatus(cli_path, source, None, None, f"Copilot CLI could not start: {exc}")
+            return CopilotStatus(cli_path, source, None, None, f"Copilot CLI could not start: {exc}", "start_failed")
         auth = await client.get_auth_status()
         if getattr(auth, "isAuthenticated", False):
             return CopilotStatus(
@@ -75,9 +79,15 @@ async def copilot_status(client_factory: Callable[[], Any] | None = None) -> Cop
                 True,
                 getattr(auth, "login", None),
                 f"signed in as {getattr(auth, 'login', None) or 'unknown user'}",
+                "signed_in",
             )
         return CopilotStatus(
-            cli_path, source, False, None, "not signed in: run `whf copilot login` (or `copilot login` in PowerShell)"
+            cli_path,
+            source,
+            False,
+            None,
+            "not signed in: run `whf copilot login` (or `copilot login` in PowerShell)",
+            "not_signed_in",
         )
     finally:
         try:

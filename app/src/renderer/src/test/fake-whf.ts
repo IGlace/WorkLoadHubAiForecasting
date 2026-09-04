@@ -21,7 +21,7 @@ export function installFakeWhf(routes: Record<string, Route>, options: { state?:
     }),
     getSettings: async () => settings,
     setSettings: async (patch) => { settings = { ...settings, ...patch }; return settings },
-    copilotLogin: async () => ({ started: true, message: 'opened' }),
+    copilotLogin: async () => ({ started: true, code: 'copilot.login.started' as const }),
     getState: async () => state,
     onStateChanged: () => () => {},
   }

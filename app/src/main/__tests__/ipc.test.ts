@@ -8,12 +8,13 @@ function harness(clientPresent = true) {
   const request = vi.fn(async () => ({ ok: true, status: 200, data: { x: 1 } }))
   const settings = { get: vi.fn(() => ({ ...DEFAULT_SETTINGS })), set: vi.fn((p: object) => ({ ...DEFAULT_SETTINGS, ...p })) }
   const applyLaunchAtLogin = vi.fn()
+  const onLanguageChanged = vi.fn()
   registerIpc({
     ipcMain, getClient: () => (clientPresent ? ({ request } as never) : null), settings: settings as never,
     getState: () => ({ service: 'ready', serviceMessage: '', version: '0.1.0', platform: 'win32' }),
-    login: async () => ({ started: true, message: 'opened' }), applyLaunchAtLogin,
+    login: async () => ({ started: true, code: 'copilot.login.started' as const }), applyLaunchAtLogin, onLanguageChanged,
   })
-  return { handlers, request, settings, applyLaunchAtLogin }
+  return { handlers, request, settings, applyLaunchAtLogin, onLanguageChanged }
 }
 
 describe('registerIpc', () => {
@@ -39,10 +40,18 @@ describe('registerIpc', () => {
     expect(settings.set).toHaveBeenCalledWith({ launchAtLogin: true })
     expect(applyLaunchAtLogin).toHaveBeenCalledWith(true)
   })
+  it('tells the main process to relabel the tray when the language changes', async () => {
+    // The tray menu is built once, in the main process, so it cannot re-read the dictionary itself.
+    const { handlers, onLanguageChanged } = harness()
+    await handlers.get(IPC.settingsSet)!({}, { model: 'gpt-5' })
+    expect(onLanguageChanged).not.toHaveBeenCalled()
+    await handlers.get(IPC.settingsSet)!({}, { language: 'fr' })
+    expect(onLanguageChanged).toHaveBeenCalledWith('fr')
+  })
   it('exposes state and login', async () => {
     const { handlers } = harness()
     expect(await handlers.get(IPC.appState)!({})).toMatchObject({ service: 'ready' })
-    expect(await handlers.get(IPC.copilotLogin)!({})).toEqual({ started: true, message: 'opened' })
+    expect(await handlers.get(IPC.copilotLogin)!({})).toEqual({ started: true, code: 'copilot.login.started' })
   })
   it('rejects an invalid settings patch and answers the current settings unchanged', async () => {
     const { handlers, settings } = harness()
@@ -60,7 +69,7 @@ describe('registerIpc', () => {
       getClient: () => ({ request: async () => ({ ok: true, status: 200, data: { run_id: 7, team_id: 1, forecasts: [] } }) } as never),
       settings: { get: () => DEFAULT_SETTINGS, set: () => DEFAULT_SETTINGS } as never,
       getState: () => ({ service: 'ready', serviceMessage: '', version: '0', platform: 'win32' }),
-      login: async () => ({ started: false, message: '' }), applyLaunchAtLogin: () => {}, onRunCreated,
+      login: async () => ({ started: false, code: 'copilot.login.noCli' as const }), applyLaunchAtLogin: () => {}, onRunCreated,
     })
     await handlers.get(IPC.apiRequest)!({}, { method: 'POST', path: '/runs', body: { team_id: 1 } })
     await handlers.get(IPC.apiRequest)!({}, { method: 'GET', path: '/runs' })

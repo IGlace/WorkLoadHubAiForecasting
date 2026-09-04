@@ -7,7 +7,9 @@ describe('App shell', () => {
   it('shows the navigation and the service state banner when the service failed', async () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: null, role: null } }, { state: { service: 'failed', serviceMessage: 'boom' } })
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>)
-    expect(await screen.findByText('boom')).toBeInTheDocument()
+    // The sentence is translated here; `serviceMessage` carries only the technical detail beside it.
+    expect(await screen.findByText(/The forecast service stopped/)).toBeInTheDocument()
+    expect(screen.getByText(/boom/)).toBeInTheDocument()
     for (const label of ['Dashboard', 'Run', 'Rebalancing', 'Projects', 'Capacity', 'Time off', 'Runs', 'Settings']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
     }

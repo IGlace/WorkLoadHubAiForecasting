@@ -16,18 +16,18 @@ describe('Settings', () => {
       'GET /meta': META,
       'GET /profile': () => profile,
       'PUT /profile': (body: unknown) => { const b = body as { member_id: number }; profile = { member_id: b.member_id, role: 'team_leader' }; return profile },
-      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', ready: false },
+      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false },
     })
     mount()
     const select = await screen.findByLabelText('I am')
     await userEvent.selectOptions(select, '11')
     await waitFor(() => expect(fake.calls.some((c) => c.method === 'PUT' && c.path === '/profile')).toBe(true))
-    expect(await screen.findByText('Not signed in')).toBeInTheDocument()
+    expect(await screen.findByText('Not signed in to GitHub Copilot yet.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Sign in to GitHub Copilot' }))
-    expect(await screen.findByText('opened')).toBeInTheDocument()
+    expect(await screen.findByText(/A terminal window opened/)).toBeInTheDocument()
   })
   it('saves language, model and launch at login', async () => {
-    const fake = installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', ready: false } })
+    const fake = installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false } })
     mount()
     await userEvent.selectOptions(await screen.findByLabelText('Language'), 'fr')
     await waitFor(() => expect(fake.settings.language).toBe('fr'))
@@ -38,7 +38,7 @@ describe('Settings', () => {
     await waitFor(() => expect(fake.settings.launchAtLogin).toBe(true))
   })
   it('shows an error when Copilot sign-in rejects', async () => {
-    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', ready: false } })
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false } })
     window.whf.copilotLogin = () => Promise.reject(new Error('login failed'))
     mount()
     await userEvent.click(await screen.findByRole('button', { name: 'Sign in to GitHub Copilot' }))

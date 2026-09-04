@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, shell, type Tray } from 'electron'
-import { IPC, type AppState } from '../shared/ipc'
+import { IPC, type AppState, type Language } from '../shared/ipc'
 import { ApiClient } from './api-client'
 import { startCopilotLogin } from './copilot-login'
 import { DueChecker, overloadedMembers } from './due-check'
@@ -13,7 +13,7 @@ import { notifyOverload } from './notifications'
 import { bundledCliPath, dataRoot, iconPath, serviceEnv } from './paths'
 import { ServiceProcess, serviceCommand } from './service-launcher'
 import { SettingsStore } from './settings-store'
-import { createTray } from './tray'
+import { createTray, retranslateTray, type TrayHandlers } from './tray'
 import { shouldQuitOnLastWindowClosed } from './window-policy'
 import type { CopilotStatus, Meta, RunCreated, Team } from '../shared/types'
 
@@ -27,7 +27,7 @@ export class AppController {
   private client: ApiClient | null = null
   private service: ServiceProcess | null = null
   private window: BrowserWindow | null = null
-  private state: AppState = { service: 'starting', serviceMessage: 'Starting the forecast service…', version: app.getVersion(), platform: process.platform }
+  private state: AppState = { service: 'starting', serviceMessage: '', version: app.getVersion(), platform: process.platform }
   readonly settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
   quitting = false
   private tray: Tray | null = null
@@ -50,7 +50,8 @@ export class AppController {
       this.service = new ServiceProcess({ spawnFn: spawn, fetchFn: fetch, ...cmd, env, log: (l) => console.log(l) })
       this.service.onExit((code) => {
         this.client = null
-        if (!this.quitting) this.setState({ service: 'failed', serviceMessage: `The forecast service stopped (exit code ${code}). Restart the application.` })
+        // Only the technical detail: the renderer supplies the sentence around it, in the user's language.
+        if (!this.quitting) this.setState({ service: 'failed', serviceMessage: `exit code ${code}` })
       })
       const { port, token } = await this.service.start()
       this.client = new ApiClient(`http://127.0.0.1:${port}`, token)
@@ -63,13 +64,21 @@ export class AppController {
     }
   }
 
+  private trayHandlers(): TrayHandlers {
+    return { showWindow: () => this.showWindow(), checkNow: () => this.dueChecker.checkNow(), quit: () => { this.quitting = true; app.quit() } }
+  }
+
   createTray(): void {
     if (this.tray) return
     try {
-      this.tray = createTray({ showWindow: () => this.showWindow(), checkNow: () => this.dueChecker.checkNow(), quit: () => { this.quitting = true; app.quit() }, iconPath: iconPath({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath(), platform: process.platform }) })
+      this.tray = createTray({ ...this.trayHandlers(), lang: this.settings.get().language, iconPath: iconPath({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath(), platform: process.platform }) })
     } catch (err) {
       console.error('failed to create tray', err)
     }
+  }
+
+  retranslateTray(lang: Language): void {
+    if (this.tray) retranslateTray(this.tray, lang, this.trayHandlers())
   }
 
   async afterRun(run: RunCreated): Promise<void> {
@@ -164,6 +173,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain, getClient: () => controller.getClient(), settings: controller.settings, getState: () => controller.getState(),
     login: () => startCopilotLogin({ status: () => controller.copilotStatus(), spawnFn: spawn, platform: process.platform }),
     applyLaunchAtLogin: (on) => controller.applyLaunchAtLogin(on),
+    onLanguageChanged: (lang) => controller.retranslateTray(lang),
     onRunCreated: (run) => { controller.afterRun(run).catch((err: unknown) => console.error(err)) },
   })
   void app.whenReady().then(async () => {

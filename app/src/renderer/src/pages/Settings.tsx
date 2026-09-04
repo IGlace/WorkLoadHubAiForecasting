@@ -37,7 +37,7 @@ export function Settings(): React.JSX.Element {
           {(id) => (
             <select id={id} value={profile?.member_id ?? ''} onChange={(e) => { void saveProfile(e.target.value ? Number(e.target.value) : null).catch((err: Error) => setError(err.message)) }}>
               <option value="">{t('settings.nobody')}</option>
-              {leaders.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.role.replace(/_/g, ' ')})</option>)}
+              {leaders.map((m) => <option key={m.id} value={m.id}>{m.name} ({t(`role.${m.role}`)})</option>)}
             </select>
           )}
         </Field>
@@ -45,11 +45,14 @@ export function Settings(): React.JSX.Element {
       <section className="panel">
         <h2>{t('settings.copilot')}</h2>
         {copilot && (
-          <p>{copilot.ready ? t('settings.ready', { login: copilot.login ?? '' }) : copilot.message}
+          // `copilot.message` is English prose, partly the CLI's own words, so the sentence comes from
+          // the code and the raw message stays beside it as technical detail.
+          <p>{copilot.ready ? t('settings.ready', { login: copilot.login ?? '' }) : t(`copilot.${copilot.code}`)}
+            {!copilot.ready && copilot.message && <span className="muted"> · {copilot.message}</span>}
             {copilot.cli_path && <span className="muted"> · {copilot.cli_path}</span>}</p>
         )}
-        {loginMessage && <StatusMessage kind="info">{loginMessage}</StatusMessage>}
-        <button className="primary" onClick={() => { void window.whf.copilotLogin().then((r) => setLoginMessage(r.message)).catch((e: Error) => setError(e.message)) }}>{t('settings.signin')}</button>{' '}
+        {loginMessage && <StatusMessage kind="info">{t(loginMessage)}</StatusMessage>}
+        <button className="primary" onClick={() => { void window.whf.copilotLogin().then((r) => setLoginMessage(r.code)).catch((e: Error) => setError(e.message)) }}>{t('settings.signin')}</button>{' '}
         <button onClick={loadStatus}>{t('settings.recheck')}</button>
       </section>
       <section className="panel">

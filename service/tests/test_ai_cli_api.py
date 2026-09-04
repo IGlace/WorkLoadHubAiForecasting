@@ -25,14 +25,16 @@ def _db(tmp_path):
 
 
 def _ready() -> CopilotStatus:
-    return CopilotStatus("C:/copilot.exe", "environment", True, "sara", "signed in as sara")
+    return CopilotStatus("C:/copilot.exe", "environment", True, "sara", "signed in as sara", "signed_in")
 
 
 def test_cli_copilot_status_and_login(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("whf.cli.copilot_status_sync", lambda: _ready())
     out = runner.invoke(app, ["copilot", "status"])
     assert out.exit_code == 0 and "signed in as sara" in out.output
-    monkeypatch.setattr("whf.cli.copilot_status_sync", lambda: CopilotStatus(None, "none", None, None, "no cli"))
+    monkeypatch.setattr(
+        "whf.cli.copilot_status_sync", lambda: CopilotStatus(None, "none", None, None, "no cli", "start_failed")
+    )
     assert runner.invoke(app, ["copilot", "status"]).exit_code == 3
     assert json.loads(runner.invoke(app, ["copilot", "status", "--json"]).output)["ready"] is False
     monkeypatch.setattr("whf.cli.resolve_cli_path", lambda: ("/bin/copilot", "path"))
