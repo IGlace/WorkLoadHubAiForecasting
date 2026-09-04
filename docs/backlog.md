@@ -8,8 +8,10 @@ item, so a later reader knows whether something is waiting, accepted as it is, o
 
 State on 2026-09-04: `main` is at `4fba18a`; `dev` carries the team-page live progress on top of it, so that
 one item is landed but not yet released. "Upcoming events" was brainstormed on 2026-09-04 and closed as
-already covered, and the Playwright smoke path was deferred the same day, so the only item the owner has
-left open is the "Ask Copilot" button question below.
+already covered, the Playwright smoke path was deferred the same day, and the "Ask Copilot" button was
+scoped to the run on screen. The review of that last change turned up a serious pre-existing defect — the
+app cannot render a narrative the service returns — which is now the first item under "Approved, not yet
+built" and should be the next thing done.
 
 ## Landed
 
@@ -53,17 +55,42 @@ left open is the "Ask Copilot" button question below.
   minutes, which nobody would have kept. The AI tests each recomputed a ten-second forecast, so that now
   runs once per session and is handed out as a copy, and pytest runs on six xdist workers. 8.4 minutes
   down to about 2.5.
+- **The team page's "Ask Copilot" button scoped to the run on screen** (2026-09-04): it was disabled from a
+  single narrating-run state, and React Router reuses the page across `/runs/:runId` navigations, so
+  narrating run A disabled run B's button and showed A's progress under B's heading. The owner chose to scope
+  it to the displayed run, accepting concurrent narrations — the service was already ready for them, since
+  each gets its own Copilot client, session and connection and `ProgressStore` is keyed by run id. The page
+  now tracks a *set* of in-flight run ids rather than one: with a single id, enabling B's button meant
+  clicking it overwrote A's id, and A's completion then cleared the state out from under B. One narration
+  finishing no longer drops tracking of another, which is the test that fails against any single-id version.
+  Accepted with it: navigating away from a narrating run and back restarts its elapsed counter at zero,
+  because the progress hook resets whenever its run id changes; the step label recovers on the next poll.
 
 ## Approved, not yet built
 
 Ordered roughly by value. Each of these has an owner decision behind it.
 
-- **The team page's "Ask Copilot" button is disabled for every run at once** (raised by the review of the
-  team-page live-progress work, 2026-09-04, owner has not yet decided). The button is disabled from the
-  single narrating-run state, so while run A's narration is in flight, run B's button is disabled too even
-  though nothing is running for B. It predates the live-progress work and was left alone by it. Scoping the
-  disable to the displayed run is a one-line change plus a test; the question for the owner is whether two
-  narrations should be allowed to run at once at all, which is a service question, not a button question.
+- **The app cannot render a narrative that came back from the service** (found by the review of the
+  "Ask Copilot" scoping work, 2026-09-04; verified against the code, not yet reproduced by hand). This is
+  the most serious item on this list and it predates all the live-progress work. `narrate_run` stores the
+  whole outcome envelope — `{**asdict(NarrativeOutcome), generated_at}`, so top-level `status`, `narrative`,
+  `error`, `reason` — and `load_run` returns that verbatim as `RunDetail.narrative`, but the app declares
+  that field as the bare `Narrative` (`app/src/shared/types.ts`). Nothing transforms it in between. So on
+  real service data `detail.narrative` is truthy with no `members`, and `TeamResult.tsx`'s
+  `narrative?.members.map(...)` throws — the optional chain guards the object, not the field. `MemberDetail.tsx`
+  has the same line. Worse for the button: a *failed* narration also writes a `run_narratives` row, so the
+  envelope is truthy and `{!narrative && <button>}` hides "Ask Copilot" for precisely the runs that need a
+  retry. Every renderer test uses a hand-written fixture in the bare shape and every service test asserts
+  the envelope shape, so the suites agree with themselves and nothing catches the seam. The fix is to decide
+  which shape is canonical and make one side match, plus a test that crosses the seam with a service-shaped
+  payload. Until it lands, the AI narrative is effectively unusable outside the tests.
+- **A narration that fails for a run you have navigated away from says nothing** (raised by the same review).
+  `narrate()`'s error path is guarded on the displayed run, so if run A's `POST` throws while run B is on
+  screen, the error is dropped and A's button simply re-enables as though nothing happened. The guard is
+  still right — without it, A's failure was displayed under B's heading, which is worse. The correct shape
+  is a run-keyed error map consulted alongside the fetched detail. Note the narrower blast radius: a
+  narration that *completes* as failed returns 200 and persists `ai_status`, so only a thrown request is
+  silent.
 - **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual
   per member per week) and make sure version 1 already records it, because it cannot be recovered
   retroactively. Build the comparison once real weeks have passed.
