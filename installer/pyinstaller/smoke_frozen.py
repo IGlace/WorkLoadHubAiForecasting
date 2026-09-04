@@ -109,11 +109,21 @@ def main(dist_dir: str) -> int:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     pass
-                stderr = proc.stderr.read() if proc.stderr else ""
-                raise SystemExit(
-                    f"serve printed no valid handshake (exit code {proc.returncode}): "
-                    f"line={raw_line!r}\nstderr:\n{stderr}"
+                returncode_before = proc.returncode
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=5)
+                outcome = (
+                    "still running after 5 s, terminated"
+                    if returncode_before is None
+                    else f"exit code {returncode_before}"
                 )
+                stderr = proc.stderr.read() if proc.stderr else ""
+                raise SystemExit(f"serve printed no valid handshake ({outcome}): line={raw_line!r}\nstderr:\n{stderr}")
             port, token = int(handshake["port"]), str(handshake["token"])
             print(f"ok handshake on port {port}")
             deadline = time.time() + 60
