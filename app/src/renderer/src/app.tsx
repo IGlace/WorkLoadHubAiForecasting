@@ -4,8 +4,10 @@ import { StatusMessage } from './components/StatusMessage'
 import { AppProvider, useApp } from './context'
 import { t } from './i18n'
 import { Dashboard } from './pages/Dashboard'
+import { Run } from './pages/Run'
 import { Runs } from './pages/Runs'
 import { Settings } from './pages/Settings'
+import { TeamResult } from './pages/TeamResult'
 
 const NAV: [string, string][] = [
   ['/', 'nav.dashboard'], ['/run', 'nav.run'], ['/rebalancing', 'nav.rebalancing'], ['/projects', 'nav.projects'],
@@ -30,9 +32,9 @@ function Shell(): React.JSX.Element {
         {!me && state.service === 'ready' && <StatusMessage kind="info">{t('profile.none')}</StatusMessage>}
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/run" element={<Placeholder title={t('nav.run')} />} />
+          <Route path="/run" element={<Run />} />
           <Route path="/runs" element={<Runs />} />
-          <Route path="/runs/:runId" element={<Placeholder title={t('team.title')} />} />
+          <Route path="/runs/:runId" element={<TeamResult />} />
           <Route path="/runs/:runId/members/:memberId" element={<Placeholder title={t('member.title')} />} />
           <Route path="/rebalancing" element={<Placeholder title={t('nav.rebalancing')} />} />
           <Route path="/projects" element={<Placeholder title={t('nav.projects')} />} />
