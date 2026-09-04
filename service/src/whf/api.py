@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
 from whf import __version__
-from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override
+from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override, set_profile
 from whf.ai.session import Narrator, default_narrator
 from whf.ai.status import CopilotStatus, copilot_status_sync
 from whf.db.connection import connect
@@ -69,6 +69,10 @@ class VacationCreate(BaseModel):
 
 class NarrativeRequest(BaseModel):
     model: str | None = None
+
+
+class ProfileUpdate(BaseModel):
+    member_id: int | None = None
 
 
 def new_token() -> str:
@@ -229,5 +233,29 @@ def create_app(
     def post_vacation(body: VacationCreate, conn: sqlite3.Connection = Depends(db)) -> dict:
         vacation_id = add_vacation(conn, body.member_id, body.start_date, body.end_date, body.type)
         return {"id": vacation_id}
+
+    @app.get("/profile", dependencies=guarded)
+    def get_profile(conn: sqlite3.Connection = Depends(db)) -> dict:
+        row = conn.execute("SELECT member_id, role FROM profiles WHERE id = 1").fetchone()
+        if row is None:
+            return {"member_id": None, "role": None}
+        return {"member_id": None if row[0] is None else int(row[0]), "role": row[1]}
+
+    @app.put("/profile", dependencies=guarded)
+    def put_profile(body: ProfileUpdate, conn: sqlite3.Connection = Depends(db)) -> dict:
+        try:
+            return set_profile(conn, body.member_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/holidays", dependencies=guarded)
+    def get_holidays(year: int | None = Query(default=None), conn: sqlite3.Connection = Depends(db)) -> list:
+        if year is None:
+            df = read_df(conn, "SELECT date, name, country FROM holidays ORDER BY date")
+        else:
+            df = read_df(
+                conn, "SELECT date, name, country FROM holidays WHERE date LIKE ? ORDER BY date", (f"{year:04d}-%",)
+            )
+        return jsonable(df.to_dict(orient="records"))
 
     return app

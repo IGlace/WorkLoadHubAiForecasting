@@ -98,3 +98,23 @@ def test_projects_capacity_and_vacations(client) -> None:
     assert vac.status_code == 200
     mine = client.get("/vacations", params={"member_id": 2}, headers=_h()).json()
     assert any(v["start_date"] == "2026-09-21" for v in mine)
+
+
+def test_profile_round_trip(client) -> None:
+    assert client.get("/profile", headers=_h()).json() == {"member_id": None, "role": None}
+    meta = client.get("/meta", headers=_h()).json()
+    leader = next(m for m in meta["members"] if m["role"] == "skill_team_leader")
+    put = client.put("/profile", json={"member_id": leader["id"]}, headers=_h())
+    assert put.status_code == 200 and put.json() == {"member_id": leader["id"], "role": "skill_team_leader"}
+    assert client.get("/profile", headers=_h()).json()["role"] == "skill_team_leader"
+    assert client.put("/profile", json={"member_id": 999999}, headers=_h()).status_code == 404
+    assert client.put("/profile", json={"member_id": None}, headers=_h()).json() == {"member_id": None, "role": None}
+
+
+def test_holidays_are_listed_and_filtered_by_year(client) -> None:
+    rows = client.get("/holidays", headers=_h()).json()
+    assert rows and {"date", "name", "country"} <= set(rows[0])
+    year = int(rows[0]["date"][:4])
+    filtered = client.get(f"/holidays?year={year}", headers=_h()).json()
+    assert filtered and all(r["date"].startswith(str(year)) for r in filtered)
+    assert client.get("/holidays?year=1900", headers=_h()).json() == []

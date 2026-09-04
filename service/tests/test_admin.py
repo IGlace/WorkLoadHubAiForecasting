@@ -81,3 +81,23 @@ def test_failed_project_insert_leaves_no_orphan(db) -> None:
     set_capacity_default(db, 39.0)  # a subsequent, unrelated write must succeed cleanly
     assert len(read_df(db, "SELECT * FROM projects WHERE name = 'OrphanProject'")) == 0
     assert float(read_df(db, "SELECT weekly_hours FROM capacity_defaults")["weekly_hours"][0]) == 39.0
+
+
+def test_set_profile_stores_member_and_role(db) -> None:
+    from whf.admin import set_profile
+    from whf.db.repo import read_df
+
+    leader = read_df(db, "SELECT id, role FROM members WHERE role = 'team_leader' LIMIT 1").iloc[0]
+    assert set_profile(db, int(leader["id"])) == {"member_id": int(leader["id"]), "role": "team_leader"}
+    stored = read_df(db, "SELECT member_id, role FROM profiles WHERE id = 1").iloc[0]
+    assert int(stored["member_id"]) == int(leader["id"]) and stored["role"] == "team_leader"
+    assert set_profile(db, None) == {"member_id": None, "role": None}
+
+
+def test_set_profile_rejects_unknown_member(db) -> None:
+    import pytest
+
+    from whf.admin import set_profile
+
+    with pytest.raises(ValueError, match="member 999999"):
+        set_profile(db, 999999)

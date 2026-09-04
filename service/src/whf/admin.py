@@ -95,3 +95,20 @@ def add_project(
         conn.rollback()
         raise
     return project_id
+
+
+def set_profile(conn: sqlite3.Connection, member_id: int | None) -> dict:
+    """Store which member uses this installation (profiles row 1). None clears the profile."""
+    role: str | None = None
+    if member_id is not None:
+        row = conn.execute("SELECT role FROM members WHERE id = ?", (member_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"member {member_id} not found")
+        role = str(row[0])
+    conn.execute(
+        "INSERT INTO profiles (id, member_id, role) VALUES (1, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET member_id = excluded.member_id, role = excluded.role",
+        (member_id, role),
+    )
+    conn.commit()
+    return {"member_id": member_id, "role": role}
