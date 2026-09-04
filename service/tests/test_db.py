@@ -34,7 +34,7 @@ def test_connect_creates_all_tables() -> None:
 def test_capacity_default_row_exists() -> None:
     conn = connect(":memory:")
     df = read_df(conn, "SELECT weekly_hours FROM capacity_defaults")
-    assert df["weekly_hours"].tolist() == [40.0]
+    assert df["weekly_hours"].tolist() == [44.0]
 
 
 def test_insert_rows_converts_dates_and_bools() -> None:

@@ -8,8 +8,8 @@ from whf.capacity import DEFAULT_WEEKLY_HOURS, available_hours, overload_hours, 
 MONDAY = dt.date(2026, 9, 7)
 
 
-def test_default_is_forty() -> None:
-    assert DEFAULT_WEEKLY_HOURS == 40.0
+def test_default_is_forty_four() -> None:
+    assert DEFAULT_WEEKLY_HOURS == 44.0
 
 
 def test_resolve_precedence_week_over_permanent_over_default() -> None:

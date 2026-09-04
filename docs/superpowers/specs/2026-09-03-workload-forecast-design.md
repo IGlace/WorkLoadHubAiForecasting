@@ -61,7 +61,7 @@ SQLite database at `%LOCALAPPDATA%\WorkloadHubForecast\whf.db`. Tables:
 | projects | id, name, department_id, start_date, deadline, type, status, created_by |
 | project_teams | project_id, team_id |
 | tasks | id, title, project_id, assignee_id, team_id, type, priority, status, created_at, assigned_at, due_date, completed_at, estimated_hours, actual_hours, created_by, assignment_mode (`manual`, `self_picked`, `project`) |
-| capacity_defaults | weekly_hours (40) |
+| capacity_defaults | weekly_hours (44) |
 | capacity_overrides | member_id, week_start (nullable for permanent), weekly_hours, reason |
 | holidays | date, name, country (`MA`) |
 | vacations | member_id, start_date, end_date, type |
@@ -153,10 +153,17 @@ hours per task and the member's cycle time for that type.
 
 ### 5.4 Capacity
 
-Available hours for a member in a week = weekly capacity (default 40, permanent
+Available hours for a member in a week = weekly capacity (default 44, permanent
 override, week override) × working days in the week after Morocco holidays and the
 member's vacations ÷ 5. Overload = max(0, demand − capacity). Demand is never capped.
 Team and department figures are bottom-up sums, so the hierarchy is always coherent.
+
+(Correction, 2026-09-04: this section, the data model table and the implementation said 40 hours,
+which contradicted the owner's answer in `docs/requirements/2026-09-03-discovery-qa.md` (Q11) and
+requirement C1, both of which say 44. The default is 44 hours over five working days, that is
+8.8 hours per working day, in `whf.capacity.DEFAULT_WEEKLY_HOURS` and the `capacity_defaults` seed
+in `service/src/whf/db/schema.sql`. Databases created before this change keep their stored 40 and
+are corrected in Settings → Capacity, or by `whf capacity default --hours 44`.)
 
 ### 5.5 Backtesting and champion selection
 

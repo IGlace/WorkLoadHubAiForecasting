@@ -33,7 +33,7 @@ def test_health_is_public_and_others_need_token(client) -> None:
         == 401
     )
     meta = client.get("/meta", headers=_h()).json()
-    assert len(meta["departments"]) == 3 and meta["capacity_default"] == 40.0
+    assert len(meta["departments"]) == 3 and meta["capacity_default"] == 44.0
     assert {"id", "name", "team_id", "role"} <= set(meta["members"][0])
 
 

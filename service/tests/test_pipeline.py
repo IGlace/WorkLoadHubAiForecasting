@@ -20,7 +20,7 @@ def test_run_forecast_produces_two_weeks_per_counted_member(db, generated) -> No
     assert len(result.forecasts) == 2 * len(counted)
     assert set(result.forecasts["week_start"]) == {f1, f2}
     f = result.forecasts
-    assert (f["demand_hours"] >= 0).all() and (f["capacity_hours"] <= 40.0 + 1e-9).all()
+    assert (f["demand_hours"] >= 0).all() and (f["capacity_hours"] <= 44.0 + 1e-9).all()
     assert (abs(f["overload_hours"] - (f["demand_hours"] - f["capacity_hours"]).clip(lower=0)) < 1e-6).all()
     assert (f["demand_low"] <= f["demand_hours"] + 1e-9).all() and (f["demand_high"] >= f["demand_hours"] - 1e-9).all()
     assert (abs(f["demand_hours"] - (f["open_task_hours"] + f["new_task_hours"])) < 1e-6).all()

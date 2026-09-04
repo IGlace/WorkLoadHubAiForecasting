@@ -15,7 +15,7 @@ id, title, project_id, assignee_id, team_id, type (feature, bug, support, analys
 
 ## Forecast rows (per member, per forecast week)
 - **demand**: predicted hours of work, uncapped. It is the sum of **open_hours** (remaining hours of tasks already assigned, placed by the effort model) and **new_hours** (hours of tasks predicted to arrive, placed the same way).
-- **capacity**: available hours after holidays, vacations and overrides (default 40 h per week).
+- **capacity**: available hours after holidays, vacations and overrides (default 44 h per week, 8.8 h per working day).
 - **overload**: max(0, demand minus capacity). Demand is never cut to fit capacity.
 - **low / high**: an interval around demand from the model's backtest residuals; wide bands mean an unstable history.
 

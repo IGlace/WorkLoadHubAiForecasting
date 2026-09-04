@@ -6,7 +6,7 @@ import datetime as dt
 
 from whf.calendar import working_days
 
-DEFAULT_WEEKLY_HOURS = 40.0
+DEFAULT_WEEKLY_HOURS = 44.0
 WORKING_DAYS_PER_WEEK = 5
 
 

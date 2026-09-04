@@ -2,7 +2,7 @@
 
 A Windows desktop application plus PowerShell CLI that forecasts each team member's
 estimated work hours for the next two weeks from the team's task history, compares
-them with capacity (40 h/week default, holidays, vacations, overrides), and uses the
+them with capacity (44 h/week default over 5 working days, holidays, vacations, overrides), and uses the
 user's own GitHub Copilot Enterprise seat to explain patterns, warn about overload
 and suggest rebalancing. Version 1 runs on generated dummy data.
 

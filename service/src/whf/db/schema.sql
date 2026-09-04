@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS capacity_defaults (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     weekly_hours REAL NOT NULL
 );
-INSERT OR IGNORE INTO capacity_defaults (id, weekly_hours) VALUES (1, 40.0);
+INSERT OR IGNORE INTO capacity_defaults (id, weekly_hours) VALUES (1, 44.0);
 CREATE TABLE IF NOT EXISTS capacity_overrides (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     member_id INTEGER NOT NULL REFERENCES members(id),
