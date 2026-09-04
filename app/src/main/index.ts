@@ -14,7 +14,7 @@ import { bundledCliPath, dataRoot, iconPath, serviceEnv } from './paths'
 import { ServiceProcess, serviceCommand } from './service-launcher'
 import { SettingsStore } from './settings-store'
 import { createTray, retranslateTray, type TrayHandlers } from './tray'
-import { shouldQuitOnLastWindowClosed } from './window-policy'
+import { onWindowAllClosed } from './window-policy'
 import type { CopilotStatus, Meta, RunCreated, Team } from '../shared/types'
 
 const dataDir = dataRoot({ platform: process.platform, env: process.env, fallback: app.getPath('userData') })
@@ -187,11 +187,11 @@ if (!app.requestSingleInstanceLock()) {
   app.on('activate', () => controller.showWindow())
   app.on('before-quit', () => controller.shutdown())
   app.on('window-all-closed', () => {
-    // Only flag quitting and ask Electron to quit here: app.quit() fires 'before-quit',
-    // whose handler calls controller.shutdown() — calling it here too would shut down twice.
-    if (shouldQuitOnLastWindowClosed(controller.settings.get(), process.platform)) {
-      controller.quitting = true
-      app.quit()
-    }
+    onWindowAllClosed({
+      settings: controller.settings.get(),
+      platform: process.platform,
+      markQuitting: () => { controller.quitting = true },
+      quit: () => app.quit(),
+    })
   })
 }

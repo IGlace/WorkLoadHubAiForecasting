@@ -199,8 +199,8 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         # raw_text is the model's unparsed reply: useful for audit (kept in the stored run_narratives row
         # via narrate_run and in NarrativeOutcome), but not something the desktop app's UI needs over HTTP.
-        body = {k: v for k, v in outcome.__dict__.items() if k != "raw_text"}
-        return jsonable({**body, "ai_status": outcome.ai_status, "run_id": run_id})
+        payload = {k: v for k, v in outcome.__dict__.items() if k != "raw_text"}
+        return jsonable({**payload, "ai_status": outcome.ai_status, "run_id": run_id})
 
     @app.get("/projects", dependencies=guarded)
     def get_projects(conn: sqlite3.Connection = Depends(db)) -> list:

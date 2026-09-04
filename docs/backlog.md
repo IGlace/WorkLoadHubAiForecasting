@@ -20,6 +20,12 @@ item, so a later reader knows whether something is waiting, accepted as it is, o
   menu, the Copilot sign-in messages and the service-failure banner. Those come from the main process or the
   Python service, so they now travel as language-independent codes (`CopilotStatus.code`, `LoginResult.code`)
   and the window supplies the wording; raw English detail from the CLI stays beside it as technical detail.
+- **The five small polish items** (2026-09-04): the settings store now deletes its temp file when the final
+  rename fails, so a locked file on Windows leaves no orphans; the IPC settings validator and
+  `SettingsStore.sanitize` read one shared table of per-key rules instead of two copies that could drift;
+  the narrative route no longer shadows its `body` parameter; the frozen-service smoke test's two parsers
+  (`_last_json_object`, `_valid_handshake`) have unit tests, which showed one branch to be unreachable and
+  it was removed; and `window-all-closed` is an extracted `onWindowAllClosed` so the quit path is tested.
 - **The fast gate made fast enough to sit in front of every commit** (2026-09-04): it started at 8.4
   minutes, which nobody would have kept. The AI tests each recomputed a ten-second forecast, so that now
   runs once per session and is handed out as a copy, and pytest runs on six xdist workers. 8.4 minutes
@@ -35,14 +41,6 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   context for the narrative only. This closes the gap where a known future event could not be expressed.
 - **Live progress for the Copilot narrative** on the Run page; today the step shows only "Asking Copilot…",
   which is where a user assumes the app has hung.
-- **Small polish**, all approved:
-  - Settings store (`app/src/main/settings-store.ts`): delete the temp file when the final rename fails, so a
-    locked file on Windows does not leave orphans.
-  - The IPC settings validator (`app/src/main/ipc.ts`) duplicates `SettingsStore.sanitize`; merge into one check.
-  - Narrative route (`service/src/whf/api.py`, `create_narrative`): rename the shadowed `body` local.
-  - Frozen-service smoke test (`installer/pyinstaller/smoke_frozen.py`): unit tests for the "last JSON line" parser.
-  - Add a test for the quit path when the last window closes with "keep running in the tray" off
-    (`app/src/main/index.ts`, `window-all-closed`).
 - **One Playwright smoke path**: launch the packaged app, confirm the window opens and the service handshake
   succeeds. Not a full end-to-end suite; that stays deferred.
 - **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual

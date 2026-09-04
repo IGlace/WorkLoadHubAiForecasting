@@ -1,8 +1,8 @@
 import type { IpcMain } from 'electron'
-import { IPC, type ApiRequest, type ApiResponse, type AppState, type Language, type LoginResult, type Settings } from '../shared/ipc'
+import { IPC, type ApiRequest, type ApiResponse, type AppState, type Language, type LoginResult } from '../shared/ipc'
 import type { RunCreated } from '../shared/types'
 import type { ApiClient } from './api-client'
-import type { SettingsStore } from './settings-store'
+import { isValidSettingsPatch, type SettingsStore } from './settings-store'
 
 export interface IpcDeps {
   ipcMain: Pick<IpcMain, 'handle'>
@@ -21,20 +21,6 @@ function isApiRequest(value: unknown): value is ApiRequest {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Record<string, unknown>
   return typeof v['method'] === 'string' && METHODS.has(v['method']) && typeof v['path'] === 'string' && v['path'].startsWith('/')
-}
-
-const SETTINGS_VALIDATORS: Record<keyof Settings, (v: unknown) => boolean> = {
-  language: (v) => v === 'en' || v === 'fr',
-  model: (v) => typeof v === 'string' || v === null,
-  launchAtLogin: (v) => typeof v === 'boolean',
-  closeToTray: (v) => typeof v === 'boolean',
-}
-
-function isValidSettingsPatch(value: unknown): value is Partial<Settings> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  return Object.entries(value).every(
-    ([key, v]) => Object.prototype.hasOwnProperty.call(SETTINGS_VALIDATORS, key) && SETTINGS_VALIDATORS[key as keyof Settings](v),
-  )
 }
 
 export function registerIpc(deps: IpcDeps): void {

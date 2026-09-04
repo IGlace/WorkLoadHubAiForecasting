@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '../../shared/ipc'
-import { SettingsStore } from '../settings-store'
+import { isValidSettingsPatch, SettingsStore } from '../settings-store'
 
 describe('SettingsStore', () => {
   it('returns defaults when the file is missing or invalid', () => {
@@ -25,5 +25,23 @@ describe('SettingsStore', () => {
     const file = join(dir, 'settings.json')
     new SettingsStore(file).set({ language: 'fr' })
     expect(readdirSync(dir).some((f) => f.endsWith('.tmp'))).toBe(false)
+  })
+  it('cleans up the temp file when the rename fails, and still reports the failure', () => {
+    // On Windows the rename loses to anything holding settings.json open; without this the
+    // orphaned .tmp files would accumulate on every attempt.
+    const dir = mkdtempSync(join(tmpdir(), 'whf-'))
+    const file = join(dir, 'settings.json')
+    const store = new SettingsStore(file, { renameSync: () => { throw new Error('EPERM') } })
+    expect(() => store.set({ language: 'fr' })).toThrow('EPERM')
+    expect(readdirSync(dir)).toEqual([])
+  })
+  it('validates a patch with the same rules it sanitizes a file with', () => {
+    // One source of truth: the IPC boundary used to keep a second copy of these rules.
+    expect(isValidSettingsPatch({ language: 'fr', closeToTray: false })).toBe(true)
+    expect(isValidSettingsPatch({ language: 'de' })).toBe(false)
+    expect(isValidSettingsPatch({ model: 12 })).toBe(false)
+    expect(isValidSettingsPatch({ unknown: 1 })).toBe(false)
+    expect(isValidSettingsPatch([{ language: 'fr' }])).toBe(false)
+    expect(isValidSettingsPatch(null)).toBe(false)
   })
 })

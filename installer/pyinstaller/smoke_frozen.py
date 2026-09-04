@@ -52,16 +52,17 @@ def _last_json_object(stdout: str) -> dict:
     `whf run --json` is documented to print exactly one JSON document, but a dependency writing a stray
     line to stdout (a warning, a progress message) should not make this smoke test crash with a
     JSONDecodeError on the whole blob — so take the last line that starts with `{` and parse only that.
+
+    Such a line needs no isinstance check: by the JSON grammar a document beginning with `{` either
+    parses to an object or fails to parse at all.
     """
     candidates = [line for line in stdout.splitlines() if line.strip().startswith("{")]
     if not candidates:
         raise SystemExit(f"whf run --json printed no JSON object line: {stdout}")
     try:
-        payload = json.loads(candidates[-1])
+        payload: dict = json.loads(candidates[-1])
     except json.JSONDecodeError as exc:
         raise SystemExit(f"whf run --json did not print valid JSON: {candidates[-1]}") from exc
-    if not isinstance(payload, dict):
-        raise SystemExit(f"whf run --json did not print a JSON object: {candidates[-1]}")
     return payload
 
 
