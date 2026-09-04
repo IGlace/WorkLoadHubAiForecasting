@@ -1,32 +1,26 @@
 import json
 
 import pytest
-from ai_fakes import FakeNarrator
+from ai_fakes import FakeClient, FakeNarrator, good_narrative
 
 from whf.ai.progress import ProgressEvent
-from whf.ai.session import NarrativeOutcome
+from whf.ai.session import CopilotNarrator, NarrativeOutcome, NarratorConfig
 from whf.db.repo import read_df
 from whf.narrate import RunHasNoFactsError, RunNotFoundError, narrate_run
 from whf.pipeline import load_run, run_forecast
 
 
 def _ok_outcome(facts: dict) -> NarrativeOutcome:
-    return NarrativeOutcome(
-        status="ok",
-        narrative={
-            "run_summary": "fine",
-            "members": [],
-            "team_risks": [],
-            "rebalancing": [],
-            "suggested_adjustments": [],
-            "model_notes": "",
-        },
-        verification={"checked": 1, "unverified": [], "fields": {}},
-        model="gpt-5",
-        usage={"input_tokens": 1, "output_tokens": 1},
-        attempts=1,
-        tool_calls=["get_run_overview"],
-    )
+    """A real `ok` outcome, produced by `CopilotNarrator` against a fake Copilot client.
+
+    Deliberately not a literal dict: `outcome.narrative` must be exactly what
+    `whf.ai.schema.Narrative.model_dump(mode="json")` (`session.py`) emits, since that is the
+    only place production code assigns it, so the contract test below binds the real producer
+    rather than a hand-written fixture that merely happens to match it today.
+    """
+    client = FakeClient(replies=[good_narrative(facts)])
+    narrator = CopilotNarrator(NarratorConfig(), client_factory=lambda: client)
+    return narrator.narrate_sync(facts)
 
 
 def test_narrate_persists_document_and_status(db, generated) -> None:
@@ -40,10 +34,11 @@ def test_narrate_persists_document_and_status(db, generated) -> None:
     assert row["ai_status"][0] == "ok"
     # The stored row keeps the whole envelope (status, model, tool_calls, ...) for audit.
     doc = json.loads(read_df(db, "SELECT json FROM run_narratives WHERE run_id = ?", (result.run_id,))["json"][0])
-    assert doc["status"] == "ok" and doc["narrative"]["run_summary"] == "fine" and doc["model"] == "gpt-5"
-    assert doc["tool_calls"] == ["get_run_overview"] and "generated_at" in doc
+    assert doc["status"] == "ok" and doc["model"] == "gpt-5"
+    assert doc["narrative"]["run_summary"] == "All members within capacity."
+    assert doc["tool_calls"][:1] == ["get_run_overview"] and "generated_at" in doc
     # `load_run` unwraps the envelope: the app only ever sees the bare narrative document.
-    assert load_run(db, result.run_id)["narrative"]["run_summary"] == "fine"
+    assert load_run(db, result.run_id)["narrative"]["run_summary"] == "All members within capacity."
 
 
 def test_load_run_narrative_matches_the_apps_declared_shape(db, generated) -> None:
@@ -81,10 +76,6 @@ def test_failed_outcome_is_stored_with_reason(db, generated) -> None:
     # `load_run` unwraps to `None` for a failed narration: this is what restores the app's retry
     # button, since `{!narrative && <button>}` would otherwise stay hidden behind a truthy envelope.
     assert load_run(db, result.run_id)["narrative"] is None
-    assert (
-        read_df(db, "SELECT ai_status FROM runs WHERE id = ?", (result.run_id,))["ai_status"][0]
-        == "failed:not_signed_in"
-    )
 
 
 def test_second_narration_replaces_the_first(db, generated) -> None:

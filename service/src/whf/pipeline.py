@@ -420,11 +420,12 @@ def load_run(conn: sqlite3.Connection, run_id: int) -> dict:
     narrative_doc = None
     if len(narrative):
         envelope = json.loads(narrative["json"][0])
-        # An envelope is a dict with a "status" key (see NarrativeOutcome); only such a document
-        # gets unwrapped. A row that predates this change or is otherwise missing the key is not
-        # an envelope, so it is treated as "no narrative" rather than passed through as-is.
-        if isinstance(envelope, dict) and "status" in envelope:
-            narrative_doc = envelope.get("narrative")
+        # An envelope is a dict with both a "status" and a "narrative" key (see NarrativeOutcome);
+        # only such a document gets unwrapped. A row that predates this change or is otherwise
+        # missing either key is not an envelope, so it is treated as "no narrative" rather than
+        # passed through as-is.
+        if isinstance(envelope, dict) and "status" in envelope and "narrative" in envelope:
+            narrative_doc = envelope["narrative"]
     return {
         "run": run.iloc[0].to_dict(),
         "forecasts": forecasts.to_dict(orient="records"),

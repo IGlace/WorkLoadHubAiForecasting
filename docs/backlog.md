@@ -68,7 +68,8 @@ the app could not render a narrative the service returns — which has since bee
   "Ask Copilot" scoping work, 2026-09-04; fixed the same day). `narrate_run` stores the whole outcome
   envelope in `run_narratives` — `{**asdict(NarrativeOutcome), generated_at}`, so top-level `status`,
   `narrative`, `error`, `reason`, `raw_text`, `verification`, `model`, `usage`, `attempts`, `tool_calls` — on
-  purpose, because the exact facts and reply sent to and from Copilot are the audit trail. But `load_run`
+  purpose, because the exact reply Copilot gave and how it was verified are the audit trail (the exact facts
+  sent live separately, in `run_facts`). But `load_run`
   returned that envelope verbatim as `RunDetail.narrative`, while the app declares that field as the bare
   `Narrative` (`app/src/shared/types.ts`): `run_summary`, `members`, `team_risks`, `rebalancing`,
   `suggested_adjustments`, `model_notes`. Nothing transformed it in between, so on real service data
@@ -85,8 +86,10 @@ the app could not render a narrative the service returns — which has since bee
   side effect: `whf runs show --json` and `whf export --format json` dump the whole `load_run` payload, so
   they now also drop the envelope (including the model's raw unparsed reply) from their output — intended,
   since that raw reply was never meant to leave the database over these paths either. A contract test now
-  asserts the exact six keys of `load_run(...)["narrative"]` against the app's `Narrative` interface, so a
-  future extra-keys regression fails a service test instead of only showing up on real data.
+  asserts the exact six keys of `load_run(...)["narrative"]` against a narrative produced by the real
+  `CopilotNarrator` path (not a hand-written fixture), against the app's `Narrative` interface, so an
+  envelope leaking through `load_run` again fails a service test instead of only showing up on real data —
+  a seventh field added to the schema itself is still `Narrative`'s own contract to guard, separately.
 
 ## Approved, not yet built
 

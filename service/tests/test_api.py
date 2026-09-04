@@ -1,10 +1,8 @@
-import json
-
 import pytest
-from ai_fakes import FakeNarrator, good_narrative
+from ai_fakes import FakeClient, FakeNarrator, good_narrative
 from fastapi.testclient import TestClient
 
-from whf.ai.session import NarrativeOutcome
+from whf.ai.session import CopilotNarrator, NarratorConfig
 from whf.api import create_app
 from whf.data.generator import GeneratorConfig, generate
 from whf.data.loader import load_generated
@@ -71,7 +69,11 @@ def test_get_run_serves_the_bare_narrative_over_http(client, tmp_path) -> None:
     created = client.post("/runs", json={"team_id": 1, "as_of": "2026-09-03"}, headers=_h())
     run_id = created.json()["run_id"]
     facts = client.get(f"/runs/{run_id}", headers=_h()).json()["facts"]
-    outcome = NarrativeOutcome(status="ok", narrative=json.loads(good_narrative(facts)), model="gpt-5")
+    # A real outcome, produced by `CopilotNarrator` against a fake client, not a literal dict: the
+    # narrative under assertion below must be exactly what `whf.ai.schema.Narrative.model_dump`
+    # emits (see `session.py`), the only place production code assigns `outcome.narrative`.
+    fake_client = FakeClient(replies=[good_narrative(facts)])
+    outcome = CopilotNarrator(NarratorConfig(), client_factory=lambda: fake_client).narrate_sync(facts)
     conn = connect(tmp_path / "api.db")
     try:
         narrate_run(conn, run_id, narrator=FakeNarrator(outcome))
