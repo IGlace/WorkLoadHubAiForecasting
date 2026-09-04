@@ -34,16 +34,19 @@ export function Run(): React.JSX.Element {
   async function start(): Promise<void> {
     if (!selected || !me) return
     setError(null); setAiError(null); setResult(null); setPhase('forecasting')
+    let run: RunCreated
     try {
-      const run = await createRun(selected.id, asOf, me.id)
-      setResult(run)
-      if (withAi && aiPossible) {
-        setPhase('narrating')
+      run = await createRun(selected.id, asOf, me.id)
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); setPhase('idle'); return }
+    setResult(run)
+    if (withAi && aiPossible) {
+      setPhase('narrating')
+      try {
         const outcome = await createNarrative(run.run_id, settings.model)
         if (outcome.status === 'failed') setAiError(outcome.error ?? outcome.ai_status)
-      }
-      setPhase('done')
-    } catch (err) { setError(err instanceof Error ? err.message : String(err)); setPhase('idle') }
+      } catch (err) { setAiError(err instanceof Error ? err.message : String(err)) }
+    }
+    setPhase('done')
   }
 
   const busy = phase === 'forecasting' || phase === 'narrating'

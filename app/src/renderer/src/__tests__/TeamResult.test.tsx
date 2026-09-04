@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import type { RunDetail } from '../../../shared/types'
 import { AppProvider } from '../context'
 import { TeamResult } from '../pages/TeamResult'
@@ -45,5 +45,31 @@ describe('TeamResult', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Ask Copilot' }))
     expect(await screen.findByText('Some numbers in this narrative could not be matched to the forecast facts.')).toBeInTheDocument()
     expect(fake.calls.some((c) => c.method === 'POST' && c.path === '/runs/5/narrative')).toBe(true)
+  })
+  it('resets stale data when navigating from one run to another', async () => {
+    const detail6: RunDetail = {
+      run: { ...RUN_DETAIL.run, id: 6, team_id: 2 },
+      forecasts: [],
+      facts: RUN_DETAIL.facts && { ...RUN_DETAIL.facts, team: { ...RUN_DETAIL.facts.team, id: 2, name: 'Nova' }, members: [] },
+      narrative: null,
+    }
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': RUN_DETAIL, 'GET /runs/6': detail6,
+    })
+    function Nav() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/runs/6')}>go to 6</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/runs/5']}><AppProvider>
+        <Nav />
+        <Routes><Route path="/runs/:runId" element={<TeamResult />} /></Routes>
+      </AppProvider></MemoryRouter>,
+    )
+    expect(await screen.findByText('Core')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'go to 6' }))
+    expect(screen.queryByText('Core')).not.toBeInTheDocument()
+    expect(await screen.findByText('Nova')).toBeInTheDocument()
   })
 })

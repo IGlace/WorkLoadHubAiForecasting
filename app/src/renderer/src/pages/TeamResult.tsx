@@ -9,25 +9,39 @@ import { WeekTable, type WeekTableRow } from '../components/WeekTable'
 import { useApp } from '../context'
 import { t } from '../i18n'
 
+interface Fetched { id: number; detail: RunDetail | null; error: string | null }
+
 export function TeamResult(): React.JSX.Element {
   const { runId } = useParams()
   const { settings } = useApp()
-  const [detail, setDetail] = useState<RunDetail | null>(null)
+  // `fetched.id` tags which run the payload belongs to; a superseded id (runId changed
+  // since this was written) is treated as empty below, so stale data from a previous
+  // run never renders while the next run's fetch is in flight.
+  const [fetched, setFetched] = useState<Fetched>({ id: NaN, detail: null, error: null })
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const id = Number(runId)
 
-  const load = useCallback((): void => { getRun(id).then(setDetail).catch((e: Error) => setError(e.message)) }, [id])
-  useEffect(() => { getRun(id).then(setDetail).catch((e: Error) => setError(e.message)) }, [id])
+  const load = useCallback((): Promise<RunDetail> => getRun(id), [id])
+
+  useEffect(() => {
+    let cancelled = false
+    load()
+      .then((d) => { if (!cancelled) setFetched({ id, detail: d, error: null }) })
+      .catch((e: Error) => { if (!cancelled) setFetched({ id, detail: null, error: e.message }) })
+    return () => { cancelled = true }
+  }, [id, load])
 
   async function narrate(): Promise<void> {
-    setBusy(true); setError(null)
+    setBusy(true)
     try {
       const outcome = await createNarrative(id, settings.model)
-      if (outcome.status === 'failed') setError(outcome.error ?? outcome.ai_status)
-      load()
-    } catch (err) { setError(err instanceof Error ? err.message : String(err)) } finally { setBusy(false) }
+      const d = await load()
+      setFetched({ id, detail: d, error: outcome.status === 'failed' ? (outcome.error ?? outcome.ai_status) : null })
+    } catch (err) { setFetched((prev) => ({ ...prev, error: err instanceof Error ? err.message : String(err) })) } finally { setBusy(false) }
   }
+
+  const detail = fetched.id === id ? fetched.detail : null
+  const error = fetched.id === id ? fetched.error : null
 
   if (error && !detail) return <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>
   if (!detail) return <p>{t('common.loading')}</p>

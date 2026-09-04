@@ -35,6 +35,17 @@ describe('Run', () => {
     expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
     expect(await screen.findByText('Copilot narrative failed: timed out')).toBeInTheDocument()
   })
+  it('keeps the completed forecast when the narrative request itself errors', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED, 'POST /runs/5/narrative': () => new Error('network down'),
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
+    expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
+    expect(await screen.findByText('Copilot narrative failed: network down')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open the result' })).toHaveAttribute('href', '/runs/5')
+  })
   it('disables the AI step when Copilot is not ready', async () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { ...ready, ready: false, authenticated: false, message: 'Not signed in' } })
     render(<MemoryRouter><AppProvider><Run /></AppProvider></MemoryRouter>)
