@@ -1,6 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { vi } from 'vitest'
 import { AppProvider } from '../context'
 import { Run } from '../pages/Run'
 import { installFakeWhf, META } from '../test/fake-whf'
@@ -59,5 +60,40 @@ describe('Run', () => {
     const ai = await screen.findByLabelText('Ask Copilot for the narrative')
     expect(ai).toBeDisabled()
     expect(screen.getByText('Not signed in')).toBeInTheDocument()
+  })
+  it('shows what Copilot is doing while the narrative is still running', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const held = new Promise((resolve) => { finish = resolve })
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'POST /runs/5/narrative': () => held,
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
+    expect(await screen.findByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
+    finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [] })
+    expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
+  })
+  it('stops polling for progress once the narrative is done', async () => {
+    const fake = installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'POST /runs/5/narrative': { run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [] },
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
+    expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
+    const progressCalls = (): number => fake.calls.filter((c) => c.path === '/runs/5/narrative/progress').length
+    const before = progressCalls()
+    vi.useFakeTimers()
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+      expect(progressCalls()).toBe(before)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

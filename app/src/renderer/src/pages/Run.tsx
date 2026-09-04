@@ -1,13 +1,14 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import type { CopilotStatus, RunCreated } from '../../../shared/types'
-import { createNarrative, createRun, getCopilotStatus } from '../api'
+import type { CopilotStatus, NarrativeProgressStep, RunCreated } from '../../../shared/types'
+import { createNarrative, createRun, getCopilotStatus, getNarrativeProgress } from '../api'
 import { Field } from '../components/Field'
 import { StatusMessage } from '../components/StatusMessage'
 import { useApp } from '../context'
 import { hours, today } from '../format'
 import { t } from '../i18n'
+import { progressLabel } from '../narrative-progress'
 
 type Phase = 'idle' | 'forecasting' | 'narrating' | 'done'
 
@@ -22,8 +23,25 @@ export function Run(): React.JSX.Element {
   const [result, setResult] = useState<RunCreated | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [step, setStep] = useState<NarrativeProgressStep | null>(null)
+  const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => { getCopilotStatus().then(setCopilot).catch(() => setCopilot(null)) }, [])
+
+  useEffect(() => {
+    if (phase !== 'narrating' || !result) return
+    const runId = result.run_id
+    const started = Date.now()
+    const tick = (): void => {
+      setElapsed(Math.round((Date.now() - started) / 1000))
+      getNarrativeProgress(runId)
+        .then((p) => setStep(p.steps[p.steps.length - 1] ?? null))
+        .catch(() => {})  // a poll that fails is not worth failing the run over; the next one may work
+    }
+    tick()
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
+  }, [phase, result])
 
   const effectiveTeam = team || (visibleTeams.length === 1 ? String(visibleTeams[0]!.id) : '')
   const selected = visibleTeams.find((tm) => tm.id === Number(effectiveTeam))
@@ -33,7 +51,7 @@ export function Run(): React.JSX.Element {
 
   async function start(): Promise<void> {
     if (!selected || !me) return
-    setError(null); setAiError(null); setResult(null); setPhase('forecasting')
+    setError(null); setAiError(null); setResult(null); setPhase('forecasting'); setStep(null); setElapsed(0)
     let run: RunCreated
     try {
       run = await createRun(selected.id, asOf, me.id)
@@ -72,7 +90,11 @@ export function Run(): React.JSX.Element {
         <button className="primary" disabled={!selected || busy} onClick={() => { void start() }}>{t('run.start')}</button>
       </section>
       {phase === 'forecasting' && <StatusMessage kind="info">{t('run.progress.forecasting', { team: selected?.name ?? '' })}</StatusMessage>}
-      {phase === 'narrating' && <StatusMessage kind="info">{t('run.progress.narrating')}</StatusMessage>}
+      {phase === 'narrating' && (
+        <StatusMessage kind="info">
+          {progressLabel(step)} <span className="muted">{t('run.progress.elapsed', { seconds: String(elapsed) })}</span>
+        </StatusMessage>
+      )}
       {aiError && <StatusMessage kind="error">{t('run.aiFailed', { reason: aiError })}</StatusMessage>}
       {phase === 'done' && result && (
         <section className="panel">
