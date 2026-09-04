@@ -3,6 +3,8 @@ import { NavLink, Route, Routes } from 'react-router-dom'
 import { StatusMessage } from './components/StatusMessage'
 import { AppProvider, useApp } from './context'
 import { t } from './i18n'
+import { Dashboard } from './pages/Dashboard'
+import { Runs } from './pages/Runs'
 import { Settings } from './pages/Settings'
 
 const NAV: [string, string][] = [
@@ -27,9 +29,9 @@ function Shell(): React.JSX.Element {
         {error && state.service === 'ready' && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
         {!me && state.service === 'ready' && <StatusMessage kind="info">{t('profile.none')}</StatusMessage>}
         <Routes>
-          <Route path="/" element={<Placeholder title={t('nav.dashboard')} />} />
+          <Route path="/" element={<Dashboard />} />
           <Route path="/run" element={<Placeholder title={t('nav.run')} />} />
-          <Route path="/runs" element={<Placeholder title={t('nav.runs')} />} />
+          <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:runId" element={<Placeholder title={t('team.title')} />} />
           <Route path="/runs/:runId/members/:memberId" element={<Placeholder title={t('member.title')} />} />
           <Route path="/rebalancing" element={<Placeholder title={t('nav.rebalancing')} />} />
