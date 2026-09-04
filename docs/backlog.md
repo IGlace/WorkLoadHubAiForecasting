@@ -86,10 +86,11 @@ the app could not render a narrative the service returns — which has since bee
   side effect: `whf runs show --json` and `whf export --format json` dump the whole `load_run` payload, so
   they now also drop the envelope (including the model's raw unparsed reply) from their output — intended,
   since that raw reply was never meant to leave the database over these paths either. A contract test now
-  asserts the exact six keys of `load_run(...)["narrative"]` against a narrative produced by the real
-  `CopilotNarrator` path (not a hand-written fixture), against the app's `Narrative` interface, so an
-  envelope leaking through `load_run` again fails a service test instead of only showing up on real data —
-  a seventh field added to the schema itself is still `Narrative`'s own contract to guard, separately.
+  asserts that `load_run(...)["narrative"]` has exactly those six keys, and it builds its narrative through
+  the real `CopilotNarrator` path rather than a hand-written fixture — deliberately, because a fixture would
+  only have proved its own shape. Binding it to the real producer is what makes it guard both halves of the
+  seam: an envelope leaking through `load_run` again, and a seventh field added to `whf.ai.schema.Narrative`
+  that the app's interface does not declare. Both were confirmed to fail the test before it was accepted.
 
 ## Approved, not yet built
 
