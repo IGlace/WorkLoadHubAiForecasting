@@ -6,6 +6,9 @@ version 1. Dated 2026-09-04; update this file when an item lands.
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
+State on 2026-09-04: `main` was fast-forwarded to `9675d3f`, so it is level with `dev` and everything under
+"Landed" is released. The next item to start is "Upcoming events".
+
 ## Landed
 
 - **Local checks in place of CI** (2026-09-04): `scripts/check.ps1` (fast, `-Full`, `-Package`),
@@ -49,6 +52,10 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   named members), an effect type (reduces capacity or adds demand) and optional hours. With hours,
   deterministic code applies the effect and shows it as a named line in the forecast; without hours it is
   context for the narrative only. This closes the gap where a known future event could not be expressed.
+  Two questions need the owner's answer before this can be planned, because they change the data model:
+  what happens when an event's hours exceed a member's remaining capacity for the range (clamp, or report
+  it as overload the way demand already is), and whether a capacity-reducing event that overlaps a holiday
+  or a vacation subtracts twice or is absorbed. Start with a brainstorming pass, not a plan.
 - **Live progress on the team page too** (raised by the final review of the live-progress work,
   2026-09-04, owner has not yet decided). `TeamResult.tsx` starts the same multi-minute narration from its
   "Ask Copilot" button and shows nothing at all while it runs — only a greyed-out button, which is worse
