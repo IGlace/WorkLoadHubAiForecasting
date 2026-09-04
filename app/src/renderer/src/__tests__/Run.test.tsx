@@ -72,6 +72,10 @@ describe('Run', () => {
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
     const button = await screen.findByRole('button', { name: 'Run forecast' })
+    // See the "stops polling" test below for why this wait matters: the "with AI" checkbox only
+    // enables once the unawaited copilot-status mount effect resolves, and that race decides whether
+    // the run ever reaches the narrating phase this test depends on.
+    await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
     // Fake timers so the elapsed counter shown next to the step label can be pinned to an exact value.
     vi.useFakeTimers()
     try {
