@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, shell, type Tray } from 'electron'
 import { IPC, type AppState } from '../shared/ipc'
@@ -7,12 +8,20 @@ import { startCopilotLogin } from './copilot-login'
 import { DueChecker, overloadedMembers } from './due-check'
 import { electronNotify } from './electron-notify'
 import { registerIpc } from './ipc'
+import { RotatingLog, installConsoleLogging } from './logger'
 import { notifyOverload } from './notifications'
+import { bundledCliPath, dataRoot, iconPath, serviceEnv } from './paths'
 import { ServiceProcess, serviceCommand } from './service-launcher'
 import { SettingsStore } from './settings-store'
 import { createTray } from './tray'
 import { shouldQuitOnLastWindowClosed } from './window-policy'
 import type { CopilotStatus, Meta, RunCreated, Team } from '../shared/types'
+
+const dataDir = dataRoot({ platform: process.platform, env: process.env, fallback: app.getPath('userData') })
+if (dataDir !== app.getPath('userData')) app.setPath('userData', join(dataDir, 'app'))
+const log = new RotatingLog({ dir: join(dataDir, 'logs') })
+installConsoleLogging(log)
+console.log(`WorkloadHub Forecast ${app.getVersion()} starting; packaged=${app.isPackaged}; data=${dataDir}`)
 
 export class AppController {
   private client: ApiClient | null = null
@@ -35,7 +44,10 @@ export class AppController {
   async startService(): Promise<void> {
     try {
       const cmd = serviceCommand({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath(), env: process.env, platform: process.platform })
-      this.service = new ServiceProcess({ spawnFn: spawn, fetchFn: fetch, ...cmd, env: {}, log: (l) => console.log(l) })
+      const cli = bundledCliPath({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, platform: process.platform, exists: existsSync })
+      const env = serviceEnv({ cliPath: cli, env: process.env })
+      console.log(`bundled Copilot CLI: ${cli ?? 'none (using env or PATH)'}`)
+      this.service = new ServiceProcess({ spawnFn: spawn, fetchFn: fetch, ...cmd, env, log: (l) => console.log(l) })
       this.service.onExit((code) => {
         this.client = null
         if (!this.quitting) this.setState({ service: 'failed', serviceMessage: `The forecast service stopped (exit code ${code}). Restart the application.` })
@@ -54,7 +66,7 @@ export class AppController {
   createTray(): void {
     if (this.tray) return
     try {
-      this.tray = createTray({ showWindow: () => this.showWindow(), checkNow: () => this.dueChecker.checkNow(), quit: () => { this.quitting = true; app.quit() }, iconPath: join(__dirname, '../../resources/icon.png') })
+      this.tray = createTray({ showWindow: () => this.showWindow(), checkNow: () => this.dueChecker.checkNow(), quit: () => { this.quitting = true; app.quit() }, iconPath: iconPath({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath(), platform: process.platform }) })
     } catch (err) {
       console.error('failed to create tray', err)
     }
@@ -83,7 +95,7 @@ export class AppController {
 
   createWindow(): BrowserWindow {
     const win = new BrowserWindow({
-      width: 1280, height: 820, minWidth: 960, minHeight: 600, show: false, icon: join(__dirname, '../../resources/icon.png'),
+      width: 1280, height: 820, minWidth: 960, minHeight: 600, show: false, icon: iconPath({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath(), platform: process.platform }),
       webPreferences: { preload: join(__dirname, '../preload/index.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
     })
     win.webContents.on('preload-error', (_e, path, err) => console.error('preload failed', path, err))
