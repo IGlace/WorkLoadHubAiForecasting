@@ -1,5 +1,6 @@
 import type { IpcMain } from 'electron'
 import { IPC, type ApiRequest, type ApiResponse, type AppState, type Settings } from '../shared/ipc'
+import type { RunCreated } from '../shared/types'
 import type { ApiClient } from './api-client'
 import type { SettingsStore } from './settings-store'
 
@@ -11,6 +12,7 @@ export interface IpcDeps {
   login: () => Promise<{ started: boolean; message: string }>
   openExternal: (url: string) => Promise<void>
   applyLaunchAtLogin: (on: boolean) => void
+  onRunCreated?: (run: RunCreated) => void
 }
 
 const METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE'])
@@ -26,7 +28,9 @@ export function registerIpc(deps: IpcDeps): void {
     if (!isApiRequest(raw)) return { ok: false, status: 0, error: 'invalid request' }
     const client = deps.getClient()
     if (!client) return { ok: false, status: 0, error: 'service not ready' }
-    return client.request(raw)
+    const res = await client.request(raw)
+    if (res.ok && raw.method === 'POST' && raw.path === '/runs') deps.onRunCreated?.(res.data as RunCreated)
+    return res
   })
   deps.ipcMain.handle(IPC.settingsGet, () => deps.settings.get())
   deps.ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<Settings>) => {

@@ -1,13 +1,17 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, type Tray } from 'electron'
 import { IPC, type AppState } from '../shared/ipc'
 import { ApiClient } from './api-client'
 import { startCopilotLogin } from './copilot-login'
+import { DueChecker, overloadedMembers } from './due-check'
+import { electronNotify } from './electron-notify'
 import { registerIpc } from './ipc'
+import { notifyOverload } from './notifications'
 import { ServiceProcess, serviceCommand } from './service-launcher'
 import { SettingsStore } from './settings-store'
-import type { CopilotStatus } from '../shared/types'
+import { createTray } from './tray'
+import type { CopilotStatus, Meta, RunCreated, Team } from '../shared/types'
 
 export class AppController {
   private client: ApiClient | null = null
@@ -16,6 +20,8 @@ export class AppController {
   private state: AppState = { service: 'starting', serviceMessage: 'Starting the forecast service…', version: app.getVersion(), platform: process.platform }
   readonly settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
   quitting = false
+  private tray: Tray | null = null
+  readonly dueChecker = new DueChecker({ request: (req) => this.client ? this.client.request(req) : Promise.resolve({ ok: false, status: 0, error: 'service not ready' }), notify: electronNotify })
 
   getClient(): ApiClient | null { return this.client }
   getState(): AppState { return this.state }
@@ -36,9 +42,25 @@ export class AppController {
       const { port, token } = await this.service.start()
       this.client = new ApiClient(`http://127.0.0.1:${port}`, token)
       this.setState({ service: 'ready', serviceMessage: '' })
+      this.createTray()
+      void this.dueChecker.checkNow()
+      this.dueChecker.start()
     } catch (err) {
       this.setState({ service: 'failed', serviceMessage: err instanceof Error ? err.message : String(err) })
     }
+  }
+
+  createTray(): void {
+    if (this.tray) return
+    this.tray = createTray({ showWindow: () => this.showWindow(), checkNow: () => this.dueChecker.checkNow(), quit: () => { this.quitting = true; app.quit() }, iconPath: join(__dirname, '../../resources/icon.png') })
+  }
+
+  async afterRun(run: RunCreated): Promise<void> {
+    const meta = await this.client?.request({ method: 'GET', path: '/meta' })
+    if (!meta || !meta.ok) return
+    const m = meta.data as Meta
+    const team = m.teams.find((t: Team) => t.id === run.team_id)
+    notifyOverload(electronNotify, team?.name ?? `team ${run.team_id}`, overloadedMembers(run.forecasts, m.members))
   }
 
   async copilotStatus(): Promise<{ cli_path: string | null; message: string }> {
@@ -75,6 +97,8 @@ export class AppController {
 
   shutdown(): void {
     this.quitting = true
+    this.dueChecker.stop()
+    this.tray?.destroy()
     this.service?.stop()
   }
 }
@@ -90,6 +114,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain, getClient: () => controller.getClient(), settings: controller.settings, getState: () => controller.getState(),
     login: () => startCopilotLogin({ status: () => controller.copilotStatus(), spawnFn: spawn, platform: process.platform }),
     openExternal: (url) => shell.openExternal(url), applyLaunchAtLogin: (on) => controller.applyLaunchAtLogin(on),
+    onRunCreated: (run) => { void controller.afterRun(run) },
   })
   void app.whenReady().then(async () => {
     if (!process.argv.includes('--hidden')) controller.createWindow()

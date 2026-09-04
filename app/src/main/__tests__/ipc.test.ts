@@ -48,4 +48,19 @@ describe('registerIpc', () => {
     const { handlers } = harness()
     await expect(handlers.get(IPC.openExternal)!({}, 'file:///etc/passwd')).rejects.toThrow('http')
   })
+  it('reports created runs to the hook', async () => {
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+    const onRunCreated = vi.fn()
+    registerIpc({
+      ipcMain: { handle: vi.fn((c: string, fn: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(c, fn)) },
+      getClient: () => ({ request: async () => ({ ok: true, status: 200, data: { run_id: 7, team_id: 1, forecasts: [] } }) } as never),
+      settings: { get: () => DEFAULT_SETTINGS, set: () => DEFAULT_SETTINGS } as never,
+      getState: () => ({ service: 'ready', serviceMessage: '', version: '0', platform: 'win32' }),
+      login: async () => ({ started: false, message: '' }), openExternal: async () => {}, applyLaunchAtLogin: () => {}, onRunCreated,
+    })
+    await handlers.get(IPC.apiRequest)!({}, { method: 'POST', path: '/runs', body: { team_id: 1 } })
+    await handlers.get(IPC.apiRequest)!({}, { method: 'GET', path: '/runs' })
+    expect(onRunCreated).toHaveBeenCalledTimes(1)
+    expect(onRunCreated).toHaveBeenCalledWith(expect.objectContaining({ run_id: 7 }))
+  })
 })
