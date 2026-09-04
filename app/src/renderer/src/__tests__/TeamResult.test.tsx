@@ -140,7 +140,7 @@ describe('TeamResult', () => {
       vi.useRealTimers()
     }
   })
-  it('keeps polling the narrating run, not the run navigated to while it is still in flight', async () => {
+  it("enables run B's button and hides the progress line while only run A is narrating", async () => {
     let finish: (value: unknown) => void = () => {}
     const held = new Promise((resolve) => { finish = resolve })
     const detail5: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
@@ -182,12 +182,72 @@ describe('TeamResult', () => {
       await navPromise
       expect(screen.getByText('Nova')).toBeInTheDocument()
       await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-      // The progress line still describes run 5's narration (it must not flip to run 6's identity,
-      // and must not poll run 6's progress endpoint at all).
-      expect(screen.getByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
+      // Run 6 is not narrating: its button must be enabled and no progress line for run 5's (or
+      // any) narration should leak onto its page, and its progress endpoint must not be polled.
+      expect(screen.getByRole('button', { name: 'Ask Copilot' })).not.toBeDisabled()
+      expect(screen.queryByText(/Copilot is reading team_overview…/)).not.toBeInTheDocument()
       expect(fake.calls.some((c) => c.path === '/runs/6/narrative/progress')).toBe(false)
-      expect(fake.calls.some((c) => c.path === '/runs/5/narrative/progress')).toBe(true)
       finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('does not let one narration finishing drop tracking of another still in flight', async () => {
+    let finish5: (value: unknown) => void = () => {}
+    let finish6: (value: unknown) => void = () => {}
+    const held5 = new Promise((resolve) => { finish5 = resolve })
+    const held6 = new Promise((resolve) => { finish6 = resolve })
+    const detail5: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
+    const detail6: RunDetail = {
+      run: { ...RUN_DETAIL.run, id: 6, team_id: 2 },
+      forecasts: [],
+      facts: RUN_DETAIL.facts && { ...RUN_DETAIL.facts, team: { ...RUN_DETAIL.facts.team, id: 2, name: 'Nova' }, members: [] },
+      narrative: null,
+    }
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': () => detail5, 'GET /runs/6': () => detail6,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'GET /runs/6/narrative/progress': { run_id: 6, steps: [{ code: 'checking', detail: null, at: '2026-09-04T10:00:00' }] },
+      'POST /runs/5/narrative': () => held5,
+      'POST /runs/6/narrative': () => held6,
+    })
+    function Nav() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/runs/6')}>go to 6</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/runs/5']}><AppProvider>
+        <Nav />
+        <Routes><Route path="/runs/:runId" element={<TeamResult />} /></Routes>
+      </AppProvider></MemoryRouter>,
+    )
+    const askButton = await screen.findByRole('button', { name: 'Ask Copilot' })
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      // Start A (run 5), navigate to B (run 6) while A is in flight, then start B too: two
+      // narrations now overlap. Letting A finish must not erase B's tracking.
+      const askAPromise = user.click(askButton)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await askAPromise
+      const navPromise = user.click(screen.getByRole('button', { name: 'go to 6' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await navPromise
+      expect(screen.getByText('Nova')).toBeInTheDocument()
+      const askBButton = screen.getByRole('button', { name: 'Ask Copilot' })
+      const askBPromise = user.click(askBButton)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await askBPromise
+      expect(screen.getByRole('button', { name: 'Ask Copilot' })).toBeDisabled()
+      finish5({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      // Run 6 (currently on screen) must still show disabled and its progress line, unaffected by
+      // run 5's narration finishing.
+      expect(screen.getByRole('button', { name: 'Ask Copilot' })).toBeDisabled()
+      expect(screen.getByText(/Checking the answer against the numbers/)).toBeInTheDocument()
+      finish6({ run_id: 6, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [] })
       await act(async () => { await vi.advanceTimersByTimeAsync(0) })
     } finally {
       vi.useRealTimers()

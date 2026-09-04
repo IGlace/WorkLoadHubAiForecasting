@@ -19,15 +19,27 @@ export function TeamResult(): React.JSX.Element {
   // since this was written) is treated as empty below, so stale data from a previous
   // run never renders while the next run's fetch is in flight.
   const [fetched, setFetched] = useState<Fetched>({ id: NaN, detail: null, error: null })
-  // The id `narrate()` is running for, not the id of the run currently on screen: the route is
+  // The ids `narrate()` is running for, not the id of the run currently on screen: the route is
   // reused across `/runs/:runId` navigations, so a user can move to another run's page while a
-  // narration is still in flight. Tracking the narrating run's own id (rather than a plain busy
-  // flag paired with the current `id`) keeps the progress hook polling that run, not whichever one
-  // happens to be showing.
-  const [narratingId, setNarratingId] = useState<number | null>(null)
-  const busy = narratingId !== null
+  // narration is still in flight. Tracking the narrating runs' own ids (rather than a plain busy
+  // flag paired with the current `id`) keeps each narration attributed to the run it belongs to,
+  // not whichever one happens to be showing. A single id is not enough: once the button for a run
+  // other than the one narrating is (correctly) enabled, a second narration can start for it while
+  // the first is still in flight, and a single `narratingId` would let the first narration's
+  // `finally` overwrite or wipe out the second's tracking when it finishes. The owner accepted that
+  // two narrations may run concurrently, so this is a set of every run currently narrating, and
+  // every update goes through the functional `setX((prev) => ...)` form because two `narrate()`
+  // calls can overlap in time and a stale closure would drop one of them.
+  const [narratingIds, setNarratingIds] = useState<Set<number>>(new Set())
   const id = Number(runId)
-  const { step, elapsed } = useNarrativeProgress(narratingId)
+  const busy = narratingIds.has(id)
+  // Progress is polled for the run on screen only when a narration is in flight for that same run;
+  // another run's narration (if any) keeps running in the background but is not shown here. Known and
+  // accepted: navigating away from a narrating run and back restarts its elapsed counter at 0, because
+  // `useNarrativeProgress` resets whenever its `runId` argument changes (including a change to or from
+  // `null`); the step label recovers on the next poll, one second later. This is not worth start-time
+  // bookkeeping to avoid.
+  const { step, elapsed } = useNarrativeProgress(busy ? id : null)
 
   const load = useCallback((): Promise<RunDetail> => getRun(id), [id])
 
@@ -40,12 +52,30 @@ export function TeamResult(): React.JSX.Element {
   }, [id, load])
 
   async function narrate(): Promise<void> {
-    setNarratingId(id)
+    setNarratingIds((prev) => new Set(prev).add(id))
     try {
       const outcome = await createNarrative(id, settings.model)
       const d = await load()
-      setFetched({ id, detail: d, error: outcome.status === 'failed' ? (outcome.error ?? outcome.ai_status) : null })
-    } catch (err) { setFetched((prev) => ({ ...prev, error: err instanceof Error ? err.message : String(err) })) } finally { setNarratingId(null) }
+      // Only replace the displayed payload if this narration's run is still the one on screen:
+      // navigating away and starting another narration there must not have this one's completion
+      // clobber the other run's data with a stale `Loading…` once it lands.
+      setFetched((prev) => (prev.id === id
+        ? { id, detail: d, error: outcome.status === 'failed' ? (outcome.error ?? outcome.ai_status) : null }
+        : prev))
+    } catch (err) {
+      setFetched((prev) => (prev.id === id
+        ? { ...prev, error: err instanceof Error ? err.message : String(err) }
+        : prev))
+    } finally {
+      // Remove only this narration's own id: another call to `narrate()` for a different run may
+      // still be in flight, and must keep being tracked when this one finishes.
+      setNarratingIds((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
   }
 
   const detail = fetched.id === id ? fetched.detail : null
