@@ -31,8 +31,8 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 ```
 service/   Python 3.11+ service (package `whf`): FastAPI, Typer CLI, SQLite, models, generator, Copilot session
 app/       Electron + React + TypeScript desktop app (`src/main`, `src/preload`, `src/renderer`, `src/shared`)
-installer/ PyInstaller and electron-builder configuration
-scripts/   PowerShell helpers (`dev-app.ps1`)
+installer/ PyInstaller and electron-builder configuration, installer README
+scripts/   PowerShell and shell helpers (`dev-app.ps1`, `build-service.{ps1,sh}`, `build-installer.ps1`)
 docs/      research, requirements, specs, plans
 .claude/   skills, agents, hooks, settings
 ```
@@ -40,8 +40,11 @@ docs/      research, requirements, specs, plans
 ## Toolchain
 
 - Python: `uv`, `ruff`, `ty`, `pytest`, `hypothesis`; see the `modern-python` skill.
-- Node: Node 22, `npm`, `electron-vite` (Vite 7), `vitest`, `eslint` 10, `tsc`; `electron-builder` in plan 4.
+- Node: Node 22, `npm`, `electron-vite` (Vite 7), `vitest`, `eslint` 10, `tsc`, `electron-builder`.
 - Commands: `uv run pytest` in `service/`; `npm test`, `npm run lint`, `npm run typecheck` in `app/`.
+- Packaging: PyInstaller (`installer/pyinstaller/whf.spec`), electron-builder
+  (`installer/electron-builder.yml`); `pwsh scripts/build-installer.ps1` builds the
+  installer; CI in `.github/workflows/ci.yml`.
 
 ## Skills and agents
 

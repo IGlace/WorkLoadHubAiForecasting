@@ -16,6 +16,19 @@ npm run build        # electron-vite build into out/
 Set `WHF_SERVICE_COMMAND` to override how the service is started, as a JSON array, for example
 `$env:WHF_SERVICE_COMMAND = '["C:\\path\\whf.exe","serve"]'`.
 
+## Package
+
+```powershell
+npm run pack:dir            # unpacked electron-builder output, any OS, for a quick check of the packaged app
+pwsh ../scripts/build-installer.ps1   # freeze the service, then build the Windows NSIS installer (Windows only)
+```
+
+`pack:dir` and `npm run build:win` both read `../installer/electron-builder.yml`
+and expect the frozen service at `../service/dist/whf` (run `pwsh
+../scripts/build-service.ps1` first, or let `build-installer.ps1` do it).
+See `../installer/README.md` for what the installer contains and a first-run
+checklist.
+
 ## Layout
 
 - `src/main`: Electron main process (service supervisor, IPC, tray, notifications, settings)

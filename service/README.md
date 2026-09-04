@@ -32,3 +32,21 @@ uv run whf narrate 1               # narrate an existing run; --json prints the 
 ```
 
 The narrative is stored with the run (`run_narratives`) and `runs.ai_status` records `ok`, `unverified` (a number in the text is not in the facts) or `failed:<reason>`. Set `WHF_COPILOT_LIVE=1` to run the one live test.
+
+## Build
+
+Freeze the service into a one-folder PyInstaller build with the pinned Copilot CLI bundled, then smoke-test it:
+
+```powershell
+pwsh ../scripts/build-service.ps1     # Windows; -SkipCliDownload skips the Copilot CLI download
+```
+
+```bash
+bash ../scripts/build-service.sh      # Linux/CI; WHF_SKIP_CLI_DOWNLOAD=1 skips the Copilot CLI download
+```
+
+Both run `uv run pyinstaller ... installer/pyinstaller/whf.spec`, then
+`installer/pyinstaller/smoke_frozen.py` against the frozen `whf`/`whf.exe`
+(version, data generation, a forecast run, `whf copilot status`, and a serve
+handshake). The result lands in `service/dist/whf`; `scripts/build-installer.ps1`
+embeds it into the desktop installer.

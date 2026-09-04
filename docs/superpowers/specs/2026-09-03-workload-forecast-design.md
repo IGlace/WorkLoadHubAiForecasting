@@ -261,6 +261,14 @@ functions as the API.
 - Development happens on Windows (PowerShell scripts) and in Linux CI; only
   notifications, installer and the frozen service are Windows-specific.
 
+(Implementation note, 2026-09-04: the Copilot CLI is pre-downloaded at build time
+with the SDK's `python -m copilot download-runtime` into
+`service/dist/whf/copilot-cli/` and the app sets `COPILOT_CLI_PATH` for the
+service; the app's settings and logs live under
+`%LOCALAPPDATA%\WorkloadHubForecast\app` and `\logs` next to the database; the
+installer is a per-user NSIS setup built by `scripts/build-installer.ps1` and by
+the `package-windows` CI job.)
+
 ## 10. Testing
 
 - Test-driven development throughout.
