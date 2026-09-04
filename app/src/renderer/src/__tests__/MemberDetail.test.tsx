@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { afterEach } from 'vitest'
 import { AppProvider } from '../context'
+import { setLanguage } from '../i18n'
 import { MemberDetail } from '../pages/MemberDetail'
 import { installFakeWhf, META } from '../test/fake-whf'
 import { RUN_DETAIL } from '../test/fixtures'
@@ -15,6 +17,16 @@ function mount(initialEntry: string) {
 }
 
 describe('MemberDetail', () => {
+  afterEach(() => setLanguage('en'))
+
+  it('re-renders on a language change even though it never calls useApp()', async () => {
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /runs/5': RUN_DETAIL })
+    mount('/runs/5/members/11')
+    expect(await screen.findByText('Week')).toBeInTheDocument()
+    act(() => { setLanguage('fr') })
+    expect(await screen.findByText('Semaine')).toBeInTheDocument()
+    expect(screen.queryByText('Week')).not.toBeInTheDocument()
+  })
   it('shows forecast, patterns, open tasks and narrative for one member', async () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /runs/5': RUN_DETAIL })
     mount('/runs/5/members/11')

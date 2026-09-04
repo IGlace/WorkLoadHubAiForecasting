@@ -17,6 +17,10 @@ export function Settings(): React.JSX.Element {
 
   const loadStatus = (): void => { getCopilotStatus().then(setCopilot).catch((e: Error) => setError(e.message)) }
   useEffect(loadStatus, [])
+  // Render-time state adjustment (not an effect): when settings.model changes underneath
+  // this component (e.g. another save completed), reset the local draft to match before
+  // this render commits, so the input doesn't briefly show stale text and there's no extra
+  // render caused by a `set-state-in-effect` round trip.
   if (modelSource !== settings.model) {
     setModelSource(settings.model)
     setModel(settings.model ?? '')

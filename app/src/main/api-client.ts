@@ -22,9 +22,11 @@ export class ApiClient {
     const init: RequestInit = { method: req.method, headers }
     if (req.body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(req.body) }
     let res: Response
-    try { res = await this.fetchFn(`${this.baseUrl}${req.path}`, init) }
-    catch (err) { return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) } }
-    const text = await res.text()
+    let text: string
+    try {
+      res = await this.fetchFn(`${this.baseUrl}${req.path}`, init)
+      text = await res.text()
+    } catch (err) { return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) } }
     let data: unknown = null
     if (text) { try { data = JSON.parse(text) } catch { data = text } }
     if (!res.ok) {

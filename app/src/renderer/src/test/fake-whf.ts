@@ -15,7 +15,7 @@ export function installFakeWhf(routes: Record<string, Route>, options: { state?:
       const pattern = Object.keys(routes).find((k) => k.includes('*') && new RegExp('^' + k.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]+') + '$').test(key))
       const route = exact !== undefined ? exact : pattern ? routes[pattern] : undefined
       if (route === undefined) return { ok: false, status: 404, error: `no fake route for ${key}` }
-      const data = typeof route === 'function' ? (route as (b: unknown, r: ApiRequest) => unknown)(req.body, req) : route
+      const data = typeof route === 'function' ? await (route as (b: unknown, r: ApiRequest) => unknown)(req.body, req) : route
       if (data instanceof Error) return { ok: false, status: 400, error: data.message }
       return { ok: true, status: 200, data }
     }),
@@ -24,7 +24,6 @@ export function installFakeWhf(routes: Record<string, Route>, options: { state?:
     copilotLogin: async () => ({ started: true, message: 'opened' }),
     getState: async () => state,
     onStateChanged: () => () => {},
-    openExternal: async () => {},
   }
   Object.defineProperty(window, 'whf', { value: bridge, configurable: true })
   return { calls, get settings() { return settings } }

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -19,5 +19,11 @@ describe('SettingsStore', () => {
     expect(store.set({ language: 'fr', model: 'gpt-5' })).toEqual({ ...DEFAULT_SETTINGS, language: 'fr', model: 'gpt-5' })
     writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), junk: 1, language: 'de' }))
     expect(new SettingsStore(file).get()).toEqual({ ...DEFAULT_SETTINGS, model: 'gpt-5' })
+  })
+  it('leaves no .tmp file behind after a write, using a unique name per write', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'whf-'))
+    const file = join(dir, 'settings.json')
+    new SettingsStore(file).set({ language: 'fr' })
+    expect(readdirSync(dir).some((f) => f.endsWith('.tmp'))).toBe(false)
   })
 })

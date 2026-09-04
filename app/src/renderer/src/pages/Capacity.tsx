@@ -29,7 +29,7 @@ export function Capacity(): React.JSX.Element {
       <section className="panel">
         <h2>{t('capacity.overrides')}</h2>
         <table>
-          <thead><tr><th>{t('capacity.member')}</th><th>{t('member.week')}</th><th className="num">{t('capacity.hours')}</th><th>{t('capacity.reason')}</th><th></th></tr></thead>
+          <thead><tr><th>{t('capacity.member')}</th><th>{t('capacity.week')}</th><th className="num">{t('capacity.hours')}</th><th>{t('capacity.reason')}</th><th></th></tr></thead>
           <tbody>
             {(data?.overrides ?? []).filter((o) => nameOf.has(o.member_id)).map((o) => (
               <tr key={o.id}><td>{nameOf.get(o.member_id)}</td><td>{o.week_start ?? t('capacity.permanent')}</td><td className="num">{o.weekly_hours.toFixed(1)}</td><td>{o.reason ?? ''}</td>

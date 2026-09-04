@@ -22,6 +22,20 @@ describe('Rebalancing', () => {
     expect(move).toHaveTextContent('Mon 07 Sep')
     expect(move).toHaveTextContent('medium')
   })
+  it('shows the loading text while the team fetch is in flight, then the data', async () => {
+    let resolveRuns: (v: unknown) => void = () => {}
+    const runsPromise = new Promise((resolve) => { resolveRuns = resolve })
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs?team_id=1': () => runsPromise,
+      'GET /runs/5': RUN_DETAIL,
+    })
+    render(<MemoryRouter><AppProvider><Rebalancing /></AppProvider></MemoryRouter>)
+    expect(await screen.findByText('Loading…')).toBeInTheDocument()
+    resolveRuns([RUN_DETAIL.run])
+    expect(await screen.findByText('18.0 h over')).toBeInTheDocument()
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
+  })
   it('says so when no run exists', async () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /runs?team_id=1': [] })
     render(<MemoryRouter><AppProvider><Rebalancing /></AppProvider></MemoryRouter>)

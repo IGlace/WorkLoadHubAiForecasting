@@ -25,6 +25,16 @@ describe('Dashboard', () => {
     expect(screen.getByText('Yara Tazi')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open result' })).toHaveAttribute('href', '/runs/5')
   })
+  it('shows the loading text while the overview fetch is in flight, then the data', async () => {
+    let resolveOverview: (v: unknown) => void = () => {}
+    const overviewPromise = new Promise((resolve) => { resolveOverview = resolve })
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 10, role: 'skill_team_leader' }, 'GET /departments/1/overview': () => overviewPromise })
+    render(<MemoryRouter><AppProvider><Dashboard /></AppProvider></MemoryRouter>)
+    expect(await screen.findByText('Loading…')).toBeInTheDocument()
+    resolveOverview(overview)
+    expect(await screen.findByText('Core')).toBeInTheDocument()
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
+  })
   it('shows only the own team for a team leader', async () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /departments/1/overview': overview })
     render(<MemoryRouter><AppProvider><Dashboard /></AppProvider></MemoryRouter>)

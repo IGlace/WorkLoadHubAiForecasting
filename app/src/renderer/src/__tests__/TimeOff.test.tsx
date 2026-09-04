@@ -1,11 +1,40 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { vi } from 'vitest'
 import { AppProvider } from '../context'
 import { TimeOff } from '../pages/TimeOff'
 import { installFakeWhf, META } from '../test/fake-whf'
 
 describe('TimeOff', () => {
+  it('debounces the year fetch by 300ms and ignores an incomplete year', async () => {
+    const fake = installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /holidays?year=*': [], 'GET /vacations': [],
+    })
+    render(<MemoryRouter><AppProvider><TimeOff /></AppProvider></MemoryRouter>)
+    const year = await screen.findByLabelText('Year')
+    // Let the initial mount (context loads + the debounced fetch for the default year) settle
+    // with real timers before switching to fake ones for the debounce assertions below.
+    await waitFor(() => expect(fake.calls.some((c) => c.path.startsWith('/holidays'))).toBe(true))
+    const callsBefore = fake.calls.length
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.change(year, { target: { value: '202' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      expect(fake.calls.length).toBe(callsBefore) // 3 digits: no fetch, ever
+
+      fireEvent.change(year, { target: { value: '2027' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(200) })
+      expect(fake.calls.length).toBe(callsBefore) // 4 digits, but debounce hasn't elapsed yet
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(150) })
+      expect(fake.calls.filter((c) => c.path === '/holidays?year=2027')).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('wraps a fetch failure in the common error message', async () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },

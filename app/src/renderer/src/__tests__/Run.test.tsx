@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AppProvider } from '../context'
@@ -45,6 +45,13 @@ describe('Run', () => {
     expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
     expect(await screen.findByText('Copilot narrative failed: network down')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open the result' })).toHaveAttribute('href', '/runs/5')
+  })
+  it('omits the empty team option when exactly one team is visible', async () => {
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready })
+    render(<MemoryRouter><AppProvider><Run /></AppProvider></MemoryRouter>)
+    const select = await screen.findByLabelText('Team')
+    expect(within(select).queryByRole('option', { name: '–' })).not.toBeInTheDocument()
+    expect(select).toHaveValue('1')
   })
   it('disables the AI step when Copilot is not ready', async () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { ...ready, ready: false, authenticated: false, message: 'Not signed in' } })

@@ -29,4 +29,10 @@ describe('ApiClient', () => {
     const client = new ApiClient('http://127.0.0.1:6001', 'tok', fetchFn as unknown as typeof fetch)
     expect(await client.request({ method: 'GET', path: '/meta' })).toEqual({ ok: false, status: 0, error: 'ECONNREFUSED' })
   })
+  it('maps a body read failure to status 0 instead of throwing', async () => {
+    const badResponse = { ok: true, status: 200, text: () => Promise.reject(new Error('body read failed')) } as unknown as Response
+    const fetchFn = vi.fn(async () => badResponse)
+    const client = new ApiClient('http://127.0.0.1:6001', 'tok', fetchFn as unknown as typeof fetch)
+    expect(await client.request({ method: 'GET', path: '/meta' })).toEqual({ ok: false, status: 0, error: 'body read failed' })
+  })
 })

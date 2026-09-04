@@ -22,7 +22,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [state, setState] = useState<AppState>({ service: 'starting', serviceMessage: '', version: '', platform: '' })
   const [error, setError] = useState<string | null>(null)
-  const [, bump] = useState(0)
 
   const refresh = useCallback(async () => {
     try {
@@ -32,7 +31,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   }, [])
 
   useEffect(() => {
-    void window.whf.getSettings().then((s) => { setSettings(s); setLanguage(s.language); bump((n) => n + 1) })
+    void window.whf.getSettings().then((s) => { setSettings(s); setLanguage(s.language) })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
     void window.whf.getState().then((s) => { setState(s); void refresh() })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
@@ -51,7 +50,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     meta, profile, settings, state, me, visibleTeams, error,
     canRun: (teamId) => visibleTeams.some((t) => t.id === teamId),
     refresh,
-    saveSettings: async (patch) => { const s = await window.whf.setSettings(patch); setSettings(s); setLanguage(s.language); bump((n) => n + 1) },
+    saveSettings: async (patch) => { const s = await window.whf.setSettings(patch); setSettings(s); setLanguage(s.language) },
     saveProfile: async (memberId) => { setProfileState(await setProfile(memberId)) },
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -1,4 +1,4 @@
-import type { ApiRequest, ApiResponse } from '../shared/ipc'
+import type { ApiRequest, ApiResponse, Language } from '../shared/ipc'
 import type { ForecastRow, Member, Meta, Profile, Team, TeamDue } from '../shared/types'
 import { notifyDue } from './notifications'
 
@@ -17,7 +17,7 @@ export function overloadedMembers(forecasts: ForecastRow[], members: Member[]): 
   return [...totals.entries()]
     .filter(([, hours]) => hours > 0)
     .sort((a, b) => b[1] - a[1])
-    .map(([id, hours]) => ({ name: nameOf.get(id) ?? String(id), hours: Math.round(hours * 100) / 100 }))
+    .map(([id, hours]) => ({ name: nameOf.get(id) ?? String(id), hours }))
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000
@@ -25,17 +25,15 @@ export const DAY_MS = 24 * 60 * 60 * 1000
 export class DueChecker {
   private timer: ReturnType<typeof setInterval> | null = null
 
-  constructor(private readonly deps: { request: (req: ApiRequest) => Promise<ApiResponse>; notify: (title: string, body: string) => void; intervalMs?: number }) {}
+  constructor(private readonly deps: { request: (req: ApiRequest) => Promise<ApiResponse>; notify: (title: string, body: string) => void; intervalMs?: number; getLang?: () => Language }) {}
 
   async checkNow(): Promise<{ due: Team[] }> {
     const [meta, profile] = await Promise.all([this.get<Meta>('/meta'), this.get<Profile>('/profile')])
     if (!meta || !profile) return { due: [] }
-    const due: Team[] = []
-    for (const team of teamsToCheck(meta, profile)) {
-      const status = await this.get<TeamDue>(`/teams/${team.id}/due`)
-      if (status?.due) due.push(team)
-    }
-    if (due.length) notifyDue(this.deps.notify, due)
+    const teams = teamsToCheck(meta, profile)
+    const statuses = await Promise.all(teams.map((team) => this.get<TeamDue>(`/teams/${team.id}/due`)))
+    const due = teams.filter((_, i) => statuses[i]?.due)
+    if (due.length) notifyDue(this.deps.notify, due, this.deps.getLang?.())
     return { due }
   }
 

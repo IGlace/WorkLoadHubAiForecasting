@@ -5,7 +5,6 @@ export const IPC = {
   copilotLogin: 'copilot:login',
   appState: 'app:state',
   appStateChanged: 'app:state-changed',
-  openExternal: 'app:open-external',
 } as const
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -29,7 +28,6 @@ export interface WhfBridge {
   copilotLogin(): Promise<{ started: boolean; message: string }>
   getState(): Promise<AppState>
   onStateChanged(listener: (state: AppState) => void): () => void
-  openExternal(url: string): Promise<void>
 }
 
 declare global {

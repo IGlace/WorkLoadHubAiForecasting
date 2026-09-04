@@ -31,7 +31,7 @@ export class AppController {
   readonly settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
   quitting = false
   private tray: Tray | null = null
-  readonly dueChecker = new DueChecker({ request: (req) => this.client ? this.client.request(req) : Promise.resolve({ ok: false, status: 0, error: 'service not ready' }), notify: electronNotify })
+  readonly dueChecker = new DueChecker({ request: (req) => this.client ? this.client.request(req) : Promise.resolve({ ok: false, status: 0, error: 'service not ready' }), notify: electronNotify, getLang: () => this.settings.get().language })
 
   getClient(): ApiClient | null { return this.client }
   getState(): AppState { return this.state }
@@ -80,7 +80,7 @@ export class AppController {
       const m = meta.data as Meta
       if (!Array.isArray(m.teams) || !Array.isArray(m.members)) return
       const team = m.teams.find((t: Team) => t.id === run.team_id)
-      notifyOverload(electronNotify, team?.name ?? `team ${run.team_id}`, overloadedMembers(run.forecasts, m.members))
+      notifyOverload(electronNotify, team?.name ?? `team ${run.team_id}`, overloadedMembers(run.forecasts, m.members), this.settings.get().language)
     } catch (err) {
       console.error(err)
     }
@@ -163,7 +163,7 @@ if (!app.requestSingleInstanceLock()) {
   registerIpc({
     ipcMain, getClient: () => controller.getClient(), settings: controller.settings, getState: () => controller.getState(),
     login: () => startCopilotLogin({ status: () => controller.copilotStatus(), spawnFn: spawn, platform: process.platform }),
-    openExternal: (url) => shell.openExternal(url), applyLaunchAtLogin: (on) => controller.applyLaunchAtLogin(on),
+    applyLaunchAtLogin: (on) => controller.applyLaunchAtLogin(on),
     onRunCreated: (run) => { controller.afterRun(run).catch((err: unknown) => console.error(err)) },
   })
   void app.whenReady().then(async () => {
@@ -177,8 +177,10 @@ if (!app.requestSingleInstanceLock()) {
   app.on('activate', () => controller.showWindow())
   app.on('before-quit', () => controller.shutdown())
   app.on('window-all-closed', () => {
+    // Only flag quitting and ask Electron to quit here: app.quit() fires 'before-quit',
+    // whose handler calls controller.shutdown() — calling it here too would shut down twice.
     if (shouldQuitOnLastWindowClosed(controller.settings.get(), process.platform)) {
-      controller.shutdown()
+      controller.quitting = true
       app.quit()
     }
   })

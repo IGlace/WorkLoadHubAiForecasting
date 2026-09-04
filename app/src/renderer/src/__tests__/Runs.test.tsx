@@ -26,4 +26,11 @@ describe('Runs', () => {
     render(<MemoryRouter><AppProvider><Runs /></AppProvider></MemoryRouter>)
     expect(await screen.findAllByRole('row')).toHaveLength(2)
   })
+  it('shows only the error banner on a failed fetch, not the empty-state text', async () => {
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /runs': () => new Error('runs unavailable') })
+    render(<MemoryRouter><AppProvider><Runs /></AppProvider></MemoryRouter>)
+    expect(await screen.findByText('Something went wrong: runs unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('No runs yet.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
 })

@@ -53,6 +53,22 @@ describe('DueChecker', () => {
     expect(notify).toHaveBeenCalledTimes(1)
     expect(notify.mock.calls[0]![1]).toContain('T1')
   })
+  it('fetches the per-team due status concurrently rather than one at a time', async () => {
+    const inFlight: string[] = []
+    let maxConcurrent = 0
+    const request = vi.fn(async (req: { path: string }) => {
+      if (req.path === '/meta') return { ok: true as const, status: 200, data: meta }
+      if (req.path === '/profile') return { ok: true as const, status: 200, data: { member_id: 10, role: 'skill_team_leader' } satisfies Profile }
+      inFlight.push(req.path)
+      maxConcurrent = Math.max(maxConcurrent, inFlight.length)
+      await Promise.resolve()
+      inFlight.pop()
+      return { ok: true as const, status: 200, data: { team_id: 1, due: false, last_run_id: null, last_finished_at: null } }
+    })
+    const checker = new DueChecker({ request: request as never, notify: vi.fn() })
+    await checker.checkNow()
+    expect(maxConcurrent).toBe(2)
+  })
   it('stays silent when the service is not ready', async () => {
     const notify = vi.fn()
     const checker = new DueChecker({ request: (async () => ({ ok: false as const, status: 0, error: 'service not ready' })) as never, notify })

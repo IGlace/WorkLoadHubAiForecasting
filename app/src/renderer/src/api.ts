@@ -33,7 +33,7 @@ export const createProject = (input: ProjectInput) => call<{ id: number }>('POST
 export const updateProject = (id: number, input: ProjectUpdate) => call<Project>('PUT', `/projects/${id}`, input)
 export const getCapacity = () => call<Capacity>('GET', '/capacity')
 export const setCapacityDefault = (weekly_hours: number) => call<{ default_weekly_hours: number }>('PUT', '/capacity/default', { weekly_hours })
-export const setCapacityOverride = (o: Omit<CapacityOverride, 'id'>) => call<CapacityOverride>('PUT', '/capacity/overrides', o)
+export const setCapacityOverride = (o: Omit<CapacityOverride, 'id'>) => call<Omit<CapacityOverride, 'id'>>('PUT', '/capacity/overrides', o)
 export const deleteCapacityOverride = (id: number) => call<{ deleted: boolean }>('DELETE', `/capacity/overrides/${id}`)
 export const getHolidays = (year?: number) => call<Holiday[]>('GET', `/holidays${q({ year })}`)
 export const getVacations = (member_id?: number) => call<Vacation[]>('GET', `/vacations${q({ member_id })}`)

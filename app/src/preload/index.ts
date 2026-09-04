@@ -12,7 +12,6 @@ const bridge: WhfBridge = {
     ipcRenderer.on(IPC.appStateChanged, handler)
     return () => ipcRenderer.removeListener(IPC.appStateChanged, handler)
   },
-  openExternal: (url: string) => ipcRenderer.invoke(IPC.openExternal, url),
 }
 
 contextBridge.exposeInMainWorld('whf', bridge)

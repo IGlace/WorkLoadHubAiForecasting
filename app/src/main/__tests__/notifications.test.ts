@@ -17,4 +17,14 @@ describe('notification texts', () => {
     notifyOverload(notify, 'T1', [])
     expect(notify).not.toHaveBeenCalled()
   })
+  it('lists due teams in French', () => {
+    const notify = vi.fn()
+    notifyDue(notify, [{ id: 1, name: 'T1', department_id: 1, team_leader_id: null }, { id: 2, name: 'T2', department_id: 1, team_leader_id: null }], 'fr')
+    expect(notify).toHaveBeenCalledWith('Prévision à faire', 'Aucune prévision au cours des 14 derniers jours pour T1, T2. Ouvrez WorkloadHub Forecast pour en lancer une.')
+  })
+  it('lists overloaded members in French, still with one decimal', () => {
+    const notify = vi.fn()
+    notifyOverload(notify, 'T1', [{ name: 'Yara', hours: 8 }, { name: 'Ali', hours: 5.55 }], 'fr')
+    expect(notify).toHaveBeenCalledWith('Surcharge prévue pour T1', 'Yara (+8.0 h), Ali (+5.6 h) dépassent la capacité au cours des deux prochaines semaines.')
+  })
 })

@@ -7,7 +7,7 @@ import { HistoryChart } from '../components/HistoryChart'
 import { RiskBadge } from '../components/RiskBadge'
 import { StatusMessage } from '../components/StatusMessage'
 import { hours, pct, weekLabel } from '../format'
-import { t } from '../i18n'
+import { useT } from '../i18n'
 
 function patternLines(p: PatternStats): string[] {
   const lines: string[] = []
@@ -24,6 +24,7 @@ function patternLines(p: PatternStats): string[] {
 interface Fetched { id: number; detail: RunDetail | null; error: string | null }
 
 export function MemberDetail(): React.JSX.Element {
+  const t = useT()
   const { runId, memberId } = useParams()
   const id = Number(runId)
   // `fetched.id` tags which run the payload belongs to; a superseded id (runId changed

@@ -26,7 +26,9 @@ export class SettingsStore {
   set(patch: Partial<Settings>): Settings {
     const next = sanitize({ ...this.get(), ...patch })
     mkdirSync(dirname(this.filePath), { recursive: true })
-    const tmp = `${this.filePath}.tmp`
+    // A unique-per-write name so two overlapping writes (e.g. two calls racing before
+    // either renameSync completes) never clobber each other's temp file.
+    const tmp = `${this.filePath}.${process.pid}.${Date.now()}.tmp`
     writeFileSync(tmp, JSON.stringify(next, null, 2))
     renameSync(tmp, this.filePath)
     return next

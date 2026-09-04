@@ -19,6 +19,7 @@ describe('Capacity', () => {
     render(<MemoryRouter><AppProvider><Capacity /></AppProvider></MemoryRouter>)
     expect(await screen.findByDisplayValue('40')).toBeInTheDocument()
     expect(screen.getByText('training')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Week (blank = permanent)' })).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText('Member'), '13')
     await userEvent.type(screen.getByLabelText('Weekly hours'), '20')
     await userEvent.type(screen.getByLabelText('Reason'), 'internal project')

@@ -74,6 +74,18 @@ describe('ServiceProcess', () => {
     proc.stop()
     expect(child.kill).toHaveBeenCalled()
   })
+  it('never logs a second handshake-shaped line verbatim', async () => {
+    const { child } = fakeChild()
+    const fetchFn = vi.fn(() => Promise.resolve(new Response('{"status":"ok"}', { status: 200 }))) as unknown as typeof fetch
+    const log = vi.fn()
+    const proc = new ServiceProcess({ spawnFn: (() => child) as never, fetchFn, command: 'whf', args: ['serve'], cwd: '/x', env: {}, log, sleep: async () => {} })
+    const started = proc.start()
+    child.stdout.write('{"port": 6001, "token": "tok"}\n')
+    await expect(started).resolves.toEqual({ port: 6001, token: 'tok' })
+    child.stdout.write('{"port": 6002, "token": "another-secret"}\n')
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith('[service] (suppressed json line)'))
+    expect(log.mock.calls.some((c) => String(c[0]).includes('another-secret'))).toBe(false)
+  })
   it('rejects when the process exits before the handshake', async () => {
     const { child } = fakeChild()
     const proc = new ServiceProcess({ spawnFn: (() => child) as never, fetchFn: fetch, command: 'whf', args: [], cwd: '/x', env: {}, log: () => {}, sleep: async () => {} })

@@ -58,7 +58,7 @@ export function Run(): React.JSX.Element {
         <Field label={t('run.team')}>
           {(id) => (
             <select id={id} value={effectiveTeam} onChange={(e) => setTeam(e.target.value)} disabled={busy}>
-              <option value="">–</option>
+              {visibleTeams.length !== 1 && <option value="">–</option>}
               {visibleTeams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
             </select>
           )}
@@ -66,7 +66,7 @@ export function Run(): React.JSX.Element {
         {onBehalf && <StatusMessage kind="info">{t('run.onBehalf', { leader: leader.name })}</StatusMessage>}
         <Field label={t('run.asof')}>{(id) => <input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} disabled={busy} />}</Field>
         <div className="field">
-          <label><input type="checkbox" checked={withAi && aiPossible} disabled={!aiPossible || busy} onChange={(e) => setWithAi(e.target.checked)} aria-label={t('run.withai')} /> {t('run.withai')}</label>
+          <label><input type="checkbox" checked={withAi && aiPossible} disabled={!aiPossible || busy} onChange={(e) => setWithAi(e.target.checked)} /> {t('run.withai')}</label>
           {copilot && !copilot.ready && <span className="muted"> {copilot.message}</span>}
         </div>
         <button className="primary" disabled={!selected || busy} onClick={() => { void start() }}>{t('run.start')}</button>

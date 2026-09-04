@@ -23,6 +23,12 @@ export function serviceCommand(opts: {
   return { command: 'uv', args: ['run', 'whf', 'serve'], cwd: join(opts.appPath, '..', 'service') }
 }
 
+/** A line that could be mistaken for the handshake: starts with `{` and mentions a token. */
+function looksLikeHandshake(line: string): boolean {
+  const trimmed = line.trim()
+  return trimmed.startsWith('{') && trimmed.includes('"token"')
+}
+
 export function parseHandshake(line: string): { port: number; token: string } | null {
   const trimmed = line.trim()
   if (!trimmed.startsWith('{')) return null
@@ -102,7 +108,8 @@ export class ServiceProcess {
               () => finish(() => resolve(hs)),
               (err: unknown) => finish(() => reject(err instanceof Error ? err : new Error(String(err)))),
             )
-        } else this.opts.log(`[service] ${line}`)
+        } else if (looksLikeHandshake(line)) this.opts.log('[service] (suppressed json line)')
+        else this.opts.log(`[service] ${line}`)
       })
       child.on('error', (err) => finish(() => reject(err)))
       child.on('exit', (code) => {

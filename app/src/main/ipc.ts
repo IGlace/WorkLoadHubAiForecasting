@@ -10,7 +10,6 @@ export interface IpcDeps {
   settings: SettingsStore
   getState: () => AppState
   login: () => Promise<{ started: boolean; message: string }>
-  openExternal: (url: string) => Promise<void>
   applyLaunchAtLogin: (on: boolean) => void
   onRunCreated?: (run: RunCreated) => void
 }
@@ -23,6 +22,20 @@ function isApiRequest(value: unknown): value is ApiRequest {
   return typeof v['method'] === 'string' && METHODS.has(v['method']) && typeof v['path'] === 'string' && v['path'].startsWith('/')
 }
 
+const SETTINGS_VALIDATORS: Record<keyof Settings, (v: unknown) => boolean> = {
+  language: (v) => v === 'en' || v === 'fr',
+  model: (v) => typeof v === 'string' || v === null,
+  launchAtLogin: (v) => typeof v === 'boolean',
+  closeToTray: (v) => typeof v === 'boolean',
+}
+
+function isValidSettingsPatch(value: unknown): value is Partial<Settings> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  return Object.entries(value).every(
+    ([key, v]) => Object.prototype.hasOwnProperty.call(SETTINGS_VALIDATORS, key) && SETTINGS_VALIDATORS[key as keyof Settings](v),
+  )
+}
+
 export function registerIpc(deps: IpcDeps): void {
   deps.ipcMain.handle(IPC.apiRequest, async (_e, raw: unknown): Promise<ApiResponse> => {
     if (!isApiRequest(raw)) return { ok: false, status: 0, error: 'invalid request' }
@@ -33,15 +46,12 @@ export function registerIpc(deps: IpcDeps): void {
     return res
   })
   deps.ipcMain.handle(IPC.settingsGet, () => deps.settings.get())
-  deps.ipcMain.handle(IPC.settingsSet, (_e, patch: Partial<Settings>) => {
+  deps.ipcMain.handle(IPC.settingsSet, (_e, patch: unknown) => {
+    if (!isValidSettingsPatch(patch)) return deps.settings.get()
     const next = deps.settings.set(patch)
     if ('launchAtLogin' in patch) deps.applyLaunchAtLogin(next.launchAtLogin)
     return next
   })
   deps.ipcMain.handle(IPC.appState, () => deps.getState())
   deps.ipcMain.handle(IPC.copilotLogin, () => deps.login())
-  deps.ipcMain.handle(IPC.openExternal, async (_e, url: unknown) => {
-    if (typeof url !== 'string' || !/^https?:\/\//.test(url)) throw new Error('only http(s) urls can be opened')
-    await deps.openExternal(url)
-  })
 }

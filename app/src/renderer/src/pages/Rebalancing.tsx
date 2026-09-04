@@ -28,6 +28,7 @@ export function Rebalancing(): React.JSX.Element {
       .catch((e: Error) => { if (!cancelled) setFetched({ team: selectedTeam, detail: null, error: e.message }) })
     return () => { cancelled = true }
   }, [selectedTeam])
+  const loading = selectedTeam !== '' && fetched.team !== selectedTeam
   const detail = fetched.team === selectedTeam ? fetched.detail : null
   const error = fetched.team === selectedTeam ? fetched.error : null
   const facts = detail && detail !== 'none' ? detail.facts : null
@@ -37,6 +38,7 @@ export function Rebalancing(): React.JSX.Element {
     <div>
       <h1>{t('rebalancing.title')}</h1>
       {error && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
+      {loading && <p>{t('common.loading')}</p>}
       <Field label={t('run.team')}>
         {(id) => <select id={id} value={selectedTeam} onChange={(e) => setTeam(e.target.value)}>{visibleTeams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}</select>}
       </Field>

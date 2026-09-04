@@ -28,7 +28,7 @@ export function Runs(): React.JSX.Element {
           </select>
         )}
       </Field>
-      {rows.length === 0 ? <p className="muted">{t('runs.empty')}</p> : (
+      {!error && (rows.length === 0 ? <p className="muted">{t('runs.empty')}</p> : (
         <table>
           <thead><tr><th>{t('runs.id')}</th><th>{t('runs.team')}</th><th>{t('runs.asof')}</th><th>{t('runs.status')}</th><th>{t('runs.champion')}</th><th>{t('runs.ai')}</th><th></th></tr></thead>
           <tbody>
@@ -41,7 +41,7 @@ export function Runs(): React.JSX.Element {
             ))}
           </tbody>
         </table>
-      )}
+      ))}
     </div>
   )
 }

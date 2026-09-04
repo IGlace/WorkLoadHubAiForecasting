@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react'
 import type { Language } from '../../shared/ipc'
 
 const en: Record<string, string> = {
@@ -53,14 +54,35 @@ const fr: Record<string, string> = {
   'nav.capacity': 'Capacité', 'nav.timeoff': 'Absences', 'nav.runs': 'Historique', 'nav.settings': 'Paramètres',
   'profile.none': 'Choisissez qui vous êtes dans Paramètres pour voir vos équipes.',
   'common.loading': 'Chargement…',
+  'member.week': 'Semaine',
 }
 
 const dictionaries: Record<Language, Record<string, string>> = { en, fr }
 let current: Language = 'en'
+const listeners = new Set<() => void>()
 
-export function setLanguage(lang: Language): void { current = lang }
+export function setLanguage(lang: Language): void {
+  if (lang === current) return
+  current = lang
+  for (const listener of listeners) listener()
+}
 export function getLanguage(): Language { return current }
 export function t(key: string, vars: Record<string, string | number> = {}): string {
   const template = dictionaries[current][key] ?? en[key] ?? key
   return template.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`))
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+/**
+ * Subscribes the calling component to language changes so it re-renders on the next
+ * `setLanguage` call even if it never reads the app context (e.g. `MemberDetail`, which
+ * is reached without going through `useApp()`).
+ */
+export function useT(): typeof t {
+  useSyncExternalStore(subscribe, getLanguage, getLanguage)
+  return t
 }

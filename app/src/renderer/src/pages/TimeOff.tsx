@@ -15,11 +15,16 @@ export function TimeOff(): React.JSX.Element {
   const [form, setForm] = useState({ member_id: '', start_date: '', end_date: '', type: 'vacation' })
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
+    if (!/^\d{4}$/.test(year)) return
     let cancelled = false
-    getHolidays(Number(year))
-      .then((hs) => { if (!cancelled) { setHolidays(hs); setError(null) } })
-      .catch((e: Error) => { if (!cancelled) setError(e.message) })
-    return () => { cancelled = true }
+    // Debounce: only fetch once the user has stopped typing for 300 ms, so a year
+    // typed digit by digit doesn't fire a request per keystroke.
+    const timer = setTimeout(() => {
+      getHolidays(Number(year))
+        .then((hs) => { if (!cancelled) { setHolidays(hs); setError(null) } })
+        .catch((e: Error) => { if (!cancelled) setError(e.message) })
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [year])
   const loadVacations = (): void => { getVacations().then((vs) => { setVacations(vs); setError(null) }).catch((e: Error) => setError(e.message)) }
   useEffect(() => { getVacations().then((vs) => { setVacations(vs); setError(null) }).catch((e: Error) => setError(e.message)) }, [])

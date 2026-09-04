@@ -11,7 +11,7 @@ function harness(clientPresent = true) {
   registerIpc({
     ipcMain, getClient: () => (clientPresent ? ({ request } as never) : null), settings: settings as never,
     getState: () => ({ service: 'ready', serviceMessage: '', version: '0.1.0', platform: 'win32' }),
-    login: async () => ({ started: true, message: 'opened' }), openExternal: async () => {}, applyLaunchAtLogin,
+    login: async () => ({ started: true, message: 'opened' }), applyLaunchAtLogin,
   })
   return { handlers, request, settings, applyLaunchAtLogin }
 }
@@ -44,9 +44,13 @@ describe('registerIpc', () => {
     expect(await handlers.get(IPC.appState)!({})).toMatchObject({ service: 'ready' })
     expect(await handlers.get(IPC.copilotLogin)!({})).toEqual({ started: true, message: 'opened' })
   })
-  it('only opens http(s) urls', async () => {
-    const { handlers } = harness()
-    await expect(handlers.get(IPC.openExternal)!({}, 'file:///etc/passwd')).rejects.toThrow('http')
+  it('rejects an invalid settings patch and answers the current settings unchanged', async () => {
+    const { handlers, settings } = harness()
+    expect(await handlers.get(IPC.settingsSet)!({}, 'nope')).toEqual(DEFAULT_SETTINGS)
+    expect(await handlers.get(IPC.settingsSet)!({}, { language: 'de' })).toEqual(DEFAULT_SETTINGS)
+    expect(await handlers.get(IPC.settingsSet)!({}, { launchAtLogin: 'yes' })).toEqual(DEFAULT_SETTINGS)
+    expect(await handlers.get(IPC.settingsSet)!({}, { unknownKey: 1 })).toEqual(DEFAULT_SETTINGS)
+    expect(settings.set).not.toHaveBeenCalled()
   })
   it('reports created runs to the hook', async () => {
     const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -56,7 +60,7 @@ describe('registerIpc', () => {
       getClient: () => ({ request: async () => ({ ok: true, status: 200, data: { run_id: 7, team_id: 1, forecasts: [] } }) } as never),
       settings: { get: () => DEFAULT_SETTINGS, set: () => DEFAULT_SETTINGS } as never,
       getState: () => ({ service: 'ready', serviceMessage: '', version: '0', platform: 'win32' }),
-      login: async () => ({ started: false, message: '' }), openExternal: async () => {}, applyLaunchAtLogin: () => {}, onRunCreated,
+      login: async () => ({ started: false, message: '' }), applyLaunchAtLogin: () => {}, onRunCreated,
     })
     await handlers.get(IPC.apiRequest)!({}, { method: 'POST', path: '/runs', body: { team_id: 1 } })
     await handlers.get(IPC.apiRequest)!({}, { method: 'GET', path: '/runs' })
