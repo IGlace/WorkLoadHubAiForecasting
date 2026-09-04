@@ -35,7 +35,7 @@ reasoning. Version 1 works on **dummy data** only.
 - C2. Per-person capacity override, and per-person **per-week** override (for example internal project time).
 - C3. Public holiday calendar; v1 ships the **Morocco** calendar.
 - C4. Planned vacations per person (date ranges).
-- C5. **Upcoming events** entered by the team leader: project start or end, affected members or team, expected effect. **[decision]** Entered through a form in the local UI before a run; stored locally; passed to the forecast as context.
+- C5. **Upcoming events** entered by the team leader: project start or end, affected members or team, expected effect. **[decision, revised 2026-09-04]** Satisfied by C3 and C4 rather than by a separate form: the owner limited events to vacations and official country holidays, which the upstream WorkloadHub application guarantees never overlap. Project starts and ends inside the forecast window already reach the narrative as facts. See `docs/backlog.md` for the four cases deliberately left out of scope.
 
 ### 3.3 Local application (primary entry point)
 - U1. Installable on Windows from a **single shared installer file**; no terminal needed to install or run.

@@ -7,7 +7,9 @@ The owner walked the whole list on 2026-09-04 and decided each item. The decisio
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
 State on 2026-09-04: `main` is at `4fba18a`; `dev` carries the team-page live progress on top of it, so that
-one item is landed but not yet released. The next item to start is "Upcoming events".
+one item is landed but not yet released. "Upcoming events" was brainstormed on 2026-09-04 and closed as
+already covered, so the next item to start is the Playwright smoke path, unless the owner first decides the
+"Ask Copilot" button question below.
 
 ## Landed
 
@@ -56,14 +58,6 @@ one item is landed but not yet released. The next item to start is "Upcoming eve
 
 Ordered roughly by value. Each of these has an owner decision behind it.
 
-- **Upcoming events** (new, agreed 2026-09-04). An event has a title, a date range, a scope (the whole team or
-  named members), an effect type (reduces capacity or adds demand) and optional hours. With hours,
-  deterministic code applies the effect and shows it as a named line in the forecast; without hours it is
-  context for the narrative only. This closes the gap where a known future event could not be expressed.
-  Two questions need the owner's answer before this can be planned, because they change the data model:
-  what happens when an event's hours exceed a member's remaining capacity for the range (clamp, or report
-  it as overload the way demand already is), and whether a capacity-reducing event that overlaps a holiday
-  or a vacation subtracts twice or is absorbed. Start with a brainstorming pass, not a plan.
 - **The team page's "Ask Copilot" button is disabled for every run at once** (raised by the review of the
   team-page live-progress work, 2026-09-04, owner has not yet decided). The button is disabled from the
   single narrating-run state, so while run A's narration is in flight, run B's button is disabled too even
@@ -96,6 +90,20 @@ intermediate one.
 
 Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
+- **Upcoming events — closed as already covered** (brainstormed and decided 2026-09-04). Requirement C5 in
+  `docs/requirements/requirements-v1.md` asked for upcoming events entered before a run. The owner decided
+  events are limited to vacations and official country holidays, and that the upstream WorkloadHub
+  application guarantees those never overlap. Both are already fully modelled: the `holidays` and
+  `vacations` tables, `GET/POST/DELETE /vacations` in `service/src/whf/api.py`, the form on the Time off
+  page, and the generator, which produces exactly these two. Capacity subtracts them as a set union of
+  off-days (`pipeline.py`), so an overlap is absorbed rather than double-counted even if one existed. No
+  work planned. Four things the model still cannot express, deliberately out of scope: a team-wide dated
+  absence as one entry rather than one vacation row per member; demand-adding events, for work a leader
+  knows is coming but that has no task yet; free-text narrative-only context, though project starts and
+  ends inside the forecast window already reach the narrative as facts; and partial-day reductions, which
+  need a weekly-hours override on the Capacity page instead. Only the demand-adding gap is real
+  arithmetic, and whether a leader's advance knowledge is accurate enough to feed it is a question for
+  real WorkloadHub data, not dummy data.
 - **Installer size, about 375 MB** (Copilot CLI about 170 MB, scikit-learn plus scipy about 120 MB). Accepted:
   both large pieces are load-bearing, and the size is unremarkable for a desktop app with a bundled runtime.
 - **Skill loading in the frozen build cannot be proved automatically**, because it sits behind Copilot sign-in.
