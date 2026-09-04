@@ -1,26 +1,6 @@
 import nodeFs from 'node:fs'
-import { isAbsolute, join, sep } from 'node:path'
+import { join } from 'node:path'
 import { format } from 'node:util'
-
-// Creates `dir` one path segment at a time instead of relying on Node's
-// `mkdirSync(dir, { recursive: true })`: on some restricted/virtual
-// filesystems (e.g. a sandboxed /proc) that built-in recursive walk can spin
-// forever retrying a segment that keeps reporting ENOENT even though its
-// parent already exists. Doing it manually makes exactly one attempt per
-// segment and surfaces any non-EEXIST error immediately instead of looping.
-function mkdirRecursive(fs: typeof nodeFs, dir: string): void {
-  const segments = dir.split(sep)
-  let current = isAbsolute(dir) ? sep : ''
-  for (const segment of segments) {
-    if (!segment) continue
-    current = current ? join(current, segment) : segment
-    try {
-      fs.mkdirSync(current)
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
-    }
-  }
-}
 
 export class RotatingLog {
   readonly path: string
@@ -34,7 +14,14 @@ export class RotatingLog {
     this.maxBytes = opts.maxBytes ?? 1_000_000
     this.keep = opts.keep ?? 5
     this.path = join(opts.dir, `${opts.name ?? 'app'}.log`)
-    try { mkdirRecursive(this.fs, opts.dir) } catch { this.failed = true }
+    try {
+      this.fs.mkdirSync(opts.dir, { recursive: true })
+    } catch (err) {
+      // The wrapped console isn't installed yet at construction time, so
+      // this can't recurse into RotatingLog.write.
+      console.error('log directory unavailable:', err)
+      this.failed = true
+    }
   }
 
   write(line: string): void {

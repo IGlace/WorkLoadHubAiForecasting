@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,17 @@ describe('RotatingLog', () => {
     expect(existsSync(join(dir, 'app.3.log'))).toBe(false)
   })
   it('never throws when the directory cannot be written', () => {
-    const log = new RotatingLog({ dir: '/proc/definitely/not/writable' })
+    // A regular file can never contain a subdirectory, so mkdirSync fails
+    // fast with ENOTDIR on every platform (no reliance on /proc quirks).
+    const file = join(mkdtempSync(join(tmpdir(), 'whf-log-')), 'not-a-dir')
+    writeFileSync(file, 'x')
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let log: RotatingLog
+    try {
+      log = new RotatingLog({ dir: join(file, 'logs') })
+    } finally {
+      errorSpy.mockRestore()
+    }
     expect(() => log.write('x')).not.toThrow()
   })
   it('mirrors console output with a level prefix', () => {
