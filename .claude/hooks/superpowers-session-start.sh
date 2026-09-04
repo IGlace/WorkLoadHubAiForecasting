@@ -22,5 +22,21 @@ ${content}
 ${note}
 </EXTREMELY_IMPORTANT>"
 
-jq -n --arg ctx "$context" '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$ctx}}'
+# Emit the hook JSON. jq is used when present; otherwise a pure-bash escaper
+# (Git Bash on Windows has no jq) handles the characters JSON needs escaped.
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\n'/\\n}
+  printf '%s' "$s"
+}
+
+if command -v jq >/dev/null 2>&1; then
+  jq -n --arg ctx "$context" '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$ctx}}'
+else
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$context")"
+fi
 exit 0
