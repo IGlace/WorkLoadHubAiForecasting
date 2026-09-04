@@ -71,10 +71,59 @@ describe('Run', () => {
       'POST /runs/5/narrative': () => held,
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
-    expect(await screen.findByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
-    finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [] })
-    expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
+    const button = await screen.findByRole('button', { name: 'Run forecast' })
+    // Fake timers so the elapsed counter shown next to the step label can be pinned to an exact value.
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      const clickPromise = user.click(button)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await clickPromise
+      expect(screen.getByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
+      expect(screen.getByText('0 s so far')).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(screen.getByText('3 s so far')).toBeInTheDocument()
+      finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText('Forecast complete')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('keeps the last known step instead of reverting to the generic message when a poll comes back empty', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const held = new Promise((resolve) => { finish = resolve })
+    let pollCount = 0
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED,
+      'GET /runs/5/narrative/progress': () => {
+        pollCount += 1
+        return pollCount === 1
+          ? { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] }
+          : { run_id: 5, steps: [] }
+      },
+      'POST /runs/5/narrative': () => held,
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    const button = await screen.findByRole('button', { name: 'Run forecast' })
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      const clickPromise = user.click(button)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await clickPromise
+      expect(screen.getByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
+      // The next poll (the service restarted, or this run fell out of the store's history) returns no
+      // steps: the label must stay put rather than reverting to the generic "asking Copilot" line.
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      expect(screen.getByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
+      finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText('Forecast complete')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
   it('stops polling for progress once the narrative is done', async () => {
     let finish: (value: unknown) => void = () => {}

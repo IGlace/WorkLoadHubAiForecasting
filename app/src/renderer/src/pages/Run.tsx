@@ -28,6 +28,9 @@ export function Run(): React.JSX.Element {
 
   useEffect(() => { getCopilotStatus().then(setCopilot).catch(() => setCopilot(null)) }, [])
 
+  // Polls rather than streams: both the narrative POST and this progress GET are synchronous `def`s
+  // in the service, so FastAPI runs them on separate threadpool workers — concurrent without a new
+  // channel, an SSE endpoint or an extra IPC surface.
   useEffect(() => {
     if (phase !== 'narrating' || !result) return
     const runId = result.run_id
@@ -35,7 +38,9 @@ export function Run(): React.JSX.Element {
     const tick = (): void => {
       setElapsed(Math.round((Date.now() - started) / 1000))
       getNarrativeProgress(runId)
-        .then((p) => setStep(p.steps[p.steps.length - 1] ?? null))
+        // An empty poll (service restart, or this run fell out of the store's bounded history) must
+        // not blank the label back to the generic line: keep whatever step was last seen.
+        .then((p) => { if (p.steps.length > 0) setStep(p.steps[p.steps.length - 1]!) })
         .catch(() => {})  // a poll that fails is not worth failing the run over; the next one may work
     }
     tick()
