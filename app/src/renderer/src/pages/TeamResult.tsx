@@ -8,6 +8,7 @@ import { StatusMessage } from '../components/StatusMessage'
 import { WeekTable, type WeekTableRow } from '../components/WeekTable'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { progressLabel, useNarrativeProgress } from '../narrative-progress'
 
 interface Fetched { id: number; detail: RunDetail | null; error: string | null }
 
@@ -20,6 +21,7 @@ export function TeamResult(): React.JSX.Element {
   const [fetched, setFetched] = useState<Fetched>({ id: NaN, detail: null, error: null })
   const [busy, setBusy] = useState(false)
   const id = Number(runId)
+  const { step, elapsed } = useNarrativeProgress(busy ? id : null)
 
   const load = useCallback((): Promise<RunDetail> => getRun(id), [id])
 
@@ -64,6 +66,11 @@ export function TeamResult(): React.JSX.Element {
         <p className="muted">{t('team.narrativeStatus', { status: detail.run.ai_status })}</p>
         {detail.run.ai_status === 'unverified' && <StatusMessage kind="info">{t('team.unverified')}</StatusMessage>}
         {!narrative && <button className="primary" disabled={busy} onClick={() => { void narrate() }}>{t('team.narrate')}</button>}
+        {busy && (
+          <StatusMessage kind="info">
+            {progressLabel(step)} <span className="muted">{t('run.progress.elapsed', { seconds: String(elapsed) })}</span>
+          </StatusMessage>
+        )}
         {narrative && (
           <>
             <p>{narrative.run_summary}</p>

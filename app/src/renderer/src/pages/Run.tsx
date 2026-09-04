@@ -1,14 +1,14 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import type { CopilotStatus, NarrativeProgressStep, RunCreated } from '../../../shared/types'
-import { createNarrative, createRun, getCopilotStatus, getNarrativeProgress } from '../api'
+import type { CopilotStatus, RunCreated } from '../../../shared/types'
+import { createNarrative, createRun, getCopilotStatus } from '../api'
 import { Field } from '../components/Field'
 import { StatusMessage } from '../components/StatusMessage'
 import { useApp } from '../context'
 import { hours, today } from '../format'
 import { t } from '../i18n'
-import { progressLabel } from '../narrative-progress'
+import { progressLabel, useNarrativeProgress } from '../narrative-progress'
 
 type Phase = 'idle' | 'forecasting' | 'narrating' | 'done'
 
@@ -23,30 +23,9 @@ export function Run(): React.JSX.Element {
   const [result, setResult] = useState<RunCreated | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [step, setStep] = useState<NarrativeProgressStep | null>(null)
-  const [elapsed, setElapsed] = useState(0)
+  const { step, elapsed } = useNarrativeProgress(phase === 'narrating' && result ? result.run_id : null)
 
   useEffect(() => { getCopilotStatus().then(setCopilot).catch(() => setCopilot(null)) }, [])
-
-  // Polls rather than streams: both the narrative POST and this progress GET are synchronous `def`s
-  // in the service, so FastAPI runs them on separate threadpool workers — concurrent without a new
-  // channel, an SSE endpoint or an extra IPC surface.
-  useEffect(() => {
-    if (phase !== 'narrating' || !result) return
-    const runId = result.run_id
-    const started = Date.now()
-    const tick = (): void => {
-      setElapsed(Math.round((Date.now() - started) / 1000))
-      getNarrativeProgress(runId)
-        // An empty poll (service restart, or this run fell out of the store's bounded history) must
-        // not blank the label back to the generic line: keep whatever step was last seen.
-        .then((p) => { if (p.steps.length > 0) setStep(p.steps[p.steps.length - 1]!) })
-        .catch(() => {})  // a poll that fails is not worth failing the run over; the next one may work
-    }
-    tick()
-    const timer = setInterval(tick, 1000)
-    return () => clearInterval(timer)
-  }, [phase, result])
 
   const effectiveTeam = team || (visibleTeams.length === 1 ? String(visibleTeams[0]!.id) : '')
   const selected = visibleTeams.find((tm) => tm.id === Number(effectiveTeam))
@@ -56,7 +35,7 @@ export function Run(): React.JSX.Element {
 
   async function start(): Promise<void> {
     if (!selected || !me) return
-    setError(null); setAiError(null); setResult(null); setPhase('forecasting'); setStep(null); setElapsed(0)
+    setError(null); setAiError(null); setResult(null); setPhase('forecasting')
     let run: RunCreated
     try {
       run = await createRun(selected.id, asOf, me.id)

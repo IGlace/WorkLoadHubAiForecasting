@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { vi } from 'vitest'
 import type { RunDetail } from '../../../shared/types'
 import { AppProvider } from '../context'
 import { TeamResult } from '../pages/TeamResult'
@@ -45,6 +46,99 @@ describe('TeamResult', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Ask Copilot' }))
     expect(await screen.findByText('Some numbers in this narrative could not be matched to the forecast facts.')).toBeInTheDocument()
     expect(fake.calls.some((c) => c.method === 'POST' && c.path === '/runs/5/narrative')).toBe(true)
+  })
+  it('shows Copilot progress while the narrative is running and advances the label when a later step arrives', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const held = new Promise((resolve) => { finish = resolve })
+    const detail: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': () => detail,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'POST /runs/5/narrative': () => held,
+    })
+    mount()
+    const button = await screen.findByRole('button', { name: 'Ask Copilot' })
+    // Fake timers so the elapsed counter shown next to the step label can be pinned to an exact value.
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      const clickPromise = user.click(button)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await clickPromise
+      expect(screen.getByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
+      expect(screen.getByText('0 s so far')).toBeInTheDocument()
+      finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('advances the elapsed counter shown next to the progress label with the clock', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const held = new Promise((resolve) => { finish = resolve })
+    const detail: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': () => detail,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'POST /runs/5/narrative': () => held,
+    })
+    mount()
+    const button = await screen.findByRole('button', { name: 'Ask Copilot' })
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      const clickPromise = user.click(button)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await clickPromise
+      expect(screen.getByText('0 s so far')).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(screen.getByText('3 s so far')).toBeInTheDocument()
+      finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('stops polling for progress once the narrative is done', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const held = new Promise((resolve) => { finish = resolve })
+    let detail: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
+    const fake = installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': () => detail,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'POST /runs/5/narrative': () => {
+        detail = { ...RUN_DETAIL, run: { ...RUN_DETAIL.run, ai_status: 'ok' } }
+        return held
+      },
+    })
+    mount()
+    const button = await screen.findByRole('button', { name: 'Ask Copilot' })
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      const clickPromise = user.click(button)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await clickPromise
+      const progressCalls = (): number => fake.calls.filter((c) => c.path === '/runs/5/narrative/progress').length
+      // Advance past several poll intervals while the narrative is still held open, to prove polling is
+      // actually happening (and not just theoretically wired up).
+      for (let i = 0; i < 3; i++) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      }
+      const duringNarrating = progressCalls()
+      expect(duringNarrating).toBeGreaterThan(0)
+      finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText('Core is slightly over capacity in both weeks, driven by Yara.')).toBeInTheDocument()
+      const afterDone = progressCalls()
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(progressCalls()).toBe(afterDone)
+    } finally {
+      vi.useRealTimers()
+    }
   })
   it('resets stale data when navigating from one run to another', async () => {
     const detail6: RunDetail = {
