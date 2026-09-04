@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import { ServiceProcess, parseHandshake, serviceCommand, waitForHealth } from '../service-launcher'
@@ -7,7 +8,7 @@ describe('serviceCommand', () => {
   const base = { resourcesPath: '/res', appPath: '/app', platform: 'win32' as const }
   it('uses uv from the sibling service directory in development', () => {
     const cmd = serviceCommand({ ...base, isPackaged: false, env: {} })
-    expect(cmd).toEqual({ command: 'uv', args: ['run', 'whf', 'serve'], cwd: '/app/../service' })
+    expect(cmd).toEqual({ command: 'uv', args: ['run', 'whf', 'serve'], cwd: join('/app', '..', 'service') })
   })
   it('uses the frozen executable when packaged', () => {
     const cmd = serviceCommand({ ...base, isPackaged: true, env: {} })

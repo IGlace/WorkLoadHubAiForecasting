@@ -20,7 +20,7 @@ export function serviceCommand(opts: {
     const exe = opts.platform === 'win32' ? 'whf.exe' : 'whf'
     return { command: join(opts.resourcesPath, 'service', 'whf', exe), args: ['serve'], cwd: opts.resourcesPath }
   }
-  return { command: 'uv', args: ['run', 'whf', 'serve'], cwd: `${opts.appPath}/../service` }
+  return { command: 'uv', args: ['run', 'whf', 'serve'], cwd: join(opts.appPath, '..', 'service') }
 }
 
 export function parseHandshake(line: string): { port: number; token: string } | null {
