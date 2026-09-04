@@ -32,9 +32,9 @@ item, so a later reader knows whether something is waiting, accepted as it is, o
   `checking`), a bounded in-memory store keeps the last steps of the last few runs, `GET
   /runs/{run_id}/narrative/progress` serves them, and the Run page polls that once a second and shows the
   step with an elapsed-seconds counter. The service sends codes only; the window supplies the English and
-  French wording, like `CopilotStatus.code` before it. Polling rather than streaming because
-  `create_narrative` is a synchronous route that FastAPI runs in a threadpool, so a concurrent GET is served
-  on the event loop with no new channel to build. Plan:
+  French wording, like `CopilotStatus.code` before it. Polling rather than streaming because both routes are
+  synchronous `def`s that FastAPI hands to its threadpool, so the progress GET runs on a different worker
+  while the narration holds one — concurrent with no new channel to build. Plan:
   `docs/superpowers/plans/2026-09-04-live-copilot-progress.md`.
 - **The fast gate made fast enough to sit in front of every commit** (2026-09-04): it started at 8.4
   minutes, which nobody would have kept. The AI tests each recomputed a ten-second forecast, so that now
