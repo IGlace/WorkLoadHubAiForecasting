@@ -26,10 +26,14 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 - Real names are allowed in prompts (owner decision); still keep all data local except
   what a run sends to Copilot, and store the exact facts sent for audit.
 - Test-driven development for every change; property tests for arithmetic invariants.
+- The repository is local only: the git remote was removed on 2026-09-04 and nothing is
+  pushed anywhere. Do not add a remote back without being asked.
+- English and French are both fully supported, everywhere in the interface and in the
+  narrative; a user may switch freely between them. No third language.
 
 ## Layout
 
-```
+```text
 service/   Python 3.11+ service (package `whf`): FastAPI, Typer CLI, SQLite, models, generator, Copilot session
 app/       Electron + React + TypeScript desktop app (`src/main`, `src/preload`, `src/renderer`, `src/shared`)
 installer/ PyInstaller and electron-builder configuration, installer README
