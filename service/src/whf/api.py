@@ -196,13 +196,13 @@ def create_app(
 
     @app.post("/runs/{run_id}/narrative", dependencies=guarded)
     def create_narrative(run_id: int, body: NarrativeRequest, conn: sqlite3.Connection = Depends(db)) -> dict:
-        narrative_progress.begin(run_id)
         try:
             outcome = narrate_run(
                 conn,
                 run_id,
                 narrator=narrator_factory(body.model),
                 progress=lambda event: narrative_progress.record(run_id, event),
+                on_valid=lambda: narrative_progress.begin(run_id),
             )
         except RunNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

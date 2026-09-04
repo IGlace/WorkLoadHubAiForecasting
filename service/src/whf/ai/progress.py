@@ -55,7 +55,9 @@ class ProgressStore:
 
     def record(self, run_id: int, event: ProgressEvent) -> None:
         with self._lock:
-            steps = self._runs.get(run_id) or self._fresh(run_id)
+            steps = self._runs.get(run_id)
+            if steps is None:
+                steps = self._fresh(run_id)
             steps.append(
                 {
                     "code": event.code,

@@ -131,6 +131,21 @@ def test_progress_of_an_unknown_run_is_empty_rather_than_an_error(client) -> Non
     assert client.get("/runs/999/narrative/progress").json() == {"run_id": 999, "steps": []}
 
 
+def test_narrative_of_an_unknown_run_does_not_evict_a_real_run_being_narrated(client) -> None:
+    """`begin` must run only after the run is known to exist, or a run of 404s can push a real run's
+
+    steps out of the store's bounded eight-run history while it is still being narrated.
+    """
+    run_id = _run_id(client)
+    client.post(f"/runs/{run_id}/narrative", json={"model": None})
+    steps_before = client.get(f"/runs/{run_id}/narrative/progress").json()["steps"]
+    assert steps_before  # sanity: the real run has recorded steps
+    for unknown_id in range(9001, 9009):  # 8 unknown ids: the store keeps only the last 8 runs
+        assert client.post(f"/runs/{unknown_id}/narrative", json={"model": None}).status_code == 404
+        assert client.get(f"/runs/{unknown_id}/narrative/progress").json()["steps"] == []
+    assert client.get(f"/runs/{run_id}/narrative/progress").json()["steps"] == steps_before
+
+
 def test_the_progress_route_needs_the_token(client_without_token) -> None:
     assert client_without_token.get("/runs/1/narrative/progress").status_code == 401
 

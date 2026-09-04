@@ -26,7 +26,13 @@ def narrate_run(
     run_id: int,
     narrator: Narrator | None = None,
     progress: Callable[[ProgressEvent], None] | None = None,
+    on_valid: Callable[[], None] | None = None,
 ) -> NarrativeOutcome:
+    """Attach a narrative to `run_id`.
+
+    `on_valid`, if given, runs once the run is known to exist and have facts, before Copilot is
+    asked anything: the caller uses it to start tracking progress only for requests worth tracking.
+    """
     run_rows = read_df(conn, "SELECT id FROM runs WHERE id = ?", (run_id,))
     if run_rows.empty:
         raise RunNotFoundError(f"run {run_id} not found")
@@ -34,6 +40,8 @@ def narrate_run(
     if facts_rows.empty:
         raise RunHasNoFactsError(f"run {run_id} exists but has no stored facts to narrate")
     facts = json.loads(facts_rows["json"][0])
+    if on_valid is not None:
+        on_valid()
     outcome = (narrator or default_narrator()).narrate_sync(facts, progress)
     document = {**asdict(outcome), "generated_at": dt.datetime.now().isoformat(timespec="seconds")}
     try:

@@ -51,6 +51,23 @@ class TestProgressStore:
         assert store.steps(1) == []
         assert [s["code"] for s in store.steps(3)] == ["starting"]
 
+    def test_record_appends_into_the_deque_begin_already_created(self, monkeypatch) -> None:
+        """`record` must not treat the empty deque `begin` just made as missing and re-create it.
+
+        `begin` followed by `record` must append into the very deque `begin` allocated: no second
+        call into `_fresh`, which would make `begin`'s allocation pointless and, if `_fresh` ever did
+        more than allocate, would silently drop steps.
+        """
+        store = ProgressStore()
+        store.begin(7)
+
+        def _fail(run_id: int) -> None:
+            raise AssertionError("record must not re-enter _fresh after begin")
+
+        monkeypatch.setattr(store, "_fresh", _fail)
+        store.record(7, ProgressEvent("starting"))
+        assert [s["code"] for s in store.steps(7)] == ["starting"]
+
     def test_recording_without_begin_still_works(self) -> None:
         store = ProgressStore()
         store.record(7, ProgressEvent("starting"))
