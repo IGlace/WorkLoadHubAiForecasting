@@ -21,11 +21,24 @@ function patternLines(p: PatternStats): string[] {
   return lines
 }
 
+interface Fetched { id: number; detail: RunDetail | null; error: string | null }
+
 export function MemberDetail(): React.JSX.Element {
   const { runId, memberId } = useParams()
-  const [detail, setDetail] = useState<RunDetail | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => { getRun(Number(runId)).then(setDetail).catch((e: Error) => setError(e.message)) }, [runId])
+  const id = Number(runId)
+  // `fetched.id` tags which run the payload belongs to; a superseded id (runId changed
+  // since this was written) is treated as empty below, so stale data or a stale error from
+  // a previous run never renders while the next run's fetch is in flight.
+  const [fetched, setFetched] = useState<Fetched>({ id: NaN, detail: null, error: null })
+  useEffect(() => {
+    let cancelled = false
+    getRun(id)
+      .then((d) => { if (!cancelled) setFetched({ id, detail: d, error: null }) })
+      .catch((e: Error) => { if (!cancelled) setFetched({ id, detail: null, error: e.message }) })
+    return () => { cancelled = true }
+  }, [id])
+  const detail = fetched.id === id ? fetched.detail : null
+  const error = fetched.id === id ? fetched.error : null
   if (error) return <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>
   if (!detail) return <p>{t('common.loading')}</p>
   const member = detail.facts?.members.find((m) => m.id === Number(memberId))

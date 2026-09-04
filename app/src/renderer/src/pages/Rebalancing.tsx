@@ -9,21 +9,27 @@ import { useApp } from '../context'
 import { hours, weekLabel } from '../format'
 import { t } from '../i18n'
 
+interface Fetched { team: string; detail: RunDetail | 'none' | null; error: string | null }
+
 export function Rebalancing(): React.JSX.Element {
   const { visibleTeams } = useApp()
   const [team, setTeam] = useState('')
   const selectedTeam = team || (visibleTeams[0] ? String(visibleTeams[0].id) : '')
-  const [detail, setDetail] = useState<RunDetail | null | 'none'>(null)
-  const [error, setError] = useState<string | null>(null)
+  // `fetched.team` tags which team the payload belongs to; a superseded team (the select
+  // changed since this was written) is treated as empty below, so a stale error or a stale
+  // run from the previous team never renders while the next team's fetch is in flight.
+  const [fetched, setFetched] = useState<Fetched>({ team: '', detail: null, error: null })
   useEffect(() => {
     if (!selectedTeam) return
-    Promise.resolve()
-      .then(() => setDetail(null))
-      .then(() => getRuns(Number(selectedTeam)))
+    let cancelled = false
+    getRuns(Number(selectedTeam))
       .then<RunDetail | 'none'>((runs) => { const ok = runs.filter((r) => r.status === 'done').sort((a, b) => b.id - a.id)[0]; return ok ? getRun(ok.id) : 'none' })
-      .then(setDetail)
-      .catch((e: Error) => setError(e.message))
+      .then((d) => { if (!cancelled) setFetched({ team: selectedTeam, detail: d, error: null }) })
+      .catch((e: Error) => { if (!cancelled) setFetched({ team: selectedTeam, detail: null, error: e.message }) })
+    return () => { cancelled = true }
   }, [selectedTeam])
+  const detail = fetched.team === selectedTeam ? fetched.detail : null
+  const error = fetched.team === selectedTeam ? fetched.error : null
   const facts = detail && detail !== 'none' ? detail.facts : null
   const names = new Map(facts?.members.map((m) => [m.id, m.name]) ?? [])
   const narrative = detail && detail !== 'none' ? detail.narrative : null
@@ -51,7 +57,7 @@ export function Rebalancing(): React.JSX.Element {
             <h2>{t('rebalancing.moves')}</h2>
             {!narrative || narrative.rebalancing.length === 0 ? <p className="muted">{t('rebalancing.none')}</p> : (
               <table>
-                <thead><tr><th>From</th><th>To</th><th>{t('member.week')}</th><th className="num">Hours</th><th>Reason</th><th>Confidence</th></tr></thead>
+                <thead><tr><th>{t('rebalancing.from')}</th><th>{t('rebalancing.to')}</th><th>{t('member.week')}</th><th className="num">{t('rebalancing.hours')}</th><th>{t('rebalancing.reason')}</th><th>{t('rebalancing.confidence')}</th></tr></thead>
                 <tbody>
                   {narrative.rebalancing.map((mv, i) => (
                     <tr key={i} aria-label={`${names.get(mv.from_member_id)} to ${names.get(mv.to_member_id)}`}>

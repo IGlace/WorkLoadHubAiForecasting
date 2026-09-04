@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AppProvider } from '../context'
 import { Rebalancing } from '../pages/Rebalancing'
@@ -25,5 +26,16 @@ describe('Rebalancing', () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /runs?team_id=1': [] })
     render(<MemoryRouter><AppProvider><Rebalancing /></AppProvider></MemoryRouter>)
     expect(await screen.findByText('No forecast yet')).toBeInTheDocument()
+  })
+  it('clears the error when switching from a team whose fetch fails to one that succeeds', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 10, role: 'skill_team_leader' },
+      'GET /runs?team_id=1': new Error('team 1 failed'), 'GET /runs?team_id=2': [RUN_DETAIL.run], 'GET /runs/5': RUN_DETAIL,
+    })
+    render(<MemoryRouter><AppProvider><Rebalancing /></AppProvider></MemoryRouter>)
+    expect(await screen.findByRole('alert')).toHaveTextContent('team 1 failed')
+    await userEvent.selectOptions(screen.getByLabelText('Team'), '2')
+    expect(await screen.findByText('18.0 h over')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

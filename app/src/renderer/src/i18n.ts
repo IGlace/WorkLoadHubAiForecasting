@@ -28,6 +28,7 @@ const en: Record<string, string> = {
   'rebalancing.title': 'Rebalancing', 'rebalancing.overloaded': 'Overloaded', 'rebalancing.underloaded': 'Under-loaded', 'rebalancing.moves': 'Suggested moves',
   'rebalancing.none': 'No moves suggested for this run.', 'rebalancing.spare': '{hours} spare', 'rebalancing.over': '{hours} over',
   'rebalancing.adjustments': 'Suggested forecast adjustments (not applied)',
+  'rebalancing.from': 'From', 'rebalancing.to': 'To', 'rebalancing.hours': 'Hours', 'rebalancing.reason': 'Reason', 'rebalancing.confidence': 'Confidence',
   'projects.title': 'Projects', 'projects.new': 'New project', 'projects.name': 'Name', 'projects.start': 'Start date', 'projects.deadline': 'Deadline',
   'projects.teams': 'Teams', 'projects.type': 'Type', 'projects.status': 'Status', 'projects.save': 'Save', 'projects.edit': 'Edit', 'projects.cancel': 'Cancel',
   'projects.deadlineError': 'The deadline must be after the start date.', 'projects.teamsError': 'Pick at least one team.',
