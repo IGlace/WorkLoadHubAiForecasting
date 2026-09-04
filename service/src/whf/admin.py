@@ -112,3 +112,54 @@ def set_profile(conn: sqlite3.Connection, member_id: int | None) -> dict:
     )
     conn.commit()
     return {"member_id": member_id, "role": role}
+
+
+PROJECT_STATUSES = ("planned", "active", "done")
+
+
+def update_project(
+    conn: sqlite3.Connection,
+    project_id: int,
+    *,
+    name: str,
+    start_date: dt.date,
+    deadline: dt.date,
+    team_ids: list[int],
+    kind: str,
+    status: str,
+) -> None:
+    """Replace every editable field of a project and its team links. Rolls back on any error."""
+    if deadline <= start_date:
+        raise ValueError("deadline must be after start_date")
+    if not team_ids:
+        raise ValueError("a project needs at least one team")
+    if status not in PROJECT_STATUSES:
+        raise ValueError(f"status must be one of {PROJECT_STATUSES}")
+    if conn.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone() is None:
+        raise KeyError(f"project {project_id} not found")
+    try:
+        conn.execute(
+            "UPDATE projects SET name = ?, start_date = ?, deadline = ?, type = ?, status = ? WHERE id = ?",
+            (name, start_date.isoformat(), deadline.isoformat(), kind, status, project_id),
+        )
+        conn.execute("DELETE FROM project_teams WHERE project_id = ?", (project_id,))
+        conn.executemany(
+            "INSERT INTO project_teams (project_id, team_id) VALUES (?, ?)",
+            [(project_id, int(t)) for t in sorted(set(team_ids))],
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def delete_capacity_override(conn: sqlite3.Connection, override_id: int) -> bool:
+    cur = conn.execute("DELETE FROM capacity_overrides WHERE id = ?", (override_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def delete_vacation(conn: sqlite3.Connection, vacation_id: int) -> bool:
+    cur = conn.execute("DELETE FROM vacations WHERE id = ?", (vacation_id,))
+    conn.commit()
+    return cur.rowcount > 0

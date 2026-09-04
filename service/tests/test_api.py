@@ -118,3 +118,44 @@ def test_holidays_are_listed_and_filtered_by_year(client) -> None:
     filtered = client.get(f"/holidays?year={year}", headers=_h()).json()
     assert filtered and all(r["date"].startswith(str(year)) for r in filtered)
     assert client.get("/holidays?year=1900", headers=_h()).json() == []
+
+
+def test_project_update_and_deletes(client) -> None:
+    created = client.post(
+        "/projects",
+        json={
+            "name": "Gamma",
+            "department_id": 1,
+            "start_date": "2026-10-05",
+            "deadline": "2026-11-27",
+            "team_ids": [1],
+        },
+        headers=_h(),
+    ).json()
+    body = {
+        "name": "Gamma 2",
+        "start_date": "2026-10-12",
+        "deadline": "2026-12-04",
+        "team_ids": [1, 2],
+        "type": "delivery",
+        "status": "active",
+    }
+    updated = client.put(f"/projects/{created['id']}", json=body, headers=_h())
+    assert updated.status_code == 200 and updated.json()["team_ids"] == [1, 2] and updated.json()["status"] == "active"
+    assert client.put("/projects/999999", json=body, headers=_h()).status_code == 404
+    bad = {**body, "deadline": "2026-10-12"}
+    assert client.put(f"/projects/{created['id']}", json=bad, headers=_h()).status_code == 422
+
+    client.put(
+        "/capacity/overrides", json={"member_id": 1, "weekly_hours": 30, "week_start": "2026-10-05"}, headers=_h()
+    )
+    overrides = client.get("/capacity", headers=_h()).json()["overrides"]
+    oid = next(o["id"] for o in overrides if o["member_id"] == 1 and o["week_start"] == "2026-10-05")
+    assert client.delete(f"/capacity/overrides/{oid}", headers=_h()).json() == {"deleted": True}
+    assert client.delete(f"/capacity/overrides/{oid}", headers=_h()).status_code == 404
+
+    vid = client.post(
+        "/vacations", json={"member_id": 1, "start_date": "2026-10-05", "end_date": "2026-10-06"}, headers=_h()
+    ).json()["id"]
+    assert client.delete(f"/vacations/{vid}", headers=_h()).json() == {"deleted": True}
+    assert client.delete(f"/vacations/{vid}", headers=_h()).status_code == 404

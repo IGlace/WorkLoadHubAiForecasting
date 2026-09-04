@@ -7,12 +7,22 @@ import secrets
 import sqlite3
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
 from whf import __version__
-from whf.admin import add_project, add_vacation, set_capacity_default, set_capacity_override, set_profile
+from whf.admin import (
+    add_project,
+    add_vacation,
+    delete_capacity_override,
+    delete_vacation,
+    set_capacity_default,
+    set_capacity_override,
+    set_profile,
+    update_project,
+)
 from whf.ai.session import Narrator, default_narrator
 from whf.ai.status import CopilotStatus, copilot_status_sync
 from whf.db.connection import connect
@@ -38,6 +48,21 @@ class ProjectCreate(BaseModel):
 
     @model_validator(mode="after")
     def _deadline_after_start(self) -> ProjectCreate:
+        if self.deadline <= self.start_date:
+            raise ValueError("deadline must be after start_date")
+        return self
+
+
+class ProjectUpdate(BaseModel):
+    name: str = Field(min_length=1)
+    start_date: dt.date
+    deadline: dt.date
+    team_ids: list[int] = Field(min_length=1)
+    type: str = "delivery"
+    status: Literal["planned", "active", "done"] = "planned"
+
+    @model_validator(mode="after")
+    def _deadline_after_start(self) -> ProjectUpdate:
         if self.deadline <= self.start_date:
             raise ValueError("deadline must be after start_date")
         return self
@@ -257,5 +282,36 @@ def create_app(
                 conn, "SELECT date, name, country FROM holidays WHERE date LIKE ? ORDER BY date", (f"{year:04d}-%",)
             )
         return jsonable(df.to_dict(orient="records"))
+
+    @app.put("/projects/{project_id}", dependencies=guarded)
+    def put_project(project_id: int, body: ProjectUpdate, conn: sqlite3.Connection = Depends(db)) -> dict:
+        try:
+            update_project(
+                conn,
+                project_id,
+                name=body.name,
+                start_date=body.start_date,
+                deadline=body.deadline,
+                team_ids=body.team_ids,
+                kind=body.type,
+                status=body.status,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return jsonable({"id": project_id, **body.model_dump()})
+
+    @app.delete("/capacity/overrides/{override_id}", dependencies=guarded)
+    def delete_override(override_id: int, conn: sqlite3.Connection = Depends(db)) -> dict:
+        if not delete_capacity_override(conn, override_id):
+            raise HTTPException(status_code=404, detail=f"override {override_id} not found")
+        return {"deleted": True}
+
+    @app.delete("/vacations/{vacation_id}", dependencies=guarded)
+    def delete_vacation_route(vacation_id: int, conn: sqlite3.Connection = Depends(db)) -> dict:
+        if not delete_vacation(conn, vacation_id):
+            raise HTTPException(status_code=404, detail=f"vacation {vacation_id} not found")
+        return {"deleted": True}
 
     return app

@@ -101,3 +101,87 @@ def test_set_profile_rejects_unknown_member(db) -> None:
 
     with pytest.raises(ValueError, match="member 999999"):
         set_profile(db, 999999)
+
+
+def test_update_project_replaces_fields_and_teams(db) -> None:
+    import datetime as dt
+
+    from whf.admin import add_project, update_project
+    from whf.db.repo import read_df
+
+    pid = add_project(db, "Alpha", 1, dt.date(2026, 10, 5), dt.date(2026, 11, 27), [1])
+    update_project(
+        db,
+        pid,
+        name="Alpha 2",
+        start_date=dt.date(2026, 10, 12),
+        deadline=dt.date(2026, 12, 4),
+        team_ids=[1, 2],
+        kind="maintenance",
+        status="active",
+    )
+    row = read_df(db, "SELECT * FROM projects WHERE id = ?", (pid,)).iloc[0]
+    assert row["name"] == "Alpha 2" and row["start_date"] == "2026-10-12" and row["deadline"] == "2026-12-04"
+    assert row["type"] == "maintenance" and row["status"] == "active"
+    teams = read_df(db, "SELECT team_id FROM project_teams WHERE project_id = ? ORDER BY team_id", (pid,))
+    assert list(teams["team_id"]) == [1, 2]
+
+
+def test_update_project_validates(db) -> None:
+    import datetime as dt
+
+    import pytest
+
+    from whf.admin import add_project, update_project
+
+    pid = add_project(db, "Beta", 1, dt.date(2026, 10, 5), dt.date(2026, 11, 27), [1])
+    with pytest.raises(ValueError, match="deadline"):
+        update_project(
+            db,
+            pid,
+            name="B",
+            start_date=dt.date(2026, 10, 5),
+            deadline=dt.date(2026, 10, 5),
+            team_ids=[1],
+            kind="delivery",
+            status="planned",
+        )
+    with pytest.raises(ValueError, match="team"):
+        update_project(
+            db,
+            pid,
+            name="B",
+            start_date=dt.date(2026, 10, 5),
+            deadline=dt.date(2026, 10, 9),
+            team_ids=[],
+            kind="delivery",
+            status="planned",
+        )
+    with pytest.raises(KeyError):
+        update_project(
+            db,
+            999999,
+            name="B",
+            start_date=dt.date(2026, 10, 5),
+            deadline=dt.date(2026, 10, 9),
+            team_ids=[1],
+            kind="delivery",
+            status="planned",
+        )
+
+
+def test_delete_override_and_vacation(db) -> None:
+    import datetime as dt
+
+    from whf.admin import add_vacation, delete_capacity_override, delete_vacation, set_capacity_override
+    from whf.db.repo import read_df
+
+    set_capacity_override(db, 1, 32.0, dt.date(2026, 10, 5), "training")
+    oid = int(
+        read_df(db, "SELECT id FROM capacity_overrides WHERE member_id = 1 AND week_start = '2026-10-05'")["id"][0]
+    )
+    assert delete_capacity_override(db, oid) is True
+    assert delete_capacity_override(db, oid) is False
+    vid = add_vacation(db, 1, dt.date(2026, 10, 5), dt.date(2026, 10, 7))
+    assert delete_vacation(db, vid) is True
+    assert delete_vacation(db, vid) is False
