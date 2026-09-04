@@ -8,8 +8,8 @@ item, so a later reader knows whether something is waiting, accepted as it is, o
 
 State on 2026-09-04: `main` is at `4fba18a`; `dev` carries the team-page live progress on top of it, so that
 one item is landed but not yet released. "Upcoming events" was brainstormed on 2026-09-04 and closed as
-already covered, so the next item to start is the Playwright smoke path, unless the owner first decides the
-"Ask Copilot" button question below.
+already covered, and the Playwright smoke path was deferred the same day, so the only item the owner has
+left open is the "Ask Copilot" button question below.
 
 ## Landed
 
@@ -64,8 +64,6 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   though nothing is running for B. It predates the live-progress work and was left alone by it. Scoping the
   disable to the displayed run is a one-line change plus a test; the question for the owner is whether two
   narrations should be allowed to run at once at all, which is a service question, not a button question.
-- **One Playwright smoke path**: launch the packaged app, confirm the window opens and the service handshake
-  succeeds. Not a full end-to-end suite; that stays deferred.
 - **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual
   per member per week) and make sure version 1 already records it, because it cannot be recovered
   retroactively. Build the comparison once real weeks have passed.
@@ -119,4 +117,10 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 - Project-phase features in the effort model (cycle time versus deadline proximity), deferred from plan 1.
   Waiting on real data: on generated data the backtest would measure the generator's own assumptions rather
   than the team's behaviour.
-- Playwright end-to-end tests beyond the single smoke path (spec section 10: "later").
+- **Playwright, all of it, including the single smoke path** (deferred by the owner on 2026-09-04; it had been
+  approved earlier the same day). The smoke path would launch the packaged app and confirm the window opens
+  and the service handshake succeeds. It is deferred rather than dropped because the same ground is covered by
+  hand for now: the first-run checklist in `installer/README.md` walks the packaged app, and the frozen-service
+  smoke test already checks the handshake below the UI. Revisit when the app is installed on more than one
+  machine, or when the manual checklist has to be run often enough to be worth automating. Everything beyond
+  the smoke path stays deferred as it was (spec section 10: "later").
