@@ -79,8 +79,15 @@ def main(dist_dir: str) -> int:
             raise SystemExit(f"whf run --json missing run_id: {run_out}")
         print("ok run")
 
+        bundled_cli = dist / "copilot-cli" / ("copilot.exe" if os.name == "nt" else "copilot")
+        env = {**os.environ, "COPILOT_SKIP_CLI_DOWNLOAD": "1"}
+        if bundled_cli.exists():
+            env["COPILOT_CLI_PATH"] = str(bundled_cli)
+            print(f"using bundled Copilot CLI: {bundled_cli}")
+        else:
+            print("no bundled CLI")
         copilot_out = subprocess.run(
-            [str(exe), "copilot", "status", "--json"], capture_output=True, text=True, timeout=60
+            [str(exe), "copilot", "status", "--json"], capture_output=True, text=True, timeout=60, env=env
         )
         if copilot_out.returncode not in (0, 3):
             raise SystemExit(
