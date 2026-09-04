@@ -140,6 +140,59 @@ describe('TeamResult', () => {
       vi.useRealTimers()
     }
   })
+  it('keeps polling the narrating run, not the run navigated to while it is still in flight', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const held = new Promise((resolve) => { finish = resolve })
+    const detail5: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
+    const detail6: RunDetail = {
+      run: { ...RUN_DETAIL.run, id: 6, team_id: 2 },
+      forecasts: [],
+      facts: RUN_DETAIL.facts && { ...RUN_DETAIL.facts, team: { ...RUN_DETAIL.facts.team, id: 2, name: 'Nova' }, members: [] },
+      narrative: null,
+    }
+    const fake = installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': () => detail5, 'GET /runs/6': () => detail6,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'GET /runs/6/narrative/progress': { run_id: 6, steps: [{ code: 'checking', detail: null, at: '2026-09-04T10:00:00' }] },
+      'POST /runs/5/narrative': () => held,
+    })
+    function Nav() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/runs/6')}>go to 6</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/runs/5']}><AppProvider>
+        <Nav />
+        <Routes><Route path="/runs/:runId" element={<TeamResult />} /></Routes>
+      </AppProvider></MemoryRouter>,
+    )
+    const askButton = await screen.findByRole('button', { name: 'Ask Copilot' })
+    vi.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      // Start narrating run 5, then - while that request is still held open - navigate to run 6's
+      // page. The route component is reused across the param change, so this exercises the case
+      // where `id` (the page on screen) and the run actually narrating diverge.
+      const askPromise = user.click(askButton)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await askPromise
+      const navPromise = user.click(screen.getByRole('button', { name: 'go to 6' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await navPromise
+      expect(screen.getByText('Nova')).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      // The progress line still describes run 5's narration (it must not flip to run 6's identity,
+      // and must not poll run 6's progress endpoint at all).
+      expect(screen.getByText(/Copilot is reading team_overview…/)).toBeInTheDocument()
+      expect(fake.calls.some((c) => c.path === '/runs/6/narrative/progress')).toBe(false)
+      expect(fake.calls.some((c) => c.path === '/runs/5/narrative/progress')).toBe(true)
+      finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('resets stale data when navigating from one run to another', async () => {
     const detail6: RunDetail = {
       run: { ...RUN_DETAIL.run, id: 6, team_id: 2 },

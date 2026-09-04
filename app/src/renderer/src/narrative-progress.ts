@@ -31,20 +31,16 @@ export function progressLabel(step: NarrativeProgressStep | null): string {
 export function useNarrativeProgress(runId: number | null): { step: NarrativeProgressStep | null; elapsed: number } {
   const [step, setStep] = useState<NarrativeProgressStep | null>(null)
   const [elapsed, setElapsed] = useState(0)
-  const [trackedRunId, setTrackedRunId] = useState(runId)
-
-  // Render-time state adjustment (not an effect): when runId goes back to null (narration ended, or
-  // reset before the next one starts), clear the step and elapsed counter before this render commits,
-  // so the next narration starts from the generic label and 0 seconds without an extra render.
-  if (runId !== trackedRunId) {
-    setTrackedRunId(runId)
-    if (runId === null) { setStep(null); setElapsed(0) }
-  }
 
   // Polls rather than streams: both the narrative POST and this progress GET are synchronous `def`s
   // in the service, so FastAPI runs them on separate threadpool workers — concurrent without a new
   // channel, an SSE endpoint or an extra IPC surface.
   useEffect(() => {
+    // Every runId change - including one to null - starts from the generic label at 0 seconds: a new
+    // narration must not show the previous one's last step, and a null runId (no narration in flight)
+    // must not keep showing stale progress from whichever run just finished or was navigated away from.
+    const reset = (): void => { setStep(null); setElapsed(0) }
+    reset()
     if (runId === null) return
     const started = Date.now()
     const tick = (): void => {

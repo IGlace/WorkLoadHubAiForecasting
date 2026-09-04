@@ -19,9 +19,15 @@ export function TeamResult(): React.JSX.Element {
   // since this was written) is treated as empty below, so stale data from a previous
   // run never renders while the next run's fetch is in flight.
   const [fetched, setFetched] = useState<Fetched>({ id: NaN, detail: null, error: null })
-  const [busy, setBusy] = useState(false)
+  // The id `narrate()` is running for, not the id of the run currently on screen: the route is
+  // reused across `/runs/:runId` navigations, so a user can move to another run's page while a
+  // narration is still in flight. Tracking the narrating run's own id (rather than a plain busy
+  // flag paired with the current `id`) keeps the progress hook polling that run, not whichever one
+  // happens to be showing.
+  const [narratingId, setNarratingId] = useState<number | null>(null)
+  const busy = narratingId !== null
   const id = Number(runId)
-  const { step, elapsed } = useNarrativeProgress(busy ? id : null)
+  const { step, elapsed } = useNarrativeProgress(narratingId)
 
   const load = useCallback((): Promise<RunDetail> => getRun(id), [id])
 
@@ -34,12 +40,12 @@ export function TeamResult(): React.JSX.Element {
   }, [id, load])
 
   async function narrate(): Promise<void> {
-    setBusy(true)
+    setNarratingId(id)
     try {
       const outcome = await createNarrative(id, settings.model)
       const d = await load()
       setFetched({ id, detail: d, error: outcome.status === 'failed' ? (outcome.error ?? outcome.ai_status) : null })
-    } catch (err) { setFetched((prev) => ({ ...prev, error: err instanceof Error ? err.message : String(err) })) } finally { setBusy(false) }
+    } catch (err) { setFetched((prev) => ({ ...prev, error: err instanceof Error ? err.message : String(err) })) } finally { setNarratingId(null) }
   }
 
   const detail = fetched.id === id ? fetched.detail : null
