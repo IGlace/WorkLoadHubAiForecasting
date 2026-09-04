@@ -18,6 +18,10 @@ __pycache__/
 service/dist/
 service/build/
 
+# Build outputs
+dist/
+installer/pyinstaller/build/
+
 # Node / Electron
 node_modules/
 app/out/
