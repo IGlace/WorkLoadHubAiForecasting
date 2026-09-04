@@ -3,20 +3,21 @@ import { NavLink, Route, Routes } from 'react-router-dom'
 import { StatusMessage } from './components/StatusMessage'
 import { AppProvider, useApp } from './context'
 import { t } from './i18n'
+import { Capacity } from './pages/Capacity'
 import { Dashboard } from './pages/Dashboard'
 import { MemberDetail } from './pages/MemberDetail'
+import { Projects } from './pages/Projects'
 import { Rebalancing } from './pages/Rebalancing'
 import { Run } from './pages/Run'
 import { Runs } from './pages/Runs'
 import { Settings } from './pages/Settings'
 import { TeamResult } from './pages/TeamResult'
+import { TimeOff } from './pages/TimeOff'
 
 const NAV: [string, string][] = [
   ['/', 'nav.dashboard'], ['/run', 'nav.run'], ['/rebalancing', 'nav.rebalancing'], ['/projects', 'nav.projects'],
   ['/capacity', 'nav.capacity'], ['/timeoff', 'nav.timeoff'], ['/runs', 'nav.runs'], ['/settings', 'nav.settings'],
 ]
-
-function Placeholder({ title }: { title: string }): React.JSX.Element { return <h1>{title}</h1> }
 
 function Shell(): React.JSX.Element {
   const { state, me, error } = useApp()
@@ -39,9 +40,9 @@ function Shell(): React.JSX.Element {
           <Route path="/runs/:runId" element={<TeamResult />} />
           <Route path="/runs/:runId/members/:memberId" element={<MemberDetail />} />
           <Route path="/rebalancing" element={<Rebalancing />} />
-          <Route path="/projects" element={<Placeholder title={t('nav.projects')} />} />
-          <Route path="/capacity" element={<Placeholder title={t('nav.capacity')} />} />
-          <Route path="/timeoff" element={<Placeholder title={t('nav.timeoff')} />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/capacity" element={<Capacity />} />
+          <Route path="/timeoff" element={<TimeOff />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
