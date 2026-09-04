@@ -3,6 +3,7 @@ import json
 import pytest
 from ai_fakes import FakeNarrator
 
+from whf.ai.progress import ProgressEvent
 from whf.ai.session import NarrativeOutcome
 from whf.db.repo import read_df
 from whf.narrate import RunHasNoFactsError, RunNotFoundError, narrate_run
@@ -24,9 +25,9 @@ def _ok_outcome(facts: dict) -> NarrativeOutcome:
 def test_narrate_persists_document_and_status(db, generated) -> None:
     result = run_forecast(db, team_id=1, as_of=generated.config.as_of)
     narrator = FakeNarrator(_ok_outcome(result.facts))
-    seen: list[str] = []
+    seen: list[ProgressEvent] = []
     outcome = narrate_run(db, result.run_id, narrator=narrator, progress=seen.append)
-    assert outcome.status == "ok" and seen == ["fake narrator"]
+    assert outcome.status == "ok" and [e.code for e in seen] == ["asking"]
     assert narrator.calls[0]["run"]["id"] == result.run_id  # the stored facts, id included
     row = read_df(db, "SELECT ai_status FROM runs WHERE id = ?", (result.run_id,))
     assert row["ai_status"][0] == "ok"

@@ -61,3 +61,13 @@ class TestProgressStore:
         store.record(7, ProgressEvent("starting"))
         store.steps(7).clear()
         assert len(store.steps(7)) == 1
+
+
+class TestTheNarratorReportsEvents:
+    def test_a_narration_reports_coded_steps_not_prose(self) -> None:
+        """The desktop app has to phrase each step in the user's language, so it needs codes."""
+        from ai_fakes import FakeNarrator
+
+        seen: list[ProgressEvent] = []
+        FakeNarrator().narrate_sync({}, seen.append)
+        assert [e.code for e in seen] == ["asking"]

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 from whf.ai.facts_tools import FactsToolbox
+from whf.ai.progress import ProgressCode, ProgressEvent
 from whf.ai.prompt import SYSTEM_PROMPT, build_retry_prompt, build_user_prompt, skill_directories
 from whf.ai.schema import parse_narrative
 from whf.ai.verify import verify_narrative
@@ -45,7 +46,9 @@ class NarratorConfig:
 
 
 class Narrator(Protocol):
-    def narrate_sync(self, facts: dict, progress: Callable[[str], None] | None = None) -> NarrativeOutcome: ...
+    def narrate_sync(
+        self, facts: dict, progress: Callable[[ProgressEvent], None] | None = None
+    ) -> NarrativeOutcome: ...
 
 
 def _default_client_factory(config: NarratorConfig) -> Callable[[], Any]:
@@ -62,15 +65,19 @@ class CopilotNarrator:
         self.config = config or NarratorConfig()
         self._client_factory = client_factory or _default_client_factory(self.config)
 
-    def narrate_sync(self, facts: dict, progress: Callable[[str], None] | None = None) -> NarrativeOutcome:
+    def narrate_sync(self, facts: dict, progress: Callable[[ProgressEvent], None] | None = None) -> NarrativeOutcome:
         return asyncio.run(self.narrate(facts, progress))
 
-    async def narrate(self, facts: dict, progress: Callable[[str], None] | None = None) -> NarrativeOutcome:
-        say = progress or (lambda _msg: None)
+    async def narrate(self, facts: dict, progress: Callable[[ProgressEvent], None] | None = None) -> NarrativeOutcome:
+        emit = progress or (lambda _event: None)
+
+        def say(code: ProgressCode, detail: str | None = None) -> None:
+            emit(ProgressEvent(code, detail))
+
         outcome = NarrativeOutcome(status="failed", reason="other")
         client = self._client_factory()
         try:
-            say("starting Copilot")
+            say("starting")
             try:
                 await client.start()
             except Exception as exc:  # the SDK raises RuntimeError when the CLI is missing or cannot start
@@ -98,7 +105,7 @@ class CopilotNarrator:
                     state["model"] = getattr(event.data, "model", None) or state["model"]
                 elif event.type == SessionEventType.TOOL_EXECUTION_START:
                     state["tools"].append(event.data.tool_name)
-                    say(f"tool {event.data.tool_name}")
+                    say("tool", event.data.tool_name)
                 elif event.type == SessionEventType.ASSISTANT_USAGE:
                     state["usage"] = {
                         "input_tokens": getattr(event.data, "input_tokens", None),
@@ -109,7 +116,7 @@ class CopilotNarrator:
 
             from copilot import ToolSet
 
-            say("creating session")
+            say("session")
             try:
                 session = await client.create_session(
                     model=self.config.model,
@@ -134,7 +141,7 @@ class CopilotNarrator:
                 problems: list[str] = []
                 for attempt in range(1, max(1, self.config.max_attempts) + 1):
                     outcome.attempts = attempt
-                    say(f"asking Copilot (attempt {attempt})")
+                    say("asking", str(attempt))
                     try:
                         event = await session.send_and_wait(prompt, timeout=self.config.timeout_seconds)
                     except TimeoutError as exc:  # asyncio.TimeoutError is an alias since Python 3.11
@@ -152,6 +159,7 @@ class CopilotNarrator:
                             error = f"{error}; session error: {state['error']}"
                         return self._finish(outcome, state, status="failed", reason="model_error", error=error)
                     raw = self._content_of(event, state)
+                    say("checking")
                     problems = []
                     try:
                         narrative = parse_narrative(raw)

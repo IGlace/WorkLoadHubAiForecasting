@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import asdict
 
+from whf.ai.progress import ProgressEvent
 from whf.ai.session import NarrativeOutcome, Narrator, default_narrator
 from whf.db.repo import read_df
 
@@ -24,7 +25,7 @@ def narrate_run(
     conn: sqlite3.Connection,
     run_id: int,
     narrator: Narrator | None = None,
-    progress: Callable[[str], None] | None = None,
+    progress: Callable[[ProgressEvent], None] | None = None,
 ) -> NarrativeOutcome:
     run_rows = read_df(conn, "SELECT id FROM runs WHERE id = ?", (run_id,))
     if run_rows.empty:

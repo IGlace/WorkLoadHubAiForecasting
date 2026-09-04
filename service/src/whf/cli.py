@@ -137,7 +137,7 @@ def run(
             conn,
             result.run_id,
             narrator=default_narrator(),
-            progress=None if as_json else lambda m: typer.echo(f"  {m}"),
+            progress=None if as_json else lambda e: typer.echo(f"  {e.message}"),
         )
         typer.echo(f"narrative: {outcome.ai_status}" + (f" ({outcome.error})" if outcome.error else ""))
         if outcome.status == "failed":
@@ -179,7 +179,10 @@ def narrate(
     conn = _conn(db)
     try:
         outcome = narrate_run(
-            conn, run_id, narrator=default_narrator(model), progress=None if as_json else lambda m: typer.echo(f"  {m}")
+            conn,
+            run_id,
+            narrator=default_narrator(model),
+            progress=None if as_json else lambda e: typer.echo(f"  {e.message}"),
         )
     except (RunNotFoundError, RunHasNoFactsError) as exc:
         typer.echo(f"error: {exc}")

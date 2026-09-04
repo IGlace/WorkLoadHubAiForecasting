@@ -9,6 +9,9 @@ from typing import Any
 
 from copilot.generated.session_events import SessionEventType
 
+from whf.ai.progress import ProgressEvent
+from whf.ai.session import NarrativeOutcome
+
 
 def make_event(event_type: SessionEventType, **data: Any) -> SimpleNamespace:
     return SimpleNamespace(type=event_type, data=SimpleNamespace(**data))
@@ -134,12 +137,12 @@ def good_narrative(facts: dict) -> str:
 class FakeNarrator:
     """A Narrator that returns a prepared outcome; used by narrate/CLI/API tests."""
 
-    def __init__(self, outcome) -> None:
-        self.outcome = outcome
+    def __init__(self, outcome: NarrativeOutcome | None = None) -> None:
+        self.outcome = outcome if outcome is not None else NarrativeOutcome(status="ok")
         self.calls: list[dict] = []
 
     def narrate_sync(self, facts: dict, progress=None):
         self.calls.append(facts)
         if progress:
-            progress("fake narrator")
+            progress(ProgressEvent("asking", "1"))
         return self.outcome
