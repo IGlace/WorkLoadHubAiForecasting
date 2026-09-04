@@ -26,6 +26,16 @@ item, so a later reader knows whether something is waiting, accepted as it is, o
   the narrative route no longer shadows its `body` parameter; the frozen-service smoke test's two parsers
   (`_last_json_object`, `_valid_handshake`) have unit tests, which showed one branch to be unreachable and
   it was removed; and `window-all-closed` is an extracted `onWindowAllClosed` so the quit path is tested.
+- **Live progress for the Copilot narrative** (2026-09-04): the Run page used to show "Asking Copilot…" for
+  the whole narration, which is exactly where a user assumes the app has hung. The narrator now emits a coded
+  event per step (`starting`, `session`, `asking` with the attempt number, `tool` with the tool name,
+  `checking`), a bounded in-memory store keeps the last steps of the last few runs, `GET
+  /runs/{run_id}/narrative/progress` serves them, and the Run page polls that once a second and shows the
+  step with an elapsed-seconds counter. The service sends codes only; the window supplies the English and
+  French wording, like `CopilotStatus.code` before it. Polling rather than streaming because
+  `create_narrative` is a synchronous route that FastAPI runs in a threadpool, so a concurrent GET is served
+  on the event loop with no new channel to build. Plan:
+  `docs/superpowers/plans/2026-09-04-live-copilot-progress.md`.
 - **The fast gate made fast enough to sit in front of every commit** (2026-09-04): it started at 8.4
   minutes, which nobody would have kept. The AI tests each recomputed a ten-second forecast, so that now
   runs once per session and is handed out as a copy, and pytest runs on six xdist workers. 8.4 minutes
@@ -39,8 +49,6 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   named members), an effect type (reduces capacity or adds demand) and optional hours. With hours,
   deterministic code applies the effect and shows it as a named line in the forecast; without hours it is
   context for the narrative only. This closes the gap where a known future event could not be expressed.
-- **Live progress for the Copilot narrative** on the Run page; today the step shows only "Asking Copilot…",
-  which is where a user assumes the app has hung.
 - **One Playwright smoke path**: launch the packaged app, confirm the window opens and the service handshake
   succeeds. Not a full end-to-end suite; that stays deferred.
 - **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual
