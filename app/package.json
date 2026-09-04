@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "icon": "node scripts/make-icon.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "pack:dir": "electron-builder --dir --config ../installer/electron-builder.yml",
+    "build:win": "electron-builder --win nsis --x64 --config ../installer/electron-builder.yml"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -32,6 +34,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",

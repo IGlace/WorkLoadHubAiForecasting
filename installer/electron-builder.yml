@@ -1,0 +1,35 @@
+# electron-builder configuration. Run from app/: npm run build:win (Windows) or npm run pack:dir (any OS, unpacked).
+appId: com.workloadhub.forecast
+productName: WorkloadHub Forecast
+copyright: Copyright © 2026
+directories:
+  output: ../dist/installer
+  buildResources: resources
+files:
+  - out/**
+  - resources/icon.png
+  - resources/icon.ico
+  - package.json
+extraResources:
+  - from: ../service/dist/whf
+    to: service/whf
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+  artifactName: WorkloadHub-Forecast-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WorkloadHub Forecast
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+linux:
+  target: [dir]
+  icon: resources/icon.png
+publish: null
