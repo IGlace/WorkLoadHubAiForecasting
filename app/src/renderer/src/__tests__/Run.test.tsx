@@ -77,21 +77,41 @@ describe('Run', () => {
     expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
   })
   it('stops polling for progress once the narrative is done', async () => {
+    let finish: (value: unknown) => void = () => {}
+    const held = new Promise((resolve) => { finish = resolve })
     const fake = installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
       'POST /runs': RUN_CREATED,
       'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
-      'POST /runs/5/narrative': { run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [] },
+      'POST /runs/5/narrative': () => held,
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
-    expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
-    const progressCalls = (): number => fake.calls.filter((c) => c.path === '/runs/5/narrative/progress').length
-    const before = progressCalls()
+    // Let the initial mount (context loads, copilot status) settle with real timers before switching to
+    // fake ones: the interval this test cares about is only created once the run reaches the narrating
+    // phase, so it must be created — and ticked — entirely under the fake clock to mean anything.
+    const button = await screen.findByRole('button', { name: 'Run forecast' })
     vi.useFakeTimers()
     try {
-      await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
-      expect(progressCalls()).toBe(before)
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      // Fire the click without awaiting it yet: userEvent's internal waits need the fake clock advanced
+      // concurrently, or the click promise itself never settles.
+      const clickPromise = user.click(button)
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+      await clickPromise
+      const progressCalls = (): number => fake.calls.filter((c) => c.path === '/runs/5/narrative/progress').length
+      // Advance past several poll intervals while the narrative is still held open, to prove polling is
+      // actually happening (and not just theoretically wired up).
+      for (let i = 0; i < 3; i++) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      }
+      const duringNarrating = progressCalls()
+      expect(duringNarrating).toBeGreaterThan(0)
+      finish({ run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [] })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText('Forecast complete')).toBeInTheDocument()
+      const afterDone = progressCalls()
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(progressCalls()).toBe(afterDone)
     } finally {
       vi.useRealTimers()
     }
