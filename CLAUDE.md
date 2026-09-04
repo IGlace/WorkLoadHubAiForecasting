@@ -13,6 +13,7 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 - `docs/requirements/2026-09-03-discovery-qa.md`: the owner's answers, source of truth for scope questions.
 - `docs/research/2026-09-03-research-notes.md`: sourced facts about Copilot CLI/SDK, forecasting methods, prior art.
 - `docs/superpowers/plans/`: implementation plans, when present.
+- `docs/backlog.md`: open items after version 1 (polish, Windows verification, design decisions, future topics).
 
 ## Hard rules
 
