@@ -25,7 +25,7 @@ export interface AppState { service: ServicePhase; serviceMessage: string; versi
  * What the sign-in attempt did, as a renderer dictionary key rather than a sentence: the main
  * process starts the login but the window that reports it may be in either language.
  */
-export type LoginCode = 'copilot.login.started' | 'copilot.login.noCli'
+export type LoginCode = 'copilot.login.started' | 'copilot.login.noCli' | 'copilot.login.failed'
 export interface LoginResult {
   started: boolean
   code: LoginCode

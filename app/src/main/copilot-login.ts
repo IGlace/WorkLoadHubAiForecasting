@@ -4,7 +4,10 @@ import type { LoginResult } from '../shared/ipc'
 export function copilotLoginCommand(cliPath: string, platform: NodeJS.Platform): { command: string; args: string[] } {
   if (platform === 'win32') {
     const quoted = cliPath.replace(/'/g, "''")
-    return { command: 'powershell.exe', args: ['-NoExit', '-NoProfile', '-Command', `& '${quoted}' login`] }
+    return {
+      command: 'cmd.exe',
+      args: ['/c', 'start', 'Copilot sign-in', 'powershell.exe', '-NoExit', '-NoProfile', '-Command', `& '${quoted}' login`],
+    }
   }
   return { command: cliPath, args: ['login'] }
 }
@@ -24,5 +27,8 @@ export async function startCopilotLogin(deps: {
   const child = deps.spawnFn(command, args, { detached: true, stdio: 'ignore', windowsHide: false })
   child.on('error', () => {})
   child.unref()
+  if (child.pid === undefined) {
+    return { started: false, code: 'copilot.login.failed' }
+  }
   return { started: true, code: 'copilot.login.started' }
 }
