@@ -37,7 +37,13 @@ export function Capacity(): React.JSX.Element {
             ))}
           </tbody>
         </table>
-        <form onSubmit={(e) => { e.preventDefault(); if (!form.member_id || !(Number(form.weekly_hours) >= 0)) return; guard(setCapacityOverride({ member_id: Number(form.member_id), week_start: form.week_start || null, weekly_hours: Number(form.weekly_hours), reason: form.reason || null })); setForm({ member_id: '', week_start: '', weekly_hours: '', reason: '' }) }}>
+        <form onSubmit={(e) => {
+          e.preventDefault()
+          if (!form.member_id || !(Number(form.weekly_hours) >= 0)) return
+          setCapacityOverride({ member_id: Number(form.member_id), week_start: form.week_start || null, weekly_hours: Number(form.weekly_hours), reason: form.reason || null })
+            .then(() => { load(); setForm({ member_id: '', week_start: '', weekly_hours: '', reason: '' }) })
+            .catch((err: Error) => setError(err.message))
+        }}>
           <Field label={t('capacity.member')}>{(id) => <select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">–</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</Field>
           <Field label={t('capacity.week')}>{(id) => <input id={id} type="date" value={form.week_start} onChange={(e) => setForm({ ...form, week_start: e.target.value })} />}</Field>
           <Field label={t('capacity.hours')}>{(id) => <input id={id} type="number" min={0} max={80} step={0.5} value={form.weekly_hours} onChange={(e) => setForm({ ...form, weekly_hours: e.target.value })} />}</Field>

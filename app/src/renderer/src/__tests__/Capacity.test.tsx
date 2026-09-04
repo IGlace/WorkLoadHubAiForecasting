@@ -29,4 +29,20 @@ describe('Capacity', () => {
     await waitFor(() => expect(screen.queryByText('training')).not.toBeInTheDocument())
     expect(fake.calls.some((c) => c.method === 'DELETE' && c.path === '/capacity/overrides/7')).toBe(true)
   })
+  it('keeps the typed override values and shows the error when the write fails', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /capacity': () => ({ default_weekly_hours: 40, overrides: [] }),
+      'PUT /capacity/overrides': () => new Error('capacity write failed'),
+    })
+    render(<MemoryRouter><AppProvider><Capacity /></AppProvider></MemoryRouter>)
+    expect(await screen.findByDisplayValue('40')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Member'), '13')
+    await userEvent.type(screen.getByLabelText('Weekly hours'), '20')
+    await userEvent.type(screen.getByLabelText('Reason'), 'internal project')
+    await userEvent.click(screen.getByRole('button', { name: 'Add override' }))
+    expect(await screen.findByText('Something went wrong: capacity write failed')).toBeInTheDocument()
+    expect(screen.getByLabelText('Reason')).toHaveValue('internal project')
+    expect(screen.getByLabelText('Weekly hours')).toHaveValue(20)
+  })
 })

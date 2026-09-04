@@ -59,7 +59,7 @@ export function TimeOff(): React.JSX.Element {
             <Field label={t('timeoff.member')}>{(id) => <select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">–</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}</Field>
             <Field label={t('timeoff.from')}>{(id) => <input id={id} type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />}</Field>
             <Field label={t('timeoff.to')}>{(id) => <input id={id} type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />}</Field>
-            <Field label={t('timeoff.type')}>{(id) => <select id={id} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="vacation">vacation</option><option value="sick">sick</option><option value="other">other</option></select>}</Field>
+            <Field label={t('timeoff.type')}>{(id) => <select id={id} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="vacation">{t('timeoff.type.vacation')}</option><option value="sick">{t('timeoff.type.sick')}</option><option value="other">{t('timeoff.type.other')}</option></select>}</Field>
             <button className="primary" type="submit">{t('timeoff.add')}</button>
           </form>
         </section>

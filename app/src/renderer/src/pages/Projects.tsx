@@ -32,8 +32,8 @@ function ProjectForm({ initial, onSave, onCancel, editing }: { initial: Draft; o
         <label>{t('projects.teams')}</label>
         {visibleTeams.map((tm) => <label key={tm.id}><input type="checkbox" checked={draft.team_ids.includes(tm.id)} onChange={() => toggle(tm.id)} /> {tm.name}</label>)}
       </div>
-      <Field label={t('projects.type')}>{(id) => <select id={id} value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}><option value="delivery">delivery</option><option value="maintenance">maintenance</option><option value="internal">internal</option></select>}</Field>
-      {editing && <Field label={t('projects.status')}>{(id) => <select id={id} value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as Draft['status'] })}><option value="planned">planned</option><option value="active">active</option><option value="done">done</option></select>}</Field>}
+      <Field label={t('projects.type')}>{(id) => <select id={id} value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}><option value="delivery">{t('projects.type.delivery')}</option><option value="maintenance">{t('projects.type.maintenance')}</option><option value="internal">{t('projects.type.internal')}</option></select>}</Field>
+      {editing && <Field label={t('projects.status')}>{(id) => <select id={id} value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as Draft['status'] })}><option value="planned">{t('projects.status.planned')}</option><option value="active">{t('projects.status.active')}</option><option value="done">{t('projects.status.done')}</option></select>}</Field>}
       <button className="primary" type="submit">{t('projects.save')}</button>{' '}
       <button type="button" onClick={onCancel}>{t('projects.cancel')}</button>
     </form>
@@ -56,11 +56,11 @@ export function Projects(): React.JSX.Element {
       {error && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
       {!creating && !editing && <button className="primary" onClick={() => setCreating(true)}>{t('projects.new')}</button>}
       {creating && me && (
-        <ProjectForm initial={empty} editing={false} onCancel={() => setCreating(false)}
+        <ProjectForm key="new" initial={empty} editing={false} onCancel={() => setCreating(false)}
           onSave={async (d) => { await createProject({ name: d.name.trim(), department_id: me.department_id, start_date: d.start_date, deadline: d.deadline, team_ids: d.team_ids, type: d.type }); setCreating(false); load() }} />
       )}
       {editing && (
-        <ProjectForm initial={{ name: editing.name, start_date: editing.start_date, deadline: editing.deadline, team_ids: editing.team_ids, type: editing.type, status: editing.status as Draft['status'] }} editing onCancel={() => setEditing(null)}
+        <ProjectForm key={editing.id} initial={{ name: editing.name, start_date: editing.start_date, deadline: editing.deadline, team_ids: editing.team_ids, type: editing.type, status: editing.status as Draft['status'] }} editing onCancel={() => setEditing(null)}
           onSave={async (d) => { await updateProject(editing.id, { name: d.name.trim(), start_date: d.start_date, deadline: d.deadline, team_ids: d.team_ids, type: d.type, status: d.status }); setEditing(null); load() }} />
       )}
       <table>
