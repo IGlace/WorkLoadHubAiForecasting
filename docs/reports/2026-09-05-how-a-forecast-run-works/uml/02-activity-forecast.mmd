@@ -1,0 +1,52 @@
+%% From "Run forecast" to the numbers on screen. No AI anywhere in this diagram.
+%% Paste into https://mermaid.live or render with: mmdc -i 02-activity-forecast.mmd -o 02-activity-forecast.svg
+flowchart TB
+  START((" ")) --> U1
+
+  subgraph YOU["YOU AND THE APP WINDOW"]
+    direction TB
+    U1["Open the Run screen. Pick the team,<br/>set the 'As of' date, tick 'AI narrative' if wanted"]
+    U2(["Click 'Run forecast'"])
+    U1 --> U2
+    U9["The two-week totals and the member table appear.<br/>Windows raises a notification naming anyone over capacity"]
+    U10(["Continue in the narrative diagram<br/>if the AI narrative was asked for"])
+    U9 --> U10
+  end
+
+  subgraph SERVICE["FORECAST SERVICE — DETERMINISTIC PYTHON, NO AI HERE"]
+    direction TB
+    T0["Secret token checked first.<br/>Missing or wrong → HTTP 401 and nothing runs"]
+    S1["1 · Load every table: members, teams, tasks,<br/>projects, holidays, vacations, capacity overrides"]
+    S2["2 · Fix the calendar: the two forecast weeks (Monday-start),<br/>the last complete week as 'origin', and who counts towards workload"]
+    S3["3 · Turn all history into one weekly table —<br/>26 numbers per person per past week"]
+    S4["4 · Backtest: rewind to up to 6 past origins, two weeks apart,<br/>and make all three candidates forecast weeks they never saw"]
+    S5["5 · Crown the champion — lowest average score wins,<br/>but only if it is strictly below 1.00, else seasonal naive is kept"]
+    S6["6 · Refit the champion on all history and predict<br/>newly arriving hours per person per week"]
+    S7["7 · Effort model — estimate × personal ratio, minus the part<br/>already done (at least 15 % remains), spread over real working days"]
+    S8["8 · Capacity = weekly hours ÷ 5 × surviving working days.<br/>Demand = open + new. Overload = max(0, demand − capacity)"]
+    S9["9 · Low / high band from the champion's own backtest residuals<br/>(10th and 90th percentile), on the new-arrival half only"]
+    S10["10 · Describe patterns, group similar members<br/>and assemble the facts document"]
+    SAVE["Save in ONE transaction:<br/>1 run row + 2 forecast rows per member + 1 facts row"]
+    D{"all saved?"}
+    OK["Reply: run id, both weeks, the champion<br/>and its score, and every forecast row"]
+    BAD["Everything is rolled back. No run row is written,<br/>so the Runs list never shows a failed forecast"]
+    T0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10 --> SAVE --> D
+    D -->|yes| OK
+    D -->|"no — any write failed"| BAD
+  end
+
+  U2 -->|"one HTTP request; the window then waits"| T0
+  OK --> U9
+  BAD --> ENDX((("no run")))
+  U10 --> ENDY(((" ")))
+
+  classDef you fill:#FDFAF3,stroke:#C8A45C,color:#16202C
+  classDef svc fill:#FFFFFF,stroke:#2F6FB5,color:#16202C
+  classDef key fill:#EEF4FB,stroke:#2F6FB5,color:#16202C
+  classDef good fill:#EAF6EF,stroke:#2E7D5B,color:#16202C
+  classDef bad fill:#FDF0EF,stroke:#B3403A,color:#16202C
+  class U1,U2,U9,U10 you
+  class T0,S1,S2,S3,S6,S7,S8,S9,S10 svc
+  class S4,S5 key
+  class SAVE,OK good
+  class BAD bad

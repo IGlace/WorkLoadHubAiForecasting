@@ -1,0 +1,56 @@
+@startuml architecture
+' WorkloadHub AI Forecasting — deployment / component view
+' Render:  plantuml -tsvg 01-architecture.puml
+' Everything except the Copilot cloud runs on the user's own Windows PC.
+
+skinparam defaultFontName "Segoe UI"
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #5B6B7D
+skinparam node      { BackgroundColor #F6FAFF  BorderColor #2F6FB5 }
+skinparam component { BackgroundColor #FFFFFF  BorderColor #2F6FB5 }
+skinparam database  { BackgroundColor #EAF6EF  BorderColor #2E7D5B }
+skinparam cloud     { BackgroundColor #F2EDFA  BorderColor #6B4FA8 }
+
+node "Your Windows PC" as pc {
+
+  node "Desktop app (Electron)" as app #FDFAF3 {
+    component "Renderer\nReact + TypeScript screens\nRun · Runs · Team result · Member · Rebalancing" as renderer
+    component "Preload bridge\nwindow.whf.request\nthe only channel the screens may use" as preload
+    component "Main process\nstarts the service, holds the secret token,\nadds the X-WHF-Token header" as main
+  }
+
+  node "Forecast service (Python 3.11)" as svc {
+    component "HTTP API — FastAPI\n127.0.0.1 only, token required" as api
+    component "Forecast pipeline\nfeatures - backtest - champion - predict -\nplace - capacity - overload - facts" as pipe
+    component "Copilot session\n8 read-only tools + 5 product skills" as sess
+  }
+
+  database "workload.db (SQLite)\nmembers · teams · tasks · projects\nholidays · vacations · capacity overrides\nruns · forecasts · run_facts · narratives" as db
+}
+
+cloud "GitHub Copilot\nthe user's own Enterprise seat" as copilot
+
+renderer --> preload  : IPC channel  api:request
+preload  --> main
+main     --> api      : HTTP  POST /runs
+api      --> pipe
+pipe     --> db       : read all history\nwrite the run in one transaction
+api      --> sess     : POST /runs/{id}/narrative
+sess     --> db       : read back the facts this run saved
+sess    ..> copilot   : rule sheet + facts + tool replies
+copilot ..> sess      : one JSON narrative — words only
+
+note right of copilot
+  The narrative request is the only thing that
+  ever leaves the machine. All history, names
+  and hours stay in workload.db on this PC.
+  No API key of any other provider is used.
+end note
+
+note bottom of pipe
+  Every displayed figure is produced here.
+  The language model never computes,
+  re-rounds or invents a number.
+end note
+@enduml

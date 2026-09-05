@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 466" width="700" height="466" role="img"
+     aria-label="How rebalancing works: the program deterministically splits people into over-loaded and under-loaded, Copilot writes the suggested moves, and the program then checks each move against the facts. Nothing is applied automatically.">
+  <style>
+    text { font-family: "Segoe UI", Calibri, system-ui, sans-serif; fill: #16202c; }
+    .pt  { font-size: 10.5px; font-weight: 700; fill: #1d4d84; letter-spacing: .3px; }
+    .bt  { font-size: 10.5px; font-weight: 700; }
+    .n   { font-size: 10px; }
+    .nb  { font-size: 10px; font-weight: 700; }
+    .e   { font-size: 9.5px; fill: #5b6b7d; }
+    .mono{ font-family: Consolas, "Courier New", monospace; font-size: 9.5px; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7d"/>
+    </marker>
+  </defs>
+
+  <!-- P1 -->
+  <rect x="14" y="30" width="214" height="190" rx="8" fill="#f6faff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="pt" x="24" y="48">① THE PROGRAM SORTS PEOPLE</text>
+  <text class="e"  x="24" y="60">deterministic — no AI involved</text>
+
+  <rect x="24" y="66" width="194" height="52" rx="6" fill="#fdf0ef" stroke="#b3403a" stroke-width="1.5"/>
+  <text class="bt" x="34" y="83" fill="#8c2f2a">OVER-LOADED</text>
+  <text class="n"  x="34" y="98">two-week overload above 0 h —</text>
+  <text class="n"  x="34" y="111">i.e. over capacity in either week</text>
+
+  <rect x="24" y="124" width="194" height="52" rx="6" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.5"/>
+  <text class="bt" x="34" y="141" fill="#1f5e42">UNDER-LOADED</text>
+  <text class="n"  x="34" y="156">has capacity at all, and two-week</text>
+  <text class="n"  x="34" y="169">demand below 70 % of it</text>
+
+  <text class="e" x="24" y="192">That is the entire rule. There is no</text>
+  <text class="e" x="24" y="203">scoring, no ranking and no optimiser</text>
+  <text class="e" x="24" y="214">anywhere in the program.</text>
+
+  <path d="M232,125 L239,125" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+
+  <!-- P2 -->
+  <rect x="243" y="30" width="214" height="190" rx="8" fill="#faf7fe" stroke="#6b4fa8" stroke-width="1.5"/>
+  <text class="pt" x="253" y="48" fill="#4a3576">② COPILOT IS HANDED THE FACTS</text>
+  <text class="e"  x="253" y="60">read-only, through tools</text>
+
+  <text class="n" x="253" y="80">It receives the two lists above, and</text>
+  <text class="n" x="253" y="94">for every person in the run: demand,</text>
+  <text class="n" x="253" y="108">capacity, overload and the open / new</text>
+  <text class="n" x="253" y="122">split, week by week.</text>
+
+  <text class="n" x="253" y="144">It also loads a short in-house guide</text>
+  <text class="n" x="253" y="158">that tells it what a sensible move</text>
+  <text class="n" x="253" y="172">looks like and what to avoid.</text>
+
+  <text class="e" x="253" y="194">It cannot see the database. It can only</text>
+  <text class="e" x="253" y="205">read the facts this run already saved.</text>
+
+  <path d="M461,125 L468,125" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+
+  <!-- P3 -->
+  <rect x="472" y="30" width="214" height="190" rx="8" fill="#faf7fe" stroke="#6b4fa8" stroke-width="1.5"/>
+  <text class="pt" x="482" y="48" fill="#4a3576">③ COPILOT WRITES THE MOVES</text>
+  <text class="e"  x="482" y="60">words, plus the size of the move</text>
+
+  <rect x="482" y="68" width="194" height="106" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.3"/>
+  <text class="mono" x="492" y="85">from   Amina</text>
+  <text class="mono" x="492" y="99">to     Karim</text>
+  <text class="mono" x="492" y="113">week   Mon 14 Sep</text>
+  <text class="mono" x="492" y="127">hours  6.0</text>
+  <text class="mono" x="492" y="141">why    Amina is 4.5 h over;</text>
+  <text class="mono" x="492" y="153">       Karim is at 61 % of his</text>
+  <text class="mono" x="492" y="165">       capacity, same project</text>
+
+  <text class="e" x="482" y="192">The hours in a move are the one figure</text>
+  <text class="e" x="482" y="203">the model is allowed to originate — and</text>
+  <text class="e" x="482" y="214">they are checked immediately afterwards.</text>
+
+  <!-- P4 -->
+  <rect x="14" y="236" width="336" height="150" rx="8" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.6"/>
+  <text class="pt" x="26" y="255" fill="#1f5e42">✓ WHAT THE PROGRAM CHECKS BEFORE YOU SEE THE MOVE</text>
+  <text class="n" x="26" y="274">• Both people really are in this run.</text>
+  <text class="n" x="26" y="292">• The giver really is on the over-loaded list and the</text>
+  <text class="n" x="26" y="304">   receiver really is on the under-loaded list.</text>
+  <text class="n" x="26" y="322">• The week is one of the two forecast weeks.</text>
+  <text class="n" x="26" y="340">• The hours do not exceed the giver’s overload that week,</text>
+  <text class="n" x="26" y="352">   and do not push the receiver past their capacity.</text>
+  <text class="n" x="26" y="370">• Anything that fails is thrown away and asked for again.</text>
+
+  <!-- P5 -->
+  <rect x="364" y="236" width="322" height="150" rx="8" fill="#fdf6e9" stroke="#b7791f" stroke-width="1.6"/>
+  <text class="pt" x="376" y="255" fill="#8a5c12">⚠ WHAT IT DOES NOT CHECK — JUDGE THESE YOURSELF</text>
+  <text class="n" x="376" y="274">• Who is eligible is decided on two-week totals, while</text>
+  <text class="n" x="376" y="286">   each move is checked one week at a time.</text>
+  <text class="n" x="376" y="304">• Two moves can each be valid alone; their combined</text>
+  <text class="n" x="376" y="316">   effect on the receiver is never re-checked.</text>
+  <text class="n" x="376" y="334">• Suggested capacity changes are not bounded at all.</text>
+  <text class="n" x="376" y="352">• Nothing knows whether the receiver has the skill or</text>
+  <text class="n" x="376" y="364">   the context to take that work on. That is your call.</text>
+
+  <!-- banner -->
+  <rect x="14" y="402" width="672" height="52" rx="8" fill="#eef2f6" stroke="#5b6b7d" stroke-width="1.6"/>
+  <text class="bt" x="28" y="422">NOTHING IS APPLIED. THERE IS NO BUTTON THAT MOVES WORK.</text>
+  <text class="n" x="28" y="440">The Rebalancing page is a printed suggestion — the heading on it says “(not applied)”. Your own task tracker stays the record of truth,</text>
+  <text class="n" x="28" y="450">and any move only happens because a human decided to make it there.</text>
+</svg>

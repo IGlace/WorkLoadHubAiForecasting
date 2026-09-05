@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 404" width="700" height="404" role="img"
+     aria-label="Anatomy of the Interval column: a grey track, a blue slide from the optimistic to the pessimistic figure, and a black pipe marking the forecast itself.">
+  <style>
+    text { font-family: "Segoe UI", Calibri, system-ui, sans-serif; fill: #16202c; }
+    .nm  { font-size: 11px; font-weight: 700; }
+    .n   { font-size: 10.5px; }
+    .nb  { font-size: 10.5px; font-weight: 700; }
+    .e   { font-size: 9.5px; fill: #5b6b7d; }
+    .cal { font-size: 10px; font-weight: 700; fill: #1d4d84; }
+    .ax  { font-size: 9px; fill: #7b8b9c; }
+    .hd  { font-size: 10.5px; font-weight: 700; fill: #1d4d84; letter-spacing: .3px; }
+  </style>
+
+  <!-- callouts -->
+  <text class="cal" x="439" y="30" text-anchor="middle">the black pipe = the forecast itself</text>
+  <text class="n"   x="439" y="44" text-anchor="middle">48.50 h — the figure every other column uses</text>
+  <line x1="439" y1="50" x2="439" y2="100" stroke="#1d4d84" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <text class="cal" x="386" y="72" text-anchor="end">optimistic end</text>
+  <text class="n"   x="386" y="85" text-anchor="end">41.30 h</text>
+  <line x1="391" y1="76" x2="391" y2="100" stroke="#1d4d84" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <text class="cal" x="508" y="72">pessimistic end</text>
+  <text class="n"   x="508" y="85">58.10 h</text>
+  <line x1="502" y1="76" x2="502" y2="100" stroke="#1d4d84" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <!-- row 1 -->
+  <text class="nm" x="14" y="122">Amina</text>
+  <text class="e"  x="14" y="134">busy, uncertain</text>
+  <rect x="120" y="104" width="460" height="28" rx="5" fill="#eef2f6" stroke="#d5dde5" stroke-width="1"/>
+  <rect x="391" y="104" width="111" height="28" rx="5" fill="#9dc0e4"/>
+  <rect x="436" y="100" width="4" height="36" rx="1.5" fill="#16202c"/>
+
+  <!-- row 2 -->
+  <text class="nm" x="14" y="170">Karim</text>
+  <text class="e"  x="14" y="182">steady, predictable</text>
+  <rect x="120" y="152" width="460" height="28" rx="5" fill="#eef2f6" stroke="#d5dde5" stroke-width="1"/>
+  <rect x="238" y="152" width="27" height="28" rx="5" fill="#9dc0e4"/>
+  <rect x="259" y="148" width="4" height="36" rx="1.5" fill="#16202c"/>
+  <text class="e" x="278" y="170">narrow slide → little doubt about this person’s week</text>
+
+  <!-- row 3 -->
+  <text class="nm" x="14" y="218">Sofia</text>
+  <text class="e"  x="14" y="230">no usable history</text>
+  <rect x="120" y="200" width="460" height="28" rx="5" fill="#eef2f6" stroke="#d5dde5" stroke-width="1"/>
+  <rect x="316" y="200" width="3" height="28" fill="#9dc0e4"/>
+  <rect x="315" y="196" width="4" height="36" rx="1.5" fill="#16202c"/>
+  <text class="e" x="330" y="218">no slide at all → the rehearsal produced no usable</text>
+  <text class="e" x="330" y="229">errors, so one value is shown instead of a range</text>
+
+  <!-- axis -->
+  <line x1="120" y1="246" x2="580" y2="246" stroke="#a9bccf" stroke-width="1.2"/>
+  <g stroke="#a9bccf" stroke-width="1.2">
+    <line x1="120" y1="246" x2="120" y2="252"/><line x1="185.7" y1="246" x2="185.7" y2="252"/>
+    <line x1="251.4" y1="246" x2="251.4" y2="252"/><line x1="317.1" y1="246" x2="317.1" y2="252"/>
+    <line x1="382.9" y1="246" x2="382.9" y2="252"/><line x1="448.6" y1="246" x2="448.6" y2="252"/>
+    <line x1="514.3" y1="246" x2="514.3" y2="252"/><line x1="580" y1="246" x2="580" y2="252"/>
+  </g>
+  <g class="ax" text-anchor="middle">
+    <text x="120" y="263">0</text><text x="185.7" y="263">10</text><text x="251.4" y="263">20</text>
+    <text x="317.1" y="263">30</text><text x="382.9" y="263">40</text><text x="448.6" y="263">50</text>
+    <text x="514.3" y="263">60</text><text x="580" y="263">70 h</text>
+  </g>
+  <text class="e" x="596" y="250">every row shares</text>
+  <text class="e" x="596" y="261">this same scale, so</text>
+  <text class="e" x="596" y="272">bars are comparable</text>
+
+  <!-- explanations -->
+  <rect x="14" y="284" width="330" height="112" rx="8" fill="#f6faff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="hd" x="26" y="302">WHY THE PIPE IS RARELY IN THE MIDDLE</text>
+  <text class="n" x="26" y="320">The band is deliberately lopsided. Only the work that</text>
+  <text class="n" x="26" y="334">has <tspan class="nb">not been assigned yet</tspan> is uncertain — hours from</text>
+  <text class="n" x="26" y="348">tasks already open are treated as known. On top of</text>
+  <text class="n" x="26" y="362">that, the optimistic end can never dip below those</text>
+  <text class="n" x="26" y="376">committed hours, while the pessimistic end has no</text>
+  <text class="n" x="26" y="390">such floor. So the pipe usually sits left of centre.</text>
+
+  <rect x="356" y="284" width="330" height="112" rx="8" fill="#fdfaf3" stroke="#b7791f" stroke-width="1.5"/>
+  <text class="hd" x="368" y="302" fill="#8a5c12">HOW TO READ IT IN ONE GLANCE</text>
+  <text class="n" x="368" y="320"><tspan class="nb">Pipe near the left edge</tspan> — most of the risk is upside;</text>
+  <text class="n" x="368" y="334">this week could turn out much heavier than planned.</text>
+  <text class="n" x="368" y="348"><tspan class="nb">Wide slide</tspan> — this person’s workload is hard to predict.</text>
+  <text class="n" x="368" y="362"><tspan class="nb">Narrow slide</tspan> — either they are steady, or most of their</text>
+  <text class="n" x="368" y="376">two weeks is already committed work rather than a guess.</text>
+  <text class="e" x="368" y="391">Hover the cell for the exact range, e.g. “41.3 – 58.1 h”.</text>
+</svg>

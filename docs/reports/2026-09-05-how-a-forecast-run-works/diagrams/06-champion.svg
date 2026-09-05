@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 486" width="700" height="486" role="img"
+     aria-label="How the champion model is chosen: three candidates are replayed against past weeks, scored against the naive baseline, and the best one wins only if it strictly beats 1.00.">
+  <style>
+    text { font-family: "Segoe UI", Calibri, system-ui, sans-serif; fill: #16202c; }
+    .t  { font-size: 12px; font-weight: 700; }
+    .r  { font-size: 11px; font-weight: 700; fill: #1d4d84; letter-spacing: .4px; }
+    .n  { font-size: 10.5px; }
+    .e  { font-size: 9.5px; fill: #5b6b7d; }
+    .eb { font-size: 9.5px; font-weight: 700; fill: #5b6b7d; }
+    .sc { font-size: 12px; font-weight: 700; }
+    .mono { font-family: Consolas, "Courier New", monospace; font-size: 11px; font-weight: 700; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7d"/>
+    </marker>
+  </defs>
+
+  <!-- 1. the rehearsal -->
+  <text class="r" x="20" y="24">STEP 1 — REHEARSE ON THE PAST (“BACKTEST”)</text>
+  <rect x="20" y="36" width="520" height="26" rx="4" fill="#eef2f6" stroke="#9db4cc" stroke-width="1.3"/>
+  <text class="e" x="30" y="53">weekly history of the whole department — one row per person per week</text>
+  <rect x="548" y="36" width="132" height="26" rx="4" fill="#eaf1f9" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="eb" x="614" y="53" text-anchor="middle" fill="#1d4d84">the two weeks ahead</text>
+
+  <g fill="#b7791f">
+    <path d="M290,64 l-6,10 h12 z"/><path d="M334,64 l-6,10 h12 z"/><path d="M378,64 l-6,10 h12 z"/>
+    <path d="M422,64 l-6,10 h12 z"/><path d="M466,64 l-6,10 h12 z"/><path d="M510,64 l-6,10 h12 z"/>
+  </g>
+  <text class="e" x="680" y="88" text-anchor="end">▲ = up to 6 rewind points, two weeks apart</text>
+  <text class="e" x="20" y="88">At each rewind point the model sees only the weeks before it, then must forecast what came next.</text>
+  <text class="e" x="20" y="101">Its answer is compared with what really happened. A rewind point needs at least 13 weeks of history behind it.</text>
+
+  <!-- 2. the competitors -->
+  <text class="r" x="20" y="128">STEP 2 — THREE CANDIDATES RUN THE SAME REHEARSAL</text>
+
+  <rect x="20" y="138" width="210" height="98" rx="8" fill="#ffffff" stroke="#9db4cc" stroke-width="1.6"/>
+  <text class="t" x="32" y="157">seasonal naive</text>
+  <text class="eb" x="32" y="171">THE BASELINE / THE YARDSTICK</text>
+  <text class="n" x="32" y="188">“Next week will look like the</text>
+  <text class="n" x="32" y="202">same week one year ago.”</text>
+  <text class="n" x="32" y="216">No learning at all — it exists</text>
+  <text class="n" x="32" y="230">so the others can be measured.</text>
+
+  <rect x="245" y="138" width="210" height="98" rx="8" fill="#ffffff" stroke="#9db4cc" stroke-width="1.6"/>
+  <text class="t" x="257" y="157">TSB</text>
+  <text class="eb" x="257" y="171">FOR OCCASIONAL, LUMPY WORK</text>
+  <text class="n" x="257" y="188">Tracks two things separately:</text>
+  <text class="n" x="257" y="202">how often this person is given</text>
+  <text class="n" x="257" y="216">work at all, and how big it is</text>
+  <text class="n" x="257" y="230">when it comes.</text>
+
+  <rect x="470" y="138" width="210" height="98" rx="8" fill="#ffffff" stroke="#9db4cc" stroke-width="1.6"/>
+  <text class="t" x="482" y="157">gradient boosting (GBM)</text>
+  <text class="eb" x="482" y="171">THE MACHINE-LEARNING ONE</text>
+  <text class="n" x="482" y="188">Reads 26 clues per person-week</text>
+  <text class="n" x="482" y="202">— recent averages, backlog,</text>
+  <text class="n" x="482" y="216">project mix, calendar — and</text>
+  <text class="n" x="482" y="230">learns the pattern from them.</text>
+
+  <!-- 3. the score -->
+  <text class="r" x="20" y="264">STEP 3 — SCORE THEM  (AVERAGE ERROR ÷ THE BASELINE’S AVERAGE ERROR)</text>
+
+  <line x1="547" y1="278" x2="547" y2="374" stroke="#b3403a" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <text class="eb" x="553" y="290" fill="#b3403a">1.00 = as good as the baseline</text>
+
+  <text class="n" x="172" y="308" text-anchor="end">gradient boosting</text>
+  <rect x="180" y="296" width="293" height="16" rx="3" fill="#2e7d5b"/>
+  <text class="sc" x="480" y="309" fill="#2e7d5b">0.80  ← winner</text>
+
+  <text class="n" x="172" y="336" text-anchor="end">seasonal naive</text>
+  <rect x="180" y="324" width="367" height="16" rx="3" fill="#9db4cc"/>
+  <text class="sc" x="554" y="337" fill="#5b6b7d">1.00</text>
+
+  <text class="n" x="172" y="364" text-anchor="end">TSB</text>
+  <rect x="180" y="352" width="386" height="16" rx="3" fill="#c98d84"/>
+  <text class="sc" x="573" y="365" fill="#b3403a">1.05</text>
+
+  <text class="e" x="180" y="384">lower is better  ·  0.80 means “on average 20 % less wrong than simply repeating last year”</text>
+
+  <!-- 4. verdict -->
+  <rect x="20" y="398" width="660" height="76" rx="8" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.6"/>
+  <text class="t" x="32" y="418">STEP 4 — CROWN THE CHAMPION</text>
+  <text class="n" x="32" y="436">The lowest score wins, <tspan font-weight="700">but only if it is strictly below 1.00</tspan>. Here <tspan class="mono">gbm</tspan> wins with 0.80, so it forecasts the</text>
+  <text class="n" x="32" y="451">newly arriving work and its rehearsal errors become the low/high band you see on screen.</text>
+  <text class="e" x="32" y="467">If nothing had beaten 1.00, the baseline would have been kept instead — the app would rather be dull than over-confident.</text>
+</svg>

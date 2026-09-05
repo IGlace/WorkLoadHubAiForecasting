@@ -1,0 +1,39 @@
+%% End-to-end sequence: one click, two HTTP calls, one saved run.
+%% Paste into https://mermaid.live or render with: mmdc -i 04-sequence.mmd -o 04-sequence.svg
+sequenceDiagram
+  autonumber
+  actor User as You (team leader)
+  participant Win as Window (React screens)
+  participant Main as Bridge + Main (holds the token)
+  participant Svc as Forecast service (Python)
+  participant DB as SQLite (workload.db)
+  participant Cop as GitHub Copilot (your seat)
+
+  User ->> Win: click "Run forecast"
+  Win ->> Main: IPC api:request { POST /runs, team, as-of }
+  Main ->> Svc: POST /runs + X-WHF-Token
+  Svc ->> DB: read members, tasks, projects, calendar, overrides
+  DB -->> Svc: history, people, calendar
+  Note over Svc: the ten deterministic stages<br/>features → backtest → champion → predict<br/>→ place → capacity → overload → facts
+  Svc ->> DB: INSERT run + forecasts + facts (one transaction)
+  DB -->> Svc: run id
+  Svc -->> Main: 200 OK — run id, both weeks, champion, score, every forecast row
+  Main -->> Win: the finished numbers
+  Win -->> User: totals on screen + Windows notification if anyone is over capacity
+
+  opt AI narrative asked for
+    Win ->> Svc: POST /runs/{id}/narrative
+    Svc ->> DB: read back the facts this run saved
+    Svc ->> Cop: rule sheet + facts + 8 read-only tools + 5 product skills
+    loop per fact the model needs
+      Cop ->> Svc: tool call — "give me this member's weeks"
+      Svc -->> Cop: the exact stored numbers, nothing else
+    end
+    Cop -->> Svc: one JSON document — words only
+    Note over Svc: check the shape against the template, then check<br/>every number against the facts. a mismatch marks<br/>the run "unverified"
+    Svc ->> DB: save the narrative envelope, set ai_status
+    Svc -->> Win: ok | unverified | failed:reason — plus the written text
+    Win -->> User: AI Summary panel and Rebalancing page fill in
+  end
+
+  Note over User,Cop: Both HTTP calls are synchronous: the window waits, showing an elapsed counter<br/>fed by a progress endpoint it polls once a second. The forecast is already safe on<br/>disk before Copilot is ever contacted, so a Copilot failure can never change a figure.

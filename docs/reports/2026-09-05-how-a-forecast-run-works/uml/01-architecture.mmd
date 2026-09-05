@@ -1,0 +1,46 @@
+%% WorkloadHub AI Forecasting — deployment / component view (Mermaid)
+%% Paste into https://mermaid.live or render with: mmdc -i 01-architecture.mmd -o 01-architecture.svg
+flowchart TB
+  subgraph PC["Your Windows PC"]
+    direction TB
+    subgraph APP["Desktop app — Electron"]
+      direction LR
+      R["Renderer<br/>React + TypeScript screens<br/>Run · Runs · Team result · Member · Rebalancing"]
+      P["Preload bridge<br/>window.whf.request<br/>the only channel the screens may use"]
+      M["Main process<br/>starts the service, holds the secret token,<br/>adds the X-WHF-Token header"]
+      R -->|"IPC api:request"| P --> M
+    end
+    subgraph SVC["Forecast service — Python 3.11"]
+      direction LR
+      A["HTTP API — FastAPI<br/>127.0.0.1 only, token required"]
+      F["Forecast pipeline<br/>features → backtest → champion → predict<br/>→ place → capacity → overload → facts"]
+      S["Copilot session<br/>8 read-only tools + 5 product skills"]
+      A --> F
+      A --> S
+    end
+    DB[("workload.db — SQLite<br/>members · teams · tasks · projects<br/>holidays · vacations · capacity overrides<br/>runs · forecasts · run_facts · narratives")]
+  end
+  C(["GitHub Copilot<br/>the user's own Enterprise seat"])
+
+  M -->|"HTTP POST /runs"| A
+  F -->|"read all history<br/>write the run in one transaction"| DB
+  S -->|"read back the facts this run saved"| DB
+  S -.->|"rule sheet + facts + tool replies"| C
+  C -.->|"one JSON narrative — words only"| S
+
+  N1["The narrative request is the only thing that ever leaves<br/>the machine. All history, names and hours stay in<br/>workload.db on this PC. No API key of any other provider."]
+  C -.- N1
+
+  N2["Every displayed figure is produced here. The language model<br/>never computes, re-rounds or invents a number."]
+  F -.- N2
+
+  classDef app fill:#FDFAF3,stroke:#C8A45C,color:#16202C
+  classDef svc fill:#F6FAFF,stroke:#2F6FB5,color:#16202C
+  classDef db  fill:#EAF6EF,stroke:#2E7D5B,color:#16202C
+  classDef ai  fill:#F2EDFA,stroke:#6B4FA8,color:#16202C
+  classDef note fill:#FFFFFF,stroke:#9DB4CC,color:#5B6B7D,stroke-dasharray:5 3
+  class R,P,M app
+  class A,F,S svc
+  class DB db
+  class C ai
+  class N1,N2 note

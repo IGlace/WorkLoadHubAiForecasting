@@ -1,0 +1,83 @@
+@startuml activity-forecast
+' What happens between clicking "Run forecast" and the numbers appearing.
+' No language model is involved anywhere in this diagram.
+' Render:  plantuml -tsvg 02-activity-forecast.puml
+
+skinparam defaultFontName "Segoe UI"
+skinparam shadowing false
+skinparam ActivityBackgroundColor #FFFFFF
+skinparam ActivityBorderColor #2F6FB5
+skinparam ArrowColor #5B6B7D
+
+|#FDFAF3|You and the app window|
+start
+:Open the Run screen.
+Pick the team, set the "As of" date,
+tick "AI narrative" if you want it;
+:Click "Run forecast";
+note right
+  One HTTP request. The window then
+  waits for the whole answer, polling
+  a progress endpoint once a second.
+end note
+
+|#F6FAFF|Forecast service — deterministic Python, no AI here|
+:Check the secret token.
+Missing or wrong -> HTTP 401, nothing runs;
+
+:1. Load every table: members, teams, tasks,
+projects, holidays, vacations, capacity overrides;
+
+:2. Fix the calendar: the two forecast weeks
+(Monday-start), the last complete week as the
+"origin", and which members count towards workload;
+
+:3. Turn all history into one weekly table —
+26 numbers per person per past week;
+
+:4. Backtest: rewind to up to 6 past origins,
+two weeks apart, and make all three candidate
+models forecast weeks they never saw.
+Score each with MASE against what really happened;
+
+:5. Crown the champion — the lowest average score
+wins, but only if it is strictly below 1.00.
+Otherwise seasonal naive is kept;
+
+:6. Refit the champion on all history and predict
+newly arriving hours per person per week;
+
+:7. Effort model — estimate x that person's ratio,
+minus the part already done (at least 15 % remains),
+spread evenly over their real working days;
+
+:8. Capacity = weekly hours / 5 x surviving working days.
+Demand = open hours + new hours.
+Overload = max(0, demand - capacity). Demand is never capped;
+
+:9. Low / high band from the champion's own backtest
+residuals — 10th and 90th percentile, applied to the
+new-arrival half only;
+
+:10. Describe patterns, group similar members and
+assemble the facts document;
+
+:Save in ONE transaction:
+1 run row + 2 forecast rows per member + 1 facts row;
+
+if (all saved?) then (yes)
+  :Reply: run id, both weeks, the champion and
+  its score, and every forecast row;
+else (no — any write failed)
+  :Everything is rolled back. No run row is written,
+  so the Runs list never shows a failed forecast;
+  stop
+endif
+
+|#FDFAF3|You and the app window|
+:The two-week totals and the member table appear.
+Windows raises a notification naming anyone over capacity;
+:Continue in the narrative activity diagram
+if the AI narrative was asked for;
+stop
+@enduml

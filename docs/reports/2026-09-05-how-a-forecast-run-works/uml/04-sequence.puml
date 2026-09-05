@@ -1,0 +1,65 @@
+@startuml sequence-run
+' End-to-end sequence: one click, two HTTP calls, one saved run.
+' Render:  plantuml -tsvg 04-sequence.puml
+
+skinparam defaultFontName "Segoe UI"
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam ParticipantBorderColor #2F6FB5
+skinparam ArrowColor #5B6B7D
+
+actor       "You\nteam leader"                     as user
+participant "Window\nReact screens"                as win
+participant "Bridge + Main\nholds the token"       as main
+participant "Forecast service\nPython, all the maths" as svc
+database    "SQLite\nworkload.db"                  as db
+participant "GitHub Copilot\nyour seat"            as cop
+
+user -> win  : click "Run forecast"
+win  -> main : IPC api:request { POST /runs, team, as-of }
+main -> svc  : POST /runs  +  X-WHF-Token
+svc  -> db   : read members, tasks, projects, calendar, overrides
+db  --> svc  : history, people, calendar
+
+rnote over svc #EEF4FB
+  the ten deterministic stages
+  features -> backtest -> champion -> predict
+  -> place -> capacity -> overload -> facts
+end rnote
+
+svc  -> db   : INSERT run + forecasts + facts  (one transaction)
+db  --> svc  : run id
+svc --> main : 200 OK — run id, both weeks, champion, score, every forecast row
+main --> win : the finished numbers
+win --> user : totals on screen + Windows notification if anyone is over capacity
+
+opt AI narrative asked for
+  win -> svc : POST /runs/{id}/narrative
+  svc -> db  : read back the facts this run saved
+  svc -> cop : rule sheet + facts + 8 read-only tools + 5 product skills
+
+  loop per fact the model needs
+    cop -> svc : tool call — "give me this member's weeks"
+    svc --> cop : the exact stored numbers, nothing else
+  end
+
+  cop --> svc : one JSON document — words only
+
+  rnote over svc #EEF4FB
+    check the shape against the template,
+    then check every number against the facts.
+    a mismatch marks the run "unverified"
+  end rnote
+
+  svc -> db   : save the narrative envelope, set ai_status
+  svc --> win : ok | unverified | failed:<reason> — plus the written text
+  win --> user : AI Summary panel and Rebalancing page fill in
+end
+
+note across
+  Both HTTP calls are synchronous: the window waits, showing an elapsed
+  counter fed by a progress endpoint it polls once a second.
+  The forecast is already safe on disk before Copilot is ever contacted,
+  so a Copilot failure can never change a single figure.
+end note
+@enduml

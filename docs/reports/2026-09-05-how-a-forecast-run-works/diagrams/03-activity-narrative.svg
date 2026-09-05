@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 790" width="700" height="790" role="img"
+     aria-label="Activity diagram with three swimlanes: what happens when the run asks Copilot for the narrative, including the verification step that produces the unverified status.">
+  <style>
+    text { font-family: "Segoe UI", Calibri, system-ui, sans-serif; fill: #16202c; }
+    .lane { font-size: 11px; font-weight: 700; fill: #1d4d84; letter-spacing: .3px; }
+    .lanv { font-size: 11px; font-weight: 700; fill: #4a3576; letter-spacing: .3px; }
+    .n    { font-size: 10.5px; }
+    .nb   { font-size: 10.5px; font-weight: 700; }
+    .e    { font-size: 10px; fill: #5b6b7d; }
+    .eb   { font-size: 10px; font-weight: 700; fill: #5b6b7d; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7d"/>
+    </marker>
+  </defs>
+
+  <rect x="8" y="8" width="184" height="700" rx="8" fill="#fdfaf3" stroke="#d8b673" stroke-width="1.4"/>
+  <rect x="196" y="8" width="276" height="700" rx="8" fill="#f6faff" stroke="#2f6fb5" stroke-width="1.4"/>
+  <rect x="476" y="8" width="216" height="700" rx="8" fill="#faf7fe" stroke="#6b4fa8" stroke-width="1.4"/>
+  <rect x="8" y="8" width="184" height="28" rx="8" fill="#f6ecd6"/>
+  <rect x="196" y="8" width="276" height="28" rx="8" fill="#e3edf8"/>
+  <rect x="476" y="8" width="216" height="28" rx="8" fill="#ede6f8"/>
+  <text class="lane" x="20" y="27">YOU AND THE WINDOW</text>
+  <text class="lane" x="208" y="27">FORECAST SERVICE — STILL NO AI NUMBERS</text>
+  <text class="lanv" x="488" y="27">GITHUB COPILOT — WORDS ONLY</text>
+
+  <!-- decision: narrative wanted -->
+  <path d="M100,46 L180,78 L100,110 L20,78 Z" fill="#ffffff" stroke="#5b6b7d" stroke-width="1.5"/>
+  <text class="nb" x="100" y="75" text-anchor="middle">AI narrative</text>
+  <text class="nb" x="100" y="88" text-anchor="middle">asked for?</text>
+
+  <path d="M100,110 L100,122" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <text class="eb" x="106" y="120">no</text>
+  <rect x="16" y="126" width="168" height="62" rx="7" fill="#ffffff" stroke="#c8a45c" stroke-width="1.5"/>
+  <text class="n" x="26" y="144">The run stays saved with</text>
+  <text class="n" x="26" y="158"><tspan class="nb">ai_status = not_requested</tspan>.</text>
+  <text class="n" x="26" y="172">You can ask for the words</text>
+  <text class="n" x="26" y="183">later from the Runs list.</text>
+  <path d="M100,188 L100,198" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <circle cx="100" cy="208" r="9" fill="none" stroke="#16202c" stroke-width="1.6"/>
+  <circle cx="100" cy="208" r="5" fill="#16202c"/>
+
+  <path d="M180,78 L224,78" fill="none" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+  <text class="eb" x="188" y="72">yes</text>
+
+  <!-- polling note -->
+  <rect x="16" y="250" width="168" height="88" rx="7" fill="#ffffff" stroke="#9db4cc" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text class="eb" x="26" y="268">WHILE YOU WAIT</text>
+  <text class="e" x="26" y="284">The window asks the service</text>
+  <text class="e" x="26" y="297">once a second which step it</text>
+  <text class="e" x="26" y="310">is on and shows it with an</text>
+  <text class="e" x="26" y="323">elapsed counter: starting →</text>
+  <text class="e" x="26" y="333">session → asking → tool → checking.</text>
+
+  <!-- service chain -->
+  <rect x="228" y="56" width="232" height="44" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="238" y="74">Second HTTP call. Load the facts</text>
+  <text class="n" x="238" y="90">this run already saved.</text>
+
+  <rect x="228" y="116" width="232" height="44" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="238" y="134">Start a Copilot session on your own signed-in</text>
+  <text class="n" x="238" y="150">Copilot CLI. No key of any other provider.</text>
+  <path d="M344,100 L344,112" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="228" y="176" width="232" height="44" rx="7" fill="#eef4fb" stroke="#2f6fb5" stroke-width="1.8"/>
+  <text class="n" x="238" y="194">Hand over the rule sheet (“never invent</text>
+  <text class="n" x="238" y="210">a number”), the facts, 8 read-only tools, 5 skills.</text>
+  <path d="M344,160 L344,172" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="228" y="236" width="232" height="58" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="238" y="255">Check the reply’s shape against a</text>
+  <text class="n" x="238" y="270">strict template. Any unexpected field,</text>
+  <text class="n" x="238" y="285">missing section or over-long text fails.</text>
+
+  <path d="M344,304 L436,330 L344,356 L252,330 Z" fill="#ffffff" stroke="#5b6b7d" stroke-width="1.5"/>
+  <text class="nb" x="344" y="334" text-anchor="middle">shape valid?</text>
+  <path d="M344,294 L344,300" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- retry loop -->
+  <path d="M252,330 L210,330 L210,190 L224,190" fill="none" stroke="#b7791f" stroke-width="1.6" marker-end="url(#a)"/>
+  <text class="eb" x="216" y="345" fill="#b7791f">no</text>
+  <text class="eb" x="205" y="260" fill="#b7791f" transform="rotate(-90 205 260)">ask again — 2 attempts, then failed</text>
+
+  <rect x="228" y="372" width="232" height="52" rx="7" fill="#eef4fb" stroke="#2f6fb5" stroke-width="1.8"/>
+  <text class="n" x="238" y="390">Pull every number out of the prose and</text>
+  <text class="n" x="238" y="405">look for it among the facts that</text>
+  <text class="n" x="238" y="420">sentence is allowed to quote.</text>
+  <path d="M344,356 L344,368" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <text class="eb" x="352" y="366">yes</text>
+
+  <path d="M344,434 L444,460 L344,486 L244,460 Z" fill="#ffffff" stroke="#5b6b7d" stroke-width="1.5"/>
+  <text class="nb" x="344" y="464" text-anchor="middle">every number matched?</text>
+  <path d="M344,424 L344,430" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <path d="M244,460 L244,502" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <text class="eb" x="216" y="480">yes</text>
+  <path d="M444,460 L444,502" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <text class="eb" x="450" y="480">no</text>
+
+  <rect x="228" y="506" width="112" height="46" rx="7" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.6"/>
+  <text class="nb" x="238" y="524">ai_status = ok</text>
+  <text class="e" x="238" y="538">every figure in the</text>
+  <text class="e" x="238" y="549">text checks out</text>
+
+  <rect x="348" y="506" width="112" height="46" rx="7" fill="#fdf6e9" stroke="#b7791f" stroke-width="1.6"/>
+  <text class="nb" x="358" y="524">= unverified</text>
+  <text class="e" x="358" y="538">text is still saved</text>
+  <text class="e" x="358" y="549">and still shown</text>
+
+  <path d="M284,552 L284,572" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <path d="M404,552 L404,572" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="228" y="576" width="232" height="58" rx="7" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.6"/>
+  <text class="n" x="238" y="595">Store the whole exchange — facts sent,</text>
+  <text class="n" x="238" y="610">reply, check report, model, timings —</text>
+  <text class="n" x="238" y="625">and update the run’s ai_status.</text>
+
+  <!-- copilot lane -->
+  <rect x="488" y="176" width="192" height="44" rx="7" fill="#f2edfa" stroke="#6b4fa8" stroke-width="1.6"/>
+  <text class="n" x="498" y="194">Copilot calls the read-only</text>
+  <text class="n" x="498" y="210">tools to look the numbers up.</text>
+  <path d="M460,198 L484,198" fill="none" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+
+  <rect x="488" y="236" width="192" height="58" rx="7" fill="#f2edfa" stroke="#6b4fa8" stroke-width="1.6"/>
+  <text class="n" x="498" y="255">Writes one JSON document:</text>
+  <text class="n" x="498" y="270">summary, per-member notes,</text>
+  <text class="n" x="498" y="285">risks, moves, model notes.</text>
+  <path d="M584,220 L584,232" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <path d="M488,265 L464,265" fill="none" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+
+  <text class="e" x="488" y="316">It never computes or</text>
+  <text class="e" x="488" y="329">re-rounds a forecast figure.</text>
+  <text class="e" x="488" y="342">Everything it quotes must</text>
+  <text class="e" x="488" y="355">already exist in the facts.</text>
+
+  <!-- back to the window -->
+  <path d="M228,605 L188,605" fill="none" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+  <rect x="16" y="576" width="168" height="76" rx="7" fill="#ffffff" stroke="#c8a45c" stroke-width="1.5"/>
+  <text class="n" x="26" y="594">The <tspan class="nb">AI Summary</tspan> panel fills</text>
+  <text class="n" x="26" y="608">in on the Team result screen</text>
+  <text class="n" x="26" y="622">and the <tspan class="nb">Rebalancing</tspan> page lists</text>
+  <text class="n" x="26" y="636">the moves. If unverified, a</text>
+  <text class="n" x="26" y="648">blue banner appears above it.</text>
+  <path d="M100,652 L100,672" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <circle cx="100" cy="683" r="9" fill="none" stroke="#16202c" stroke-width="1.6"/>
+  <circle cx="100" cy="683" r="5" fill="#16202c"/>
+
+  <!-- failure collector -->
+  <rect x="8" y="722" width="684" height="60" rx="8" fill="#fdf0ef" stroke="#b3403a" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <text class="nb" x="22" y="740" fill="#8c2f2a">IF ANYTHING GOES WRONG, THE NUMBERS ARE UNTOUCHED — ONLY ai_status RECORDS IT</text>
+  <text class="n" x="22" y="757">failed:not_signed_in · failed:cli_unavailable · failed:timeout (no answer in 240 s) · failed:model_error ·</text>
+  <text class="n" x="22" y="772">failed:invalid_output (still malformed after 2 attempts) · failed:other. The forecast itself is already saved and stays correct.</text>
+</svg>

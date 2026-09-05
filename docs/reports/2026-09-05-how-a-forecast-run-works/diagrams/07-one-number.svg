@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 488" width="700" height="488" role="img"
+     aria-label="How one member-week figure is built: open work and predicted new work are converted to hours and added to give demand, capacity is computed from the calendar, and overload and the low-high band follow.">
+  <style>
+    text { font-family: "Segoe UI", Calibri, system-ui, sans-serif; fill: #16202c; }
+    .col { font-size: 10.5px; font-weight: 700; fill: #1d4d84; letter-spacing: .3px; }
+    .n   { font-size: 10.5px; }
+    .nb  { font-size: 10.5px; font-weight: 700; }
+    .chip{ font-size: 13px; font-weight: 700; }
+    .e   { font-size: 9.5px; fill: #5b6b7d; }
+    .big { font-size: 13.5px; font-weight: 700; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7d"/>
+    </marker>
+  </defs>
+
+  <text class="e" x="686" y="16" text-anchor="end">worked example — one person, one week</text>
+
+  <!-- column A -->
+  <text class="col" x="14" y="26">① WORK ALREADY ON THEIR PLATE</text>
+  <rect x="14" y="34" width="214" height="36" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4"/>
+  <text class="n" x="24" y="50">Estimated hours on every task</text>
+  <text class="n" x="24" y="64">they already hold today</text>
+
+  <rect x="14" y="78" width="214" height="50" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4"/>
+  <text class="n" x="24" y="94">× their <tspan class="nb">personal ratio</tspan> — how</text>
+  <text class="n" x="24" y="108">much longer they really take than</text>
+  <text class="n" x="24" y="122">estimated (held between 0.5 and 2.5)</text>
+
+  <rect x="14" y="136" width="214" height="36" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4"/>
+  <text class="n" x="24" y="152">− the part already done, but at</text>
+  <text class="n" x="24" y="166">least 15 % is always left to do</text>
+
+  <rect x="14" y="180" width="214" height="50" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4"/>
+  <text class="n" x="24" y="196">spread evenly over their working</text>
+  <text class="n" x="24" y="210">days, out to the due date plus</text>
+  <text class="n" x="24" y="224">however late they usually are</text>
+
+  <rect x="14" y="242" width="214" height="30" rx="6" fill="#eef4fb" stroke="#2f6fb5" stroke-width="1.8"/>
+  <text class="chip" x="121" y="263" text-anchor="middle">open hours  12.00</text>
+
+  <g stroke="#5b6b7d" stroke-width="1.5" fill="none">
+    <path d="M121,70 L121,74" marker-end="url(#a)"/>
+    <path d="M121,128 L121,132" marker-end="url(#a)"/>
+    <path d="M121,172 L121,176" marker-end="url(#a)"/>
+    <path d="M121,230 L121,238" marker-end="url(#a)"/>
+  </g>
+
+  <!-- column B -->
+  <text class="col" x="240" y="26">② WORK NOT YET ASSIGNED</text>
+  <rect x="240" y="34" width="214" height="50" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4"/>
+  <text class="n" x="250" y="50">The <tspan class="nb">champion model</tspan> predicts</text>
+  <text class="n" x="250" y="64">how many estimated hours of new</text>
+  <text class="n" x="250" y="78">work arrive for them that week</text>
+
+  <rect x="240" y="92" width="214" height="36" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4"/>
+  <text class="n" x="250" y="108">× the same personal ratio</text>
+  <text class="n" x="250" y="122">(the task-type-blind version)</text>
+
+  <rect x="240" y="136" width="214" height="50" rx="6" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4"/>
+  <text class="n" x="250" y="152">spread from the arrival week over</text>
+  <text class="n" x="250" y="166">their typical cycle length, so part</text>
+  <text class="n" x="250" y="180">of it lands in the following week</text>
+
+  <rect x="240" y="242" width="214" height="30" rx="6" fill="#eef4fb" stroke="#2f6fb5" stroke-width="1.8"/>
+  <text class="chip" x="347" y="263" text-anchor="middle">new hours  36.50</text>
+
+  <g stroke="#5b6b7d" stroke-width="1.5" fill="none">
+    <path d="M347,84 L347,88" marker-end="url(#a)"/>
+    <path d="M347,128 L347,132" marker-end="url(#a)"/>
+    <path d="M347,186 L347,238" marker-end="url(#a)"/>
+  </g>
+  <text class="e" x="352" y="212">only this half</text>
+  <text class="e" x="352" y="224">carries uncertainty</text>
+
+  <!-- column C -->
+  <text class="col" x="466" y="26">③ HOURS THEY ACTUALLY HAVE</text>
+  <rect x="466" y="34" width="220" height="50" rx="6" fill="#ffffff" stroke="#2e7d5b" stroke-width="1.4"/>
+  <text class="n" x="476" y="50">Weekly hours: <tspan class="nb">44</tspan> by default, or</text>
+  <text class="n" x="476" y="64">their standing override, or a</text>
+  <text class="n" x="476" y="78">one-week override (that one wins)</text>
+
+  <rect x="466" y="92" width="220" height="36" rx="6" fill="#ffffff" stroke="#2e7d5b" stroke-width="1.4"/>
+  <text class="n" x="476" y="108">÷ 5 = hours per working day</text>
+  <text class="n" x="476" y="122">(8.80 h at the 44 default)</text>
+
+  <rect x="466" y="136" width="220" height="50" rx="6" fill="#ffffff" stroke="#2e7d5b" stroke-width="1.4"/>
+  <text class="n" x="476" y="152">× the working days that survive</text>
+  <text class="n" x="476" y="166">weekends, public holidays and</text>
+  <text class="n" x="476" y="180">this person’s own leave</text>
+
+  <rect x="466" y="242" width="220" height="30" rx="6" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.8"/>
+  <text class="chip" x="576" y="263" text-anchor="middle">capacity  44.00</text>
+
+  <g stroke="#5b6b7d" stroke-width="1.5" fill="none">
+    <path d="M576,84 L576,88" marker-end="url(#a)"/>
+    <path d="M576,128 L576,132" marker-end="url(#a)"/>
+    <path d="M576,186 L576,238" marker-end="url(#a)"/>
+  </g>
+  <text class="e" x="476" y="206">a public holiday that week</text>
+  <text class="e" x="476" y="218">would make this 35.20</text>
+
+  <!-- merge to demand -->
+  <g stroke="#5b6b7d" stroke-width="1.6" fill="none">
+    <path d="M121,272 L121,292 L347,292"/>
+    <path d="M347,272 L347,292"/>
+    <path d="M234,292 L234,304" marker-end="url(#a)"/>
+  </g>
+
+  <rect x="84" y="308" width="300" height="46" rx="8" fill="#eaf1f9" stroke="#2f6fb5" stroke-width="2"/>
+  <text class="big" x="234" y="329" text-anchor="middle">DEMAND  =  12.00 + 36.50  =  48.50 h</text>
+  <text class="e" x="234" y="346" text-anchor="middle">this is the number in the “Demand” column</text>
+
+  <g stroke="#5b6b7d" stroke-width="1.6" fill="none">
+    <path d="M234,354 L234,366 L150,366 L150,376" marker-end="url(#a)"/>
+    <path d="M234,366 L500,366 L500,376" marker-end="url(#a)"/>
+    <path d="M576,272 L576,376" marker-end="url(#a)"/>
+  </g>
+
+  <rect x="14" y="380" width="340" height="88" rx="8" fill="#f6faff" stroke="#2f6fb5" stroke-width="1.6"/>
+  <text class="nb" x="26" y="398">LOW / HIGH BAND — only the new half is uncertain</text>
+  <text class="n" x="26" y="416">low  = 12.00 + max(0, 36.50 − 7.20)  =  41.30 h</text>
+  <text class="n" x="26" y="431">high = 12.00 + 36.50 + 9.60           =  58.10 h</text>
+  <text class="e" x="26" y="450">−7.20 / +9.60 are the champion’s 10th and 90th percentile rehearsal</text>
+  <text class="e" x="26" y="462">errors, rescaled by this person’s own ratio.</text>
+
+  <rect x="370" y="380" width="316" height="88" rx="8" fill="#fdf6e9" stroke="#b7791f" stroke-width="1.6"/>
+  <text class="nb" x="382" y="398">OVERLOAD = max(0, demand − capacity)</text>
+  <text class="n" x="382" y="418">= max(0, 48.50 − 44.00)  =  <tspan class="big">4.50 h</tspan></text>
+  <text class="e" x="382" y="442">Demand is never trimmed to fit capacity. The gap is</text>
+  <text class="e" x="382" y="456">reported so someone can act on it — that is the point.</text>
+</svg>

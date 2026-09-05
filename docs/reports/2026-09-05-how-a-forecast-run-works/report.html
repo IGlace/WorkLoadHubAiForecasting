@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How a forecast run works — WorkloadHub AI Forecasting</title>
+<link rel="stylesheet" href="report.css">
+</head>
+<body>
+
+<!-- ============================== COVER ============================== -->
+<div class="cover">
+  <div class="cover-top">
+    <div class="cover-eyebrow">WorkloadHub AI Forecasting · Version 1</div>
+    <h1>How a forecast run works</h1>
+    <p class="sub">What the program calculates, what the AI writes, and how to read every
+    number on the screen — explained without assuming you know the project.</p>
+    <div class="cover-rule"></div>
+    <div class="cover-abstract">
+      <p>This document answers eight questions about the <b>Runs</b> screens: what the
+      "champion model" is, what happens between pressing <i>Run forecast</i> and seeing a
+      result, why a run can be marked <i>unverified</i>, what "ask Copilot for the narrative"
+      means, what the blue interval bar with the black pipe shows, what the AI Summary
+      contains, how Rebalancing works, and what forecasting logic sits underneath all of it.</p>
+      <p>It contains ten diagrams. Each one is also supplied as UML source code
+      (PlantUML and Mermaid) so it can be re-rendered, edited, or dropped into a slide deck.</p>
+      <p><b>One idea carries the whole document:</b> the program produces every number;
+      the AI only produces sentences, and is checked afterwards against the numbers.</p>
+    </div>
+  </div>
+  <dl class="cover-meta">
+    <div><dt>Prepared</dt><dd>5 September 2026</dd></div>
+    <div><dt>Audience</dt><dd>Team leaders, department leads, management — no technical background needed</dd></div>
+    <div><dt>Applies to</dt><dd>Version 1, running on generated dummy data</dd></div>
+  </dl>
+</div>
+
+<!-- ============================== CONTENTS ============================== -->
+<section>
+<h2>Contents</h2>
+
+<div class="toc">
+<ol>
+  <li>What this application does<span class="toc-desc">The one-page version, and the single rule that governs everything</span></li>
+  <li>Where everything runs<span class="toc-desc">The four moving parts, and the only thing that ever leaves your PC — Figure 1</span></li>
+  <li>What happens when you press "Run forecast"<span class="toc-desc">The ten calculation stages, in order — Figure 2</span></li>
+  <li>Asking Copilot for the narrative<span class="toc-desc">What the second step actually does, and what the AI is and is not allowed to do — Figure 3</span></li>
+  <li>The same run, as a conversation between the parts<span class="toc-desc">A timing view: who asks whom, and in what order — Figure 4</span></li>
+  <li>The two status columns, and why a run says "unverified"<span class="toc-desc">Every value the Runs list can show, and what each one means — Figure 5</span></li>
+  <li>The forecasting logic, and the champion model<span class="toc-desc">The three candidate models, the rehearsal, and how one is chosen — Figure 6</span></li>
+  <li>How one person's hours are built<span class="toc-desc">From open work, arriving work and capacity to a single demand figure — Figure 7</span></li>
+  <li>The interval bar: the blue slide and the black pipe<span class="toc-desc">What the range means, and why some bars are wide and some vanish — Figure 8</span></li>
+  <li>The AI Summary<span class="toc-desc">Its six parts, where each appears on screen, and how far to trust it — Figure 9</span></li>
+  <li>Rebalancing<span class="toc-desc">How the suggested moves are produced and checked — Figure 10</span></li>
+  <li>What to trust, and what to treat with care<span class="toc-desc">An honest list of the limits of version 1</span></li>
+  <li>Glossary<span class="toc-desc">Every term used in the app, in one place</span></li>
+</ol>
+</div>
+
+<h3>Your questions, and where each is answered</h3>
+
+<table>
+<thead><tr><th style="width:56%">Question</th><th>Answered in</th></tr></thead>
+<tbody>
+<tr><td>What is the "champion model", and what is this champion mechanic?</td><td>Section 7 (Figure 6)</td></tr>
+<tr><td>A technical workflow diagram of everything that happens from clicking "run a forecast" to seeing a result</td><td>Sections 2–5 (Figures 1–4) and Appendix A, which contains the UML source code</td></tr>
+<tr><td>Why is a run in Runs marked "unverified"?</td><td>Section 6 (Figure 5)</td></tr>
+<tr><td>What does it mean to ask Copilot for the narrative?</td><td>Section 4 (Figure 3)</td></tr>
+<tr><td>What is the interval field — the blue slide with a black pipe at a different position for each person?</td><td>Section 9 (Figure 8)</td></tr>
+<tr><td>What does the AI Summary do, and what does each thing inside it represent?</td><td>Section 10 (Figure 9)</td></tr>
+<tr><td>What does the Rebalancing section do, and how does it work?</td><td>Section 11 (Figure 10)</td></tr>
+<tr><td>What reasoning logic, algorithms and models does the system use to forecast?</td><td>Sections 7 and 8 (Figures 6 and 7)</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<span class="callout-title">How to read this document</span>
+<p>Every section stands on its own — you can jump straight to the one you need. Sections 1
+to 6 describe the <i>process</i>; sections 7 to 9 describe the <i>maths</i>; sections 10 and 11
+describe <i>what the AI writes</i>. Section 12 is the honest list of limits, and is the section
+to read before making a staffing decision on the strength of a forecast.</p>
+</div>
+
+</section>
+
+<!-- ============================== 1 ============================== -->
+<section>
+<h2><span class="num">1</span>What this application does</h2>
+
+<p class="lead">In one sentence: it looks at how your team has worked in the past, estimates
+how many hours of work each person is likely to have over the next two weeks, compares that
+with the hours they are actually available, and tells you who is about to be overloaded.</p>
+
+<h3>The three quantities</h3>
+
+<dl class="defs">
+<dt>Demand</dt>
+<dd>Hours of work a person is expected to have to do in a given week. It has two halves:
+work that is <b>already open and assigned</b> to them, and work that has <b>not arrived yet</b>
+but is expected to, based on history.</dd>
+
+<dt>Capacity</dt>
+<dd>Hours that person is actually available in that week, after weekends, public holidays,
+vacations and any manual override are removed. The starting point is 44 hours per full
+week — 8.8 hours per working day, Monday to Friday.</dd>
+
+<dt>Overload</dt>
+<dd>The excess: demand minus capacity, when demand is larger. If demand is smaller,
+overload is zero. It is never negative.</dd>
+</dl>
+
+<div class="key">
+<span class="callout-title">The rule that governs the whole product</span>
+<p><b>Demand is never trimmed to fit capacity.</b> If the arithmetic says a person is
+expected to have 61 hours of work in a 35-hour week, the app shows 61 hours and reports
+26 hours of overload. It does not quietly cap the figure at 35 and pretend everything is
+fine. Making the problem visible is the entire point of the tool.</p>
+</div>
+
+<h3>Where the AI fits — and where it does not</h3>
+
+<p>The application uses your own GitHub Copilot seat. It is important to be precise about
+what that means, because it is the single most common misunderstanding:</p>
+
+<table>
+<thead><tr><th style="width:50%">Produced by ordinary program code</th><th>Produced by the AI</th></tr></thead>
+<tbody>
+<tr><td>Every hour figure on every screen</td><td>Sentences</td></tr>
+<tr><td>Demand, capacity, overload, the interval range</td><td>The explanation of <i>why</i> a pattern looks the way it does</td></tr>
+<tr><td>Who is overloaded and who is underused</td><td>A written risk description for the team</td></tr>
+<tr><td>Which forecasting model was chosen, and its score</td><td>Suggested moves of work between people</td></tr>
+<tr><td>The history behind each person</td><td>Suggested changes to someone's available hours</td></tr>
+</tbody>
+</table>
+
+<p>The two figures in the right-hand column — the size of a suggested move and the size of a
+suggested capacity change — are the <b>only</b> numbers the AI is allowed to originate, because
+they are proposals, not measurements. Every other number it writes must already exist in the
+saved facts, and the program checks that, sentence by sentence, before you are shown the text.
+Section 6 explains what happens when a number fails that check.</p>
+
+<h3>Two things worth knowing before you go further</h3>
+
+<div class="warn">
+<span class="callout-title">Version 1 runs on generated data</span>
+<p>The people, projects and tasks in the current build are dummy data produced by a
+generator, not your real backlog. Everything in this document describes real, working
+machinery — but the specific numbers you see on screen today are not about your real team.</p>
+</div>
+
+<div class="note">
+<span class="callout-title">The forecast is always two weeks</span>
+<p>Every run covers exactly two weeks. If you run it on a Monday, those are this week and
+next week. On any other day, the current week is already partly spent, so the run covers
+the <i>next</i> two full weeks instead. There is no other horizon; the number cannot be changed
+from the screen.</p>
+</div>
+
+</section>
+
+<!-- ============================== 2 ============================== -->
+<section>
+<h2><span class="num">2</span>Where everything runs</h2>
+
+<p class="lead">Four pieces, and only one arrow that leaves your machine.</p>
+
+<figure>
+<img src="diagrams/01-architecture.svg" alt="Component diagram: the Electron window and the Python forecast service both run on your Windows PC, alongside the SQLite database file; only the narrative request reaches GitHub Copilot in the cloud.">
+<figcaption><b>Figure 1 — Where each piece runs.</b> Everything inside the outer box is on
+your own PC. The only thing that ever crosses the boundary is the request for the written
+narrative, and only when you ask for one.</figcaption>
+</figure>
+
+<dl class="defs">
+<dt>The window</dt>
+<dd>What you click on: the desktop application. It draws screens and tables. It performs
+no calculations of its own — every figure it shows was computed elsewhere and handed to it.</dd>
+
+<dt>The forecast service</dt>
+<dd>A small program that starts up invisibly with the app and does all the arithmetic:
+reads the history, fits the models, computes demand, capacity and overload, and saves
+the result. This is where every number in the product is born.</dd>
+
+<dt>The database file</dt>
+<dd>A single file on your disk holding people, teams, projects, tasks, the calendar,
+capacity overrides, and every run ever computed. Nothing is stored anywhere else.</dd>
+
+<dt>GitHub Copilot</dt>
+<dd>Reached through your own signed-in Copilot command-line tool — your seat, your login.
+It is contacted only when a narrative is requested, never during the calculation. No key
+belonging to any other AI provider is used, or can be added.</dd>
+</dl>
+
+<h3>What crosses the boundary</h3>
+
+<p>When — and only when — you ask for the narrative, the service sends Copilot the facts of
+that one run: the team's name, the members' names, their weekly hours, the overload figures,
+and thirteen weeks of history per person. The exact content of what was sent is stored back
+in the database next to the run, so it can be audited later. Nothing else, from any other
+team or any other run, is ever included.</p>
+
+<div class="note">
+<span class="callout-title">If you never ask for a narrative</span>
+<p>…then nothing leaves the machine at all. The forecast is complete and fully usable
+without ever contacting Copilot. The AI is an optional layer of explanation on top of a
+finished result.</p>
+</div>
+
+</section>
+
+<!-- ============================== 3 ============================== -->
+<section>
+<h2><span class="num">3</span>What happens when you press "Run forecast"</h2>
+
+<p class="lead">Ten stages, all of them ordinary arithmetic and statistics. No AI is involved
+in any of them.</p>
+
+<figure>
+<img src="diagrams/02-activity-numbers.svg" alt="Activity diagram with two swimlanes showing the ten deterministic stages of a forecast run, from the click through to the saved result.">
+<figcaption><b>Figure 2 — The ten calculation stages.</b> The left lane is you and the app
+window; the right lane is the forecast service. If any part of the save fails, the whole run
+is rolled back and no row appears in the Runs list at all.</figcaption>
+</figure>
+
+<h3>The stages in words</h3>
+
+<ol>
+<li><b>Collect.</b> Read every task, person, project, holiday, vacation and capacity override
+from the database.</li>
+<li><b>Decide the two weeks.</b> Monday-start weeks. If today is a Monday, forecast this week
+and next; otherwise the next two full weeks.</li>
+<li><b>Build a weekly history.</b> Turn the raw task records into one row per person per week:
+how much work arrived, how much was open, how long things took.</li>
+<li><b>Rehearse.</b> Rewind the clock to several points in the past and test each candidate
+model on weeks it had never seen. This is the backtest — section 7.</li>
+<li><b>Pick a champion.</b> Score every candidate on the rehearsal and keep the best, with a
+safety rule that falls back to the simple baseline if none of them beats it.</li>
+<li><b>Predict.</b> Retrain the champion on all the history and predict how many <i>newly
+arriving</i> hours each person will pick up in each of the two weeks.</li>
+<li><b>Add the work already open.</b> For every task currently assigned and unfinished,
+estimate how much of it remains and spread that across the working days ahead.</li>
+<li><b>Work out capacity.</b> Count each person's available hours per week, removing weekends,
+holidays and leave, and applying any override. Demand is open plus new; overload is the excess.</li>
+<li><b>Attach a range.</b> Give each figure a low and a high value, derived from how wrong
+the champion was during the rehearsal — section 9.</li>
+<li><b>Save.</b> Write the run, both weeks for every person, and a full fact sheet, in one
+single all-or-nothing transaction.</li>
+</ol>
+
+<h3>What "all-or-nothing" means here</h3>
+
+<p>The run row, the per-person figures and the fact sheet are written together or not at all.
+There is no half-saved run. This has one visible consequence: <b>a failed forecast does not
+appear in the Runs list as a failed run — it does not appear at all.</b> If you pressed the
+button and no new row showed up, the calculation did not complete.</p>
+
+<div class="key">
+<span class="callout-title">Everything above is reproducible</span>
+<p>The same database and the same date produce the same numbers, every time. There is no
+randomness in the pipeline, and nothing in these ten stages depends on a network connection,
+a subscription, or a model being available.</p>
+</div>
+
+</section>
+
+<!-- ============================== 4 ============================== -->
+<section>
+<h2><span class="num">4</span>Asking Copilot for the narrative</h2>
+
+<p class="lead">"Narrative" simply means <i>the words</i> — the paragraphs that explain the
+numbers you already have. Asking for it is a separate, optional, second step.</p>
+
+<figure>
+<img src="diagrams/03-activity-narrative.svg" alt="Activity diagram with three swimlanes showing the narrative request, the Copilot session with its retry loop, the shape check and the number check, and the ok or unverified outcome.">
+<figcaption><b>Figure 3 — Asking for the words.</b> The forecast is already saved before this
+starts. The two diamonds are the two checks: first that the answer has the right shape, then
+that every number in it is real.</figcaption>
+</figure>
+
+<h3>What actually happens</h3>
+
+<ol>
+<li>The service reloads the facts that this run already saved. It does not recalculate
+anything, and it does not read the database freely — it uses the frozen snapshot.</li>
+<li>It opens a session on <b>your own signed-in Copilot command-line tool</b>. If you are not
+signed in, the request stops here with a clear reason.</li>
+<li>It hands over three things: a rule sheet ("you may not invent a number"), the facts, and
+<b>eight read-only tools</b> the model can call to look things up — plus five short
+in-house guides on this specific domain, so the model uses the right vocabulary.</li>
+<li>The model reads what it needs by calling those tools, then writes one structured document:
+a run summary, a note per person, the team-level risks, suggested moves, suggested capacity
+changes, and a note on the models used.</li>
+<li>The service checks the answer's <b>shape</b> against a strict template. A missing section,
+an unexpected field or an over-long block fails. On failure it asks again — at most twice in
+total, then gives up.</li>
+<li>The service then checks every <b>number</b> in the prose against the facts. Result:
+<span class="pill pill-ok">ok</span> or <span class="pill pill-warn">unverified</span>.</li>
+<li>The whole exchange is stored: the exact facts sent, the answer received, the check report,
+the model name and the timings.</li>
+</ol>
+
+<h3>The eight tools</h3>
+
+<p>The model cannot browse your database. It can only call eight narrow, read-only lookups —
+"give me this member's two weeks", "give me the team totals", "give me this person's
+thirteen weeks of history", and so on. Each returns exactly the stored numbers and nothing
+else. It cannot write, delete, or reach outside this one run.</p>
+
+<h3>If it goes wrong</h3>
+
+<p>Nothing that goes wrong here can change a single forecast figure — the numbers were saved
+before Copilot was contacted. Only a status is recorded:</p>
+
+<table>
+<thead><tr><th style="width:34%">Recorded reason</th><th>What it means in practice</th></tr></thead>
+<tbody>
+<tr><td><code>failed:not_signed_in</code></td><td>Your Copilot login has expired or was never completed. Sign in and ask again.</td></tr>
+<tr><td><code>failed:cli_unavailable</code></td><td>The Copilot command-line tool could not be started.</td></tr>
+<tr><td><code>failed:timeout</code></td><td>No answer within four minutes. Usually transient — ask again.</td></tr>
+<tr><td><code>failed:model_error</code></td><td>Copilot itself returned an error.</td></tr>
+<tr><td><code>failed:invalid_output</code></td><td>The answer never matched the required shape, twice in a row.</td></tr>
+<tr><td><code>failed:other</code></td><td>Anything else.</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<span class="callout-title">You can ask later, and you can ask again</span>
+<p>A run saved without a narrative sits at <i>not requested</i> and can be narrated at any time
+from the Runs list. A run that already has one can be re-narrated. Re-asking replaces the
+stored record of the previous answer, so if you need to keep an earlier narrative for the
+record, copy it out first.</p>
+</div>
+
+</section>
+
+<!-- ============================== 5 ============================== -->
+<section>
+<h2><span class="num">5</span>The same run, as a conversation between the parts</h2>
+
+<p class="lead">Figures 2 and 3 show <i>what</i> is computed. This one shows <i>who talks to whom</i>,
+and in what order — the view your engineers will recognise fastest.</p>
+
+<figure>
+<img src="diagrams/04-sequence.svg" alt="Sequence diagram with six participants: you, the window, the bridge, the forecast service, the database and Copilot, showing both HTTP calls and the optional narrative fragment.">
+<figcaption><b>Figure 4 — One click, two requests, one saved run.</b> Dashed arrows are
+replies. The boxed <i>opt</i> region happens only if a narrative is asked for; the nested
+<i>loop</i> is the model looking facts up through the read-only tools.</figcaption>
+</figure>
+
+<h3>Reading the diagram</h3>
+
+<ul>
+<li><b>Six participants.</b> You, the window you click in, the bridge that holds the security
+token, the forecast service, the database file, and Copilot.</li>
+<li><b>Two requests only.</b> One to compute the forecast, and optionally one to write the
+narrative. Everything else is internal.</li>
+<li><b>The window waits.</b> Both requests are synchronous — the screen shows an elapsed
+counter, fed by a small progress check it performs once a second. That counter is a display
+convenience, not a separate job.</li>
+<li><b>The order matters.</b> The forecast is committed to disk <i>before</i> Copilot is ever
+contacted. This is the structural guarantee behind "the AI cannot change a number".</li>
+<li><b>A notification.</b> If anyone in the run comes out over capacity, Windows shows a
+notification when the calculation finishes.</li>
+</ul>
+
+<h3>The security token</h3>
+
+<p>The forecast service listens only on your own machine, and refuses any request that does
+not carry a token generated when the app started. Another program on your PC — or anything on
+your network — cannot read your workload data by talking to it.</p>
+
+</section>
+
+<!-- ============================== 6 ============================== -->
+<section>
+<h2><span class="num">6</span>The two status columns, and why a run says "unverified"</h2>
+
+<p class="lead">The Runs list has two status columns and they mean completely different
+things. One is about the maths. The other is about the words.</p>
+
+<figure>
+<img src="diagrams/05-state-machine.svg" alt="State machine with two regions: run.status, whose only reachable value is done, and ai_status, moving from not requested through asking to ok, unverified or failed.">
+<figcaption><b>Figure 5 — Every value the two columns can hold.</b> Top: the run itself.
+Bottom: the narrative.</figcaption>
+</figure>
+
+<h3>The first column: did the maths finish?</h3>
+
+<p>In practice this column only ever reads <b>done</b>. There is no "running" and no "failed",
+because the row is written only at the very end, after every stage has succeeded. A run that
+failed leaves no row behind. So: <b>if it is in the list, its numbers are complete and correct
+arithmetic.</b></p>
+
+<h3>The second column: did the AI write the words, and did they check out?</h3>
+
+<table>
+<thead><tr><th style="width:26%">Value</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><span class="pill pill-info">not requested</span></td><td>You have not asked for a narrative. The numbers are all there; there is simply no prose. This is the normal state of a fresh run.</td></tr>
+<tr><td><span class="pill pill-ok">ok</span></td><td>Every number the AI wrote was found in the run's own facts, in the right place.</td></tr>
+<tr><td><span class="pill pill-warn">unverified</span></td><td>At least one number in the prose could not be matched. The text is still saved and still shown in full, with an information banner above it.</td></tr>
+<tr><td><span class="pill pill-bad">failed:…</span></td><td>No narrative was produced at all. The reason is recorded — see the table in section 4.</td></tr>
+</tbody>
+</table>
+
+<h3 id="unverified">Why a run gets marked "unverified"</h3>
+
+<p>After the AI returns its text, the program reads back through every sentence, pulls out
+every number, and asks: <i>does this figure exist in the facts that this particular sentence is
+allowed to quote?</i> A note about Amina may quote Amina's hours; it may not quote Karim's. If
+one number cannot be matched, the run is marked unverified.</p>
+
+<p>There are three realistic causes, and they are very different in seriousness:</p>
+
+<div class="warn">
+<span class="callout-title">1 — The AI genuinely got a number wrong</span>
+<p>It wrote 46.5 where the facts say 45.6, or rounded differently, or added two numbers
+together to produce a total that appears nowhere. This is the case the check exists to catch.
+Trust the table, not the sentence.</p>
+</div>
+
+<div class="note">
+<span class="callout-title">2 — The number is real but attributed to the wrong person or field</span>
+<p>A perfectly genuine figure quoted under the wrong member, or described as capacity when it
+is demand. The check is deliberately strict about this, because a right number in the wrong
+place is exactly as misleading as a wrong number.</p>
+</div>
+
+<div class="plain">
+<span class="callout-title">3 — Harmless collateral</span>
+<p>Whole numbers of 20 or less are skipped by the check unless written with an hours unit
+("she has 5 tasks" is ignored; "5 h" is not), precisely so that counting words do not cause
+false alarms. But percentages, dates written unusually, or a figure quoted from a different
+week can still trip it. Not every unverified flag is an error of substance.</p>
+</div>
+
+<div class="key">
+<span class="callout-title">What to do about it</span>
+<p><b>Unverified affects only the prose. It never affects a single number in the tables or
+charts.</b> Treat it as: <i>read this text more carefully, and check any figure it quotes against
+the table beside it.</i> If it looks wrong, ask for the narrative again — the numbers stay
+exactly as they are.</p>
+</div>
+
+</section>
+
+<!-- ============================== 7 ============================== -->
+<section>
+<h2><span class="num">7</span>The forecasting logic, and the champion model</h2>
+
+<p class="lead">This is the answer to "what is the champion mechanic". Short version:
+the app does not trust any one forecasting method. It makes three of them compete on your
+team's real history, and uses the winner.</p>
+
+<h3>The three candidates</h3>
+
+<dl class="defs">
+<dt>Seasonal naive — the baseline</dt>
+<dd>"Next week will look like the same week last year." It looks back 364 days — exactly
+52 weeks, so the same day of the week — and repeats what it finds. It is deliberately
+unsophisticated. Its job is to be the bar the others must clear.</dd>
+
+<dt>TSB — for stop-start work</dt>
+<dd>Named after the three statisticians who devised it. Built for work that arrives
+<i>intermittently</i>: nothing for three weeks, then a burst. It tracks two things separately —
+how often work arrives, and how big it is when it does — which stops it from being fooled by
+long quiet stretches.</dd>
+
+<dt>Gradient boosting — the pattern learner</dt>
+<dd>A machine-learning method that builds many small decision rules, each correcting the
+mistakes of the last. It is given 26 pieces of context per person per week — recent weeks,
+rolling averages, position in the month, and so on — and learns which combinations tend to
+precede a busy week.</dd>
+</dl>
+
+<h3>The rehearsal, and how the winner is chosen</h3>
+
+<figure>
+<img src="diagrams/06-champion.svg" alt="Diagram of the rolling-origin backtest: up to six rewind points two weeks apart, three candidate models, and their MASE scores compared against the baseline of 1.00.">
+<figcaption><b>Figure 6 — The rehearsal.</b> At each rewind point every model sees only the
+weeks before it, then must forecast what came next. The score is the average error, expressed
+as a multiple of the baseline's error.</figcaption>
+</figure>
+
+<p>The app rewinds the clock to a point in the past, hides everything after it, and asks each
+model to forecast the weeks that followed — which it can then mark, because it knows what
+actually happened. It repeats this at <b>up to six</b> rewind points, two weeks apart. "Up to"
+matters: a team with a short history gets fewer rewind points, and with less than about three
+months of usable history it gets none at all.</p>
+
+<h4>The score</h4>
+
+<p>Each model gets one number. It is its average error divided by the baseline's average
+error, so:</p>
+
+<table>
+<thead><tr><th class="num" style="width:18%">Score</th><th>Reading</th></tr></thead>
+<tbody>
+<tr><td class="num"><b>1.00</b></td><td>Exactly as good as the naive baseline.</td></tr>
+<tr><td class="num"><b>0.80</b></td><td>20 % less error than the baseline. Good.</td></tr>
+<tr><td class="num"><b>1.15</b></td><td>Worse than simply repeating last year. Rejected.</td></tr>
+</tbody>
+</table>
+
+<p><b>Lower is better, and 1.00 is the line that matters.</b> The winner — the champion — is
+the model with the lowest score, and it is what the Runs screen names.</p>
+
+<h4>The safety rule</h4>
+
+<p>If the best score is 1.00 or worse, no candidate has earned its place, and the app forces
+the choice back to the simple baseline. It would rather be predictably plain than
+confidently wrong.</p>
+
+<div class="warn">
+<span class="callout-title">Three things the champion figure does not tell you</span>
+<ul style="margin-bottom:0">
+<li><b>It only covers the arriving half of the work.</b> The champion predicts <i>newly arriving</i>
+hours. The hours already open on assigned tasks are computed by a different method entirely
+(section 8) and are not scored at all. So "20 % better than the baseline" does not mean the
+demand figure on screen is 20 % better — often the open half is the larger of the two.</li>
+<li><b>The number shown is not always the winner's score.</b> When the safety rule fires, what
+is reported is the baseline's own score, not the score of the model that was rejected.</li>
+<li><b>It is one number for the whole run</b>, not per person. Individuals can be forecast much
+better or much worse than the headline suggests.</li>
+</ul>
+</div>
+
+<h3>One more thing about how the models are trained</h3>
+
+<p>Both the arrival model and the effort model are fitted on <b>everyone in the database</b>
+who counts toward workload, not just the team you are forecasting — then used to predict only
+that team. This is deliberate: it gives the models far more history to learn from, which
+matters most for small teams. The trade-off is that a team whose work is genuinely unlike the
+rest of the organisation is being forecast partly from other people's patterns.</p>
+
+</section>
+
+<!-- ============================== 8 ============================== -->
+<section>
+<h2><span class="num">8</span>How one person's hours are built</h2>
+
+<p class="lead">Every demand figure in the product is the sum of exactly two things, compared
+against a third. This is that arithmetic, end to end.</p>
+
+<figure>
+<img src="diagrams/07-one-number.svg" alt="Diagram showing open work plus newly arriving work combining into demand, compared against capacity, producing the interval band and the overload figure.">
+<figcaption><b>Figure 7 — One person, one week.</b> Column ① is work that already exists.
+Column ② is work predicted by the champion. Column ③ is availability. Demand is ① + ②;
+overload is what demand exceeds ③ by.</figcaption>
+</figure>
+
+<h3>① Work already open</h3>
+
+<p>For every unfinished task assigned to the person, the app has to answer two questions:
+<i>how much work is left in it?</i> and <i>when will that work land?</i></p>
+
+<ul>
+<li><b>How much is left.</b> It compares the task's own estimate against how long comparable
+tasks have actually taken in the past, and blends the two. A team that habitually
+under-estimates has its estimates scaled up; one that over-estimates has them scaled down.
+The adjustment is capped — never below half, never above two and a half times — so one
+freak task cannot distort everything. And it never assumes a task is more than 85 % done:
+even a task that looks finished carries a small remainder.</li>
+<li><b>When it lands.</b> A model trained on how long past tasks took predicts a finish date,
+and the remaining hours are spread evenly across the working days between now and then.
+Only the hours that land inside the two forecast weeks appear in the result.</li>
+</ul>
+
+<p>New teams are not left without an answer: where there is not enough history, sensible
+defaults apply — a five-working-day cycle, and estimates trusted as written.</p>
+
+<h3>② Work not yet arrived</h3>
+
+<p>This is the champion model's output from section 7: the hours of new work this person is
+expected to pick up in each of the two weeks, based on the pattern of how work has reached
+them historically.</p>
+
+<h3>③ Capacity</h3>
+
+<p>Capacity starts from a weekly figure — 44 hours by default — and is scaled by how many of
+that week's five working days the person is actually available:</p>
+
+<pre><code>capacity for the week = weekly hours × (available working days ÷ 5)
+
+Example: 44 h/week, one public holiday and two days of vacation
+         → 2 available days → 44 × 2 ÷ 5 = 17.60 h</code></pre>
+
+<p>Weekends never count. Public holidays and approved leave are removed. Where several rules
+could apply, the most specific wins: an override for that exact week beats a standing override
+for that person, which beats the default.</p>
+
+<div class="note">
+<span class="callout-title">About the 44 hours</span>
+<p>44 h is the value the dummy data is seeded with, not a constant enforced at run time. Each
+person carries their own weekly hours, and part-time members are handled correctly. If a
+capacity figure looks wrong, the fix is in that person's record or in an override — not in a
+global setting.</p>
+</div>
+
+<h3>Putting it together</h3>
+
+<pre><code>demand   = open hours + newly arriving hours       (never capped)
+overload = demand − capacity, or 0 if demand is smaller</code></pre>
+
+<p>A person is listed as <b>overloaded</b> when their overload across the two weeks is above
+zero — any excess at all, no tolerance band. A person is listed as <b>underused</b> when they
+have capacity but their two-week demand is below 70 % of it.</p>
+
+<div class="warn">
+<span class="callout-title">Two small honesties about the arithmetic</span>
+<p><b>Rounding.</b> Each component is rounded to two decimals before being added, so a total
+can differ from the sum you would get by hand by about a hundredth of an hour. Irrelevant for
+decisions, occasionally visible in a table.</p>
+<p><b>Work beyond the horizon.</b> Open-task hours that would land after the second forecast
+week are simply not shown — they are outside the window. A person's total open workload can
+therefore be larger than the two-week demand figure suggests.</p>
+</div>
+
+</section>
+
+<!-- ============================== 9 ============================== -->
+<section>
+<h2><span class="num">9</span>The interval bar: the blue slide and the black pipe</h2>
+
+<p class="lead">The blue bar is the range the forecast could plausibly fall in. The black pipe
+is the single figure the app is actually reporting. They are not always centred on each other,
+and that asymmetry is meaningful.</p>
+
+<figure>
+<img src="diagrams/08-interval-bar.svg" alt="Three example interval bars on a shared hours axis: a wide band with an off-centre marker, a narrow band, and a collapsed band shown as a single value.">
+<figcaption><b>Figure 8 — Three people, one scale.</b> Every row in the table uses the same
+horizontal scale, so widths are directly comparable between people.</figcaption>
+</figure>
+
+<h3>How to read one row</h3>
+
+<dl class="defs">
+<dt>The black pipe</dt>
+<dd>The forecast demand for that person and week — the same number printed beside it. This is
+the figure to plan with.</dd>
+
+<dt>The left end of the blue bar</dt>
+<dd>A plausible low outcome: less new work arrives than expected.</dd>
+
+<dt>The right end</dt>
+<dd>A plausible high outcome: more arrives than expected.</dd>
+
+<dt>The width</dt>
+<dd><b>How predictable this person is.</b> A wide bar means their workload has historically
+been erratic. A narrow bar means it has been steady. Width is the most useful thing on the
+chart, and it is why the shared scale matters.</dd>
+</dl>
+
+<h3>Why the pipe is rarely in the middle</h3>
+
+<p>Because only half of the demand carries any uncertainty. Work already open and assigned is
+known — it is counted as fact. Only the newly-arriving half is a prediction, and only that
+half gets a range. So a person with a large open backlog and little incoming work has a
+narrow bar sitting near their demand figure, while a person whose week is mostly speculative
+gets a wide one. The ends are also allowed to be lopsided: history is often more capable of
+surprising you upwards than downwards.</p>
+
+<h3>Where the range comes from</h3>
+
+<p>From the rehearsal in section 7. The app kept every mistake the champion made during the
+backtest, then took the band that covers the middle 80 % of them — the 10th to the 90th
+percentile. That band is scaled to the individual by how far their own estimates have
+historically run from reality, and applied to the arriving half of their demand.</p>
+
+<div class="warn">
+<span class="callout-title">What "80 %" here does and does not mean</span>
+<p>It means: <i>80 % of the errors this model made in rehearsal were inside this range.</i> It is
+not a calibrated, statistically guaranteed 80 % confidence interval, it has never been tested
+against how often reality actually lands inside it, and it says nothing about the open-work
+half. Read it as a well-founded indication of steadiness, not as a probability you could bet on.</p>
+</div>
+
+<div class="note">
+<span class="callout-title">If a bar has no blue slide at all</span>
+<p>A collapsed bar — a single value, no range — means the rehearsal produced no usable errors
+to work from, usually because the history was too short to score. It is not a claim of perfect
+certainty; it is the absence of evidence. Nothing on the screen distinguishes the two cases,
+so treat a collapsed bar as <i>unknown</i>, not as <i>exact</i>.</p>
+</div>
+
+</section>
+
+<!-- ============================== 10 ============================== -->
+<section>
+<h2><span class="num">10</span>The AI Summary</h2>
+
+<p class="lead">The AI Summary turns a screen of tables into a short written briefing. It adds
+no information — it re-tells, in sentences, what the numbers already say, and points out what
+is worth your attention.</p>
+
+<figure>
+<img src="diagrams/09-ai-summary.svg" alt="Diagram mapping the six parts of the narrative document to the three screens they appear on, with a caveat card.">
+<figcaption><b>Figure 9 — The six parts of the narrative, and where each one surfaces.</b>
+The panel on the Team result screen shows roughly a third of the document; the rest is on the
+Member screens and the Rebalancing page.</figcaption>
+</figure>
+
+<h3>What each part contains</h3>
+
+<dl class="defs">
+<dt>Run summary</dt>
+<dd>A short paragraph on the whole team: the shape of the two weeks, how many people are
+over capacity, whether the pressure is concentrated or spread. Read this first.</dd>
+
+<dt>Per-member notes</dt>
+<dd>For each person: a risk level, a one-line summary, any warnings, and observed patterns —
+"consistently above capacity in the second week", "workload has climbed for four weeks".
+These appear on the individual member screens.</dd>
+
+<dt>Team risks</dt>
+<dd>Issues that belong to the team rather than a person: a single point of failure, a project
+concentrated on one individual, a week where several people peak together. Each has a title,
+a detail, and the members it concerns.</dd>
+
+<dt>Suggested moves</dt>
+<dd>Proposals to shift hours from one person to another in a specific week, with a reason.
+Covered fully in section 11.</dd>
+
+<dt>Suggested capacity changes</dt>
+<dd>Proposals to change someone's available hours — overtime, or reduced load — rather than
+move the work.</dd>
+
+<dt>Model notes</dt>
+<dd>A plain-language remark about which model won and how confident the forecast is. This is
+the AI describing the champion mechanic from section 7 in its own words.</dd>
+</dl>
+
+<h3>How much to trust it</h3>
+
+<div class="key">
+<span class="callout-title">The figures inside it are checked</span>
+<p>Every number in the prose has been matched against the run's own facts before you see it.
+When the panel reads <span class="pill pill-ok">ok</span>, every figure it quotes is one the
+program itself calculated. That is a much stronger guarantee than a normal chatbot answer.</p>
+</div>
+
+<div class="warn">
+<span class="callout-title">The reasoning inside it is not checked</span>
+<p>Only figures are verified. Causal claims — "because the Atlas migration landed" — are the
+model's interpretation, produced from the numbers alone. It does not know about your
+reorganisation, the customer who went quiet, or the person about to go on parental leave.
+Read the interpretations as a well-informed colleague's first reading, not as findings.</p>
+</div>
+
+<p>If the panel carries an <span class="pill pill-warn">unverified</span> banner, section 6
+explains what that means and what to do about it. The text is still shown in full — nothing
+is hidden from you.</p>
+
+</section>
+
+<!-- ============================== 11 ============================== -->
+<section>
+<h2><span class="num">11</span>Rebalancing</h2>
+
+<p class="lead">The Rebalancing page suggests moving hours from people who are over capacity to
+people who have room. It is a discussion aid. It changes nothing.</p>
+
+<figure>
+<img src="diagrams/10-rebalancing.svg" alt="Diagram of the rebalancing flow: the program sorts people into overloaded and underused, hands the facts to Copilot, Copilot writes the suggested moves, and the program validates each one.">
+<figcaption><b>Figure 10 — How a suggestion is produced and checked.</b> The two lists are
+computed by the program; the moves between them are written by the model and then validated.</figcaption>
+</figure>
+
+<h3>The three steps</h3>
+
+<ol>
+<li><b>The program sorts everyone into two lists.</b> Overloaded: two-week overload above zero.
+Underused: has capacity, and two-week demand below 70 % of it. These lists are pure
+arithmetic — no judgement involved.</li>
+<li><b>Copilot is handed those lists</b>, together with each person's weekly figures and their
+thirteen weeks of history.</li>
+<li><b>Copilot writes the moves</b> — from whom, to whom, which week, how many hours, and why.
+Each proposal is then validated against the facts: the source must really be over capacity in
+that week, the destination must really have room, and the hours must not exceed the room
+available.</li>
+</ol>
+
+<h3>What is checked, and what is not</h3>
+
+<table>
+<thead><tr><th style="width:50%">✓ Checked by the program</th><th>⚠ Not checked — your judgement</th></tr></thead>
+<tbody>
+<tr><td>The source person is genuinely overloaded that week</td><td>Whether the receiving person can actually do that work</td></tr>
+<tr><td>The receiving person genuinely has room that week</td><td>Whether the task can be handed over at all mid-flight</td></tr>
+<tr><td>The hours moved do not exceed the room available</td><td>Client, security or contractual constraints</td></tr>
+<tr><td>Both people are in this run</td><td>The cost of the handover itself</td></tr>
+<tr><td>Every figure quoted exists in the facts</td><td>Leave, notice periods, anything not in the database</td></tr>
+</tbody>
+</table>
+
+<h3>Two limits to be aware of</h3>
+
+<div class="warn">
+<span class="callout-title">There is no optimiser behind this</span>
+<p>The app does not solve an assignment problem or search for a best allocation. The two lists
+are arithmetic; the moves themselves are written by the language model and checked afterwards.
+Expect sensible, plausible suggestions — not a mathematically optimal plan, and not a
+complete one.</p>
+</div>
+
+<div class="warn">
+<span class="callout-title">Suggestions are validated one at a time</span>
+<p>Each move is checked on its own, against the original figures. Three separate moves that
+each individually fit into the same person's spare capacity will each pass the check — and
+together will overload them. Look at the list as a whole before acting on any of it.</p>
+</div>
+
+<div class="key">
+<span class="callout-title">Nothing is applied</span>
+<p>There is no button that moves work. No task is reassigned, no schedule changes, no one is
+notified. The page produces a list you can take into a conversation. Every re-run recomputes it
+from scratch.</p>
+</div>
+
+</section>
+
+<!-- ============================== 12 ============================== -->
+<section>
+<h2><span class="num">12</span>What to trust, and what to treat with care</h2>
+
+<p class="lead">This section exists so that nobody has to discover these things the hard way.
+None of it is a defect; all of it is a consequence of a deliberate design choice in version 1.</p>
+
+<h3>Solid</h3>
+
+<ul>
+<li><b>The arithmetic.</b> Demand, capacity and overload are ordinary, reproducible
+calculations, covered by tests including property tests on the invariants. The same data and
+date always give the same answer.</li>
+<li><b>The separation.</b> The AI cannot alter a forecast figure. The numbers are on disk
+before it is contacted, and it has only read-only access afterwards.</li>
+<li><b>The auditability.</b> Every narrative stores the exact facts that were sent, the answer
+received, and the verification report.</li>
+<li><b>The privacy boundary.</b> Nothing leaves the machine except one narrative request, on
+your own Copilot seat, and only when you ask.</li>
+</ul>
+
+<h3>Treat with care</h3>
+
+<table class="wide">
+<thead><tr><th style="width:32%">Point</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>The champion score covers only arriving work</td><td>It says nothing about the accuracy of the open-work half, which is often the larger contributor to demand.</td></tr>
+<tr><td>The reported score may be the baseline's, not the winner's</td><td>When the safety rule forces the fallback, the figure shown belongs to the baseline model.</td></tr>
+<tr><td>Short history means a weak forecast</td><td>Fewer than about three months of usable weeks means no rehearsal at all — no scoring, and no interval range.</td></tr>
+<tr><td>The interval is indicative, not calibrated</td><td>Nobody has measured how often reality lands inside it. Use the width to compare people, not as a probability.</td></tr>
+<tr><td>A collapsed interval means "unknown", not "certain"</td><td>Nothing on screen distinguishes an absent range from a genuinely tiny one.</td></tr>
+<tr><td>Work beyond week two is not shown</td><td>Open hours landing after the horizon are dropped from the figures.</td></tr>
+<tr><td>Models are trained across the whole organisation</td><td>Good for small teams, less accurate for a team whose work is genuinely unlike everyone else's.</td></tr>
+<tr><td>Unverified narratives are still shown in full</td><td>Deliberate — hiding text would hide the problem — but it means the banner must actually be read.</td></tr>
+<tr><td>Re-narrating overwrites the previous audit record</td><td>Copy out a narrative you need to keep before asking again.</td></tr>
+<tr><td>Rebalancing suggestions are not jointly validated</td><td>Individually valid moves can conflict when combined.</td></tr>
+<tr><td>The suggested size of a move is not bounded</td><td>It is one of the two figures the model originates; sanity-check large ones.</td></tr>
+<tr><td>The Team panel shows only part of the summary</td><td>The per-member notes and the moves live on the other screens; the panel alone is not the whole briefing.</td></tr>
+<tr><td>A few screens still show English text in French mode</td><td>A known gap in version 1 — chart series names, some badges and status values. On the backlog.</td></tr>
+<tr><td>"Today" is taken in UTC</td><td>Late in the evening in a positive-offset timezone, a run may date itself to tomorrow. Set the date explicitly if it matters.</td></tr>
+</tbody>
+</table>
+
+<h3>What version 1 does not attempt</h3>
+
+<ul>
+<li>It does not schedule anything, assign anything or notify anyone.</li>
+<li>It does not model skills or seniority — an hour is an hour, whoever does it.</li>
+<li>It does not know about work that lives outside the database.</li>
+<li>It does not learn from your feedback; each run starts from the data alone.</li>
+</ul>
+
+</section>
+
+<!-- ============================== 13 ============================== -->
+<section>
+<h2><span class="num">13</span>Glossary</h2>
+
+<dl class="defs">
+<dt>ai_status</dt><dd>The second status column in the Runs list: <i>not requested</i>, <i>ok</i>, <i>unverified</i>, or <i>failed</i> with a reason. About the words only, never the numbers.</dd>
+<dt>Arrival model</dt><dd>The model that predicts how many hours of <i>new</i> work reach a person in a week. One of three candidates; the winner is the champion.</dd>
+<dt>Backtest / rehearsal</dt><dd>Rewinding to a point in the past, hiding everything after it, and marking each model on what it predicted for the weeks that followed.</dd>
+<dt>Capacity</dt><dd>Hours a person is available in a week, after weekends, holidays, leave and overrides.</dd>
+<dt>Champion</dt><dd>The forecasting model that won the rehearsal and was used for this run. Named on the Runs screen with its score.</dd>
+<dt>Demand</dt><dd>Hours of work a person is expected to have: open work plus newly arriving work. Never capped by capacity.</dd>
+<dt>Department / team / member</dt><dd>The three levels: a department is led by a skill team leader and contains teams; a team is led by a team leader and contains members.</dd>
+<dt>Effort model</dt><dd>The separate model that estimates how much work remains in an already-open task, and when it will land.</dd>
+<dt>Facts</dt><dd>The frozen snapshot of everything a run computed, saved alongside it. The only thing Copilot is allowed to read, and the reference every quoted number is checked against.</dd>
+<dt>Horizon</dt><dd>The two weeks a run covers. Always two, always starting on a Monday.</dd>
+<dt>Interval</dt><dd>The blue bar: a plausible low and high value around the forecast, derived from rehearsal errors. See section 9.</dd>
+<dt>Narrative</dt><dd>The written text produced by Copilot for a run — the AI Summary, the per-member notes and the rebalancing suggestions, together.</dd>
+<dt>Overload</dt><dd>Demand minus capacity, when demand is larger; otherwise zero.</dd>
+<dt>Overridden capacity</dt><dd>A manually set number of weekly hours for a person, either for one specific week or standing until changed.</dd>
+<dt>Run</dt><dd>One complete forecast for one team on one date, saved permanently with all its figures and facts.</dd>
+<dt>Score (MASE)</dt><dd>A model's average error divided by the naive baseline's average error. Lower is better; 1.00 means no better than the baseline.</dd>
+<dt>Seasonal naive</dt><dd>The baseline model: repeat what happened 52 weeks ago. The bar the other models must clear.</dd>
+<dt>Underused</dt><dd>Has capacity, and two-week demand below 70 % of it. The candidate list for receiving work in Rebalancing.</dd>
+<dt>Unverified</dt><dd>At least one number in the narrative could not be matched to the facts. The text is still shown; the figures in the tables are unaffected. See section 6.</dd>
+</dl>
+
+</section>
+
+<!-- ============================== APPENDIX ============================== -->
+<section>
+<h2>Appendix A · UML source code for the diagrams</h2>
+
+<p class="lead">Six of the ten diagrams in this report are also supplied as UML source code, so
+they can be re-rendered, edited or embedded in a slide deck without redrawing anything.</p>
+
+<p>The sources live beside this document, in the <code>uml/</code> folder. Each diagram is
+written twice — once in <b>PlantUML</b> (<code>.puml</code>) and once in <b>Mermaid</b>
+(<code>.mmd</code>) — so whichever your team already renders will work.</p>
+
+<table>
+<thead><tr><th style="width:28%">File</th><th style="width:22%">UML kind</th><th>What it shows</th></tr></thead>
+<tbody>
+<tr><td><code>01-architecture</code></td><td>Component / deployment</td><td>Where each piece runs, and the single arrow that leaves the machine (Figure 1)</td></tr>
+<tr><td><code>02-activity-forecast</code></td><td>Activity, 2 swimlanes</td><td>The ten deterministic calculation stages (Figure 2)</td></tr>
+<tr><td><code>03-activity-narrative</code></td><td>Activity, 3 swimlanes</td><td>The narrative request, and where <i>unverified</i> comes from (Figure 3)</td></tr>
+<tr><td><code>04-sequence</code></td><td>Sequence</td><td>The same run as messages between the six participants (Figure 4)</td></tr>
+<tr><td><code>05-state-machine</code></td><td>State machine</td><td>Every value the two status columns can hold (Figure 5)</td></tr>
+<tr><td><code>06-result-payload</code></td><td>Class</td><td>What a finished run actually contains — the shape behind every screen</td></tr>
+</tbody>
+</table>
+
+<h3>How to render them</h3>
+
+<h4>With nothing installed</h4>
+<p>Open <b>mermaid.live</b> in a browser, paste the contents of any <code>.mmd</code> file, and
+export SVG or PNG. This is the fastest route for a slide deck.</p>
+
+<h4>PlantUML online</h4>
+<p>Paste a <code>.puml</code> file into the PlantUML web server. Note that this uploads the
+diagram text to a public service — use a local render instead if that is not acceptable.</p>
+
+<h4>Locally, in PowerShell</h4>
+<pre><code># PlantUML (needs Java)
+winget install --id Oracle.JavaRuntimeEnvironment
+java -jar plantuml.jar -tsvg *.puml
+
+# Mermaid (needs Node)
+npm install -g @mermaid-js/mermaid-cli
+mmdc -i 04-sequence.mmd -o 04-sequence.svg</code></pre>
+
+<h4>In an editor</h4>
+<p>VS Code: the <i>PlantUML</i> and <i>Markdown Preview Mermaid Support</i> extensions. JetBrains
+IDEs: the bundled Mermaid plugin, or PlantUML Integration. GitHub and GitLab render Mermaid
+directly inside fenced code blocks.</p>
+
+<div class="note">
+<span class="callout-title">The figures and the sources are separate files</span>
+<p>The ten figures in this report are hand-drawn vector graphics in <code>diagrams/</code>, so
+that the report renders with no toolchain installed at all. They are <b>not</b> generated from
+the UML sources. If you edit a <code>.puml</code> or <code>.mmd</code>, the matching figure in
+this report does not update itself — and vice versa.</p>
+</div>
+
+<div class="footer-note">
+<p>Written against the source code as it stood on 5 September 2026, not from memory: the ten
+stages, the champion rule, the two narrative outcomes, the six failure reasons and every field
+name were read out of the service. If the pipeline changes, this document and the UML sources
+must be updated by hand.</p>
+</div>
+
+</section>
+
+</body>
+</html>

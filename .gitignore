@@ -24,3 +24,6 @@ installer/pyinstaller/build/
 # Node / Electron
 node_modules/
 app/out/
+
+# Rendered reports (regenerate from the HTML; the pre-commit hook blocks binaries)
+docs/reports/**/*.pdf

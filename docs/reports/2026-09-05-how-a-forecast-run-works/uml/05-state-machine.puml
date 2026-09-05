@@ -1,0 +1,53 @@
+@startuml state-run
+' The two status columns in the Runs list, and every value they can hold.
+' Render:  plantuml -tsvg 05-state-machine.puml
+
+skinparam defaultFontName "Segoe UI"
+skinparam shadowing false
+skinparam state {
+  BackgroundColor #FFFFFF
+  BorderColor #2F6FB5
+}
+skinparam ArrowColor #5B6B7D
+
+state "run.status  —  did the maths finish?" as A {
+  state "computing\nin memory only, nothing on disk" as computing
+  state "done" as done #EAF6EF
+  state "no row at all" as norow #FDF0EF
+
+  [*] --> computing
+  computing --> done  : all ten stages succeeded\nand the transaction committed
+  computing --> norow : anything failed —\neverything is rolled back
+  norow --> [*]
+
+  note bottom of norow
+    There is no "running" and no "failed" status.
+    The row is written only at the very end, so
+    "done" is the only value the Runs list can show.
+  end note
+}
+
+state "run.ai_status  —  did Copilot write the words?" as B {
+  state "not_requested" as nr
+  state "asking Copilot\nnever stored on the run" as asking
+  state "ok" as ok #EAF6EF
+  state "unverified" as unv #FDF6E9
+  state "failed:<reason>" as fail #FDF0EF
+
+  [*] --> nr : every new run starts here
+  nr     --> asking : you ask for the words
+  asking --> ok     : every figure in the prose\nwas found in the facts
+  asking --> unv    : at least one figure could not be matched;\nthe text is still saved and still shown
+  asking --> fail   : not_signed_in | cli_unavailable | timeout\n| invalid_output | model_error | other
+  ok   --> asking   : ask again
+  unv  --> asking   : ask again
+  fail --> asking   : ask again
+
+  note bottom of fail
+    Re-asking overwrites the stored audit record
+    of the previous answer. The forecast numbers
+    are never touched by any of this — only the
+    words and this one column change.
+  end note
+}
+@enduml

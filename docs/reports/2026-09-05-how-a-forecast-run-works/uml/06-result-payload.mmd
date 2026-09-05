@@ -1,0 +1,58 @@
+%% What a finished run actually contains — the shape of everything you see on screen.
+%% Paste into https://mermaid.live or render with: mmdc -i 06-result-payload.mmd -o 06-result-payload.svg
+classDiagram
+  direction LR
+
+  class Run {
+    +int id
+    +int team_id
+    +date as_of
+    +int horizon_weeks = 2
+    +string status = "done"
+    +string ai_status
+    +string champion_model
+    +float champion_score
+    +datetime created_at
+  }
+  note for Run "status has exactly one reachable value.\nai_status is not_requested, ok, unverified\nor failed:reason.\nchampion_model is seasonal_naive, tsb or gbm.\nchampion_score is MASE — lower is better."
+
+  class Forecast {
+    +int run_id
+    +int member_id
+    +date week_start
+    +float open_task_hours
+    +float new_task_hours
+    +float demand_hours
+    +float capacity_hours
+    +float overload_hours
+    +float demand_low
+    +float demand_high
+  }
+  note for Forecast "demand = open + new, never capped.\noverload = max(0, demand - capacity).\ndemand_low / demand_high are the ends of\nthe blue interval bar; only the new-arrival\nhalf carries any uncertainty."
+
+  class RunFacts {
+    +weeks, team, as_of
+    +per_member_weekly_rows
+    +team_totals_per_week
+    +overloaded[]
+    +underloaded[]
+    +history_13_weeks_per_member
+    +model_info
+  }
+  note for RunFacts "The single source of truth handed to Copilot.\noverloaded = two-week overload above 0 h.\nunderloaded = has capacity and two-week\ndemand below 70 % of it."
+
+  class Narrative {
+    +text run_summary
+    +members[] risk, summary, warnings, patterns
+    +team_risks[] title, detail, members
+    +rebalancing[] from, to, week, hours, why
+    +suggested_adjustments[] member, delta_hours, why
+    +text model_notes
+    +facts_sent, verification_report, model, timings
+  }
+  note for Narrative "The only figures the model may originate are the\nsize of a suggested move and of a suggested capacity\nchange. Everything else it writes is checked back\nagainst RunFacts before you are allowed to see it."
+
+  Run "1" *-- "2 per member" Forecast : deterministic Python
+  Run "1" *-- "1" RunFacts : deterministic Python
+  Run "1" o-- "0..1" Narrative : optional, written by the model
+  RunFacts <.. Narrative : every quoted number must exist here

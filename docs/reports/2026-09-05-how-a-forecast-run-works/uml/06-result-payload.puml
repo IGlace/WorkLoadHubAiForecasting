@@ -1,0 +1,70 @@
+@startuml result-payload
+' What a finished run actually contains — the shape of everything you see on screen.
+' Render:  plantuml -tsvg 06-result-payload.puml
+
+skinparam defaultFontName "Segoe UI"
+skinparam shadowing false
+skinparam class { BackgroundColor #FFFFFF  BorderColor #2F6FB5 }
+hide empty members
+
+class Run <<one row per forecast>> {
+  id : int
+  team_id : int
+  as_of : date            -- the day the run pretends it is
+  horizon_weeks : 2       -- always two
+  status : "done"         -- the only reachable value
+  ai_status : not_requested | ok | unverified | failed:<reason>
+  champion_model : seasonal_naive | tsb | gbm
+  champion_score : float  -- MASE, lower is better
+  created_at : datetime
+}
+
+class Forecast <<2 rows per member>> {
+  run_id : int
+  member_id : int
+  week_start : date       -- a Monday
+  --
+  open_task_hours : float  -- work already on their plate
+  new_task_hours : float   -- predicted arrivals (the champion's part)
+  demand_hours : float     -- open + new, never capped
+  capacity_hours : float   -- weekly hours / 5 x working days
+  overload_hours : float   -- max(0, demand - capacity)
+  demand_low : float       -- optimistic end of the interval bar
+  demand_high : float      -- pessimistic end of the interval bar
+}
+
+class RunFacts <<exactly one row>> {
+  weeks, team, as_of
+  per-member weekly rows (the same figures as Forecast)
+  team totals per week
+  overloaded[]  -- two-week overload above 0 h
+  underloaded[] -- has capacity and two-week demand below 70 % of it
+  13 weeks of history per member
+  model info: champion, its score, every candidate's score
+}
+
+class Narrative <<written by Copilot>> {
+  run_summary : text                       -- up to 2000 characters
+  members[] : risk, summary, warnings, patterns
+  team_risks[] : title, detail, members
+  rebalancing[] : from, to, week, hours, why
+  suggested_adjustments[] : member, delta_hours, why
+  model_notes : text                       -- up to 1000 characters
+  --
+  the exact facts sent, the verification report,
+  the model name and the timings (kept for audit)
+}
+
+Run "1" *-- "2 per member" Forecast : deterministic Python
+Run "1" *-- "1"            RunFacts : deterministic Python
+Run "1" o-- "0..1"         Narrative : optional, written by the model
+RunFacts <.. Narrative : every number quoted in the prose\nmust already exist here
+
+note as N1
+  The only figures the model may originate are the
+  size of a suggested move and of a suggested capacity
+  change. Everything else it writes is checked back
+  against RunFacts before you are allowed to see it.
+end note
+N1 .. Narrative
+@enduml

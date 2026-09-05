@@ -1,0 +1,49 @@
+%% The two status columns in the Runs list, and every value they can hold.
+%% Paste into https://mermaid.live or render with: mmdc -i 05-state-machine.mmd -o 05-state-machine.svg
+stateDiagram-v2
+  direction TB
+
+  state "run.status — did the maths finish?" as A {
+    direction LR
+    [*] --> computing
+    computing: computing
+    computing: in memory only, nothing on disk
+    done: done
+    done: the only value the Runs list can ever show
+    norow: no row at all
+    norow: everything is rolled back
+    computing --> done: all ten stages succeeded and the transaction committed
+    computing --> norow: anything failed
+    norow --> [*]
+    note right of norow
+      There is no "running" and no "failed" status.
+      The row is written only at the very end.
+    end note
+  }
+
+  state "run.ai_status — did Copilot write the words?" as B {
+    direction LR
+    [*] --> not_requested: every new run starts here
+    not_requested --> asking: you ask for the words
+    asking: asking Copilot
+    asking: never stored on the run
+    ok: ok
+    ok: every figure in the prose was found in the facts
+    unverified: unverified
+    unverified: at least one figure could not be matched
+    unverified: the text is still saved and still shown
+    failed: failed:reason
+    failed: not_signed_in | cli_unavailable | timeout
+    failed: invalid_output | model_error | other
+    asking --> ok
+    asking --> unverified
+    asking --> failed
+    ok --> asking: ask again
+    unverified --> asking: ask again
+    failed --> asking: ask again
+    note right of failed
+      Re-asking overwrites the stored audit record of the
+      previous answer. The forecast numbers are never
+      touched — only the words and this one column change.
+    end note
+  }

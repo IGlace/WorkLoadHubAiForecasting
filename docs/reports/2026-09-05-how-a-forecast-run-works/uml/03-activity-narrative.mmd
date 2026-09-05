@@ -1,0 +1,58 @@
+%% Asking Copilot for the narrative, and where "unverified" comes from.
+%% Paste into https://mermaid.live or render with: mmdc -i 03-activity-narrative.mmd -o 03-activity-narrative.svg
+flowchart TB
+  START((" ")) --> Q1
+  Q1{"AI narrative<br/>asked for?"}
+  Q1 -->|no| NR["The run stays saved with ai_status = not_requested.<br/>You can ask for the words later from the Runs list"]
+  NR --> E1(((" ")))
+
+  Q1 -->|yes| C1
+  subgraph SERVICE["FORECAST SERVICE — STILL NO AI NUMBERS"]
+    direction TB
+    C1["Second HTTP call. Load the facts this run already saved"]
+    C2["Start a Copilot session on the user's own signed-in<br/>Copilot CLI. No key of any other provider"]
+    C3["Hand over the rule sheet ('never invent a number'),<br/>the facts, 8 read-only tools and 5 product skills"]
+    C4["Check the reply's shape against a strict template.<br/>Unexpected field, missing section or over-long text fails"]
+    Q2{"shape valid?"}
+    C5["Pull every number out of the prose and look for it among<br/>the facts that sentence is allowed to quote. Whole numbers<br/>of 20 or less are ignored unless written with an hours unit"]
+    Q3{"every number<br/>matched?"}
+    OK["ai_status = ok"]
+    UNV["ai_status = unverified<br/>the text is still saved and still shown,<br/>with an information banner above it"]
+    STORE["Store the whole exchange — the exact facts sent, the reply,<br/>the check report, the model and the timings — and update ai_status"]
+    C1 --> C2 --> C3
+    C4 --> Q2
+    Q2 -->|"no — ask again, 2 attempts then failed"| C3
+    Q2 -->|yes| C5 --> Q3
+    Q3 -->|yes| OK --> STORE
+    Q3 -->|no| UNV --> STORE
+  end
+
+  subgraph COP["GITHUB COPILOT — WORDS ONLY"]
+    direction TB
+    P1["Call the read-only tools to look the numbers up"]
+    P2["Write one JSON document: run summary, per-member notes,<br/>team risks, suggested moves, model notes"]
+    P1 --> P2
+  end
+  C3 --> P1
+  P2 --> C4
+
+  STORE --> W1["The AI Summary panel fills in on the Team result screen,<br/>per-member notes appear on the Member screens, and the<br/>Rebalancing page lists the suggested moves"]
+  W1 --> E2(((" ")))
+
+  FAIL["If anything goes wrong the numbers are untouched — only ai_status records it:<br/>failed:not_signed_in · failed:cli_unavailable · failed:timeout (no answer in 240 s) ·<br/>failed:model_error · failed:invalid_output · failed:other"]
+  STORE -.- FAIL
+
+  classDef svc fill:#FFFFFF,stroke:#2F6FB5,color:#16202C
+  classDef key fill:#EEF4FB,stroke:#2F6FB5,color:#16202C
+  classDef ai fill:#F2EDFA,stroke:#6B4FA8,color:#16202C
+  classDef good fill:#EAF6EF,stroke:#2E7D5B,color:#16202C
+  classDef warn fill:#FDF6E9,stroke:#B7791F,color:#16202C
+  classDef bad fill:#FDF0EF,stroke:#B3403A,color:#16202C
+  classDef you fill:#FDFAF3,stroke:#C8A45C,color:#16202C
+  class C1,C2,C4 svc
+  class C3,C5 key
+  class P1,P2 ai
+  class OK,STORE good
+  class UNV warn
+  class FAIL bad
+  class NR,W1 you

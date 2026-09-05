@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 972" width="700" height="972" role="img"
+     aria-label="Activity diagram with two swimlanes: what happens from clicking Run forecast until the numbers are on screen.">
+  <style>
+    text { font-family: "Segoe UI", Calibri, system-ui, sans-serif; fill: #16202c; }
+    .lane { font-size: 11.5px; font-weight: 700; fill: #1d4d84; letter-spacing: .4px; }
+    .n    { font-size: 11px; }
+    .nb   { font-size: 11px; font-weight: 700; }
+    .num  { font-size: 11px; font-weight: 700; fill: #2f6fb5; }
+    .e    { font-size: 10px; fill: #5b6b7d; }
+    .eb   { font-size: 10px; font-weight: 700; fill: #5b6b7d; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7d"/>
+    </marker>
+  </defs>
+
+  <!-- lanes -->
+  <rect x="8" y="8" width="224" height="946" rx="8" fill="#fdfaf3" stroke="#d8b673" stroke-width="1.4"/>
+  <rect x="236" y="8" width="456" height="946" rx="8" fill="#f6faff" stroke="#2f6fb5" stroke-width="1.4"/>
+  <rect x="8" y="8" width="224" height="30" rx="8" fill="#f6ecd6" stroke="none"/>
+  <rect x="236" y="8" width="456" height="30" rx="8" fill="#e3edf8" stroke="none"/>
+  <text class="lane" x="22" y="28">YOU AND THE APP WINDOW</text>
+  <text class="lane" x="250" y="28">FORECAST SERVICE — DETERMINISTIC PYTHON, NO AI HERE</text>
+
+  <!-- start -->
+  <circle cx="120" cy="58" r="9" fill="#16202c"/>
+
+  <rect x="22" y="80" width="196" height="60" rx="7" fill="#ffffff" stroke="#c8a45c" stroke-width="1.5"/>
+  <text class="n" x="34" y="99">Open the <tspan class="nb">Run</tspan> screen. Pick the</text>
+  <text class="n" x="34" y="114">team, set the “As of” date,</text>
+  <text class="n" x="34" y="129">tick “AI narrative” if wanted.</text>
+  <line x1="120" y1="58" x2="120" y2="76" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="22" y="156" width="196" height="34" rx="17" fill="#f6ecd6" stroke="#c8a45c" stroke-width="1.8"/>
+  <text class="nb" x="120" y="178" text-anchor="middle">Click “Run forecast”</text>
+  <line x1="120" y1="140" x2="120" y2="152" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- cross to service -->
+  <path d="M218,173 L234,173 L234,117 L246,117" fill="none" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+  <text class="e" x="120" y="206" text-anchor="middle">one HTTP request; the window</text>
+  <text class="e" x="120" y="219" text-anchor="middle">now waits for the whole answer</text>
+
+  <!-- service chain -->
+  <rect x="250" y="100" width="428" height="34" rx="7" fill="#ffffff" stroke="#9db4cc" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <text class="n" x="262" y="122">Secret token checked first. Missing or wrong → HTTP 401 and nothing runs.</text>
+
+  <rect x="250" y="156" width="428" height="34" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="177"><tspan class="num">1 </tspan>Load every table: members, teams, tasks, projects, holidays, vacations, overrides.</text>
+  <line x1="464" y1="134" x2="464" y2="152" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="204" width="428" height="48" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="223"><tspan class="num">2 </tspan>Fix the calendar: the two forecast weeks (Monday-start), the last complete week</text>
+  <text class="n" x="262" y="238">as “origin”, and which members count towards workload.</text>
+  <line x1="464" y1="190" x2="464" y2="200" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="266" width="428" height="34" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="287"><tspan class="num">3 </tspan>Turn all history into one weekly table: 26 numbers per person per past week.</text>
+  <line x1="464" y1="252" x2="464" y2="262" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="314" width="428" height="48" rx="7" fill="#eef4fb" stroke="#2f6fb5" stroke-width="1.8"/>
+  <text class="n" x="262" y="333"><tspan class="num">4 </tspan>Backtest — rewind to up to 6 past weeks and make all three candidate models</text>
+  <text class="n" x="262" y="348">forecast weeks they never saw. Score each one against what really happened.</text>
+  <line x1="464" y1="300" x2="464" y2="310" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="376" width="428" height="48" rx="7" fill="#eef4fb" stroke="#2f6fb5" stroke-width="1.8"/>
+  <text class="n" x="262" y="395"><tspan class="num">5 </tspan>Crown the <tspan class="nb">champion</tspan>: the lowest average score wins, but only if it strictly beats</text>
+  <text class="n" x="262" y="410">the simple “same week last year” baseline. Otherwise the baseline is kept.</text>
+  <line x1="464" y1="362" x2="464" y2="372" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="438" width="428" height="34" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="459"><tspan class="num">6 </tspan>Retrain the champion on all history; predict newly arriving hours per person.</text>
+  <line x1="464" y1="424" x2="464" y2="434" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="486" width="428" height="48" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="505"><tspan class="num">7 </tspan>Effort model: stretch each person’s estimates by their personal ratio, remove the</text>
+  <text class="n" x="262" y="520">part already done, then spread the rest evenly over their real working days.</text>
+  <line x1="464" y1="472" x2="464" y2="482" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="548" width="428" height="48" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="567"><tspan class="num">8 </tspan>Capacity per person per week = weekly hours ÷ 5 × working days that survive</text>
+  <text class="n" x="262" y="582">weekends, holidays and leave. Demand = open + new; overload is the excess.</text>
+  <line x1="464" y1="534" x2="464" y2="544" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="610" width="428" height="34" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="631"><tspan class="num">9 </tspan>Low / high band from how wrong the champion was in rehearsal (10th–90th %).</text>
+  <line x1="464" y1="596" x2="464" y2="606" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="658" width="428" height="34" rx="7" fill="#ffffff" stroke="#2f6fb5" stroke-width="1.5"/>
+  <text class="n" x="262" y="679"><tspan class="num">10 </tspan>Describe patterns, group similar people, and assemble the <tspan class="nb">facts document</tspan>.</text>
+  <line x1="464" y1="644" x2="464" y2="654" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="250" y="706" width="428" height="34" rx="7" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.6"/>
+  <text class="n" x="262" y="727">Save in <tspan class="nb">one</tspan> transaction: 1 run row + 2 forecast rows per member + 1 facts row.</text>
+  <line x1="464" y1="692" x2="464" y2="702" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- decision -->
+  <path d="M464,758 L556,782 L464,806 L372,782 Z" fill="#ffffff" stroke="#5b6b7d" stroke-width="1.5"/>
+  <text class="nb" x="464" y="786" text-anchor="middle">all saved?</text>
+  <line x1="464" y1="740" x2="464" y2="754" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <path d="M372,782 L300,782 L300,822" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <text class="eb" x="330" y="776">yes</text>
+  <path d="M556,782 L616,782 L616,822" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <text class="eb" x="572" y="776">no</text>
+
+  <rect x="250" y="826" width="224" height="56" rx="7" fill="#eaf6ef" stroke="#2e7d5b" stroke-width="1.6"/>
+  <text class="n" x="260" y="845">Reply sent back: run id, the two</text>
+  <text class="n" x="260" y="860">weeks, the champion and its score,</text>
+  <text class="n" x="260" y="875">and every forecast row.</text>
+
+  <rect x="486" y="826" width="192" height="70" rx="7" fill="#fdf0ef" stroke="#b3403a" stroke-width="1.5"/>
+  <text class="n" x="496" y="844">Everything rolled back. No run</text>
+  <text class="n" x="496" y="858">row is written, so the Runs list</text>
+  <text class="n" x="496" y="872">never shows a failed forecast.</text>
+  <text class="nb" x="496" y="888">The run ends here.</text>
+
+  <path d="M250,854 L222,854" fill="none" stroke="#5b6b7d" stroke-width="1.8" marker-end="url(#a)"/>
+
+  <rect x="22" y="826" width="196" height="66" rx="7" fill="#ffffff" stroke="#c8a45c" stroke-width="1.5"/>
+  <text class="n" x="34" y="845">The two-week totals and the</text>
+  <text class="n" x="34" y="860">member table appear. Windows</text>
+  <text class="n" x="34" y="875">raises a notification naming</text>
+  <text class="n" x="34" y="890">anyone over capacity.</text>
+
+  <path d="M120,892 L120,904" fill="none" stroke="#5b6b7d" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="22" y="908" width="196" height="26" rx="13" fill="#f2edfa" stroke="#6b4fa8" stroke-width="1.6"/>
+  <text class="nb" x="120" y="926" text-anchor="middle" fill="#4a3576">continues in Figure 3 ▶</text>
+</svg>

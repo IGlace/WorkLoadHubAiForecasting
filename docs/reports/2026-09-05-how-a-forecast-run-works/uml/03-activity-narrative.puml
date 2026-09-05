@@ -1,0 +1,72 @@
+@startuml activity-narrative
+' Asking Copilot for the narrative, and where "unverified" comes from.
+' The forecast numbers are already saved before any of this starts.
+' Render:  plantuml -tsvg 03-activity-narrative.puml
+
+skinparam defaultFontName "Segoe UI"
+skinparam shadowing false
+skinparam ActivityBackgroundColor #FFFFFF
+skinparam ActivityBorderColor #2F6FB5
+skinparam ArrowColor #5B6B7D
+
+|#FDFAF3|You and the window|
+start
+if (AI narrative asked for?) then (no)
+  :The run stays saved with ai_status = not_requested.
+  You can ask for the words later from the Runs list;
+  stop
+else (yes)
+endif
+
+|#F6FAFF|Forecast service — still no AI numbers|
+:Second HTTP call. Load the facts this run already saved;
+:Start a Copilot session on the user's own signed-in
+Copilot CLI. No key of any other provider;
+
+repeat
+  :Hand over the rule sheet ("never invent a number"),
+  the facts, 8 read-only tools and 5 product skills;
+
+  |#F2EDFA|GitHub Copilot — words only|
+  :Call the read-only tools to look the numbers up;
+  :Write one JSON document: run summary, per-member
+  notes, team risks, suggested moves, model notes;
+
+  |#F6FAFF|Forecast service — still no AI numbers|
+  :Check the reply's shape against a strict template.
+  An unexpected field, a missing section or an
+  over-long paragraph fails;
+repeat while (shape valid?) is (no — 2 attempts, then failed) not (yes)
+
+:Pull every number out of the prose and look for it
+among the facts that sentence is allowed to quote.
+Whole numbers of 20 or less are ignored unless
+they are written with an hours unit;
+
+if (every number matched?) then (yes)
+  #EAF6EF:ai_status = ok;
+else (no)
+  #FDF6E9:ai_status = unverified.
+  The text is still saved and still shown,
+  with an information banner above it;
+endif
+
+:Store the whole exchange — the exact facts sent, the
+reply, the check report, the model and the timings —
+and update the run's ai_status;
+
+|#FDFAF3|You and the window|
+:The AI Summary panel fills in on the Team result screen,
+per-member notes appear on the Member screens, and the
+Rebalancing page lists the suggested moves;
+stop
+
+note right
+  If anything goes wrong the numbers are untouched —
+  only ai_status records it:
+  failed:not_signed_in · failed:cli_unavailable ·
+  failed:timeout (no answer in 240 s) ·
+  failed:model_error · failed:invalid_output ·
+  failed:other
+end note
+@enduml
