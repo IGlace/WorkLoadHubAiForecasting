@@ -391,3 +391,97 @@ empty-database gap and the open decision it depended on."
 ## Verification before release
 
 After the four tasks: run the fast gate (`uv run ruff check . && uv run ruff format --check . && uv run pytest -q -m "not slow" -n 6` in `service/`; `npm run lint && npm run typecheck && npm test` in `app/`), rebuild the frozen service and its smoke test, then push `dev` and fast-forward `main` once CI on `dev` (including `package-windows`, which compiles the NSIS script) is green. The owner's Windows verification: run the produced setup on a machine without `%LOCALAPPDATA%\WorkloadHubForecast`, confirm the details log shows "Sample data ready." and that the launched app offers departments, teams and members in Settings; then run the setup a second time and confirm the log shows the seeding line again but the data (and any stored run) is unchanged.
+
+---
+
+### Task 5: `whf copilot status` survives a missing Copilot CLI (CI `freeze-linux` fix)
+
+Added during execution. The `freeze-linux` CI job builds the service with `WHF_SKIP_CLI_DOWNLOAD=1` and then runs `installer/pyinstaller/smoke_frozen.py`, whose `whf copilot status --json` step accepts exit codes 0 and 3 only. On a machine with no Copilot CLI at all (no `COPILOT_CLI_PATH`, none on `PATH`, none in the SDK cache) the job has failed on every push since the remote came back (runs for fea509e, dac2bc8, 957aca8, 5ef12cd): `CopilotClient(...)` raises `RuntimeError: Copilot CLI not found ...` from its constructor, which `whf.ai.status.copilot_status` calls *outside* the `try` that guards `client.start()`, so the frozen binary prints a traceback and exits 1. Locally it passes only because this machine has the SDK's cached CLI. The same traceback would greet a user whose bundled CLI is missing, so the fix belongs in the service, not in CI.
+
+**Files:**
+- Modify: `service/src/whf/ai/status.py` (the `copilot_status` coroutine)
+- Test: `service/tests/test_ai_status.py`
+
+**Interfaces:**
+- Consumes: `CopilotStatus`, `resolve_cli_path` (unchanged).
+- Produces: `copilot_status` returns a `CopilotStatus` with `code="start_failed"`, `authenticated=None` and a message that starts with `Copilot CLI could not start:` when the client factory itself raises; `whf copilot status` therefore exits 3 instead of crashing.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `service/tests/test_ai_status.py` (the `FakeClient` import and `copilot_status_sync` are already imported at the top of the file):
+
+```python
+def test_status_when_the_sdk_cannot_even_construct_a_client(monkeypatch) -> None:
+    """With no CLI anywhere, CopilotClient() raises from its constructor, before start(): still exit 3, no traceback."""
+    monkeypatch.delenv("COPILOT_CLI_PATH", raising=False)
+    monkeypatch.setattr("whf.ai.status.shutil.which", lambda name: None)
+    monkeypatch.setattr("whf.ai.status.get_cached_cli_path", lambda: None)
+
+    def factory() -> FakeClient:
+        raise RuntimeError("Copilot CLI not found. Install a published wheel ...")
+
+    status = copilot_status_sync(client_factory=factory)
+    assert status.cli_path is None and status.cli_source == "none"
+    assert status.authenticated is None and not status.ready
+    assert status.code == "start_failed"
+    assert status.message.startswith("Copilot CLI could not start:") and "not found" in status.message
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run, in `service/`: `uv run pytest tests/test_ai_status.py -k cannot_even_construct -v`
+Expected: FAIL with `RuntimeError: Copilot CLI not found ...` escaping from `copilot_status_sync`.
+
+- [ ] **Step 3: Guard the construction**
+
+In `service/src/whf/ai/status.py`, replace the lines
+
+```python
+    client = client_factory()
+    try:
+        try:
+            await client.start()
+        except Exception as exc:
+            return CopilotStatus(cli_path, source, None, None, f"Copilot CLI could not start: {exc}", "start_failed")
+```
+
+with
+
+```python
+    try:
+        # The SDK resolves its CLI in the constructor and raises RuntimeError when there is none anywhere.
+        client = client_factory()
+        await client.start()
+    except Exception as exc:
+        return CopilotStatus(cli_path, source, None, None, f"Copilot CLI could not start: {exc}", "start_failed")
+    try:
+```
+
+so the rest of the function (the `get_auth_status` call and the `finally: client.stop()` block) is unchanged and still only runs with a constructed, started client.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run, in `service/`: `uv run pytest tests/test_ai_status.py tests/test_ai_cli_api.py -v` then `uv run ruff check . && uv run ruff format --check .`
+Expected: all PASS, ruff clean.
+
+- [ ] **Step 5: Reproduce the CI failure against the frozen build, then see it pass**
+
+The frozen service at `service/dist/whf` (Linux) was built before this fix. Run, from the repository root, with the SDK's cache and any CLI hidden the way CI has none:
+
+```bash
+HOME=$(mktemp -d) PATH=/usr/bin:/bin COPILOT_SKIP_CLI_DOWNLOAD=1 service/dist/whf/whf copilot status --json; echo "exit=$?"
+```
+
+Expected before the rebuild: a traceback and `exit=1` (the CI failure). Then rebuild with `WHF_SKIP_CLI_DOWNLOAD=1 bash scripts/build-service.sh` (which re-runs the smoke test; timeout at least 600000 ms) and repeat the command. Expected: one JSON line with `"code": "start_failed"` and `exit=3`, and the smoke test's `ok copilot status` line during the build. Note: with the cache hidden the smoke test's own `copilot status` step also runs without a CLI, which is exactly the CI condition; if the build machine still finds a CLI on `PATH`, hide it the same way for the smoke command: `HOME=$(mktemp -d) PATH=/usr/bin:/bin uv run --directory service python ../installer/pyinstaller/smoke_frozen.py ../service/dist/whf` (the `uv` binary must stay reachable; use its absolute path if needed).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add service/src/whf/ai/status.py service/tests/test_ai_status.py
+git commit -m "fix(service): report a missing Copilot CLI as a status, not a traceback
+
+The SDK raises from CopilotClient's constructor when no CLI exists
+anywhere; copilot_status only guarded start(), so the frozen binary
+crashed with exit 1. The freeze-linux CI job, which skips the CLI
+download, has failed on every push for this reason."
+```
