@@ -1,4 +1,4 @@
-# electron-builder configuration. Run from app/: npm run build:win (Windows) or npm run pack:dir (any OS, unpacked).
+# electron-builder configuration. Run from app/: npm run build:win (Windows) or npm run pack:dir (any OS, unpacked). Custom NSIS steps live in installer/nsis/installer.nsh.
 appId: com.workloadhub.forecast
 productName: WorkloadHub Forecast
 copyright: Copyright © 2026
@@ -21,6 +21,7 @@ win:
   icon: resources/icon.ico
   artifactName: WorkloadHub-Forecast-Setup-${version}.${ext}
 nsis:
+  include: ../installer/nsis/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
