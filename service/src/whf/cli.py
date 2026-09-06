@@ -15,7 +15,7 @@ from whf.ai.session import default_narrator
 from whf.ai.status import copilot_status_sync, resolve_cli_path, run_login
 from whf.config import data_dir, db_path
 from whf.data.generator import GeneratorConfig, generate
-from whf.data.loader import load_generated, write_answer_key
+from whf.data.loader import has_data, load_generated, write_answer_key
 from whf.db.connection import connect
 from whf.narrate import RunHasNoFactsError, RunNotFoundError, narrate_run
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
@@ -73,11 +73,17 @@ def data_generate(
     months: int = 12,
     as_of: Annotated[str | None, typer.Option("--as-of")] = None,
     answer_key: Annotated[Path | None, typer.Option("--answer-key")] = None,
+    if_empty: Annotated[
+        bool, typer.Option("--if-empty", help="Do nothing when the database already has data (installer use)")
+    ] = False,
 ) -> None:
-    """Generate dummy data (replaces existing data in the database)."""
+    """Generate dummy data (replaces existing data in the database unless --if-empty)."""
+    conn = _conn(db)
+    if if_empty and has_data(conn):
+        typer.echo("database already has data; nothing generated")
+        return
     config = GeneratorConfig(seed=seed, months=months, as_of=_date(as_of) or GeneratorConfig().as_of)
     data = generate(config)
-    conn = _conn(db)
     load_generated(conn, data)
     key_path = answer_key or (data_dir() / "answer_key.json")
     write_answer_key(key_path, data)

@@ -129,3 +129,45 @@ def test_invalid_date_is_rejected_with_exit_code_2(tmp_path) -> None:
     )
     assert result.exit_code == 2
     assert "invalid date" in result.output
+
+
+def test_generate_if_empty_seeds_an_empty_database(tmp_path) -> None:
+    db = tmp_path / "t.db"
+    key = tmp_path / "answer_key.json"
+    result = runner.invoke(
+        app, ["data", "generate", "--db", str(db), "--months", "3", "--if-empty", "--answer-key", str(key)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "generated" in result.output and "tasks" in result.output
+    assert key.exists()
+
+
+def test_generate_if_empty_leaves_existing_data_alone(tmp_path) -> None:
+    db = tmp_path / "t.db"
+    key = tmp_path / "answer_key.json"
+    _generate(db)
+    run = runner.invoke(app, ["run", "--db", str(db), "--team", "1", "--as-of", "2026-09-03", "--json"])
+    assert run.exit_code == 0, run.output
+    before = db.read_bytes()
+    result = runner.invoke(
+        app, ["data", "generate", "--db", str(db), "--seed", "9", "--if-empty", "--answer-key", str(key)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "already has data" in result.output
+    assert not key.exists()
+    assert db.read_bytes() == before
+    listed = runner.invoke(app, ["runs", "list", "--db", str(db)])
+    assert listed.exit_code == 0 and "team   1" in listed.output
+
+
+def test_generate_without_if_empty_still_replaces(tmp_path) -> None:
+    db = tmp_path / "t.db"
+    _generate(db)
+    run = runner.invoke(app, ["run", "--db", str(db), "--team", "1", "--as-of", "2026-09-03", "--json"])
+    assert run.exit_code == 0, run.output
+    result = runner.invoke(
+        app, ["data", "generate", "--db", str(db), "--months", "3", "--answer-key", str(tmp_path / "k.json")]
+    )
+    assert result.exit_code == 0, result.output
+    listed = runner.invoke(app, ["runs", "list", "--db", str(db)])
+    assert listed.exit_code == 0 and "team   1" not in listed.output

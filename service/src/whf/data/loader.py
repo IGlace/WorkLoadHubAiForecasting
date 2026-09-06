@@ -46,6 +46,12 @@ def load_generated(conn: sqlite3.Connection, data: GeneratedData) -> None:
     conn.commit()
 
 
+def has_data(conn: sqlite3.Connection) -> bool:
+    """True when the database already holds organisational data (at least one department)."""
+    row = conn.execute("SELECT COUNT(*) FROM departments").fetchone()
+    return bool(row and row[0] > 0)
+
+
 def write_answer_key(path: Path, data: GeneratedData) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data.answer_key, indent=1), encoding="utf-8")
