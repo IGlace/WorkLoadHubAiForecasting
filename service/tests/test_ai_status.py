@@ -67,3 +67,14 @@ def test_status_when_the_sdk_cannot_even_construct_a_client(monkeypatch) -> None
     assert status.authenticated is None and not status.ready
     assert status.code == "start_failed"
     assert status.message.startswith("Copilot CLI could not start:") and "not found" in status.message
+
+
+def test_status_stops_a_client_whose_start_failed(monkeypatch) -> None:
+    """A constructed client that fails to start still gets stop(): the service calls this on every 'Check again'."""
+    monkeypatch.delenv("COPILOT_CLI_PATH", raising=False)
+    monkeypatch.setattr("whf.ai.status.shutil.which", lambda name: None)
+    monkeypatch.setattr("whf.ai.status.get_cached_cli_path", lambda: None)
+    client = FakeClient(replies=[], start_error=RuntimeError("no cli"))
+    status = copilot_status_sync(client_factory=lambda: client)
+    assert status.code == "start_failed" and not status.ready
+    assert client.stopped

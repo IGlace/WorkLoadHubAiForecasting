@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shutil
 import subprocess
@@ -65,11 +66,15 @@ async def copilot_status(client_factory: Callable[[], Any] | None = None) -> Cop
         def client_factory() -> Any:
             return CopilotClient(log_level="error")
 
+    client = None
     try:
         # The SDK resolves its CLI in the constructor and raises RuntimeError when there is none anywhere.
         client = client_factory()
         await client.start()
     except Exception as exc:
+        if client is not None:
+            with contextlib.suppress(Exception):
+                await client.stop()
         return CopilotStatus(cli_path, source, None, None, f"Copilot CLI could not start: {exc}", "start_failed")
     try:
         auth = await client.get_auth_status()

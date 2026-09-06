@@ -25,8 +25,8 @@ def _exe(dist: Path) -> Path:
     return exe
 
 
-def _run(exe: Path, *args: str, timeout: int = 300) -> str:
-    out = subprocess.run([str(exe), *args], capture_output=True, text=True, timeout=timeout)
+def _run(exe: Path, *args: str, timeout: int = 300, env: dict[str, str] | None = None) -> str:
+    out = subprocess.run([str(exe), *args], capture_output=True, text=True, timeout=timeout, env=env)
     if out.returncode != 0:
         raise SystemExit(f"{exe.name} {' '.join(args)} failed ({out.returncode}):\n{out.stdout}\n{out.stderr}")
     return out.stdout
@@ -97,6 +97,22 @@ def main(dist_dir: str) -> int:
         if "already has data" not in second:
             raise SystemExit(f"data generate --if-empty on a populated database did not stay a no-op: {second}")
         print("ok data generate --if-empty (no-op)")
+
+        # The NSIS install step passes no --db: it relies on the frozen binary's default data-directory
+        # resolution (WHF_HOME, when set, else the platform's local-app-data folder). Exercise that path too.
+        with tempfile.TemporaryDirectory() as home:
+            _run(
+                exe,
+                "data",
+                "generate",
+                "--months",
+                "3",
+                "--if-empty",
+                env={**os.environ, "WHF_HOME": home},
+            )
+            if not (Path(home) / "whf.db").exists():
+                raise SystemExit(f"data generate --if-empty with no --db did not create whf.db under WHF_HOME={home}")
+        print("ok data generate --if-empty (default data dir via WHF_HOME)")
 
         run_out = _run(exe, "run", "--team", "1", "--db", str(db), "--json")
         run_payload = _last_json_object(run_out)

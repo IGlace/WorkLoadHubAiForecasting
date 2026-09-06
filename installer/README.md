@@ -41,17 +41,22 @@ pull request and manual dispatch.
 ## First-run checklist (for the owner)
 
 1. Copy `WorkloadHub-Forecast-Setup-<version>.exe` to the target machine and
-   run it. It installs per user (no administrator prompt) into the user's
-   local app data and adds Desktop and Start Menu shortcuts. Near the end,
-   the progress text shows "Loading the sample data" while the installer runs
-   the bundled service once to fill the database (3 departments, 8 teams, 48
-   members, 12 months of task history, plus `answer_key.json` beside the
-   database, the ground truth the backtest compares against). When the
-   installer finishes it launches the app itself (`runAfterFinish: true` in
-   `installer/electron-builder.yml`).
-2. If the installer showed a message box saying the sample data could not be loaded, run the
-   same command by hand and restart the app afterwards (it reads the
-   database at startup):
+   run it. By default it installs per user (no administrator prompt) into
+   the user's local app data and adds Desktop and Start Menu shortcuts. Near
+   the end, the progress text shows "Loading the sample data" while the
+   installer runs the bundled service once to fill the database (3
+   departments, 8 teams, 48 members, 12 months of task history, plus
+   `answer_key.json` beside the database, the ground truth the backtest
+   compares against). When the installer finishes it launches the app itself
+   (`runAfterFinish: true` in `installer/electron-builder.yml`). Choosing
+   "for all users" on the install-mode page, or running the setup itself as
+   administrator, installs without loading the sample data: the app data
+   folder is per user, so seeding there would fill the administrator's
+   profile instead of yours. An information box then shows the manual
+   command to run afterwards, as yourself.
+2. If the installer showed a message box saying the sample data could not
+   be loaded, run the bundled service by hand and restart the app
+   afterwards (it reads the database at startup):
 
    ```powershell
    & "$env:LOCALAPPDATA\Programs\WorkloadHub Forecast\resources\service\whf\whf.exe" data generate
@@ -80,8 +85,8 @@ pull request and manual dispatch.
 - Database: `%LOCALAPPDATA%\WorkloadHubForecast\whf.db`
 - Answer key for the generated data:
   `%LOCALAPPDATA%\WorkloadHubForecast\answer_key.json`, written by the
-  installer's seeding step and rewritten by every `data generate` so it
-  always describes the data currently in the database
+  installer's seeding step on a fresh install and rewritten by every
+  `data generate` so it always describes the data currently in the database
 - App settings: `%LOCALAPPDATA%\WorkloadHubForecast\app\settings.json`
 - Logs: `%LOCALAPPDATA%\WorkloadHubForecast\logs\app.log` (rotates at 1 MB,
   keeps 5 files)

@@ -216,6 +216,18 @@ database (must seed) and once on a populated one (must not touch it)."
 - Consumes: `$INSTDIR\resources\service\whf\whf.exe data generate --if-empty` from Task 1 (exit 0 whether it seeds or not; non-zero only on a real failure).
 - Produces: an installer that seeds the database; Task 4 documents it.
 
+**Execution notes (2026-09-06):** the numeric locale IDs 1033/1036 are used because this include is
+compiled before `installer.nsi` loads MUI2 and defines `LANG_ENGLISH`/`LANG_FRENCH`; `installerLanguages`
+must stay exactly `[en_US, fr_FR]` in `installer/electron-builder.yml` because electron-builder compiles
+every bundled language under `-WX`, and a language without a `whfSeed*` LangString fails the build; the
+loading line goes to the status text above the progress bar (`SetDetailsPrint textonly`), not the details
+log, because electron-builder's own templates suppress `DetailPrint` output for the whole install section,
+and a failure shows a message box instead, for the same reason — there is no "Sample data ready." line;
+an elevated ("for all users") install skips seeding altogether and shows an information box with the
+manual command, because `%LOCALAPPDATA%` there is the administrator's profile, not the installing user's.
+The committed `installer/nsis/installer.nsh` is the authority over the code block below, which is kept for
+historical context and no longer matches it exactly.
+
 Background for the implementer (electron-builder 26.15.3, `app/node_modules/app-builder-lib`):
 - `nsis.include` is resolved by `PlatformPackager.getResource`: first relative to the build resources directory (`app/resources`), then relative to the project directory (`app/`). So `../installer/nsis/installer.nsh` resolves to `installer/nsis/installer.nsh` from the repository root.
 - `templates/nsis/installSection.nsh` inserts `customInstall` after `installApplicationFiles` and the shortcuts, inside the install section; the assisted installer's finish page (`MUI_FINISHPAGE_RUN`, enabled by `runAfterFinish: true`) launches the app only after the section completes, so the app never starts before seeding finishes.
@@ -390,7 +402,7 @@ empty-database gap and the open decision it depended on."
 
 ## Verification before release
 
-After the four tasks: run the fast gate (`uv run ruff check . && uv run ruff format --check . && uv run pytest -q -m "not slow" -n 6` in `service/`; `npm run lint && npm run typecheck && npm test` in `app/`), rebuild the frozen service and its smoke test, then push `dev` and fast-forward `main` once CI on `dev` (including `package-windows`, which compiles the NSIS script) is green. The owner's Windows verification: run the produced setup on a machine without `%LOCALAPPDATA%\WorkloadHubForecast`, confirm the details log shows "Sample data ready." and that the launched app offers departments, teams and members in Settings; then run the setup a second time and confirm the log shows the seeding line again but the data (and any stored run) is unchanged.
+After the four tasks: run the fast gate (`uv run ruff check . && uv run ruff format --check . && uv run pytest -q -m "not slow" -n 6` in `service/`; `npm run lint && npm run typecheck && npm test` in `app/`), rebuild the frozen service and its smoke test, then push `dev` and fast-forward `main` once CI on `dev` (including `package-windows`, which compiles the NSIS script) is green. The owner's Windows verification: run the produced setup on a machine without `%LOCALAPPDATA%\WorkloadHubForecast`, choosing the default per-user install; while it runs, the status text above the progress bar briefly shows "Loading the sample data (this takes a moment)..."; no message box should appear; the launched app offers departments, teams and members in Settings; then run the setup a second time and confirm the data (and any stored run) is unchanged; optionally run it once more choosing "for all users" and confirm the information box with the manual command appears.
 
 ---
 
