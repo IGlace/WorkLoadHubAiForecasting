@@ -6,6 +6,8 @@ version 1. Dated 2026-09-04, last updated 2026-09-05; update this file when an i
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
+State on 2026-09-06: the owner's local work (39 commits) was verified and pushed back to the GitHub remote, `dev` and `main` level again.
+
 State on 2026-09-05: released — `scripts/release.ps1` fast-forwarded `main` to `dev` at `0f3eb03` on
 2026-09-04, so both branches carry the team-page live progress, the "Ask Copilot" button scoping and the
 narrative-envelope fix. "Upcoming events" was brainstormed on 2026-09-04 and closed as already covered, and

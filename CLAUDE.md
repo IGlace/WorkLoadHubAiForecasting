@@ -26,8 +26,9 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 - Real names are allowed in prompts (owner decision); still keep all data local except
   what a run sends to Copilot, and store the exact facts sent for audit.
 - Test-driven development for every change; property tests for arithmetic invariants.
-- The repository is local only: the git remote was removed on 2026-09-04 and nothing is
-  pushed anywhere. Do not add a remote back without being asked.
+- The GitHub remote (`IGlace/WorkLoadHubAiForecasting`) is the shared copy again since 2026-09-06:
+  `dev` and `main` are pushed there and CI runs on both. Work offline if you must, but push `dev`
+  when a batch is reviewed.
 - English and French are both fully supported, everywhere in the interface and in the
   narrative; a user may switch freely between them. No third language.
 
@@ -47,7 +48,7 @@ docs/      research, requirements, specs, plans
 - Python: `uv`, `ruff`, `ty`, `pytest`, `hypothesis`; see the `modern-python` skill.
 - Node: Node 22, `npm`, `electron-vite` (Vite 7), `vitest`, `eslint` 10, `tsc`, `electron-builder`.
 - Commands: `uv run pytest` in `service/`; `npm test`, `npm run lint`, `npm run typecheck` in `app/`.
-- Local gate (there is no CI; the remote was removed): `pwsh scripts/check.ps1` runs the fast
+- Local gate (mirrors CI): `pwsh scripts/check.ps1` runs the fast
   checks in about two and a half minutes, `-Full` adds the slow pytest suite and the app build,
   `-Package` adds the installer. `pwsh scripts/release.ps1` runs the full gate and then
   fast-forwards `main` to `dev`; it is the only thing that can refuse a bad release, because git
@@ -56,8 +57,8 @@ docs/      research, requirements, specs, plans
   `WHF_SKIP_HOOKS=1`.
 - Packaging: PyInstaller (`installer/pyinstaller/whf.spec`), electron-builder
   (`installer/electron-builder.yml`); `pwsh scripts/build-installer.ps1` builds the
-  installer. `.github/workflows/ci.yml` is kept as the written definition of "green" but is
-  inert, since there is no remote to trigger it.
+  installer. `.github/workflows/ci.yml` runs the same gate on GitHub for pushes to `dev` and
+  `main`; keep it and `scripts/check.ps1` in step.
 
 ## Skills and agents
 
