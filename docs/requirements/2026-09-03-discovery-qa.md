@@ -28,7 +28,7 @@ This is the source of truth for version 1 scope. The derived requirements are in
 
 | # | Question | Answer |
 |---|----------|--------|
-| 11 | Source of leave, holidays, deadlines? | Normally the WorkloadHub application. For version 1: **dummy data**. Use **Morocco public holidays**, a **default capacity of 44 hours per week**, and **dummy planned vacations for some employees in the coming weeks**. |
+| 11 | Source of leave, holidays, deadlines? | Normally the WorkloadHub application. For version 1: **dummy data**. Use **Morocco public holidays**, a **default capacity of 44 hours per week** (confirmed as the final decision on 2026-09-06 after a brief switch to 40 during the design conversation), and **dummy planned vacations for some employees in the coming weeks**. |
 | 12 | Do team leaders know upcoming project starts and ends a week ahead? | **Yes.** The owner does not yet know how they should provide this to the application. (Design decision recorded in `requirements-v1.md`: an "upcoming events" form in the local UI.) |
 
 ## Output and operation
