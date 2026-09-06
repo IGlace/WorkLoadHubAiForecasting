@@ -114,7 +114,7 @@ first install straight away; the installer now seeds the data itself, see "Lande
   custom NSIS step (`installer/nsis/installer.nsh`, run by electron-builder's `customInstall` hook after the
   files are copied and before the finish page launches the app) calls it through the bundled `whf.exe`. So a
   fresh install starts populated, an upgrade or a reinstall keeps its data, runs and narratives, and a seeding
-  failure is logged in the installer details with the manual command rather than failing the install. The
+  failure shows a message box with the manual command rather than failing the install. The
   frozen-service smoke test exercises both paths of `--if-empty`. Still open, lower priority now: an in-app
   "Load sample data" action in Settings (guarded by a confirmation because it replaces everything) for someone
   who wants to reset to fresh data without reinstalling.

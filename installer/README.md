@@ -43,13 +43,13 @@ pull request and manual dispatch.
 1. Copy `WorkloadHub-Forecast-Setup-<version>.exe` to the target machine and
    run it. It installs per user (no administrator prompt) into the user's
    local app data and adds Desktop and Start Menu shortcuts. Near the end,
-   the details log shows "Loading the sample data": the installer runs the
-   bundled service once to fill the database (3 departments, 8 teams, 48
+   the progress text shows "Loading the sample data" while the installer runs
+   the bundled service once to fill the database (3 departments, 8 teams, 48
    members, 12 months of task history, plus `answer_key.json` beside the
    database, the ground truth the backtest compares against). When the
    installer finishes it launches the app itself (`runAfterFinish: true` in
    `installer/electron-builder.yml`).
-2. If the details log said the sample data could not be loaded, run the
+2. If the installer showed a message box saying the sample data could not be loaded, run the
    same command by hand and restart the app afterwards (it reads the
    database at startup):
 

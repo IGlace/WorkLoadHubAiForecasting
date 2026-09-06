@@ -22,6 +22,7 @@ win:
   artifactName: WorkloadHub-Forecast-Setup-${version}.${ext}
 nsis:
   include: ../installer/nsis/installer.nsh
+  installerLanguages: [en_US, fr_FR]
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
