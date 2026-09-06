@@ -87,8 +87,16 @@ def main(dist_dir: str) -> int:
     print(f"ok version: {version}")
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "smoke.db"
-        _run(exe, "data", "generate", "--db", str(db), "--months", "3")
-        print("ok data generate")
+        key = Path(tmp) / "answer_key.json"
+        first = _run(exe, "data", "generate", "--db", str(db), "--months", "3", "--if-empty", "--answer-key", str(key))
+        if "generated" not in first:
+            raise SystemExit(f"data generate --if-empty on an empty database did not generate: {first}")
+        print("ok data generate --if-empty (seeded)")
+        # The installer calls exactly this on every install; on an upgrade the database is already populated.
+        second = _run(exe, "data", "generate", "--db", str(db), "--months", "3", "--if-empty", "--answer-key", str(key))
+        if "already has data" not in second:
+            raise SystemExit(f"data generate --if-empty on a populated database did not stay a no-op: {second}")
+        print("ok data generate --if-empty (no-op)")
 
         run_out = _run(exe, "run", "--team", "1", "--db", str(db), "--json")
         run_payload = _last_json_object(run_out)
