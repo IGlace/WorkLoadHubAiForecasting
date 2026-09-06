@@ -14,7 +14,7 @@ narrative-envelope fix. "Upcoming events" was brainstormed on 2026-09-04 and clo
 the Playwright smoke path was deferred the same day. The review of the button-scoping change turned up a
 serious pre-existing defect — the app could not render a narrative the service returns — which has since
 been fixed; see "Landed" below. The owner began the Windows verification on 2026-09-05 and hit the empty
-first install straight away; that is the seeding item below.
+first install straight away; the installer now seeds the data itself, see "Landed" below.
 
 ## Landed
 
@@ -108,11 +108,16 @@ first install straight away; that is the seeding item below.
   is the first evidence that the frozen PyInstaller build runs the generator correctly. Two traps the new
   step calls out: the app must be restarted afterwards, because it reads the database at startup and
   otherwise keeps showing empty lists, and `data generate` *replaces* everything, so running it after a
-  forecast destroys the stored runs and their narratives. Fixed as documentation only — a new step 2 in the
-  first-run checklist. **Still undecided, and the owner's call:** whether the app should offer this itself
-  (a "Load sample data" action in Settings, guarded by a confirmation because of the replace). Documentation
-  is enough while one person installs this on one machine; it stops being enough as soon as someone who
-  will not open PowerShell has to install it.
+  forecast destroys the stored runs and their narratives. Fixed as documentation first (a new step 2 in the
+  first-run checklist), then properly on 2026-09-06 at the owner's request: the setup file now loads the sample
+  data itself. `whf data generate --if-empty` generates only when the database holds no departments, and a
+  custom NSIS step (`installer/nsis/installer.nsh`, run by electron-builder's `customInstall` hook after the
+  files are copied and before the finish page launches the app) calls it through the bundled `whf.exe`. So a
+  fresh install starts populated, an upgrade or a reinstall keeps its data, runs and narratives, and a seeding
+  failure is logged in the installer details with the manual command rather than failing the install. The
+  frozen-service smoke test exercises both paths of `--if-empty`. Still open, lower priority now: an in-app
+  "Load sample data" action in Settings (guarded by a confirmation because it replaces everything) for someone
+  who wants to reset to fresh data without reinstalling.
 
 ## Approved, not yet built
 

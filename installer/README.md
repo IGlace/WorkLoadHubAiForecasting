@@ -12,6 +12,11 @@ administrator rights are needed anywhere in the build or the install.
 - The GitHub Copilot CLI, pre-downloaded at build time into
   `resources/service/whf/copilot-cli/`. The app points the service at it via
   `COPILOT_CLI_PATH`, so the CLI is never downloaded at install or run time.
+- A custom NSIS step (`installer/nsis/installer.nsh`, wired in through `nsis.include`)
+  that runs the bundled `whf.exe data generate --if-empty` at the end of the
+  installation, so a fresh install starts with the sample data. `--if-empty`
+  makes it a no-op when the database already holds data, so an upgrade or a
+  reinstall keeps existing data, stored runs and narratives.
 
 `installer/electron-builder.yml` configures the packaging (`extraResources`,
 icons, NSIS options); `installer/pyinstaller/whf.spec` configures the freeze.
@@ -37,30 +42,26 @@ pull request and manual dispatch.
 
 1. Copy `WorkloadHub-Forecast-Setup-<version>.exe` to the target machine and
    run it. It installs per user (no administrator prompt) into the user's
-   local app data and adds Desktop and Start Menu shortcuts. When the
+   local app data and adds Desktop and Start Menu shortcuts. Near the end,
+   the details log shows "Loading the sample data": the installer runs the
+   bundled service once to fill the database (3 departments, 8 teams, 48
+   members, 12 months of task history, plus `answer_key.json` beside the
+   database, the ground truth the backtest compares against). When the
    installer finishes it launches the app itself (`runAfterFinish: true` in
-   `installer/electron-builder.yml`), so step 2 below is usually already done.
-2. Load the dummy data. Version 1 forecasts from generated data, and a fresh
-   install has none — the database holds only the empty schema, so the
-   profile pickers in step 4 have nothing to offer and no team can be
-   forecast. Nothing seeds it automatically and there is no button for it in
-   the app; run the bundled service binary once:
+   `installer/electron-builder.yml`).
+2. If the details log said the sample data could not be loaded, run the
+   same command by hand and restart the app afterwards (it reads the
+   database at startup):
 
    ```powershell
    & "$env:LOCALAPPDATA\Programs\WorkloadHub Forecast\resources\service\whf\whf.exe" data generate
    ```
 
-   It writes to the same `%LOCALAPPDATA%\WorkloadHubForecast\whf.db` the app
-   uses, so no `--db` is needed; adjust the path if the install directory was
-   changed (`allowToChangeInstallationDirectory: true`). The defaults produce
-   3 departments, 8 teams, 48 members and 12 months of task history, plus
-   `answer_key.json` beside the database — the ground truth the backtest
-   compares against, which is why the two are always written together.
-   `data generate` **replaces** all existing data, including stored runs and
-   their narratives, so run it before the first forecast and not after.
-3. Start the app from the Start Menu. If the installer already launched it
-   (step 1), quit it from the tray icon first and start it again: it read an
-   empty database at startup and will keep showing empty lists otherwise.
+   Adjust the path if the install directory was changed
+   (`allowToChangeInstallationDirectory: true`). Without `--if-empty`,
+   `data generate` **replaces** all existing data, including stored runs
+   and their narratives, so never run it after a forecast you want to keep.
+3. Start the app from the Start Menu if the installer did not launch it.
 4. Settings → choose your profile (department, team, member).
 5. Settings → "Sign in to GitHub Copilot". A PowerShell window opens showing
    a device code; this first sign-in must use the company GitHub account
@@ -78,8 +79,9 @@ pull request and manual dispatch.
 
 - Database: `%LOCALAPPDATA%\WorkloadHubForecast\whf.db`
 - Answer key for the generated data:
-  `%LOCALAPPDATA%\WorkloadHubForecast\answer_key.json`, rewritten by every
-  `data generate` so it always describes the data currently in the database
+  `%LOCALAPPDATA%\WorkloadHubForecast\answer_key.json`, written by the
+  installer's seeding step and rewritten by every `data generate` so it
+  always describes the data currently in the database
 - App settings: `%LOCALAPPDATA%\WorkloadHubForecast\app\settings.json`
 - Logs: `%LOCALAPPDATA%\WorkloadHubForecast\logs\app.log` (rotates at 1 MB,
   keeps 5 files)
@@ -92,4 +94,6 @@ installed program files but, by design (`deleteAppDataOnUninstall: false` in
 `installer/electron-builder.yml`), leaves the
 `%LOCALAPPDATA%\WorkloadHubForecast` folder — database, settings and logs —
 in place. Delete that folder by hand for a fully clean removal, or to keep
-history across a reinstall, leave it.
+history across a reinstall, leave it. Because the folder survives,
+reinstalling over it keeps the data: the installer's seeding step sees a
+populated database and does nothing.
