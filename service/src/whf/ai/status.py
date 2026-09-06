@@ -65,12 +65,13 @@ async def copilot_status(client_factory: Callable[[], Any] | None = None) -> Cop
         def client_factory() -> Any:
             return CopilotClient(log_level="error")
 
-    client = client_factory()
     try:
-        try:
-            await client.start()
-        except Exception as exc:
-            return CopilotStatus(cli_path, source, None, None, f"Copilot CLI could not start: {exc}", "start_failed")
+        # The SDK resolves its CLI in the constructor and raises RuntimeError when there is none anywhere.
+        client = client_factory()
+        await client.start()
+    except Exception as exc:
+        return CopilotStatus(cli_path, source, None, None, f"Copilot CLI could not start: {exc}", "start_failed")
+    try:
         auth = await client.get_auth_status()
         if getattr(auth, "isAuthenticated", False):
             return CopilotStatus(

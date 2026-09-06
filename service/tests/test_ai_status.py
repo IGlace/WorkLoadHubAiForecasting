@@ -51,3 +51,19 @@ def test_login_command_and_runner() -> None:
     assert run_login("/bin/copilot", runner=lambda cmd: seen.append(cmd) or 0) == 0
     assert seen == [["/bin/copilot", "login"]]
     assert isinstance(CopilotStatus(None, "none", None, None, "x", "start_failed").ready, bool)
+
+
+def test_status_when_the_sdk_cannot_even_construct_a_client(monkeypatch) -> None:
+    """With no CLI anywhere, CopilotClient() raises from its constructor, before start(): still exit 3, no traceback."""
+    monkeypatch.delenv("COPILOT_CLI_PATH", raising=False)
+    monkeypatch.setattr("whf.ai.status.shutil.which", lambda name: None)
+    monkeypatch.setattr("whf.ai.status.get_cached_cli_path", lambda: None)
+
+    def factory() -> FakeClient:
+        raise RuntimeError("Copilot CLI not found. Install a published wheel ...")
+
+    status = copilot_status_sync(client_factory=factory)
+    assert status.cli_path is None and status.cli_source == "none"
+    assert status.authenticated is None and not status.ready
+    assert status.code == "start_failed"
+    assert status.message.startswith("Copilot CLI could not start:") and "not found" in status.message
