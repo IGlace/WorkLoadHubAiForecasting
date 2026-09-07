@@ -76,7 +76,10 @@ export function Run(): React.JSX.Element {
           <label><input type="checkbox" checked={withAi && aiPossible} disabled={!aiPossible || busy} onChange={(e) => setWithAi(e.target.checked)} /> {t('run.withai')}</label>
           {copilot && !copilot.ready && <span className="muted"> {copilot.message}</span>}
         </div>
-        <button className="primary" disabled={!selected || busy} onClick={() => { void start() }}>{t('run.start')}</button>
+        <button className="primary" disabled={!selected || busy} onClick={() => { void start() }}>
+          {busy ? t('run.running') : phase === 'done' ? t('run.again') : t('run.start')}
+        </button>
+        {phase === 'done' && <span className="muted"> {t('run.againHint')}</span>}
       </section>
       {phase === 'forecasting' && <StatusMessage kind="info">{t('run.progress.forecasting', { team: selected?.name ?? '' })}</StatusMessage>}
       {phase === 'narrating' && <NarrativeLive {...live} />}

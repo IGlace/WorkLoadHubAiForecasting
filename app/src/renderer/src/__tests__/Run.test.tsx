@@ -216,4 +216,38 @@ describe('Run', () => {
       vi.useRealTimers()
     }
   })
+  it('invites another run once the forecast is complete, and explains what that does', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED,
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
+    expect(await screen.findByRole('button', { name: 'Run another forecast' })).toBeInTheDocument()
+    expect(screen.getByText('Every run is kept in the history. Running again adds a new one; the previous run stays.')).toBeInTheDocument()
+  })
+  it('shows a disabled "Running…" button while the narrative request is held open', async () => {
+    const held = new Promise(() => {})
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED, 'POST /runs/5/narrative': () => held,
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    const button = await screen.findByRole('button', { name: 'Run forecast' })
+    await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
+    await userEvent.click(button)
+    const running = await screen.findByRole('button', { name: 'Running…' })
+    expect(running).toBeDisabled()
+  })
+  it('posts a second run when "Run another forecast" is clicked', async () => {
+    const fake = installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED,
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
+    const again = await screen.findByRole('button', { name: 'Run another forecast' })
+    await userEvent.click(again)
+    await waitFor(() => expect(fake.calls.filter((c) => c.path === '/runs').length).toBe(2))
+  })
 })
