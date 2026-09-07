@@ -186,16 +186,31 @@ def run_forecast(
     # placements of already-known work, not a forecast). When the champion offers its own
     # quantiles, those define a per-member band directly; otherwise fall back to the pooled
     # champion backtest residuals for the horizon, clamped to bracket zero, scaled per member
-    # by their estimate ratio.
+    # by their estimate ratio. Point values come from `predicted` (already computed above)
+    # rather than a second `model.predict` call, which would double inference for exactly the
+    # heavy quantile-capable models this feature exists to support.
+    point_by_member = {(int(r.member_id), int(r.horizon)): float(r.est_hours) for r in predicted.itertuples()}
     offsets: dict[tuple[int, int], tuple[float, float]] = {}
     basis = "backtest residuals"
     if hasattr(model, "predict_quantiles"):
         basis = "model quantiles"
         for h in horizons:
-            point = np.clip(model.predict(latest, h), 0.0, None)
             low, high = (np.clip(np.asarray(b, dtype=float), 0.0, None) for b in model.predict_quantiles(latest, h))
-            for m, p, lo, hi in zip(latest["member_id"].astype(int), point, low, high, strict=True):
-                offsets[(int(m), h)] = (min(0.0, float(lo - p)), max(0.0, float(hi - p)))
+            band_by_member = {
+                int(m): (float(lo), float(hi))
+                for m, lo, hi in zip(latest["member_id"].astype(int), low, high, strict=True)
+            }
+            # Key from `member_ids`, like the residual branch below: a counted member without a
+            # feature row at the origin degrades to a zero-width band instead of a KeyError.
+            for m in member_ids:
+                band = band_by_member.get(m)
+                point = point_by_member.get((m, h))
+                if band is None or point is None:
+                    offsets[(m, h)] = (0.0, 0.0)
+                else:
+                    p = max(0.0, point)
+                    lo, hi = band
+                    offsets[(m, h)] = (min(0.0, lo - p), max(0.0, hi - p))
     else:
         for h in horizons:
             q10, q90 = interval_bounds(backtest.residuals.get((champion, h), np.array([])))

@@ -26,7 +26,7 @@ export const RUN_DETAIL: RunDetail = {
         patterns: { member_id: 13, trend_hours_per_week: 1.2, top_weekday: 'Friday', weekday_shares: {}, estimate_ratio_median: 0.9, cycle_days_median: 5, cycle_days_by_type: {}, lateness_days_median: 1, share_late: 0.3, deadline_proximity_corr: 0.4, share_with_project: 0.5, hours_by_project: {}, open_tasks: 6, open_est_hours: 44, overdue_open: 2, cluster: 1 }, open_tasks: [] },
     ],
     projects: [{ id: 3, name: 'Billing v2', start_date: '2026-08-03', deadline: '2026-09-18', status: 'active', type: 'delivery', active_in_window: true, starting_in_window: false, ending_in_window: true }],
-    model: { champion: 'gbm', champion_mase: 0.77, mase_by_model: { gbm: 0.77, tsb: 0.85, seasonal_naive: 1.0 }, backtest_origins: [], horizons: [1, 2], limitations: '', interval: { basis: '', horizons: {} } },
+    model: { champion: 'gbm', champion_mase: 0.77, mase_by_model: { gbm: 0.77, tsb: 0.85, seasonal_naive: 1.0 }, backtest_origins: [], horizons: [1, 2], limitations: '', interval: { basis: '', horizons: {} }, unavailable: {} },
     rebalancing_candidates: { overloaded: [{ member_id: 13, name: 'Yara Tazi', overload_hours: 18 }], underloaded: [{ member_id: 11, name: 'Ali Benjelloun', spare_hours: 6 }] },
   },
   narrative: {

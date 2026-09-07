@@ -54,7 +54,9 @@ export interface RunFacts {
   members: MemberFacts[]
   projects: ProjectFact[]
   model: { champion: string; champion_mase: number; mase_by_model: Record<string, number>; backtest_origins: string[]
-    horizons: number[]; limitations: string; interval: { basis: string; horizons: Record<string, { low: number; high: number }> } }
+    horizons: number[]; limitations: string
+    interval: { basis: string; horizons: Record<string, { low_offset: number; high_offset: number }> }
+    unavailable: Record<string, string> }
   rebalancing_candidates: { overloaded: { member_id: number; name: string; overload_hours: number }[]
     underloaded: { member_id: number; name: string; spare_hours: number }[] }
 }
