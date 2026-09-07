@@ -6,13 +6,13 @@ import datetime as dt
 import json
 import math
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from whf.backtest import default_origins, interval_bounds, rolling_backtest, select_champion
+from whf.backtest import FLOOR_MODEL, default_origins, interval_bounds, rolling_backtest, select_champion
 from whf.calendar import (
     ONE_WEEK,
     days_in_ranges,
@@ -24,6 +24,7 @@ from whf.capacity import available_hours, overload_hours, resolve_weekly_hours
 from whf.db.repo import insert_rows, read_df, with_dates
 from whf.features import build_feature_matrix, weekly_arrivals
 from whf.models import MODEL_FACTORIES
+from whf.models.base import ModelUnavailable
 from whf.models.effort import EffortModel, place_new_arrivals, place_open_tasks
 from whf.patterns import cluster_members, pattern_table
 
@@ -45,6 +46,7 @@ class RunResult:
     forecasts: pd.DataFrame
     facts: dict
     scores: pd.DataFrame
+    unavailable: dict[str, str] = field(default_factory=dict)
 
 
 def jsonable(value: Any) -> Any:
@@ -107,7 +109,13 @@ def _capacity_rows(
 
 
 def run_forecast(
-    conn: sqlite3.Connection, team_id: int, as_of: dt.date | None = None, requested_by: int | None = None
+    conn: sqlite3.Connection,
+    team_id: int,
+    as_of: dt.date | None = None,
+    requested_by: int | None = None,
+    *,
+    force_model: str | None = None,
+    persist: bool = True,
 ) -> RunResult:
     as_of = as_of or dt.date.today()
     started = dt.datetime.now()
@@ -144,8 +152,19 @@ def run_forecast(
     origins = [
         o for o in default_origins(origin, BACKTEST_ORIGINS) if o >= weeks[0] + MIN_WEEKS_BEFORE_ORIGIN * ONE_WEEK
     ]
-    backtest = rolling_backtest(feat, MODEL_FACTORIES, origins, horizons)
-    champion, champion_mase = select_champion(backtest.scores)
+    if force_model is not None and force_model not in MODEL_FACTORIES:
+        raise ValueError(f"unknown model {force_model!r}; known: {sorted(MODEL_FACTORIES)}")
+    factories = (
+        MODEL_FACTORIES if force_model is None else {name: MODEL_FACTORIES[name] for name in {force_model, FLOOR_MODEL}}
+    )
+    backtest = rolling_backtest(feat, factories, origins, horizons)
+    if force_model is not None:
+        if force_model in backtest.unavailable:
+            raise ModelUnavailable(backtest.unavailable[force_model])
+        mine = backtest.scores[backtest.scores["model"] == force_model]["mase"].dropna()
+        champion, champion_mase = force_model, (float(mine.mean()) if len(mine) else float("nan"))
+    else:
+        champion, champion_mase = select_champion(backtest.scores)
     model = MODEL_FACTORIES[champion]().fit(feat, horizons)
     latest = feat[(feat["week_start"] == origin) & (feat["member_id"].astype(int).isin(member_ids))]
     predicted_rows = []
@@ -163,13 +182,25 @@ def run_forecast(
     team_of = {int(m): int(t) for m, t in zip(members["id"], members["team_id"].fillna(0), strict=True)}
     new_placed = place_new_arrivals(predicted[["member_id", "week_start", "est_hours"]], effort, off_by_member, team_of)
     capacity = _capacity_rows(frames, member_ids, (f1, f2), off_by_member)
-    # Prediction intervals apply only to the new-arrival component: pooled champion backtest
-    # residuals for the horizon, clamped to bracket zero, scaled per member by their estimate
-    # ratio (open-task hours are placements of already-known work, not a forecast).
-    bounds = {}
-    for h in horizons:
-        q10, q90 = interval_bounds(backtest.residuals.get((champion, h), np.array([])))
-        bounds[h] = (min(0.0, q10), max(0.0, q90))
+    # Prediction intervals apply only to the new-arrival component (open-task hours are
+    # placements of already-known work, not a forecast). When the champion offers its own
+    # quantiles, those define a per-member band directly; otherwise fall back to the pooled
+    # champion backtest residuals for the horizon, clamped to bracket zero, scaled per member
+    # by their estimate ratio.
+    offsets: dict[tuple[int, int], tuple[float, float]] = {}
+    basis = "backtest residuals"
+    if hasattr(model, "predict_quantiles"):
+        basis = "model quantiles"
+        for h in horizons:
+            point = np.clip(model.predict(latest, h), 0.0, None)
+            low, high = (np.clip(np.asarray(b, dtype=float), 0.0, None) for b in model.predict_quantiles(latest, h))
+            for m, p, lo, hi in zip(latest["member_id"].astype(int), point, low, high, strict=True):
+                offsets[(int(m), h)] = (min(0.0, float(lo - p)), max(0.0, float(hi - p)))
+    else:
+        for h in horizons:
+            q10, q90 = interval_bounds(backtest.residuals.get((champion, h), np.array([])))
+            for m in member_ids:
+                offsets[(m, h)] = (min(0.0, q10), max(0.0, q90))
 
     rows = []
     for m in member_ids:
@@ -188,7 +219,7 @@ def run_forecast(
             )
             open_hours, new_hours = round(open_hours, 2), round(new_hours, 2)
             demand = round(open_hours + new_hours, 2)
-            low, high = bounds[h]
+            low, high = offsets[(m, h)]
             demand_low = min(demand, open_hours + max(0.0, new_hours + low * ratio))
             demand_high = max(demand, open_hours + new_hours + high * ratio)
             cap = capacity[(m, week)]
@@ -232,34 +263,51 @@ def run_forecast(
         backtest.scores,
         origins,
         horizons,
-        bounds,
+        offsets,
+        basis,
+        backtest.unavailable,
     )
 
     # persist: one run, its forecasts and its facts, in a single transaction
-    try:
-        cur = conn.execute(
-            "INSERT INTO runs (team_id, as_of, requested_by, status, champion_model, backtest_mase, started_at, finished_at, ai_status)"
-            " VALUES (?, ?, ?, 'done', ?, ?, ?, ?, 'not_requested')",
-            (
-                team_id,
-                as_of.isoformat(),
-                requested_by,
-                champion,
-                None if math.isnan(champion_mase) else champion_mase,
-                started.isoformat(timespec="seconds"),
-                dt.datetime.now().isoformat(timespec="seconds"),
-            ),
-        )
-        run_id = int(cur.lastrowid)
-        facts["run"]["id"] = run_id
-        facts_json = json.dumps(jsonable(facts))
-        insert_rows(conn, "forecasts", [{"run_id": run_id, **r} for r in rows], commit=False)
-        conn.execute("INSERT INTO run_facts (run_id, json) VALUES (?, ?)", (run_id, facts_json))
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    return RunResult(run_id, team_id, as_of, (f1, f2), champion, champion_mase, forecasts, facts, backtest.scores)
+    run_id = 0
+    if persist:
+        try:
+            cur = conn.execute(
+                "INSERT INTO runs (team_id, as_of, requested_by, status, champion_model, backtest_mase, started_at,"
+                " finished_at, ai_status) VALUES (?, ?, ?, 'done', ?, ?, ?, ?, 'not_requested')",
+                (
+                    team_id,
+                    as_of.isoformat(),
+                    requested_by,
+                    champion,
+                    None if math.isnan(champion_mase) else champion_mase,
+                    started.isoformat(timespec="seconds"),
+                    dt.datetime.now().isoformat(timespec="seconds"),
+                ),
+            )
+            run_id = int(cur.lastrowid)
+            facts["run"]["id"] = run_id
+            facts_json = json.dumps(jsonable(facts))
+            insert_rows(conn, "forecasts", [{"run_id": run_id, **r} for r in rows], commit=False)
+            conn.execute("INSERT INTO run_facts (run_id, json) VALUES (?, ?)", (run_id, facts_json))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    else:
+        facts["run"]["id"] = 0
+    return RunResult(
+        run_id,
+        team_id,
+        as_of,
+        (f1, f2),
+        champion,
+        champion_mase,
+        forecasts,
+        facts,
+        backtest.scores,
+        backtest.unavailable,
+    )
 
 
 def _build_facts(
@@ -278,7 +326,9 @@ def _build_facts(
     scores,
     origins,
     horizons,
-    bounds,
+    offsets,
+    basis,
+    unavailable,
 ) -> dict:
     f1, f2 = weeks
     team = frames["teams"][frames["teams"]["id"] == team_id].iloc[0]
@@ -366,6 +416,14 @@ def _build_facts(
         if r.capacity_hours > 0 and r.demand_hours < UNDERLOAD_RATIO * r.capacity_hours
     ]
     mase_by_model = scores.groupby("model")["mase"].mean().to_dict() if len(scores) else {}
+    # Facts carry one band per horizon, not per member: average the per-member offsets. For the
+    # "backtest residuals" basis every member already shares the same offset at a given horizon,
+    # so the mean is exact; for "model quantiles" it is a genuine average across members.
+    horizon_offsets: dict[int, tuple[float, float]] = {}
+    for h in horizons:
+        lows = [lo for (_, hh), (lo, _hi) in offsets.items() if hh == h]
+        highs = [hi for (_, hh), (_lo, hi) in offsets.items() if hh == h]
+        horizon_offsets[h] = (float(np.mean(lows)) if lows else 0.0, float(np.mean(highs)) if highs else 0.0)
     return {
         "run": {"id": None, "as_of": as_of, "weeks": [f1, f2], "generated_at": dt.datetime.now()},
         "team": {
@@ -395,12 +453,12 @@ def _build_facts(
                 "open tasks are placed from the first forecast week"
             ),
             "interval": {
-                "basis": (
-                    "10th/90th percentile of the champion's pooled backtest residuals, scaled by each "
-                    "member's estimate ratio, applied to new-arrival hours only"
-                ),
-                "horizons": {h: {"low": low, "high": high} for h, (low, high) in bounds.items()},
+                "basis": basis,
+                "horizons": {
+                    str(h): {"low_offset": low, "high_offset": high} for h, (low, high) in horizon_offsets.items()
+                },
             },
+            "unavailable": dict(unavailable),
         },
         "rebalancing_candidates": {"overloaded": overloaded, "underloaded": underloaded},
     }

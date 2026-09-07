@@ -4,11 +4,15 @@ import json
 import pandas as pd
 import pytest
 
+from whf.backtest import FLOOR_MODEL
 from whf.calendar import forecast_weeks
 from whf.data.generator import GeneratorConfig, generate, truncate_to
 from whf.data.loader import load_generated
 from whf.db.connection import connect
 from whf.db.repo import read_df
+from whf.models import MODEL_FACTORIES
+from whf.models.base import ModelUnavailable
+from whf.models.naive import SeasonalNaive
 from whf.pipeline import jsonable, list_runs, load_run, run_forecast
 
 
@@ -127,6 +131,49 @@ def test_failed_persistence_leaves_no_partial_run(db, generated, monkeypatch) ->
 def test_run_forecast_rejects_team_without_counted_members(db) -> None:
     with pytest.raises(ValueError):
         run_forecast(db, team_id=999)
+
+
+def test_force_model_and_no_persist(db, generated) -> None:
+    result = run_forecast(db, team_id=1, as_of=generated.config.as_of, force_model="tsb", persist=False)
+    assert result.champion == "tsb" and result.run_id == 0
+    assert read_df(db, "SELECT COUNT(*) AS n FROM runs")["n"][0] == 0
+    with pytest.raises(ValueError):
+        run_forecast(db, team_id=1, as_of=generated.config.as_of, force_model="nope", persist=False)
+
+
+class _Banded(SeasonalNaive):
+    name = "banded"
+
+    def predict_quantiles(self, rows, horizon):
+        point = self.predict(rows, horizon)
+        return point * 0.5, point * 2.0
+
+
+class _Broken:
+    name = "broken"
+
+    def __init__(self) -> None:
+        raise ModelUnavailable("broken: missing")
+
+
+def test_model_quantiles_drive_the_band(db, generated, monkeypatch) -> None:
+    monkeypatch.setitem(MODEL_FACTORIES, "banded", _Banded)
+    result = run_forecast(db, team_id=1, as_of=generated.config.as_of, force_model="banded", persist=False)
+    f = result.forecasts
+    assert (f["demand_low"] <= f["demand_hours"] + 1e-9).all() and (f["demand_high"] >= f["demand_hours"] - 1e-9).all()
+    assert result.facts["model"]["interval"]["basis"] == "model quantiles"
+    plain = run_forecast(db, team_id=1, as_of=generated.config.as_of, force_model=FLOOR_MODEL, persist=False)
+    assert plain.facts["model"]["interval"]["basis"] == "backtest residuals"
+
+
+def test_unavailable_models_are_recorded_or_raised_when_forced(db, generated, monkeypatch) -> None:
+    monkeypatch.setitem(MODEL_FACTORIES, "broken", _Broken)
+    full = run_forecast(db, team_id=1, as_of=generated.config.as_of, persist=False)
+    assert full.unavailable == {"broken": "broken: missing"}
+    assert full.facts["model"]["unavailable"] == {"broken": "broken: missing"}
+    assert full.champion != "broken"
+    with pytest.raises(ModelUnavailable):
+        run_forecast(db, team_id=1, as_of=generated.config.as_of, force_model="broken", persist=False)
 
 
 @pytest.mark.slow
