@@ -38,11 +38,19 @@ describe('CopilotCost', () => {
     expect(screen.getByText('Copilot usage: 2 requests · 2.5 premium requests')).toBeInTheDocument()
   })
 
+  it('says nothing about money when the service reported credits without a price', () => {
+    // The service computes the money (whf/ai/usage.py); the view never does that arithmetic itself.
+    render(<CopilotCost usage={usage({ usd: null, premium_requests: null })} />)
+    const line = screen.getByText(/Copilot usage:/)
+    expect(line).not.toHaveTextContent('AI credits')
+    expect(line).toHaveTextContent('12,345 tokens in, 678 out · 3 requests')
+  })
+
   it('reads in French, thousands grouped the French way', () => {
     render(<CopilotCost usage={USAGE} />)
     act(() => { setLanguage('fr') })
     const line = screen.getByText(/crédits IA/)
-    expect(line).toHaveTextContent('Utilisation de Copilot : 12.50 crédits IA (environ 0.13 $)')
+    expect(line).toHaveTextContent('Utilisation de Copilot : 12,50 crédits IA (environ 0,13 $)')
     expect(line).toHaveTextContent('3 requêtes')
     // 12345 is grouped for a French reader, so the English comma must be gone.
     expect(line.textContent).toContain((12345).toLocaleString('fr-FR'))

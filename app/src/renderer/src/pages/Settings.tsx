@@ -24,11 +24,13 @@ function quotaLines(quota: Record<string, CopilotQuota> | null): React.JSX.Eleme
     .filter(([, snapshot]) => !snapshot.unlimited)
     .map(([key, snapshot]) => (
       <p key={key} className="muted">
-        {t('settings.quota', {
+        {t(snapshot.reset_date ? 'settings.quota' : 'settings.quotaNoResetLine', {
           name: NAMED_QUOTAS.includes(key) ? t(`quota.${key}`) : key,
           remaining: Math.round(snapshot.remaining_percentage),
-          // The reset date is an ISO timestamp; the day is all that matters here.
-          reset: snapshot.reset_date ? snapshot.reset_date.slice(0, 10) : t('settings.quotaNoReset'),
+          // The reset date is an ISO timestamp; the day is all that matters here. A quota with no
+          // reset date gets a sentence of its own: a fragment glued after "resets on" reads badly
+          // in both languages.
+          reset: snapshot.reset_date?.slice(0, 10) ?? '',
         })}
       </p>
     ))

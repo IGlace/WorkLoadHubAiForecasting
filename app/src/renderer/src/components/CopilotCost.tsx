@@ -14,9 +14,14 @@ export function CopilotCost({ usage }: { usage: NarrativeUsage | null }): React.
   const t = useT()
   if (!usage || usage.source === 'none') return null
   const locale = getLanguage() === 'fr' ? 'fr-FR' : 'en-US'
+  // Two decimals, with the decimal mark of the reader's language: 12,50 for a French reader.
+  const money = (value: number): string =>
+    value.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const parts: string[] = []
-  if (usage.ai_credits !== null) {
-    parts.push(t('cost.credits', { credits: usage.ai_credits.toFixed(2), usd: (usage.usd ?? usage.ai_credits / 100).toFixed(2) }))
+  // The service is the one that turns credits into money (`whf/ai/usage.py`); credits without a
+  // price mean the price was not computed, and the view does not compute it here.
+  if (usage.ai_credits !== null && usage.usd !== null) {
+    parts.push(t('cost.credits', { credits: money(usage.ai_credits), usd: money(usage.usd) }))
   }
   if (usage.input_tokens !== null && usage.output_tokens !== null) {
     parts.push(t('cost.tokens', { in: usage.input_tokens.toLocaleString(locale), out: usage.output_tokens.toLocaleString(locale) }))

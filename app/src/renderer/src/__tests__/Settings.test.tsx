@@ -45,8 +45,9 @@ describe('Settings', () => {
     expect(await screen.findByText('Premium requests: 63% remaining, resets on 2026-10-01')).toBeInTheDocument()
     // An unlimited quota has nothing to run out of, so it says nothing.
     expect(screen.queryByText(/Chat:/)).not.toBeInTheDocument()
-    // A quota type this version has no wording for still shows, under its raw name.
-    expect(screen.getByText('copilot_labs: 90% remaining, resets on no reset date')).toBeInTheDocument()
+    // A quota type this version has no wording for still shows, under its raw name; a quota with no
+    // reset date gets its own sentence rather than a fragment glued onto "resets on".
+    expect(screen.getByText('copilot_labs: 90% remaining (no reset date)')).toBeInTheDocument()
   })
   it('shows no quota line when Copilot reports none', async () => {
     installFakeWhf({
