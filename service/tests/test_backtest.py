@@ -6,6 +6,8 @@ import pandas as pd
 from whf.backtest import default_origins, interval_bounds, mase, rolling_backtest, select_champion
 from whf.features import build_feature_matrix, weekly_arrivals
 from whf.models import MODEL_FACTORIES
+from whf.models.base import ModelUnavailable
+from whf.models.naive import SeasonalNaive
 
 W0 = dt.date(2025, 1, 6)
 
@@ -82,3 +84,40 @@ def test_interval_bounds_are_ordered_quantiles() -> None:
     low, high = interval_bounds(np.array([-4.0, -2.0, 0.0, 2.0, 4.0]))
     assert low < 0 < high
     assert interval_bounds(np.array([])) == (0.0, 0.0)
+
+
+class _Broken:
+    name = "broken"
+
+    def __init__(self) -> None:
+        raise ModelUnavailable("broken: no weights")
+
+
+class _Banded(SeasonalNaive):
+    name = "banded"
+
+    def predict_quantiles(self, rows, horizon):
+        point = self.predict(rows, horizon)
+        return point * 0.5, point * 1.5
+
+
+def test_backtest_skips_unavailable_models_and_records_the_reason() -> None:
+    feat = _frame()
+    origins = default_origins(W0 + dt.timedelta(days=7 * 76), count=2)
+    result = rolling_backtest(feat, {"seasonal_naive": SeasonalNaive, "broken": _Broken}, origins, horizons=(1,))
+    assert set(result.scores["model"]) == {"seasonal_naive"}
+    assert result.unavailable == {"broken": "broken: no weights"}
+    assert result.timings["seasonal_naive"] >= 0.0 and "broken" not in result.timings
+    frame = result.residual_frames[("seasonal_naive", 1)]
+    assert list(frame.columns) == ["origin", "residual"] and set(frame["origin"]) == set(origins)
+    assert np.allclose(frame["residual"].to_numpy(), result.residuals[("seasonal_naive", 1)])
+
+
+def test_backtest_collects_native_quantiles_when_a_model_offers_them() -> None:
+    feat = _frame()
+    origins = default_origins(W0 + dt.timedelta(days=7 * 76), count=2)
+    result = rolling_backtest(feat, {"seasonal_naive": SeasonalNaive, "banded": _Banded}, origins, horizons=(1, 2))
+    q = result.quantiles[("banded", 1)]
+    assert list(q.columns) == ["origin", "y", "low", "high"] and len(q) == 2 * 8
+    assert (q["low"] <= q["high"]).all()
+    assert ("seasonal_naive", 1) not in result.quantiles
