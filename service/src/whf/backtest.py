@@ -98,6 +98,15 @@ def rolling_backtest(
                         {"origin": origin, "y": float(a), "low": float(b), "high": float(c)}
                         for a, b, c in zip(y, low, high, strict=True)
                     )
+    # A model recorded in `unavailable` must leave no partial trace: a factory that fit fine at
+    # an early origin and then raised ModelUnavailable later would otherwise keep the scores,
+    # residuals, quantiles and timings from the origins where it did run, letting a broken model
+    # win select_champion on a handful of good origins.
+    rows = [r for r in rows if r["model"] not in unavailable]
+    residuals = {k: v for k, v in residuals.items() if k[0] not in unavailable}
+    residual_rows = {k: v for k, v in residual_rows.items() if k[0] not in unavailable}
+    quantiles = {k: v for k, v in quantiles.items() if k[0] not in unavailable}
+    timings = {k: v for k, v in timings.items() if k not in unavailable}
     scores = pd.DataFrame(rows, columns=["model", "origin", "horizon", "mae", "mase"])
     return BacktestResult(
         scores=scores,

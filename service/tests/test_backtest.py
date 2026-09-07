@@ -121,3 +121,30 @@ def test_backtest_collects_native_quantiles_when_a_model_offers_them() -> None:
     assert list(q.columns) == ["origin", "y", "low", "high"] and len(q) == 2 * 8
     assert (q["low"] <= q["high"]).all()
     assert ("seasonal_naive", 1) not in result.quantiles
+
+
+class _LaterUnavailable(SeasonalNaive):
+    name = "later"
+    instantiations = 0
+
+    def __init__(self) -> None:
+        super().__init__()
+        type(self).instantiations += 1
+        if type(self).instantiations >= 2:
+            raise ModelUnavailable("later: gone")
+
+
+def test_backtest_drops_all_traces_of_a_model_that_becomes_unavailable_later() -> None:
+    feat = _frame()
+    origins = default_origins(W0 + dt.timedelta(days=7 * 76), count=3)
+    result = rolling_backtest(
+        feat, {"seasonal_naive": SeasonalNaive, "later": _LaterUnavailable}, origins, horizons=(1, 2)
+    )
+    assert result.unavailable == {"later": "later: gone"}
+    assert "later" not in set(result.scores["model"])
+    assert all(model != "later" for model, _ in result.residuals)
+    assert all(model != "later" for model, _ in result.residual_frames)
+    assert all(model != "later" for model, _ in result.quantiles)
+    assert "later" not in result.timings
+    naive_rows = result.scores[result.scores["model"] == "seasonal_naive"]
+    assert len(naive_rows) == 3 * 2
