@@ -13,6 +13,8 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "github-copilot-sdk>=1.0.11,<2",
+    "chronos-forecasting>=2.3,<3",
+    "torch>=2.6",
 ]
 
 [project.scripts]
@@ -31,6 +33,16 @@ build = [
     "pyinstaller>=6.22,<7",
     "pyinstaller-hooks-contrib>=2026.7",
 ]
+
+# torch resolves to the CUDA build by default (1.2 GB plus NVIDIA runtime libraries); the service
+# only ever forecasts on CPU, so it is pinned to PyTorch's CPU wheel index instead.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]

@@ -12,6 +12,9 @@ ROOT = HERE.parents[1]
 
 whf_datas = collect_data_files("whf", includes=["db/schema.sql", "ai/skills/**/SKILL.md"])
 copilot_datas, copilot_binaries, copilot_hidden = collect_all("copilot")
+# chronos ships its model configs and registry as package data and imports pipeline classes
+# dynamically, so collect_all is what makes Chronos2Pipeline.from_pretrained work in the frozen build.
+chronos_datas, chronos_binaries, chronos_hidden = collect_all("chronos")
 # holidays ships per-country .mo translation catalogs as package data (no pyinstaller-hooks-contrib
 # hook covers it); without these, e.g. Morocco's calendar raises FileNotFoundError at runtime.
 # Morocco's MA class supports only ar (its default), en_US and fr (holidays.countries.morocco.MA
@@ -22,8 +25,8 @@ holidays_datas = collect_data_files("holidays", includes=["locale/en_US/**", "lo
 a = Analysis(
     [str(HERE / "entry.py")],
     pathex=[str(ROOT / "service" / "src")],
-    binaries=copilot_binaries,
-    datas=whf_datas + copilot_datas + holidays_datas,
+    binaries=copilot_binaries + chronos_binaries,
+    datas=whf_datas + copilot_datas + holidays_datas + chronos_datas,
     hiddenimports=[
         "uvicorn.logging",
         "uvicorn.loops.auto",
@@ -32,8 +35,21 @@ a = Analysis(
         "uvicorn.lifespan.on",
         "sklearn.ensemble._hist_gradient_boosting",
         *copilot_hidden,
+        *chronos_hidden,
     ],
-    excludes=["tkinter", "matplotlib", "IPython", "pytest", "hypothesis", "notebook"],
+    # torch.utils.tensorboard and the torchvision/torchaudio siblings are never imported by the
+    # service; without these excludes PyInstaller follows torch's optional imports and grows the build.
+    excludes=[
+        "tkinter",
+        "matplotlib",
+        "IPython",
+        "pytest",
+        "hypothesis",
+        "notebook",
+        "torch.utils.tensorboard",
+        "torchvision",
+        "torchaudio",
+    ],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

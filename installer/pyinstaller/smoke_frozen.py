@@ -1,5 +1,5 @@
-"""Smoke-test a frozen service folder: version, data generation, forecast run, Copilot status,
-serve handshake, health and one guarded route.
+"""Smoke-test a frozen service folder: version, data generation, forecast run, Chronos-2 evaluation,
+Copilot status, serve handshake, health and one guarded route.
 
 Usage: python installer/pyinstaller/smoke_frozen.py <dist-dir>   (dist-dir contains whf or whf.exe)
 Exit code 0 on success. Standard library only, so it runs on the Windows build machine and on Linux CI.
@@ -119,6 +119,39 @@ def main(dist_dir: str) -> int:
         if "run_id" not in run_payload:
             raise SystemExit(f"whf run --json missing run_id: {run_out}")
         print("ok run")
+
+        # Chronos-2: with the weights bundled next to the exe the frozen build must actually run the
+        # model; without them it must degrade to a clean "skipped" and exit 1, never crash and never
+        # reach for the network. HF_HUB_OFFLINE=1 forbids the download, and an empty HF_HOME hides
+        # any Hugging Face cache the build machine happens to have - without it this step would pass
+        # on a developer's machine for the wrong reason, proving only that the cache was warm.
+        weights = dist / "models" / "chronos-2"
+        eval_db = Path(tmp) / "eval.db"
+        eval_key = Path(tmp) / "eval_key.json"
+        _run(exe, "data", "generate", "--db", str(eval_db), "--months", "6", "--answer-key", str(eval_key))
+        eval_out = subprocess.run(
+            [
+                str(exe), "eval",
+                "--db", str(eval_db),
+                "--models", "chronos2",
+                "--origins", "1",
+                "--teams", "1",
+                "--out", str(Path(tmp) / "eval_out"),
+                "--answer-key", str(eval_key),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env={**os.environ, "HF_HUB_OFFLINE": "1", "HF_HOME": str(Path(tmp) / "hf_home")},
+        )
+        if weights.is_dir():
+            if eval_out.returncode != 0 or "skipped" in eval_out.stdout:
+                raise SystemExit(f"chronos2 should run from bundled weights:\n{eval_out.stdout}\n{eval_out.stderr}")
+            print("ok chronos2 eval from bundled weights")
+        else:
+            if eval_out.returncode != 1 or "skipped chronos2" not in eval_out.stdout:
+                raise SystemExit(f"chronos2 should be skipped without weights:\n{eval_out.stdout}\n{eval_out.stderr}")
+            print("ok chronos2 reported unavailable without weights")
 
         bundled_cli = dist / "copilot-cli" / ("copilot.exe" if os.name == "nt" else "copilot")
         env = {**os.environ, "COPILOT_SKIP_CLI_DOWNLOAD": "1"}

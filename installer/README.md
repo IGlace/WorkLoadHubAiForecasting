@@ -8,10 +8,15 @@ administrator rights are needed anywhere in the build or the install.
 - The Electron app (`app/`), packaged with electron-builder into an `asar`.
 - The frozen forecast service, one-folder PyInstaller build, under
   `resources/service/whf` (`whf.exe` plus its Python runtime and dependencies:
-  scikit-learn, pandas, holidays).
+  scikit-learn, pandas, holidays, and the CPU-only build of PyTorch that
+  Chronos-2 runs on).
 - The GitHub Copilot CLI, pre-downloaded at build time into
   `resources/service/whf/copilot-cli/`. The app points the service at it via
   `COPILOT_CLI_PATH`, so the CLI is never downloaded at install or run time.
+- The Chronos-2 forecasting model weights
+  (`resources/service/whf/models/chronos-2`, about 480 MB, Apache 2.0),
+  downloaded at build time at a pinned revision; the service loads them from
+  there and never contacts the network for them.
 - A custom NSIS step (`installer/nsis/installer.nsh`, wired in through `nsis.include`)
   that runs the bundled `whf.exe data generate --if-empty` at the end of the
   installation, so a fresh install starts with the sample data. `--if-empty`
@@ -30,9 +35,17 @@ pwsh scripts/build-installer.ps1
 ```
 
 This runs `scripts/build-service.ps1` (freeze the service, download the
-Copilot CLI, run the frozen-service smoke test), then `npm ci`, `npm run
-build` and `npm run build:win` in `app/`. The finished installer lands at
+Copilot CLI and the Chronos-2 weights, run the frozen-service smoke test),
+then `npm ci`, `npm run build` and `npm run build:win` in `app/`. The finished
+installer lands at
 `dist/installer/WorkloadHub-Forecast-Setup-<version>.exe`.
+
+The first build downloads about 1.2 GB: the CPU-only PyTorch wheel that `uv
+sync` installs (the CPU wheel index is pinned in `service/pyproject.toml`, so
+no CUDA build is ever resolved) and the Chronos-2 weights. Both are cached
+afterwards. Passing `-SkipModelDownload` to `scripts/build-service.ps1` leaves
+the weights out; the installer still builds and works, but its forecasts use
+the three classical models only and the app reports Chronos-2 as unavailable.
 
 The `package-windows` job in `.github/workflows/ci.yml` runs the same script
 on `windows-latest` and uploads the `.exe` as a build artifact on every push,

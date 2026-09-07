@@ -116,6 +116,13 @@ def test_predict_quantiles_are_ordered_and_clipped() -> None:
     assert np.all(low <= point + 1e-9) and np.all(point <= high + 1e-9) and np.all(low >= 0)
 
 
+def test_the_fast_suite_never_reaches_the_real_model() -> None:
+    """The conftest guard, asserted here so that dropping it is a test failure and not a 53-minute
+    test run: outside `-m slow` a Chronos2Arrival with no injected pipeline must refuse to load."""
+    with pytest.raises(ModelUnavailable, match="disabled"):
+        Chronos2Arrival().fit(_frame(), (1,))
+
+
 def test_registered_and_unavailable_without_torch(monkeypatch) -> None:
     assert MODEL_FACTORIES["chronos2"] is Chronos2Arrival
     import whf.models.chronos2 as mod

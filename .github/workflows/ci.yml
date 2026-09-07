@@ -44,8 +44,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with: { enable-cache: true }
       - run: uv python install 3.11
+      # Neither download runs on CI: the CLI is a Windows-only concern for the installer and the
+      # Chronos-2 weights are about 480 MB per run. The Linux freeze therefore also exercises the
+      # without-weights branch of the smoke test - chronos2 must report itself unavailable.
       - run: bash scripts/build-service.sh
-        env: { WHF_SKIP_CLI_DOWNLOAD: "1" }
+        env: { WHF_SKIP_CLI_DOWNLOAD: "1", WHF_SKIP_MODEL_DOWNLOAD: "1" }
 
   package-windows:
     runs-on: windows-latest

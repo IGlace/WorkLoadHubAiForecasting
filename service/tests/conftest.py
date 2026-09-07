@@ -11,6 +11,51 @@ from whf.db.connection import connect
 from whf.pipeline import jsonable, run_forecast
 
 
+def _refuse_chronos2() -> None:
+    raise ImportError("chronos2 disabled in the fast suite")
+
+
+def _install_chronos2_guard(mp: pytest.MonkeyPatch) -> None:
+    from whf.models import chronos2
+
+    mp.setattr(chronos2, "_pipeline", None)
+    mp.setattr(chronos2, "_import_pipeline_class", _refuse_chronos2)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _chronos2_guard():
+    """Keep the real Chronos-2 out of the fast suite.
+
+    `torch` and `chronos-forecasting` are ordinary dependencies now, so on any machine with the
+    weights in its Hugging Face cache every `run_forecast` and every `rolling_backtest` in this
+    suite would load a 456 MB checkpoint into each of the six xdist workers - measured at 53
+    minutes instead of 18, at over a gigabyte of resident memory per worker. On CI, where nothing
+    is cached, the same code would instead *download* the weights. Refusing the pipeline import
+    puts `chronos2` back where the fast tests already expect it: unavailable, and skipped.
+
+    This is session-scoped on purpose. Session-scoped fixtures are built before any function-scoped
+    fixture, so a function-scoped guard would arrive too late for `_team_one_facts` below, which
+    runs a real forecast.
+    """
+    mp = pytest.MonkeyPatch()
+    _install_chronos2_guard(mp)
+    yield mp
+    mp.undo()
+
+
+@pytest.fixture(autouse=True)
+def _chronos2_guard_exempts_slow_tests(request, _chronos2_guard: pytest.MonkeyPatch):
+    """`-m slow` is where the real model is allowed to run, so lift the guard for those tests only."""
+    if request.node.get_closest_marker("slow") is None:
+        yield
+        return
+    _chronos2_guard.undo()
+    try:
+        yield
+    finally:
+        _install_chronos2_guard(_chronos2_guard)
+
+
 @pytest.fixture(scope="session")
 def generated() -> GeneratedData:
     return generate(GeneratorConfig(seed=42))

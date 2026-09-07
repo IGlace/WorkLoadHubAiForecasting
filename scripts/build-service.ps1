@@ -1,6 +1,7 @@
-# Freeze the forecast service with PyInstaller, bundle the pinned Copilot CLI, smoke-test the result.
-# Usage: pwsh scripts/build-service.ps1 [-SkipCliDownload]
-param([switch]$SkipCliDownload)
+# Freeze the forecast service with PyInstaller, bundle the pinned Copilot CLI and the pinned
+# Chronos-2 weights, smoke-test the result.
+# Usage: pwsh scripts/build-service.ps1 [-SkipCliDownload] [-SkipModelDownload]
+param([switch]$SkipCliDownload, [switch]$SkipModelDownload)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $root "service\dist"
@@ -21,6 +22,12 @@ try {
         uv run python -m copilot download-runtime
         if ($LASTEXITCODE -ne 0) { throw "Copilot CLI download failed" }
         Get-ChildItem $env:COPILOT_CLI_EXTRACT_DIR
+    }
+    if (-not $SkipModelDownload) {
+        # Chronos-2 weights: pinned revision, bundled next to the CLI so the service never downloads at run
+        # time (skip with -SkipModelDownload; the frozen service then reports chronos2 as unavailable).
+        uv run python (Join-Path $root "installer\pyinstaller\download_weights.py") (Join-Path $dist "whf")
+        if ($LASTEXITCODE -ne 0) { throw "Chronos-2 weights download failed" }
     }
     # Smoke: launch the frozen exe and run a real forecast through it, to catch packaging regressions early.
     uv run python (Join-Path $root "installer\pyinstaller\smoke_frozen.py") (Join-Path $dist "whf")

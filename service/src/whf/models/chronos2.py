@@ -86,9 +86,11 @@ def load(env: Mapping[str, str] | None = None, *, shared: bool = True) -> Any:
             # in the user's environment is overridden on purpose, not merely defaulted.
             os.environ["HF_HUB_OFFLINE"] = "1"
         try:
+            # The pipeline class first: importing it is what pulls torch in, so a caller that has
+            # made the library unavailable (the test suite does) pays nothing for torch either.
+            cls = _import_pipeline_class()
             import torch
 
-            cls = _import_pipeline_class()
             torch.set_num_threads(min(MAX_THREADS, os.cpu_count() or 1))
             if path is not None:
                 pipeline = cls.from_pretrained(str(path), device_map="cpu")
@@ -164,12 +166,12 @@ class Chronos2Arrival:
         if self._memo is not None and self._memo[0] == key:
             return self._memo[1]
         df, future = self._frames(rows, horizon)
-        try:
-            import torch
-
+        # Seed the library the pipeline actually runs on. `load()` imports torch before it builds a
+        # real pipeline, so this finds it there; an injected stub never needs torch and must not
+        # cause it to be imported (importing torch costs a test worker seconds and ~400 MB).
+        torch = sys.modules.get("torch")
+        if torch is not None:
             torch.manual_seed(0)
-        except ImportError:
-            pass
         out = self._pipe().predict_df(
             df,
             future_df=future,
