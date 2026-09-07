@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import math
 import sqlite3
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,7 +25,7 @@ from whf.capacity import available_hours, overload_hours, resolve_weekly_hours
 from whf.db.repo import insert_rows, read_df, with_dates
 from whf.features import build_feature_matrix, weekly_arrivals
 from whf.models import MODEL_FACTORIES
-from whf.models.base import ModelUnavailable
+from whf.models.base import ArrivalModel, ModelUnavailable
 from whf.models.effort import EffortModel, place_new_arrivals, place_open_tasks
 from whf.patterns import cluster_members, pattern_table
 
@@ -33,6 +34,15 @@ MIN_WEEKS_BEFORE_ORIGIN = 13
 BACKTEST_ORIGINS = 6
 OVERLOAD_THRESHOLD = 0.0
 UNDERLOAD_RATIO = 0.7
+
+
+class TeamHasNoCountedMembers(ValueError):
+    """Raised by `run_forecast` when the team has no member counted in the workload.
+
+    A distinct type so callers that replay many teams (the evaluation harness) can tell this
+    routine, expected case apart from any other `ValueError` a bug might raise deeper in the run,
+    and skip only for this reason.
+    """
 
 
 @dataclass
@@ -144,7 +154,9 @@ def run_forecast(
     *,
     force_model: str | None = None,
     persist: bool = True,
+    factories: Mapping[str, Callable[[], ArrivalModel]] | None = None,
 ) -> RunResult:
+    factories = factories if factories is not None else MODEL_FACTORIES
     as_of = as_of or dt.date.today()
     started = dt.datetime.now()
     f1, f2 = forecast_weeks(as_of)
@@ -157,7 +169,7 @@ def run_forecast(
     counted = members[members["counted_in_workload"] == 1]
     team_members = counted[counted["team_id"] == team_id]
     if team_members.empty:
-        raise ValueError(f"team {team_id} has no counted members")
+        raise TeamHasNoCountedMembers(f"team {team_id} has no counted members")
     member_ids = [int(m) for m in team_members["id"]]
     holidays = {d for d in frames["holidays"]["date"] if d is not None}
     vacation_days = _vacation_days(frames)
@@ -168,12 +180,16 @@ def run_forecast(
     origins = [
         o for o in default_origins(origin, BACKTEST_ORIGINS) if o >= weeks[0] + MIN_WEEKS_BEFORE_ORIGIN * ONE_WEEK
     ]
-    if force_model is not None and force_model not in MODEL_FACTORIES:
-        raise ValueError(f"unknown model {force_model!r}; known: {sorted(MODEL_FACTORIES)}")
-    factories = (
-        MODEL_FACTORIES if force_model is None else {name: MODEL_FACTORIES[name] for name in {force_model, FLOOR_MODEL}}
+    if force_model is not None and force_model not in factories:
+        raise ValueError(f"unknown model {force_model!r}; known: {sorted(factories)}")
+    run_factories = (
+        factories
+        if force_model is None
+        else {
+            name: factories[name] if name in factories else MODEL_FACTORIES[name] for name in {force_model, FLOOR_MODEL}
+        }
     )
-    backtest = rolling_backtest(feat, factories, origins, horizons)
+    backtest = rolling_backtest(feat, run_factories, origins, horizons)
     if force_model is not None:
         if force_model in backtest.unavailable:
             raise ModelUnavailable(backtest.unavailable[force_model])
@@ -181,7 +197,7 @@ def run_forecast(
         champion, champion_mase = force_model, (float(mine.mean()) if len(mine) else float("nan"))
     else:
         champion, champion_mase = select_champion(backtest.scores)
-    model = MODEL_FACTORIES[champion]().fit(feat, horizons)
+    model = run_factories[champion]().fit(feat, horizons)
     latest = feat[(feat["week_start"] == origin) & (feat["member_id"].astype(int).isin(member_ids))]
     predicted_rows = []
     for week, h in zip((f1, f2), horizons, strict=True):

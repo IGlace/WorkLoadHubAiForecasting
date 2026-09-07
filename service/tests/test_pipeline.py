@@ -13,7 +13,7 @@ from whf.db.repo import read_df
 from whf.models import MODEL_FACTORIES
 from whf.models.base import ModelUnavailable
 from whf.models.naive import SeasonalNaive
-from whf.pipeline import jsonable, list_runs, load_run, run_forecast
+from whf.pipeline import TeamHasNoCountedMembers, jsonable, list_runs, load_run, run_forecast
 
 
 def test_run_forecast_produces_two_weeks_per_counted_member(db, generated) -> None:
@@ -131,8 +131,20 @@ def test_failed_persistence_leaves_no_partial_run(db, generated, monkeypatch) ->
 
 
 def test_run_forecast_rejects_team_without_counted_members(db) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(TeamHasNoCountedMembers):
         run_forecast(db, team_id=999)
+
+
+def test_run_forecast_accepts_a_harness_local_factory_not_in_the_registry(db, generated) -> None:
+    result = run_forecast(
+        db,
+        team_id=1,
+        as_of=generated.config.as_of,
+        force_model="local_naive",
+        factories={"local_naive": SeasonalNaive},
+        persist=False,
+    )
+    assert result.champion == "local_naive" and result.run_id == 0
 
 
 def test_force_model_and_no_persist(db, generated) -> None:

@@ -5,6 +5,7 @@ from whf.eval.harness import EvalConfig, arrival_level, demand_level, evaluate
 from whf.eval.truth import truth_from_answer_key
 from whf.models import MODEL_FACTORIES
 from whf.models.base import ModelUnavailable
+from whf.models.naive import SeasonalNaive
 from whf.pipeline import _load_frames, arrival_feature_matrix
 
 FAST = {name: MODEL_FACTORIES[name] for name in ("seasonal_naive", "tsb")}
@@ -30,6 +31,22 @@ def test_arrival_level_reports_every_metric_per_model_and_horizon(db, generated)
     assert ((cov >= 0) & (cov <= 1)).all()
 
 
+def test_arrival_level_single_origin_yields_nan_coverage_for_a_residual_model(db, generated) -> None:
+    """`tsb` has no `predict_quantiles`, so coverage80 must fall back to a leave-one-origin-out band.
+
+    With a single origin there is no other origin to draw that band from, and reporting `0.0`
+    would silently claim a (fake) perfect miss rate rather than admitting no band exists.
+    """
+    frames = _load_frames(db)
+    origin = last_complete_week(generated.config.as_of)
+    _, feat, _ = arrival_feature_matrix(frames, origin)
+    scores, skipped = arrival_level(feat, {"tsb": MODEL_FACTORIES["tsb"]}, [origin - 2 * ONE_WEEK], (1,))
+    assert skipped == {}
+    cov = scores[scores.metric == "coverage80"]["value"]
+    assert len(cov) == 1
+    assert cov.isna().all()
+
+
 def test_demand_level_replays_origins_without_leakage(db, generated, tmp_path) -> None:
     key = tmp_path / "k.json"
     key.write_text(__import__("json").dumps(generated.answer_key))
@@ -40,7 +57,21 @@ def test_demand_level_replays_origins_without_leakage(db, generated, tmp_path) -
     assert set(demand["model"]) == {"seasonal_naive", "tsb"}
     assert set(demand["week_start"]) == {origin + ONE_WEEK, origin + 2 * ONE_WEEK}
     assert (demand["forecast"] >= 0).all() and (demand["capacity"] > 0).all()
-    assert demand["truth"].notna().all()
+    assert (demand["truth"] > 0).any()  # the truth join actually matched some rows
+
+
+def test_demand_level_supports_a_harness_local_factory_not_in_the_registry(db, generated, tmp_path) -> None:
+    """`chronos2_ft` (registered only inside `evaluate`) must also work here: demand_level must
+    pass its own `factories` through to `run_forecast` rather than relying on the global registry.
+    """
+    key = tmp_path / "k.json"
+    key.write_text(__import__("json").dumps(generated.answer_key))
+    truth = truth_from_answer_key(key)
+    origin = last_complete_week(generated.config.as_of) - 2 * ONE_WEEK
+    demand, skipped = demand_level(db, {"local_naive": SeasonalNaive}, [origin], (1,), truth)
+    assert skipped == {}
+    assert set(demand["model"]) == {"local_naive"}
+    assert not demand.empty
 
 
 def test_evaluate_end_to_end_on_generated_data(db, generated, tmp_path) -> None:

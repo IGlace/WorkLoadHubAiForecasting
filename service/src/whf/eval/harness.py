@@ -18,7 +18,13 @@ from whf.eval.metrics import coverage, weighted_quantile_loss
 from whf.eval.truth import realised_hours, truncated_copy, truth_from_answer_key
 from whf.models import MODEL_FACTORIES
 from whf.models.base import ArrivalModel, ModelUnavailable
-from whf.pipeline import MIN_WEEKS_BEFORE_ORIGIN, _load_frames, arrival_feature_matrix, run_forecast
+from whf.pipeline import (
+    MIN_WEEKS_BEFORE_ORIGIN,
+    TeamHasNoCountedMembers,
+    _load_frames,
+    arrival_feature_matrix,
+    run_forecast,
+)
 
 HORIZONS = (1, 2)
 METRIC_COLUMNS = ["model", "horizon", "origin", "metric", "value"]
@@ -57,8 +63,14 @@ class EvalResult:
 
 
 def _leave_one_out_band(residuals: pd.DataFrame, origin: dt.date) -> tuple[float, float]:
+    """The 0.1/0.9 residual quantiles from every *other* origin, so an origin never bounds itself.
+
+    With a single origin there are no others to draw a band from: report NaN rather than the
+    all-zero band `interval_bounds` would give an empty array, which would score coverage as
+    "the residual equals exactly zero" instead of "no honest band is available".
+    """
     others = residuals[residuals["origin"] != origin]["residual"].to_numpy(dtype=float)
-    return interval_bounds(others) if len(others) else (0.0, 0.0)
+    return interval_bounds(others) if len(others) else (float("nan"), float("nan"))
 
 
 def arrival_level(
@@ -92,7 +104,11 @@ def arrival_level(
             cov, wql = coverage(y, low, high), weighted_quantile_loss(y, {0.1: low, 0.5: point, 0.9: high})
         else:
             low_off, high_off = _leave_one_out_band(res, score.origin)
-            cov = coverage(mine, np.full_like(mine, low_off), np.full_like(mine, high_off))
+            cov = (
+                float("nan")
+                if np.isnan(low_off) or np.isnan(high_off)
+                else coverage(mine, np.full_like(mine, low_off), np.full_like(mine, high_off))
+            )
             wql = float("nan")
         rows.append({**base, "metric": "coverage80", "value": cov})
         rows.append({**base, "metric": "wql", "value": wql})
@@ -117,33 +133,41 @@ def demand_level(
     for origin in origins:
         as_of = origin + ONE_WEEK
         replay = truncated_copy(conn, as_of)
-        team_ids = teams or tuple(int(t) for t in _load_frames(replay)["teams"]["id"])
-        for name in factories:
-            if name in skipped:
-                continue
-            for team_id in team_ids:
-                try:
-                    result = run_forecast(replay, team_id=team_id, as_of=as_of, force_model=name, persist=False)
-                except ModelUnavailable as exc:
-                    skipped[name] = str(exc)
-                    break
-                except ValueError:
-                    continue  # team without counted members
-                for r in result.forecasts.itertuples(index=False):
-                    rows.append(
-                        {
-                            "model": name,
-                            "origin": origin,
-                            "team_id": team_id,
-                            "member_id": int(r.member_id),
-                            "week_start": r.week_start,
-                            "forecast": float(r.demand_hours),
-                            "truth": truth_index.get((int(r.member_id), r.week_start), 0.0),
-                            "capacity": float(r.capacity_hours),
-                            "open_hours": float(r.open_task_hours),
-                            "new_hours": float(r.new_task_hours),
-                        }
-                    )
+        try:
+            team_ids = teams or tuple(int(t) for t in _load_frames(replay)["teams"]["id"])
+            for name in factories:
+                if name in skipped:
+                    continue
+                for team_id in team_ids:
+                    try:
+                        result = run_forecast(
+                            replay, team_id=team_id, as_of=as_of, force_model=name, persist=False, factories=factories
+                        )
+                    except ModelUnavailable as exc:
+                        skipped[name] = str(exc)
+                        break
+                    except TeamHasNoCountedMembers:
+                        continue
+                    for r in result.forecasts.itertuples(index=False):
+                        rows.append(
+                            {
+                                "model": name,
+                                "origin": origin,
+                                "team_id": team_id,
+                                "member_id": int(r.member_id),
+                                "week_start": r.week_start,
+                                "forecast": float(r.demand_hours),
+                                "truth": truth_index.get((int(r.member_id), r.week_start), 0.0),
+                                "capacity": float(r.capacity_hours),
+                                "open_hours": float(r.open_task_hours),
+                                "new_hours": float(r.new_task_hours),
+                            }
+                        )
+        finally:
+            replay.close()
+    # A model recorded in `skipped` must leave no partial demand rows, consistent with the
+    # backtest's purge of an unavailable model's scores, residuals and timings.
+    rows = [r for r in rows if r["model"] not in skipped]
     return pd.DataFrame(rows, columns=DEMAND_COLUMNS), skipped
 
 
@@ -153,7 +177,7 @@ def evaluate(
     factories: dict[str, Callable[[], ArrivalModel]] | None = None,
 ) -> EvalResult:
     started = time.perf_counter()
-    factories = factories or MODEL_FACTORIES
+    factories = factories if factories is not None else MODEL_FACTORIES
     for name in config.models:
         if name not in factories:
             raise ValueError(f"unknown model {name!r}; known: {sorted(factories)}")
