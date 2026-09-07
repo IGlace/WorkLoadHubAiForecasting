@@ -16,6 +16,8 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 - `docs/superpowers/specs/2026-09-07-planned-work-and-likely-work-design.md`: planned-work allocation and the
   "likely work" narrative section, locked on 2026-09-07 and implemented once the real export has landed
   (plan: `docs/superpowers/plans/2026-09-07-planned-work-and-likely-work.md`).
+- `docs/design/2026-09-07-forecasting-internals.md`: the feature matrix, the four arrival models' algorithms,
+  and the backtest tournament end to end, as the code does it (update it when that code changes).
 - `docs/superpowers/plans/`: implementation plans, when present.
 - `docs/backlog.md`: open items after version 1 (polish, Windows verification, design decisions, future topics).
 
