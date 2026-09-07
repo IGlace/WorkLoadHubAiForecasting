@@ -7,7 +7,7 @@ import { RiskBadge } from '../components/RiskBadge'
 import { StatusMessage } from '../components/StatusMessage'
 import { WeekTable, type WeekTableRow } from '../components/WeekTable'
 import { useApp } from '../context'
-import { t } from '../i18n'
+import { modelName, useT } from '../i18n'
 import { progressLabel, useNarrativeProgress } from '../narrative-progress'
 
 interface Fetched { id: number; detail: RunDetail | null; error: string | null }
@@ -15,6 +15,7 @@ interface Fetched { id: number; detail: RunDetail | null; error: string | null }
 export function TeamResult(): React.JSX.Element {
   const { runId } = useParams()
   const { settings } = useApp()
+  const t = useT()
   // `fetched.id` tags which run the payload belongs to; a superseded id (runId changed
   // since this was written) is treated as empty below, so stale data from a previous
   // run never renders while the next run's fetch is in flight.
@@ -95,7 +96,7 @@ export function TeamResult(): React.JSX.Element {
     <div>
       <h1>{t('team.title')}: <span>{facts?.team.name ?? `team ${detail.run.team_id}`}</span></h1>
       {error && <StatusMessage kind="error">{t('common.error', { message: error })}</StatusMessage>}
-      <p className="muted">{t('runs.asof')} {detail.run.as_of} · {t('team.champion')}: <strong>{detail.run.champion_model}</strong> · {t('team.mase')}: <strong>{detail.run.backtest_mase?.toFixed(2)}</strong></p>
+      <p className="muted">{t('runs.asof')} {detail.run.as_of} · {t('team.champion')}: <strong>{modelName(t, detail.run.champion_model)}</strong> · {t('team.mase')}: <strong>{detail.run.backtest_mase?.toFixed(2)}</strong></p>
       <section className="panel"><WeekTable weeks={weeks} rows={rows} /></section>
       <section className="panel">
         <h2>{t('team.summary')}</h2>

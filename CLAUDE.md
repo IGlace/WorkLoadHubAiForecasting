@@ -12,6 +12,7 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 - `docs/requirements/requirements-v1.md`: scope, roles, functional and non-functional requirements.
 - `docs/requirements/2026-09-03-discovery-qa.md`: the owner's answers, source of truth for scope questions.
 - `docs/research/2026-09-03-research-notes.md`: sourced facts about Copilot CLI/SDK, forecasting methods, prior art.
+- `docs/superpowers/specs/2026-09-06-forecast-evaluation-and-chronos2-design.md`: the evaluation harness and Chronos-2 candidate design.
 - `docs/superpowers/plans/`: implementation plans, when present.
 - `docs/backlog.md`: open items after version 1 (polish, Windows verification, design decisions, future topics).
 
@@ -26,6 +27,8 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 - Real names are allowed in prompts (owner decision); still keep all data local except
   what a run sends to Copilot, and store the exact facts sent for audit.
 - Test-driven development for every change; property tests for arithmetic invariants.
+- The installer bundles CPU-only PyTorch and the pinned Chronos-2 weights; never resolve a CUDA build and
+  never download weights at run time.
 - The GitHub remote (`IGlace/WorkLoadHubAiForecasting`) is the shared copy again since 2026-09-06:
   `dev` and `main` are pushed there and CI runs on both. Work offline if you must, but push `dev`
   when a batch is reviewed.
@@ -35,9 +38,11 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 ## Layout
 
 ```text
-service/   Python 3.11+ service (package `whf`): FastAPI, Typer CLI, SQLite, models, generator, Copilot session
+service/   Python 3.11+ service (package `whf`): FastAPI, Typer CLI, SQLite, models, generator, Copilot session,
+           evaluation harness (`src/whf/eval/`)
 app/       Electron + React + TypeScript desktop app (`src/main`, `src/preload`, `src/renderer`, `src/shared`)
-installer/ PyInstaller and electron-builder configuration, installer README
+installer/ PyInstaller and electron-builder configuration, installer README, weight prefetch
+           (`installer/pyinstaller/download_weights.py`)
 scripts/   PowerShell and shell helpers (`dev-app.ps1`, `build-service.{ps1,sh}`, `build-installer.ps1`)
 docs/      research, requirements, specs, plans
 .claude/   skills, agents, hooks, settings
@@ -47,7 +52,9 @@ docs/      research, requirements, specs, plans
 
 - Python: `uv`, `ruff`, `ty`, `pytest`, `hypothesis`; see the `modern-python` skill.
 - Node: Node 22, `npm`, `electron-vite` (Vite 7), `vitest`, `eslint` 10, `tsc`, `electron-builder`.
-- Commands: `uv run pytest` in `service/`; `npm test`, `npm run lint`, `npm run typecheck` in `app/`.
+- Commands: `uv run pytest` in `service/`; `npm test`, `npm run lint`, `npm run typecheck` in `app/`;
+  `uv run whf eval` in `service/` runs the evaluation harness, writing `scores.csv`, `demand.csv` and
+  `summary.md`.
 - Local gate (mirrors CI): `pwsh scripts/check.ps1` runs the fast
   checks in about two and a half minutes, `-Full` adds the slow pytest suite and the app build,
   `-Package` adds the installer. `pwsh scripts/release.ps1` runs the full gate and then

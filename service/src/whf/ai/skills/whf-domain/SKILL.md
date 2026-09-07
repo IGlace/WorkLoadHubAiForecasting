@@ -17,8 +17,8 @@ id, title, project_id, assignee_id, team_id, type (feature, bug, support, analys
 - **demand**: predicted hours of work, uncapped. It is the sum of **open_hours** (remaining hours of tasks already assigned, placed by the effort model) and **new_hours** (hours of tasks predicted to arrive, placed the same way).
 - **capacity**: available hours after holidays, vacations and overrides (default 44 h per week, 8.8 h per working day).
 - **overload**: max(0, demand minus capacity). Demand is never cut to fit capacity.
-- **low / high**: an interval around demand from the model's backtest residuals; wide bands mean an unstable history.
+- **low / high**: an interval around demand; its basis is either the model's backtest residuals or the model's own quantiles, given in `model.interval.basis`. Wide bands mean an unstable history.
 
 ## Model facts
-- **champion**: the arrival model that won the backtest (seasonal_naive, tsb or gbm). **champion_mase** below 1.0 means it beat the seasonal-naive floor; near 1.0 means little better than repeating history.
+- **champion**: the arrival model that won the backtest (seasonal_naive, tsb, gbm or chronos2). **champion_mase** below 1.0 means it beat the seasonal-naive floor; near 1.0 means little better than repeating history.
 - **backtest_origins**: the past dates the models were scored on. **limitations**: known blind spots of this run.

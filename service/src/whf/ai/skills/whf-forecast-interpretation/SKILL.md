@@ -12,5 +12,6 @@ description: How to explain a member's two-week forecast, capacity, overload, in
 - Overdue open tasks are placed forward from the first forecast week; they inflate week one by design. Mention overdue_open when it drives the overload.
 - Projects starting inside the window raise expected arrivals; projects ending inside the window raise crunch. Cite the project name and date.
 - Model quality: champion_mase well below 1.0 is reliable; near or above 1.0 means the numbers are close to a naive repeat of history and the narrative should say so.
+- Model names: seasonal_naive repeats history; tsb is exponential smoothing for sparse demand; gbm is gradient boosting on engineered features; chronos2 is Chronos-2, a pretrained time-series foundation model used zero-shot with the holiday, vacation and project covariates. When `model.unavailable` lists chronos2, say the forecast used the classical models only and give the reason in plain words.
 - Never round, sum, subtract or convert numbers yourself. If a derived figure is not in the facts, describe the relationship in words.
 - Risk levels: high when overload is greater than 0 in either week or overdue_open is at least 3; medium when demand is above 85 percent of capacity or the interval's high crosses capacity; low otherwise.

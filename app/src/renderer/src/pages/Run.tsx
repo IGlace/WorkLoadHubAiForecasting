@@ -7,7 +7,7 @@ import { Field } from '../components/Field'
 import { StatusMessage } from '../components/StatusMessage'
 import { useApp } from '../context'
 import { hours, today } from '../format'
-import { t } from '../i18n'
+import { modelName, t } from '../i18n'
 import { progressLabel, useNarrativeProgress } from '../narrative-progress'
 
 type Phase = 'idle' | 'forecasting' | 'narrating' | 'done'
@@ -83,7 +83,7 @@ export function Run(): React.JSX.Element {
       {phase === 'done' && result && (
         <section className="panel">
           <StatusMessage kind="success">{t('run.done')}</StatusMessage>
-          <p>{t('team.champion')}: {result.champion} · {t('team.mase')}: {result.backtest_mase.toFixed(2)}</p>
+          <p>{t('team.champion')}: {modelName(t, result.champion)} · {t('team.mase')}: {result.backtest_mase.toFixed(2)}</p>
           <ul>
             {result.weeks.map((w) => {
               const rows = result.forecasts.filter((f) => f.week_start === w)

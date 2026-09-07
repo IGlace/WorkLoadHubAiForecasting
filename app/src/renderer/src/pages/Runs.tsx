@@ -6,7 +6,7 @@ import { getRuns } from '../api'
 import { Field } from '../components/Field'
 import { StatusMessage } from '../components/StatusMessage'
 import { useApp } from '../context'
-import { t } from '../i18n'
+import { modelName, t } from '../i18n'
 
 export function Runs(): React.JSX.Element {
   const { visibleTeams } = useApp()
@@ -35,7 +35,7 @@ export function Runs(): React.JSX.Element {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>{r.id}</td><td>{nameOf.get(r.team_id)}</td><td>{r.as_of}</td><td>{r.status}</td>
-                <td>{r.champion_model ?? '–'}{r.backtest_mase !== null && <span className="muted"> (MASE {r.backtest_mase.toFixed(2)})</span>}</td>
+                <td>{r.champion_model ? modelName(t, r.champion_model) : '–'}{r.backtest_mase !== null && <span className="muted"> (MASE {r.backtest_mase.toFixed(2)})</span>}</td>
                 <td>{r.ai_status}</td><td><Link to={`/runs/${r.id}`}>{t('runs.open')}</Link></td>
               </tr>
             ))}

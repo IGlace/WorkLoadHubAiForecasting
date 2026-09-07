@@ -59,6 +59,8 @@ const en: Record<string, string> = {
   'timeoff.type.vacation': 'vacation', 'timeoff.type.sick': 'sick', 'timeoff.type.other': 'other',
   'runs.title': 'Runs', 'runs.id': 'Run', 'runs.team': 'Team', 'runs.asof': 'As of', 'runs.status': 'Status', 'runs.ai': 'AI', 'runs.champion': 'Champion',
   'runs.open': 'Open', 'runs.empty': 'No runs yet.',
+  'model.seasonal_naive': 'Seasonal naive', 'model.tsb': 'TSB (intermittent demand)', 'model.gbm': 'Gradient boosting',
+  'model.chronos2': 'Chronos-2 (foundation model)',
   'common.loading': 'Loading…', 'common.error': 'Something went wrong: {message}', 'common.week': 'Week of {date}', 'common.all': 'All teams',
 }
 
@@ -139,6 +141,8 @@ const fr: Record<string, string> = {
   'runs.title': 'Historique', 'runs.id': 'Prévision', 'runs.team': 'Équipe', 'runs.asof': 'À la date du', 'runs.status': 'Statut',
   'runs.ai': 'IA', 'runs.champion': 'Modèle',
   'runs.open': 'Ouvrir', 'runs.empty': 'Aucune prévision pour l’instant.',
+  'model.seasonal_naive': 'Naïf saisonnier', 'model.tsb': 'TSB (demande intermittente)', 'model.gbm': 'Boosting de gradient',
+  'model.chronos2': 'Chronos-2 (modèle de fondation)',
   'common.loading': 'Chargement…', 'common.error': 'Une erreur est survenue : {message}', 'common.week': 'Semaine du {date}',
   'common.all': 'Toutes les équipes',
 }
@@ -164,6 +168,18 @@ export function untranslatedKeys(lang: Language): string[] {
 export function t(key: string, vars: Record<string, string | number> = {}): string {
   const template = dictionaries[current][key] ?? en[key] ?? key
   return template.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`))
+}
+
+/**
+ * The display name of a model (e.g. `gbm` -> "Gradient boosting"), translated with `t`.
+ * Falls back to the raw name for a model with no `model.<name>` key (e.g. an unknown or
+ * future model), since `t` returns the key itself when nothing translates it.
+ */
+export function modelName(t: (key: string, vars?: Record<string, string | number>) => string, name: string | null | undefined): string {
+  if (!name) return ''
+  const key = `model.${name}`
+  const label = t(key)
+  return label === key ? name : label
 }
 
 function subscribe(listener: () => void): () => void {

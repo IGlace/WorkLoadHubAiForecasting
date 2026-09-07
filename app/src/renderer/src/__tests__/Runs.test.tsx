@@ -17,6 +17,7 @@ describe('Runs', () => {
     const rows = await screen.findAllByRole('row')
     expect(rows).toHaveLength(3)
     expect(rows[1]).toHaveTextContent('Data')
+    expect(rows[1]).toHaveTextContent('TSB (intermittent demand)')
     expect(rows[2]).toHaveTextContent('failed:timeout')
     await userEvent.selectOptions(screen.getByLabelText('Team'), '1')
     expect(screen.getAllByRole('row')).toHaveLength(2)

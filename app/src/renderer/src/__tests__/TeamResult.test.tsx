@@ -1,9 +1,10 @@
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
-import { vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
 import type { RunDetail } from '../../../shared/types'
 import { AppProvider } from '../context'
+import { setLanguage } from '../i18n'
 import { TeamResult } from '../pages/TeamResult'
 import { installFakeWhf, META } from '../test/fake-whf'
 import { RUN_DETAIL } from '../test/fixtures'
@@ -17,11 +18,13 @@ function mount() {
 }
 
 describe('TeamResult', () => {
+  afterEach(() => setLanguage('en'))
+
   it('shows members by week with overload, champion, summary and warnings', async () => {
     installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /runs/5': RUN_DETAIL })
     mount()
     expect(await screen.findByText('Core')).toBeInTheDocument()
-    expect(screen.getByText('gbm')).toBeInTheDocument()
+    expect(screen.getByText('Gradient boosting')).toBeInTheDocument()
     expect(screen.getByText('0.77')).toBeInTheDocument()
     const yara = screen.getByRole('row', { name: /Yara Tazi/ })
     expect(yara).toHaveTextContent('46.0 h')
@@ -31,6 +34,8 @@ describe('TeamResult', () => {
     expect(screen.getByText('Two overdue tasks.')).toBeInTheDocument()
     expect(screen.getByText('Billing v2 deadline')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Yara Tazi' })).toHaveAttribute('href', '/runs/5/members/13')
+    act(() => { setLanguage('fr') })
+    expect(await screen.findByText('Boosting de gradient')).toBeInTheDocument()
   })
   it('offers to ask Copilot when there is no narrative and flags unverified ones', async () => {
     let detail: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }

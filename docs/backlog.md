@@ -119,6 +119,22 @@ first install straight away; the installer now seeds the data itself, see "Lande
   "Load sample data" action in Settings (guarded by a confirmation because it replaces everything) for someone
   who wants to reset to fresh data without reinstalling.
 
+- **Evaluation harness and the Chronos-2 candidate** (2026-09-06): `whf eval` backtests the arrival models —
+  seasonal_naive, tsb, gbm and the new chronos2, a pretrained time-series foundation model run zero-shot with
+  the holiday, vacation and project covariates — across origins and horizons, and writes `scores.csv`,
+  `demand.csv` and `summary.md`. The installer bundles CPU-only PyTorch and the pinned Chronos-2 weights
+  (`installer/pyinstaller/download_weights.py` prefetches them at build time; the app never downloads weights
+  or resolves a CUDA build at run time). Pending: which candidates become the default champion set is a
+  decision for the real data, not this harness's dummy-data run. Spec:
+  `docs/superpowers/specs/2026-09-06-forecast-evaluation-and-chronos2-design.md`.
+  - Deferred: gap weeks between the training cut-off and the forecast origin carry forward-filled covariates
+    in the Chronos-2 context (up to three weeks stale for the deadline-proximity covariate).
+  - Deferred: the fine-tuned harness candidate loads the weights twice (shared availability check, then a
+    private copy).
+  - Deferred: a single-origin evaluation reports NaN interval coverage without saying why.
+  - Deferred: `whf eval` level A `seconds` is per origin including skipped origins and repeated on every
+    horizon row.
+
 ## Approved, not yet built
 
 Ordered roughly by value. Each of these has an owner decision behind it.
@@ -181,6 +197,8 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Waiting on something specific
 
+- Run `whf eval` on the real export and commit the result under `docs/eval/`; decide the default candidates
+  from it.
 - `@vitejs/plugin-react` 6 requires Vite 8, which electron-vite does not support. Rechecked 2026-09-04:
   electron-vite is still 5.0.0 with a Vite peer of `^5 || ^6 || ^7`, and plugin-react 6.1.1 still requires
   `^8`, so the pin at plugin-react 5 stands. Revisit when electron-vite supports Vite 8.
