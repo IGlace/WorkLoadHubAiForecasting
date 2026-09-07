@@ -1,0 +1,164 @@
+import datetime as dt
+
+import numpy as np
+import pandas as pd
+import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from whf.features import build_feature_matrix, weekly_arrivals
+from whf.models import MODEL_FACTORIES
+from whf.models.base import ModelUnavailable
+from whf.models.chronos2 import PAST_COVARIATES, Chronos2Arrival, weights_path
+
+W0 = dt.date(2025, 1, 6)
+
+
+def _frame(members: int = 4, weeks: int = 40, seed: int = 0) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    rows, tid = [], 0
+    week_list = [W0 + dt.timedelta(days=7 * i) for i in range(weeks)]
+    for m in range(1, members + 1):
+        for w in week_list:
+            for _ in range(rng.poisson(1.0 + m / 3)):
+                tid += 1
+                rows.append(
+                    {
+                        "id": tid,
+                        "assignee_id": m,
+                        "assigned_at": w + dt.timedelta(days=int(rng.integers(0, 5))),
+                        "estimated_hours": float(rng.uniform(1, 6)),
+                        "assignment_mode": "project",
+                    }
+                )
+    tasks = pd.DataFrame(rows)
+    arr = weekly_arrivals(tasks, list(range(1, members + 1)), week_list)
+    mem = pd.DataFrame([{"id": m, "team_id": 1} for m in range(1, members + 1)])
+    projects = pd.DataFrame([{"id": 1, "start_date": W0, "deadline": W0 + dt.timedelta(days=7 * weeks)}])
+    project_teams = pd.DataFrame([{"project_id": 1, "team_id": 1}])
+    return build_feature_matrix(arr, tasks, projects, project_teams, mem, set(), {})
+
+
+class StubPipeline:
+    """Records the frames it receives and answers with the last context value as every quantile."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def predict_df(
+        self, df, future_df=None, *, id_column, timestamp_column, target, prediction_length, quantile_levels, freq, **kw
+    ):
+        self.calls.append(
+            {
+                "df": df,
+                "future_df": future_df,
+                "prediction_length": prediction_length,
+                "freq": freq,
+                "quantiles": quantile_levels,
+            }
+        )
+        rows = []
+        for member, g in df.groupby(id_column, sort=False):
+            last = float(g.sort_values(timestamp_column)[target].iloc[-1])
+            for k in range(1, prediction_length + 1):
+                ts = g[timestamp_column].max() + pd.Timedelta(weeks=k)
+                rows.append(
+                    {
+                        id_column: member,
+                        timestamp_column: ts,
+                        "target_name": target,
+                        "predictions": last,
+                        **{str(q): last * (0.5 + q) for q in quantile_levels},
+                    }
+                )
+        return pd.DataFrame(rows)
+
+
+def test_predict_builds_contiguous_history_and_future_covariates() -> None:
+    feat = _frame()
+    origin = W0 + dt.timedelta(days=7 * 30)
+    train = feat[feat["week_start"] <= origin - 2 * dt.timedelta(days=7)]
+    rows = feat[feat["week_start"] == origin]
+    stub = StubPipeline()
+    model = Chronos2Arrival(pipeline=stub).fit(train, (1, 2))
+    pred = model.predict(rows, horizon=2)
+    assert pred.shape == (len(rows),) and np.all(pred >= 0)
+    call = stub.calls[-1]
+    assert call["prediction_length"] == 2 and call["freq"] == "W-MON" and call["quantiles"] == [0.1, 0.5, 0.9]
+    df, future = call["df"], call["future_df"]
+    for _member, g in df.groupby("member_id"):
+        weeks = sorted(g["timestamp"])
+        assert weeks[-1] == pd.Timestamp(origin)
+        assert all((b - a) == pd.Timedelta(weeks=1) for a, b in zip(weeks, weeks[1:], strict=False))
+        assert set(PAST_COVARIATES) <= set(g.columns) and g[list(PAST_COVARIATES)].notna().all().all()
+    assert set(future["member_id"]) == set(rows["member_id"].astype(int))
+    assert len(future) == 2 * len(rows) and set(PAST_COVARIATES) <= set(future.columns)
+    # the gap weeks between train and the origin row come from the row's lag columns
+    m0 = int(rows["member_id"].astype(int).iloc[0])
+    g0 = df[df.member_id == m0].set_index("timestamp")["est_hours"]
+    assert g0[pd.Timestamp(origin)] == float(rows[rows.member_id.astype(int) == m0]["lag1"].iloc[0])
+    assert g0[pd.Timestamp(origin - dt.timedelta(days=7))] == float(
+        rows[rows.member_id.astype(int) == m0]["lag2"].iloc[0]
+    )
+
+
+def test_predict_quantiles_are_ordered_and_clipped() -> None:
+    feat = _frame()
+    origin = W0 + dt.timedelta(days=7 * 30)
+    rows = feat[feat["week_start"] == origin]
+    model = Chronos2Arrival(pipeline=StubPipeline()).fit(feat[feat["week_start"] < origin], (1,))
+    low, high = model.predict_quantiles(rows, horizon=1)
+    point = model.predict(rows, horizon=1)
+    assert np.all(low <= point + 1e-9) and np.all(point <= high + 1e-9) and np.all(low >= 0)
+
+
+def test_registered_and_unavailable_without_torch(monkeypatch) -> None:
+    assert MODEL_FACTORIES["chronos2"] is Chronos2Arrival
+    import whf.models.chronos2 as mod
+
+    monkeypatch.setattr(mod, "_pipeline", None)
+    monkeypatch.setattr(mod, "_import_pipeline_class", lambda: (_ for _ in ()).throw(ImportError("no torch")))
+    with pytest.raises(ModelUnavailable, match="chronos2"):
+        Chronos2Arrival().fit(_frame(), (1,))
+
+
+def test_weights_path_prefers_env_then_bundled(tmp_path) -> None:
+    bundled = tmp_path / "models" / "chronos-2"
+    bundled.mkdir(parents=True)
+    assert weights_path(env={}, exe_dir=tmp_path) == bundled
+    custom = tmp_path / "custom"
+    custom.mkdir()
+    assert weights_path(env={"WHF_CHRONOS2_PATH": str(custom)}, exe_dir=tmp_path) == custom
+    assert weights_path(env={}, exe_dir=tmp_path / "nowhere") is None
+
+
+@settings(max_examples=25, deadline=None)
+@given(st.lists(st.floats(0, 50, allow_nan=False, allow_infinity=False), min_size=8, max_size=30))
+def test_history_with_arbitrary_sparse_values_yields_finite_non_negative_predictions(values) -> None:
+    weeks = [W0 + dt.timedelta(days=7 * i) for i in range(len(values))]
+    tasks = pd.DataFrame(
+        [
+            {
+                "id": i + 1,
+                "assignee_id": 1,
+                "assigned_at": w,
+                "estimated_hours": v if v > 0 else 0.0,
+                "assignment_mode": "project",
+            }
+            for i, (w, v) in enumerate(zip(weeks, values, strict=True))
+        ]
+    )
+    arr = weekly_arrivals(tasks, [1], weeks)
+    feat = build_feature_matrix(
+        arr,
+        tasks,
+        pd.DataFrame([{"id": 1, "start_date": W0, "deadline": weeks[-1]}]),
+        pd.DataFrame([{"project_id": 1, "team_id": 1}]),
+        pd.DataFrame([{"id": 1, "team_id": 1}]),
+        set(),
+        {},
+    )
+    origin = weeks[-1]
+    model = Chronos2Arrival(pipeline=StubPipeline()).fit(feat[feat.week_start < origin], (1,))
+    pred = model.predict(feat[feat.week_start == origin], 1)
+    assert np.isfinite(pred).all() and (pred >= 0).all()

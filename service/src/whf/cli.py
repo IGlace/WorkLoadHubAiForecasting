@@ -399,5 +399,8 @@ def serve(
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
+    from whf.models.chronos2 import warm_up
+
+    warm_up()
     typer.echo(json.dumps({"port": port, "token": token}), nl=True)
     uvicorn.run(create_app(db or db_path(), token), host="127.0.0.1", port=port, log_level="warning")

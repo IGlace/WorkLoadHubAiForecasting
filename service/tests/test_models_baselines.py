@@ -5,6 +5,7 @@ import pandas as pd
 
 from whf.features import build_feature_matrix, weekly_arrivals
 from whf.models import MODEL_FACTORIES
+from whf.models.base import ModelUnavailable
 from whf.models.naive import SeasonalNaive
 from whf.models.tsb import TSB
 
@@ -73,5 +74,8 @@ def test_registry_contains_baselines() -> None:
 def test_predictions_are_never_negative() -> None:
     feat = _frame()
     for factory in MODEL_FACTORIES.values():
-        pred = factory().fit(feat).predict(feat.dropna(subset=["target_h1"]), horizon=1)
-        assert np.all(pred >= 0)
+        try:
+            model = factory().fit(feat)
+        except ModelUnavailable:
+            continue  # a model that cannot run here is covered by its own module
+        assert np.all(model.predict(feat.dropna(subset=["target_h1"]), horizon=1) >= 0)

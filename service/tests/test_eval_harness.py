@@ -61,6 +61,23 @@ def test_evaluate_without_answer_key_uses_realised_hours(db, generated) -> None:
     assert result.truth_source == "realised hours"
 
 
+def test_evaluate_adds_the_fine_tuned_chronos2_candidate(db, generated, monkeypatch) -> None:
+    seen: dict[str, bool] = {}
+
+    class _Stub:
+        name = "chronos2"
+
+        def __init__(self, pipeline=None, finetune: bool = False) -> None:
+            seen["finetune"] = finetune
+            raise ModelUnavailable("ft: stub")
+
+    monkeypatch.setattr("whf.models.chronos2.Chronos2Arrival", _Stub)
+    config = EvalConfig(as_of=generated.config.as_of, origins=1, models=("seasonal_naive",), teams=(1,), finetune=True)
+    result = evaluate(db, config)
+    assert result.skipped == {"chronos2_ft": "ft: stub"}
+    assert seen == {"finetune": True}
+
+
 def test_evaluate_rejects_unknown_model_before_doing_any_work(db, generated) -> None:
     config = EvalConfig(as_of=generated.config.as_of, origins=1, models=("nope",), teams=(1,))
     with pytest.raises(ValueError, match="unknown model 'nope'"):

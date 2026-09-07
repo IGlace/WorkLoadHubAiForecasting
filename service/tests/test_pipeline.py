@@ -28,7 +28,9 @@ def test_run_forecast_produces_two_weeks_per_counted_member(db, generated) -> No
     assert (abs(f["overload_hours"] - (f["demand_hours"] - f["capacity_hours"]).clip(lower=0)) < 1e-6).all()
     assert (f["demand_low"] <= f["demand_hours"] + 1e-9).all() and (f["demand_high"] >= f["demand_hours"] - 1e-9).all()
     assert (abs(f["demand_hours"] - (f["open_task_hours"] + f["new_task_hours"])) < 1e-6).all()
-    assert result.champion in {"seasonal_naive", "tsb", "gbm"}
+    assert result.champion in {"seasonal_naive", "tsb", "gbm", "chronos2"}
+    if "chronos2" in result.unavailable:  # no torch or no weights in this environment
+        assert "chronos2" in result.unavailable["chronos2"]
 
 
 def test_run_is_persisted_with_facts(db, generated) -> None:
@@ -169,8 +171,9 @@ def test_model_quantiles_drive_the_band(db, generated, monkeypatch) -> None:
 def test_unavailable_models_are_recorded_or_raised_when_forced(db, generated, monkeypatch) -> None:
     monkeypatch.setitem(MODEL_FACTORIES, "broken", _Broken)
     full = run_forecast(db, team_id=1, as_of=generated.config.as_of, persist=False)
-    assert full.unavailable == {"broken": "broken: missing"}
-    assert full.facts["model"]["unavailable"] == {"broken": "broken: missing"}
+    # other registered models may also be unavailable here (chronos2 without torch or weights)
+    assert full.unavailable["broken"] == "broken: missing"
+    assert full.facts["model"]["unavailable"]["broken"] == "broken: missing"
     assert full.champion != "broken"
     with pytest.raises(ModelUnavailable):
         run_forecast(db, team_id=1, as_of=generated.config.as_of, force_model="broken", persist=False)

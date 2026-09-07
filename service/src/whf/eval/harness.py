@@ -158,6 +158,11 @@ def evaluate(
         if name not in factories:
             raise ValueError(f"unknown model {name!r}; known: {sorted(factories)}")
     chosen = {name: factories[name] for name in (config.models or tuple(factories))}
+    if config.finetune:
+        # Harness-only candidate: the same adapter, fine-tuned on the training window of every origin.
+        from whf.models.chronos2 import Chronos2Arrival
+
+        chosen["chronos2_ft"] = lambda: Chronos2Arrival(finetune=True)
     frames = _load_frames(conn)
     origin = last_complete_week(config.as_of)
     _, feat, weeks = arrival_feature_matrix(frames, origin)
