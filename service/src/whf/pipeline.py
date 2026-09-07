@@ -91,6 +91,34 @@ def _load_frames(conn: sqlite3.Connection) -> dict[str, pd.DataFrame]:
     }
 
 
+def _vacation_days(frames: dict[str, pd.DataFrame]) -> dict[int, set[dt.date]]:
+    vacation_days: dict[int, set[dt.date]] = {}
+    for m, s, e in zip(
+        frames["vacations"]["member_id"],
+        frames["vacations"]["start_date"],
+        frames["vacations"]["end_date"],
+        strict=True,
+    ):
+        vacation_days.setdefault(int(m), set()).update(days_in_ranges([(s, e)]))
+    return vacation_days
+
+
+def arrival_feature_matrix(
+    frames: dict[str, pd.DataFrame], origin: dt.date
+) -> tuple[pd.DataFrame, pd.DataFrame, list[dt.date]]:
+    """Weekly arrivals and the feature matrix for every counted member, up to `origin`."""
+    members, tasks = frames["members"], frames["tasks"]
+    counted = members[members["counted_in_workload"] == 1]
+    holidays = {d for d in frames["holidays"]["date"] if d is not None}
+    vacation_days = _vacation_days(frames)
+    weeks = weeks_between(min(tasks["assigned_at"]), origin)
+    arrivals = weekly_arrivals(tasks, [int(m) for m in counted["id"]], weeks)
+    feat = build_feature_matrix(
+        arrivals, tasks, frames["projects"], frames["project_teams"], members, holidays, vacation_days
+    )
+    return arrivals, feat, weeks
+
+
 def _capacity_rows(
     frames: dict, member_ids: list[int], weeks: tuple[dt.date, dt.date], off_by_member: dict
 ) -> dict[tuple[int, dt.date], float]:
@@ -132,23 +160,11 @@ def run_forecast(
         raise ValueError(f"team {team_id} has no counted members")
     member_ids = [int(m) for m in team_members["id"]]
     holidays = {d for d in frames["holidays"]["date"] if d is not None}
-    vacation_days: dict[int, set[dt.date]] = {}
-    for m, s, e in zip(
-        frames["vacations"]["member_id"],
-        frames["vacations"]["start_date"],
-        frames["vacations"]["end_date"],
-        strict=True,
-    ):
-        vacation_days.setdefault(int(m), set()).update(days_in_ranges([(s, e)]))
+    vacation_days = _vacation_days(frames)
     off_by_member = {int(m): holidays | vacation_days.get(int(m), set()) for m in counted["id"]}
 
     # arrival model on every counted member in the database (global model), forecast for the team
-    first_week = min(tasks["assigned_at"])
-    weeks = weeks_between(first_week, origin)
-    arrivals = weekly_arrivals(tasks, [int(m) for m in counted["id"]], weeks)
-    feat = build_feature_matrix(
-        arrivals, tasks, frames["projects"], frames["project_teams"], members, holidays, vacation_days
-    )
+    arrivals, feat, weeks = arrival_feature_matrix(frames, origin)
     origins = [
         o for o in default_origins(origin, BACKTEST_ORIGINS) if o >= weeks[0] + MIN_WEEKS_BEFORE_ORIGIN * ONE_WEEK
     ]
