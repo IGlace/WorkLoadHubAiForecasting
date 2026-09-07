@@ -183,6 +183,23 @@ def test_every_attempt_starts_a_new_answer(facts) -> None:
     assert answers == ["", "{", "", "{"]
 
 
+def test_a_turn_without_a_final_message_is_read_from_the_deltas(facts) -> None:
+    """Some turns end without `assistant.message`; the answer already streamed must not be lost."""
+    client = FakeClient(replies=[good_narrative(facts)], final_message=False)
+    outcome = _narrator(client).narrate_sync(facts)
+    assert outcome.status == "ok" and outcome.attempts == 1
+    assert outcome.narrative is not None
+    assert outcome.narrative["run_summary"] == "All members within capacity."
+
+
+def test_a_deltas_only_retry_forgets_the_rejected_attempt(facts) -> None:
+    """Each attempt writes its own answer, so the deltas of a rejected one must not be prepended."""
+    client = FakeClient(replies=["not JSON", good_narrative(facts)], final_message=False)
+    outcome = _narrator(client).narrate_sync(facts)
+    assert outcome.status == "ok" and outcome.attempts == 2
+    assert outcome.raw_text == good_narrative(facts)
+
+
 def test_a_finished_tool_call_is_a_step_naming_the_tool(facts) -> None:
     client = FakeClient(replies=[good_narrative(facts)])
     steps: list[ProgressEvent] = []

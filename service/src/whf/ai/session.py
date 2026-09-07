@@ -119,7 +119,9 @@ class CopilotNarrator:
                     error=getattr(auth, "statusMessage", None) or "not signed in to GitHub Copilot",
                 )
             toolbox = FactsToolbox(facts)
-            state: dict[str, Any] = {"messages": [], "model": None, "usage": [], "tools": []}
+            # `deltas` holds the answer of the attempt being written, so a turn that never sends a
+            # final `assistant.message` still has its narrative; it is cleared at each new attempt.
+            state: dict[str, Any] = {"messages": [], "model": None, "usage": [], "tools": [], "deltas": []}
             # A reasoning block arrives either as deltas or in one piece; a few models send both, so
             # the ids already streamed are remembered and the full block is then skipped.
             streamed_reasoning: set[str] = set()
@@ -132,6 +134,7 @@ class CopilotNarrator:
                     state["messages"].append(event.data.content)
                     state["model"] = getattr(event.data, "model", None) or state["model"]
                 elif event.type == SessionEventType.ASSISTANT_MESSAGE_DELTA:
+                    state["deltas"].append(event.data.delta_content)
                     stream("answer", event.data.delta_content)
                 elif event.type == SessionEventType.ASSISTANT_INTENT:
                     stream("thinking", event.data.intent + "\n")
@@ -191,6 +194,7 @@ class CopilotNarrator:
                     outcome.attempts = attempt
                     say("asking", str(attempt))
                     stream("answer", "")  # this attempt writes its own answer; drop the rejected one
+                    state["deltas"].clear()
                     try:
                         event = await session.send_and_wait(prompt, timeout=self.config.timeout_seconds)
                     except TimeoutError as exc:  # asyncio.TimeoutError is an alias since Python 3.11
@@ -266,7 +270,10 @@ class CopilotNarrator:
 
         if event is not None and getattr(event, "type", None) == SessionEventType.ASSISTANT_MESSAGE:
             return event.data.content
-        return state["messages"][-1] if state["messages"] else ""
+        if state["messages"]:
+            return state["messages"][-1]
+        # No final message anywhere: the deltas of this attempt are the whole answer.
+        return "".join(state["deltas"])
 
     @staticmethod
     def _finish(

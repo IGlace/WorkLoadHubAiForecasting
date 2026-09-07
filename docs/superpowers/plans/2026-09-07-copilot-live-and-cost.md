@@ -33,10 +33,8 @@ Findings the design rests on (SDK `github-copilot-sdk` 1.0.11, the version pinne
   and the typographic apostrophe (’). The service sends codes and raw data; the app phrases them.
 - Test-driven development: failing test first, then the code, for every behaviour below.
 - Nothing downloads at run time; no new dependencies.
-- No AI-assistant model names (Claude, Sonnet, Opus) anywhere in the repository.
-- Commit footer on every commit, exactly:
-  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` then
-  `Claude-Session: https://claude.ai/code/session_01CqJ57Eq8raMBmwPaDj5FVU`.
+- No AI-assistant model names anywhere in the repository.
+- Commit footer on every commit, exactly: the two footer lines the controller gives in the dispatch.
   Never `--no-verify`, never `WHF_SKIP_HOOKS`. Stage by path, never `git add -A`.
 - Gate before each commit: in `service/`: `uv run ruff check . && uv run ruff format --check . && uv run ty check && uv run pytest -q` (the fast suite; do not pass `-m chronos2_real`); in `app/`: `npm run lint && npm run typecheck && npm test`.
 - Fakes for the Copilot SDK live in `service/tests/ai_fakes.py` (`FakeClient`, `FakeSession`, `make_event`); extend them rather than adding a second fake.

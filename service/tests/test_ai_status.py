@@ -136,3 +136,13 @@ def test_a_quota_lookup_that_fails_leaves_the_user_signed_in(monkeypatch, tmp_pa
 
 def test_a_status_that_is_not_signed_in_has_no_quota() -> None:
     assert CopilotStatus(None, "none", None, None, "x", "not_signed_in").quota is None
+
+
+def test_the_quota_lookup_is_bounded_by_a_timeout(monkeypatch, tmp_path) -> None:
+    """A stalled quota RPC must not hold `/copilot/status` — and the CLI it started — forever."""
+    exe = tmp_path / "copilot"
+    exe.write_text("")
+    monkeypatch.setenv("COPILOT_CLI_PATH", str(exe))
+    client = FakeClient(replies=[], quota_snapshots={"premium_interactions": _snapshot()})
+    copilot_status_sync(client_factory=lambda: client)
+    assert client.quota_timeout == 10.0

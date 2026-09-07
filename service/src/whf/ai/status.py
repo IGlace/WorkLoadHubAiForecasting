@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+# The quota RPC talks to GitHub over the network; the SDK skips `asyncio.wait_for` when no timeout
+# is given, so a stalled call would hold the status request — and the CLI it started — forever.
+QUOTA_TIMEOUT_SECONDS = 10.0
 CliSource = Literal["environment", "path", "cache", "none"]
 # What happened, independent of language. `message` is English prose (partly the CLI's own), so the
 # desktop app keys its own translated wording off this instead.
@@ -71,7 +74,9 @@ async def account_quota(client: Any) -> dict[str, dict] | None:
         from copilot.generated.rpc import AccountGetQuotaRequest
 
         # No token of ours: the quota wanted is the one of the user already signed in to the CLI.
-        result = await client.rpc.account.get_quota(AccountGetQuotaRequest(git_hub_token=None))
+        result = await client.rpc.account.get_quota(
+            AccountGetQuotaRequest(git_hub_token=None), timeout=QUOTA_TIMEOUT_SECONDS
+        )
         return {
             key: {
                 "used": snapshot.used_requests,

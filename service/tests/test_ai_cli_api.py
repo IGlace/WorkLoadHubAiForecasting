@@ -84,12 +84,22 @@ def test_cli_narrate_prints_what_the_narration_cost(monkeypatch, tmp_path) -> No
 
     narrating(usage_from_metrics(make_metrics(total_nano_aiu=12e9)))
     out = runner.invoke(app, ["narrate", str(run_id), "--db", str(db)])
-    assert "cost: 12.000 AI credits (~$0.12), 100 in / 50 out, 1 requests" in out.output
+    assert "cost: 12.000 AI credits (~$0.12), 100 in / 50 out, 1 request" in out.output
+
+    # More than one call to the model reads as a plural.
+    narrating(usage_from_metrics(make_metrics(total_user_requests=3)))
+    assert "50 out, 3 requests" in runner.invoke(app, ["narrate", str(run_id), "--db", str(db)]).output
 
     # Only the streamed events survived: tokens are real, money is unknown and stays unsaid.
     narrating(usage_from_events([{"input_tokens": 100, "output_tokens": 50, "model": "gpt-5"}]))
     out = runner.invoke(app, ["narrate", str(run_id), "--db", str(db)])
-    assert "cost: 100 in / 50 out, 1 requests" in out.output
+    assert "cost: 100 in / 50 out, 1 request" in out.output
+    assert "AI credits" not in out.output
+
+    # Credits without the money they are worth: the tokens are said, the price is not invented.
+    narrating({**usage_from_metrics(make_metrics()), "usd": None})
+    out = runner.invoke(app, ["narrate", str(run_id), "--db", str(db)])
+    assert "cost: 100 in / 50 out, 1 request" in out.output
     assert "AI credits" not in out.output
 
     narrating(empty_usage())

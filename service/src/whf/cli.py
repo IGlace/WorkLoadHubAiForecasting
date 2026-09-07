@@ -241,8 +241,12 @@ def _echo_cost(usage: dict) -> None:
     usage events survived, the tokens are said and the price is left unsaid rather than guessed.
     """
     usage = usage or {}
-    tokens = f"{usage.get('input_tokens')} in / {usage.get('output_tokens')} out, {usage.get('requests')} requests"
-    if usage.get("ai_credits") is not None:
+    count = usage.get("requests")
+    calls = f"{count} {'request' if count == 1 else 'requests'}"
+    tokens = f"{usage.get('input_tokens')} in / {usage.get('output_tokens')} out, {calls}"
+    # Credits are only worth saying with the money they represent; the service is what converts
+    # them (`whf/ai/usage.py`), so credits without a price mean the price was never computed.
+    if usage.get("ai_credits") is not None and usage.get("usd") is not None:
         typer.echo(f"cost: {usage['ai_credits']:.3f} AI credits (~${usage['usd']:.2f}), {tokens}")
     elif usage.get("input_tokens") is not None:
         typer.echo(f"cost: {tokens}")

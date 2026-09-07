@@ -10,7 +10,7 @@ function usage(patch: Partial<NarrativeUsage>): NarrativeUsage {
 }
 
 describe('CopilotCost', () => {
-  afterEach(() => setLanguage('en'))
+  afterEach(() => act(() => { setLanguage('en') }))
 
   it('says nothing when the narration never reached a session', () => {
     const { container } = render(<CopilotCost usage={usage({ source: 'none' })} />)
@@ -30,7 +30,7 @@ describe('CopilotCost', () => {
 
   it('shows the tokens without inventing a price when only the events were readable', () => {
     render(<CopilotCost usage={usage({ source: 'events', ai_credits: null, usd: null, premium_requests: null, input_tokens: 1000, output_tokens: 20, requests: 1 })} />)
-    expect(screen.getByText('Copilot usage: 1,000 tokens in, 20 out · 1 requests')).toBeInTheDocument()
+    expect(screen.getByText('Copilot usage: 1,000 tokens in, 20 out · 1 request')).toBeInTheDocument()
   })
 
   it('falls back to the premium requests when the account is not billed in credits', () => {
@@ -44,6 +44,19 @@ describe('CopilotCost', () => {
     const line = screen.getByText(/Copilot usage:/)
     expect(line).not.toHaveTextContent('AI credits')
     expect(line).toHaveTextContent('12,345 tokens in, 678 out · 3 requests')
+  })
+
+  it('says one request in the singular, in both languages', () => {
+    render(<CopilotCost usage={usage({ ai_credits: null, usd: null, input_tokens: null, output_tokens: null, premium_requests: null, requests: 1 })} />)
+    expect(screen.getByText('Copilot usage: 1 request')).toBeInTheDocument()
+    act(() => { setLanguage('fr') })
+    expect(screen.getByText('Utilisation de Copilot : 1 requête')).toBeInTheDocument()
+  })
+
+  it('formats the premium requests with the decimal mark of the reader', () => {
+    render(<CopilotCost usage={usage({ ai_credits: null, usd: null, input_tokens: null, output_tokens: null, premium_requests: 2.5, requests: 2 })} />)
+    act(() => { setLanguage('fr') })
+    expect(screen.getByText('Utilisation de Copilot : 2 requêtes · 2,5 requêtes premium')).toBeInTheDocument()
   })
 
   it('reads in French, thousands grouped the French way', () => {

@@ -26,11 +26,14 @@ export function CopilotCost({ usage }: { usage: NarrativeUsage | null }): React.
   if (usage.input_tokens !== null && usage.output_tokens !== null) {
     parts.push(t('cost.tokens', { in: usage.input_tokens.toLocaleString(locale), out: usage.output_tokens.toLocaleString(locale) }))
   }
-  if (usage.requests !== null) parts.push(t('cost.requests', { n: usage.requests }))
+  // One request is one request: a language cannot be pluralised with a "(s)".
+  if (usage.requests !== null) {
+    parts.push(usage.requests === 1 ? t('cost.request') : t('cost.requests', { n: usage.requests }))
+  }
   // The premium-request count is the older way Copilot accounted for a call; it is worth showing
   // only when there are no credits to show instead.
   if (usage.ai_credits === null && usage.premium_requests !== null) {
-    parts.push(t('cost.premium', { n: usage.premium_requests.toFixed(1) }))
+    parts.push(t('cost.premium', { n: usage.premium_requests.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }))
   }
   if (parts.length === 0) return null
   return <p className="muted">{t('cost.label')} {parts.join(' · ')}</p>

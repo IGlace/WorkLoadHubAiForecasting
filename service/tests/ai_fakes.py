@@ -52,6 +52,9 @@ class FakeSession:
     disconnected: bool = False
     call_tools_first: bool = True
     return_none: bool = False
+    # A turn that never sends `assistant.message`: the reply arrives as message deltas only and
+    # `send_and_wait` answers None, which is what some models and the CLI's own relay do.
+    final_message: bool = True
     emit_session_error: str | None = None
     disconnect_raises: bool = False
     # What the usage RPC answers, and what it did in which order: the metrics must be read while
@@ -125,6 +128,11 @@ class FakeSession:
                     model="gpt-5",
                 )
             )
+        if not self.final_message:
+            half = len(reply) // 2
+            for chunk in (reply[:half], reply[half:]):
+                self._emit(make_event(SessionEventType.ASSISTANT_MESSAGE_DELTA, delta_content=chunk, message_id="m1"))
+            return None
         event = make_event(SessionEventType.ASSISTANT_MESSAGE, content=reply, message_id="m1", model="gpt-5")
         for h in self.handlers:
             h(event)
@@ -149,6 +157,7 @@ class FakeClient:
     auth_error: Exception | None = None
     session_error: Exception | None = None
     reply_none: bool = False
+    final_message: bool = True
     emit_session_error: str | None = None
     disconnect_raises: bool = False
     metrics: Any = None
@@ -157,6 +166,7 @@ class FakeClient:
     quota_snapshots: dict[str, Any] | None = None
     quota_error: Exception | None = None
     quota_requests: list[Any] = field(default_factory=list)
+    quota_timeout: float | None = None
     started: bool = False
     stopped: bool = False
     session: FakeSession | None = None
@@ -173,6 +183,7 @@ class FakeClient:
 
     async def _get_quota(self, params, *, timeout: float | None = None):
         self.quota_requests.append(getattr(params, "git_hub_token", None))
+        self.quota_timeout = timeout
         if self.quota_error:
             raise self.quota_error
         if self.quota_snapshots is None:
@@ -199,6 +210,7 @@ class FakeClient:
             replies=self.replies,
             tools=list(kwargs.get("tools") or []),
             return_none=self.reply_none,
+            final_message=self.final_message,
             emit_session_error=self.emit_session_error,
             disconnect_raises=self.disconnect_raises,
             intents=list(self.intents),

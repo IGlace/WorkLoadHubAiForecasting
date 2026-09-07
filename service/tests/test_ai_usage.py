@@ -101,22 +101,30 @@ def test_events_with_nothing_at_all_are_a_zero_request_narration() -> None:
     assert usage["input_tokens"] is None and usage["models"] == {}
 
 
+_TOKEN_COUNT = st.one_of(st.none(), st.integers(min_value=0, max_value=10**6))
+
+
 @given(
     st.lists(
         st.fixed_dictionaries(
             {
-                "input_tokens": st.integers(min_value=0, max_value=10**6),
-                "output_tokens": st.integers(min_value=0, max_value=10**6),
-                "cache_read_tokens": st.integers(min_value=0, max_value=10**6),
-                "reasoning_tokens": st.integers(min_value=0, max_value=10**6),
+                "input_tokens": _TOKEN_COUNT,
+                "output_tokens": _TOKEN_COUNT,
+                "cache_read_tokens": _TOKEN_COUNT,
+                "reasoning_tokens": _TOKEN_COUNT,
             }
         ),
         max_size=12,
     )
 )
 def test_events_total_exactly_what_the_events_carried(events: list[dict]) -> None:
+    """A field is the sum of the events that carried it, and None only when no event did.
+
+    Real `assistant.usage` events leave fields out (a model that does not reason reports no
+    reasoning tokens), so a missing field must never turn into a zero the totals then hide.
+    """
     usage = usage_from_events(events)
     assert usage["requests"] == len(events)
     for field in ("input_tokens", "output_tokens", "cache_read_tokens", "reasoning_tokens"):
-        expected = sum(event[field] for event in events) if events else None
-        assert usage[field] == expected
+        reported = [event[field] for event in events if event[field] is not None]
+        assert usage[field] == (sum(reported) if reported else None)

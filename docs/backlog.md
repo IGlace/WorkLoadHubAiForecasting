@@ -1,7 +1,7 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04, last updated 2026-09-05; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-07; update this file when an item lands.
 
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
@@ -17,6 +17,34 @@ been fixed; see "Landed" below. The owner began the Windows verification on 2026
 first install straight away; the installer now seeds the data itself, see "Landed" below.
 
 ## Landed
+
+- **The live Copilot view, what a run cost, and the "run again" wording** (2026-09-07): a narration used
+  to be a several-minute wait behind one progress line. The session now runs with `streaming=True` and
+  forwards what it receives to the Run and team pages as it arrives: the model's intent and reasoning under
+  "What Copilot is thinking", the answer under "The answer as it is written", and the facts it read beside
+  them. Every narration also records what it cost, read from `session.rpc.usage.get_metrics()` when the
+  session can answer and from the streamed `assistant.usage` events when it cannot; the stored keys are
+  `input_tokens, output_tokens, cache_read_tokens, reasoning_tokens, requests, premium_requests, ai_credits,
+  usd, api_seconds, models, source`, and a value nobody reported stays null rather than becoming a
+  plausible-looking zero. One AI credit is one US cent per GitHub's pricing page, so the money shown is the
+  credits divided by a hundred and nothing more. Settings shows the account's remaining monthly quota from
+  `client.rpc.account.get_quota(...)`, and the Run page button now says "Running…" while a forecast runs and
+  "Run another forecast" afterwards, with a line saying the previous run is kept. Caveat to carry into the
+  Windows verification: `session.usage.getMetrics` and `account.getQuota` are experimental SDK calls, proven
+  here only against fakes, so the first live run by the owner is what confirms they answer at all — both
+  failure paths are already handled (the cost falls back to the events, the quota is simply not shown).
+  Plan: `docs/superpowers/plans/2026-09-07-copilot-live-and-cost.md`.
+  - Deferred: the tool-step window. A tool call now costs two of the 50 steps the store keeps (start and
+    completion), so the live list holds half the history it did; and once a start has rolled out of the
+    window, a later completion of a same-named tool can be matched to the wrong start and mis-labelled.
+  - Deferred: the partial-token quiet paths. The cost line shows tokens only when both `input_tokens` and
+    `output_tokens` are known, so a source that reported one of the two says nothing about tokens at all.
+  - Deferred: the `run.live.*` strings are asserted in English only; the French wording exists and is
+    checked for existence by the parity test, but no test reads the live panel in French.
+  - Accepted as it is: the live panels auto-scroll to the newest text, so a reader cannot scroll back
+    through what has already gone by while the answer is still being written.
+  - Deferred: `keep_chars=0` disables the bound on the stored live text instead of storing nothing, which is
+    the reading a caller would expect from a zero.
 
 - **Local checks in place of CI** (2026-09-04): `scripts/check.ps1` (fast, `-Full`, `-Package`),
   `scripts/release.ps1` (gate then fast-forward `main`) and the hooks in `scripts/hooks/`, activated by
