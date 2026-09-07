@@ -40,6 +40,7 @@
 | `service/src/whf/eval/truth.py`, `harness.py`, `report.py` | Backlog reconstruction at an origin, `planned` flag, "Planned work" summary section. |
 | `service/src/whf/ai/facts_tools.py`, `prompt.py`, `schema.py`, `skills/whf-likely-work/SKILL.md` | Likely-work facts, tools, contract, skill. |
 | `service/src/whf/cli.py` | `whf data profile`, `--no-planned`, planned hours in `whf run` output. |
+| `service/src/whf/fit.py` (new), `service/src/whf/ai/skills/whf-rebalancing-advice/SKILL.md`, `app/src/renderer/src/pages/Rebalancing.tsx` | Fit table between an overloaded member's open tasks and under-loaded targets; moves name their tasks and are validated against the fit. |
 | `app/src/shared/types.ts`, `app/src/renderer/src/components/WeekTable.tsx`, `pages/TeamResult.tsx`, `pages/MemberDetail.tsx`, `i18n.ts` | Planned column, "Likely to land" list. |
 
 ---
@@ -1467,8 +1468,212 @@ git commit -m "docs: planned work and likely work landed; decision 3 recorded as
 
 ---
 
+### Task 11: Rebalancing fit [always; runs after Task 8, before Task 10]
+
+**Files:**
+- Create: `service/src/whf/fit.py`
+- Modify: `service/src/whf/pipeline.py` (`_build_facts`, the `rebalancing_candidates` dict), `service/src/whf/ai/schema.py` (`RebalancingMove`, `validate_against_facts`), `service/src/whf/ai/skills/whf-rebalancing-advice/SKILL.md`, `app/src/shared/types.ts`, `app/src/renderer/src/pages/Rebalancing.tsx`, `app/src/renderer/src/i18n.ts`
+- Test: `service/tests/test_fit.py`, `service/tests/test_ai_schema.py`, `app/src/renderer/src/__tests__/Rebalancing.test.tsx`
+
+**Interfaces:**
+- Consumes: `EffortModel.estimate_ratio(member_id, task_type, team_id)`; the overloaded and underloaded lists already computed in `_build_facts`; each member's `open_tasks` list in the facts.
+- Produces: `fit.fit_table(tasks, overloaded_ids, underloaded_ids, team_id, as_of, weeks, effort, vacation_days) -> list[dict]` with rows `{"task_id", "from_member_id", "to_member_id", "project_share", "type_tasks", "type_ratio", "vacation_days": {iso_week: int}, "score"}`; facts `rebalancing_candidates.fit` (that list); `RebalancingMove.task_ids: list[int] = []`; i18n `'rebalancing.tasks': 'Tasks'` / `'rebalancing.tasks': 'Tâches'`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# service/tests/test_fit.py
+import datetime as dt
+
+import pandas as pd
+import pytest
+from hypothesis import given, settings, strategies as st
+
+from whf.fit import fit_table, score
+from whf.models.effort import EffortModel
+
+MON = dt.date(2026, 9, 7)
+WEEKS = (dt.date(2026, 9, 14), dt.date(2026, 9, 21))
+
+
+def _task(i, member, project, ttype, days_ago, done=True, hours=8.0):
+    d = MON - dt.timedelta(days=days_ago)
+    return {"id": i, "title": f"t{i}", "project_id": project, "assignee_id": member, "team_id": 1, "type": ttype,
+            "priority": "medium", "status": "done" if done else "todo", "created_at": d, "assigned_at": d, "due_date": None,
+            "completed_at": d + dt.timedelta(days=4) if done else None, "estimated_hours": hours,
+            "actual_hours": hours * 1.2 if done else None, "created_by": None, "assignment_mode": "manual"}
+
+
+def _tasks():
+    rows = [_task(i, 12, 1, "feature", 30) for i in range(1, 6)]          # target 12: five features on project 1
+    rows += [_task(i, 13, 2, "bug", 30) for i in range(6, 8)]              # target 13: two bugs on project 2
+    rows += [_task(i, 11, 1, "feature", 40) for i in range(8, 11)]         # source 11 history
+    rows += [_task(20, 11, 1, "feature", 3, done=False), _task(21, 11, None, "bug", 2, done=False)]  # source open tasks
+    return pd.DataFrame(rows)
+
+
+def test_score_formula_and_bounds() -> None:
+    assert score(type_tasks=5, project_share=1.0) == 1.0
+    assert score(type_tasks=0, project_share=0.0) == 0.0
+    assert score(type_tasks=2, project_share=0.5) == pytest.approx(0.45)
+    assert score(type_tasks=50, project_share=0.2) == pytest.approx(0.6)
+
+
+def test_fit_table_has_one_row_per_open_task_and_target() -> None:
+    tasks = _tasks()
+    effort = EffortModel().fit(tasks.dropna(subset=["actual_hours", "completed_at"]))
+    rows = fit_table(tasks, overloaded_ids=[11], underloaded_ids=[12, 13], team_id=1, as_of=MON, weeks=WEEKS,
+                     effort=effort, vacation_days={13: {WEEKS[0]}})
+    assert {(r["task_id"], r["to_member_id"]) for r in rows} == {(20, 12), (20, 13), (21, 12), (21, 13)}
+    r = {(x["task_id"], x["to_member_id"]): x for x in rows}
+    # project 1 has nine recent assigned tasks: five by 12, three done by 11, and 11's open task 20 itself
+    assert r[(20, 12)]["type_tasks"] == 5 and r[(20, 12)]["project_share"] == pytest.approx(0.56) and r[(20, 12)]["score"] == pytest.approx(0.78)
+    assert r[(20, 13)]["type_tasks"] == 0 and r[(20, 13)]["project_share"] == 0.0 and r[(20, 13)]["score"] == 0.0
+    assert r[(21, 13)]["type_tasks"] == 2 and r[(21, 13)]["project_share"] == 0.0 and r[(21, 13)]["score"] == pytest.approx(0.2)
+    assert r[(20, 13)]["vacation_days"] == {WEEKS[0].isoformat(): 1, WEEKS[1].isoformat(): 0}
+    assert r[(20, 12)]["type_ratio"] == pytest.approx(effort.estimate_ratio(12, "feature", 1))
+
+
+@settings(max_examples=50, deadline=None)
+@given(type_tasks=st.integers(0, 40), project_share=st.sampled_from([0.0, 0.25, 0.5, 0.75, 0.9, 1.0]))
+def test_score_is_within_unit_interval_and_one_only_at_full_fit(type_tasks, project_share) -> None:
+    s = score(type_tasks=type_tasks, project_share=project_share)
+    assert 0.0 <= s <= 1.0
+    assert (s == 1.0) == (type_tasks >= 5 and project_share == 1.0)
+```
+
+In `service/tests/test_ai_schema.py`, with a `facts` fixture (the shared one) whose `rebalancing_candidates` you extend in the test with `overloaded = [{member_id: A, ...}]`, `underloaded = [B, C]` and a `fit` list where task 20 has score 0.8 for B and 0.0 for C, and where member A's `open_tasks` contains id 20 with `estimated_hours` 8.0 and A's pattern `estimate_ratio_median` 1.25:
+
+- a move `A -> C, task_ids=[20], hours=4` is rejected with a problem containing `"member B fits task 20 better"`;
+- the same move to B is accepted;
+- a move to C is accepted when C is the only underloaded member;
+- `task_ids=[99]` (not A's) is rejected with `"task 99 is not an open task of member A"`;
+- `task_ids=[20], hours=12` is rejected with `"exceeds the corrected estimate of the named tasks"` (8.0 × 1.25 = 10.0, rounded up to the half hour stays 10.0);
+- a move without `task_ids` is validated exactly as before (reuse an existing passing case).
+
+App test (`Rebalancing.test.tsx`, following the file's fixture pattern): a stored narrative with a move carrying `task_ids: [20]` and facts whose member A has open task 20 titled "Atlas API layer" renders "Tasks: Atlas API layer" under the move; a move without `task_ids` renders no such line.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `uv run pytest tests/test_fit.py tests/test_ai_schema.py -q -k "fit or task_ids"`
+Expected: `ModuleNotFoundError: whf.fit`, then validation errors on the unknown field `task_ids`.
+
+- [ ] **Step 3: Implement `whf/fit.py`**
+
+```python
+"""How well an under-loaded member fits a task an overloaded member could hand over."""
+
+from __future__ import annotations
+
+import datetime as dt
+
+import pandas as pd
+
+from whf.calendar import ONE_WEEK, week_start, working_days
+from whf.models.effort import EffortModel
+
+PROJECT_WINDOW_WEEKS = 26
+FULL_TYPE_TASKS = 5
+
+
+def score(*, type_tasks: int, project_share: float) -> float:
+    return round(0.5 * min(1.0, type_tasks / FULL_TYPE_TASKS) + 0.5 * project_share, 2)
+
+
+def fit_table(
+    tasks: pd.DataFrame,
+    overloaded_ids: list[int],
+    underloaded_ids: list[int],
+    team_id: int,
+    as_of: dt.date,
+    weeks: tuple[dt.date, dt.date],
+    effort: EffortModel,
+    vacation_days: dict[int, set[dt.date]],
+) -> list[dict]:
+    assigned = tasks[tasks["assignee_id"].notna()] if len(tasks) else tasks
+    done = assigned.dropna(subset=["completed_at"]) if len(assigned) else assigned
+    since = week_start(as_of) - PROJECT_WINDOW_WEEKS * ONE_WEEK
+    recent = assigned[assigned["assigned_at"] >= since] if len(assigned) else assigned
+    rows: list[dict] = []
+    for source in overloaded_ids:
+        open_tasks = assigned[(assigned["assignee_id"] == source) & (assigned["status"] != "done")]
+        for t in open_tasks.itertuples():
+            project = None if pd.isna(t.project_id) else int(t.project_id)
+            on_project = recent[recent["project_id"] == project] if project is not None and len(recent) else recent.iloc[0:0]
+            for target in underloaded_ids:
+                type_tasks = int(((done["assignee_id"] == target) & (done["type"] == t.type)).sum()) if len(done) else 0
+                share = float((on_project["assignee_id"] == target).mean()) if len(on_project) else 0.0
+                off = vacation_days.get(target, set())
+                rows.append({
+                    "task_id": int(t.id),
+                    "from_member_id": int(source),
+                    "to_member_id": int(target),
+                    "project_share": round(share, 2),
+                    "type_tasks": type_tasks,
+                    "type_ratio": round(effort.estimate_ratio(target, str(t.type), team_id), 3),
+                    "vacation_days": {
+                        w.isoformat(): sum(1 for d in working_days(w, w + dt.timedelta(days=6), set()) if d in off)
+                        for w in weeks
+                    },
+                    "score": score(type_tasks=type_tasks, project_share=share),
+                })
+    return rows
+```
+
+`project_share` uses `mean()` of a boolean series, which is the target's count over the project's recent assigned tasks; `round(..., 2)` for the fact and the unrounded value for the score, then the score is rounded once. In `_build_facts`, after `overloaded` and `underloaded` are built, call `fit_table(tasks, [m["member_id"] for m in overloaded], [m["member_id"] for m in underloaded], team_id, as_of, (f1, f2), effort, vacation_days)` and store it as `"fit"` in `rebalancing_candidates`; `effort` and `vacation_days` are computed in `run_forecast`, pass them into `_build_facts` (two more parameters).
+
+- [ ] **Step 4: Contract and validation**
+
+In `schema.py`, `RebalancingMove` gains `task_ids: list[int] = Field(default_factory=list)`. In `validate_against_facts`, inside the per-move loop after the existing capacity check, when `mv.task_ids` is non-empty:
+
+```python
+            source = next((m for m in facts.get("members", []) if int(m["id"]) == mv.from_member_id), None)
+            open_by_id = {int(t["id"]): t for t in (source or {}).get("open_tasks", [])}
+            unknown = [tid for tid in mv.task_ids if tid not in open_by_id]
+            for tid in unknown:
+                problems.append(f"task {tid} is not an open task of member {mv.from_member_id}")
+            if unknown:
+                continue
+            ratio = float((source or {}).get("patterns", {}).get("estimate_ratio_median") or 1.0)
+            corrected = sum(float(open_by_id[tid]["estimated_hours"]) for tid in mv.task_ids) * ratio
+            ceiling = math.ceil(corrected * 2) / 2
+            if mv.hours > ceiling + 0.05:
+                problems.append(
+                    f"rebalancing move of {mv.hours:g} h exceeds the corrected estimate of the named tasks ({ceiling:g} h)"
+                )
+            fit = facts.get("rebalancing_candidates", {}).get("fit", [])
+            spare = {int(u["member_id"]): float(u["spare_hours"]) for u in facts.get("rebalancing_candidates", {}).get("underloaded", [])}
+            for tid in mv.task_ids:
+                mine = {int(r["to_member_id"]): float(r["score"]) for r in fit if int(r["task_id"]) == tid}
+                if mine.get(mv.to_member_id, 0.0) > 0.0:
+                    continue
+                better = [m for m, s in mine.items() if s > 0.0 and m != mv.to_member_id and spare.get(m, 0.0) >= mv.hours]
+                if better:
+                    names = ", ".join(f"member {m}" for m in sorted(better))
+                    problems.append(f"{names} fits task {tid} better than member {mv.to_member_id}, who has no fit for it")
+```
+
+(`estimate_ratio_median` is the pattern statistic already in each member's `patterns`; `None` falls back to 1.0.) Update the rebalancing skill's rule 2 and rule 6 with the spec's wording, and its rule 3 to say "name the tasks in `task_ids`".
+
+- [ ] **Step 5: App**
+
+`types.ts`: `RebalancingMove.task_ids?: number[]`. `Rebalancing.tsx`: under each move's reason cell, when `mv.task_ids?.length`, a muted line `t('rebalancing.tasks')`: the titles of those ids found in `facts.members[*].open_tasks`, joined by ", " (fall back to the id when a title is not found). i18n keys as in Interfaces.
+
+- [ ] **Step 6: Gate both halves and commit**
+
+```bash
+# service/
+uv run ruff check . && uv run ruff format --check . && uv run ty check && uv run pytest -q
+# app/
+npm run lint && npm run typecheck && npm test
+git add service/src/whf/fit.py service/src/whf/pipeline.py service/src/whf/ai/schema.py service/src/whf/ai/skills/whf-rebalancing-advice/SKILL.md service/tests/test_fit.py service/tests/test_ai_schema.py app/src/shared/types.ts app/src/renderer/src/pages/Rebalancing.tsx app/src/renderer/src/i18n.ts app/src/renderer/src/__tests__/Rebalancing.test.tsx
+git commit -m "feat: rebalancing moves name their tasks and respect a deterministic fit between task and target"
+```
+
+---
+
 ## Self-review
 
-- **Spec coverage.** 4.1 schema and migration: Task 2. 4.2 generator: Task 3. 4.3 readiness report: Task 1. 5.1 candidates, 5.2 weights, 5.3 timing: Task 5. 5.4 split: Task 4. 5.5 demand, bands, facts: Task 6. 5.6 evaluation: Task 7. 6.1 facts, 6.2 contract, 6.3 tools, prompt, skill: Task 8. 6.4 app: Tasks 6 and 9. 8 gates: the task labels. 9 testing: each task's tests, the property tests in Tasks 4 and 5, the harness smoke in Task 7.
+- **Spec coverage.** 4.1 schema and migration: Task 2. 4.2 generator: Task 3. 4.3 readiness report: Task 1. 5.1 candidates, 5.2 weights, 5.3 timing: Task 5. 5.4 split: Task 4. 5.5 demand, bands, facts: Task 6. 5.6 evaluation: Task 7. 6.1 facts, 6.2 contract, 6.3 tools, prompt, skill: Task 8. 6.4 app: Tasks 6 and 9. 6.5 rebalancing fit: Task 11 (runs after Task 8 and before Task 10). 8 gates: the task labels. 9 testing: each task's tests, the property tests in Tasks 4 and 5, the harness smoke in Task 7.
 - **Placeholders.** Task 7's report test body is a reference to the file's fixture pattern rather than code, and Task 9's tests are described rather than written: both are deliberate, because the fixture helpers in those files will have moved by the time this plan runs; the implementer reads the file first. Everything else carries its code.
 - **Type consistency.** `PlannedAllocation.hours` columns `member_id, week_start, hours` are read in Task 6 as `planned.hours.member_id` and `.week_start`; `items` keys in Task 5 match the facts assertion in Task 6 and the passthrough in Task 8; `SERIES_COLUMN` is defined in Task 4 and read by the models; `profile_tasks` keys in Task 1 are the ones Task 7 reads (`share_lagged`, `lag_median_days`, `planned`).

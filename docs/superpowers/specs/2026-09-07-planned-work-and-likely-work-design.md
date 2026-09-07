@@ -237,6 +237,41 @@ line per item with its confidence badge, in English and French. The week table g
 column beside "Open" and "New" when any row has planned hours. Older runs without the field show
 nothing new.
 
+### 6.5 Rebalancing fit (added 2026-09-07 at the owner's request)
+
+Today a rebalancing move is bounded only by hours: the source must have overload, the target spare
+capacity, in the same week. The product skill asks Copilot to prefer a target who has done the task
+type before, but the facts give it nothing better than "has a cycle-time statistic for that type",
+and nothing at all about projects. This section gives the move a deterministic **fit** it must
+respect.
+
+- **Fit table.** For every open task of every overloaded member (status not `done`) and every
+  underloaded member of the same team, the service computes one row:
+  `task_id`, `from_member_id`, `to_member_id`, `project_share` (the target's share of the task's
+  project's assigned tasks over the last 26 weeks, 0 when the task has no project or the target none
+  of its tasks), `type_tasks` (the target's completed tasks of that type over the whole history),
+  `type_ratio` (the target's estimate ratio for that type from the effort model, shrunk like every
+  ratio), `vacation_days` (the target's vacation days in the move's week, per forecast week), and
+  `score = 0.5 * min(1, type_tasks / 5) + 0.5 * project_share`, rounded to two decimals. The table
+  lives in the facts under `rebalancing_candidates.fit` and reaches Copilot through the existing
+  `get_rebalancing_candidates` tool.
+- **Contract.** `RebalancingMove` gains `task_ids: list[int]` (default empty). When given, every id
+  must be an open task of the source member; the move's hours may not exceed the sum of those tasks'
+  estimated hours times the source's estimate ratio, rounded up to the nearest half hour, so a move
+  is a set of named tasks rather than a loose number.
+- **Validation.** For each named task, if the target's fit score is 0 and another underloaded member
+  in the same week has a score above 0 for that task and spare hours at least the move, the answer
+  is rejected with a message naming the better-fitting member. A zero-fit target is allowed only when
+  nobody fits better. Moves without `task_ids` are validated as today.
+- **Skill.** Rule 2 of `whf-rebalancing-advice` becomes: rank targets by `score`, cite the score's
+  components in the reason (project share, tasks of the type), and set confidence `high` only when
+  the chosen target has the best score among those with enough spare hours, `medium` when the score
+  is above 0 but not the best, `low` when it is 0.
+- **App.** The rebalancing page lists each move's task titles under the move, looked up from the
+  facts. No new page.
+- **Scope.** Moves stay inside one team. Seniority and skills that are not visible in the task
+  history are still not modelled; `type_tasks` and `project_share` are the observable proxies.
+
 ## 7. Non-goals
 
 - Any use of the language model to produce hours, counts or dates (decision 3, closed).
@@ -278,6 +313,11 @@ nothing new.
   any yields the same forecasts as before the change, row for row.
 - Narrative tests: the schema accepts and rejects `likely_work` as specified; the verifier catches an
   invented hours figure in a statement; the fake session exercises the two new tools.
+- Fit tests: the fit table has one row per (open task of an overloaded member, underloaded member);
+  `score` is in [0, 1] and is 1 only for a target with at least five tasks of the type and the whole
+  project share (property test); a move naming a task that is not the source's is rejected; a move to
+  a zero-fit target is rejected when a better-fitting target with spare hours exists and accepted
+  when none does; a move whose hours exceed the named tasks' corrected estimate is rejected.
 - App tests: the member card renders the items with badges in both languages; the week table shows
   the planned column only when needed.
 - The harness A/B on generated data with `backlog_share = 0.35` as a smoke test of the whole chain
