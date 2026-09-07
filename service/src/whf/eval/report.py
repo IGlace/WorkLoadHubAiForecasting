@@ -13,14 +13,19 @@ import pandas as pd
 from whf.eval.harness import EvalConfig, EvalResult
 from whf.eval.metrics import bias, mae, overload_precision_recall
 
+LEVEL_A_METRIC_COLUMNS = ["model", "horizon", "mae", "mase", "beats_naive", "coverage80", "wql", "seconds"]
+
 
 def summary_tables(result: EvalResult) -> tuple[pd.DataFrame, pd.DataFrame]:
     if result.scores.empty:
         level_a = pd.DataFrame(columns=["model", "horizon"])
     else:
+        # dropna=False: a metric that is NaN for every row of this run (e.g. wql when no
+        # model produced quantiles) must still show up as a NaN column, not vanish silently.
         level_a = result.scores.pivot_table(
-            index=["model", "horizon"], columns="metric", values="value", aggfunc="mean"
+            index=["model", "horizon"], columns="metric", values="value", aggfunc="mean", dropna=False
         ).reset_index()
+        level_a = level_a.reindex(columns=LEVEL_A_METRIC_COLUMNS)
     rows = []
     for name, g in result.demand.groupby("model"):
         y, p = g["truth"].to_numpy(dtype=float), g["forecast"].to_numpy(dtype=float)
