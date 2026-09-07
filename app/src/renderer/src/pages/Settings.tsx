@@ -10,9 +10,9 @@ import { t } from '../i18n'
 // landed in the interpolated "Signed in as {login}" sentence so only the name can be bolded.
 const READY_SENTINEL = '\uE000'
 
-export function Settings({ pollMs }: { pollMs?: number } = {}): React.JSX.Element {
+export function Settings({ pollMs, maxPollMs }: { pollMs?: number; maxPollMs?: number }): React.JSX.Element {
   const { meta, profile, settings, saveSettings, saveProfile } = useApp()
-  const { status: copilot, error: copilotError, loginPending, timedOut, startLogin, loginMessage } = useCopilotStatus({ pollMs })
+  const { status: copilot, error: copilotError, loginPending, timedOut, startLogin, loginMessage } = useCopilotStatus({ pollMs, maxPollMs })
   const [model, setModel] = useState(settings.model ?? '')
   const [modelSource, setModelSource] = useState(settings.model)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +60,7 @@ export function Settings({ pollMs }: { pollMs?: number } = {}): React.JSX.Elemen
               {copilot.message && <span className="muted"> · {copilot.message}</span>}
               {copilot.cli_path && <span className="muted"> · {copilot.cli_path}</span>}</p>
         )}
-        {loginPending && <StatusMessage kind="info">{loginMessage ? t(loginMessage) : t('settings.waiting')}</StatusMessage>}
+        {(loginPending || loginMessage) && <StatusMessage kind="info">{loginMessage ? t(loginMessage) : t('settings.waiting')}</StatusMessage>}
         {timedOut && <StatusMessage kind="info">{t('settings.loginTimeout')}</StatusMessage>}
         <button className="primary" disabled={copilot?.ready ?? false} aria-disabled={copilot?.ready ?? false} onClick={() => { void startLogin() }}>{t('settings.signin')}</button>
         {copilot?.ready && <span className="muted"> {t('settings.signedInHint')}</span>}

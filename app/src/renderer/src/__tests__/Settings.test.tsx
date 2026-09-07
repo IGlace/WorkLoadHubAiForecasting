@@ -5,7 +5,7 @@ import { AppProvider } from '../context'
 import { Settings } from '../pages/Settings'
 import { installFakeWhf, META } from '../test/fake-whf'
 
-function mount(props: { pollMs?: number } = {}) {
+function mount(props: { pollMs?: number; maxPollMs?: number } = {}) {
   return render(<MemoryRouter><AppProvider><Settings {...props} /></AppProvider></MemoryRouter>)
 }
 
@@ -57,7 +57,20 @@ describe('Settings', () => {
     expect(await screen.findByText((_, node) => node?.textContent === 'Signed in as octocat')).toBeInTheDocument()
     const signIn = screen.getByRole('button', { name: 'Sign in to GitHub Copilot' })
     expect(signIn).toBeDisabled()
+    expect(signIn).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('You are signed in; no further sign-in is needed.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument()
+  })
+  it('shows the CLI-not-found message and keeps the sign-in button enabled when the login does not start', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false },
+    })
+    window.whf.copilotLogin = () => Promise.resolve({ started: false, code: 'copilot.login.noCli' })
+    mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign in to GitHub Copilot' }))
+    expect(await screen.findByText('The Copilot CLI could not be found.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign in to GitHub Copilot' })).not.toBeDisabled()
   })
   it('polls after sign-in until the status becomes ready, then shows the login and a disabled button', async () => {
     let calls = 0
@@ -72,11 +85,33 @@ describe('Settings', () => {
     mount({ pollMs: 10 })
     await screen.findByText('Not signed in to GitHub Copilot yet.')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in to GitHub Copilot' }))
-    expect(await screen.findByText('Waiting for the sign-in to finish in the terminal window…')).toBeInTheDocument()
+    // The login-started sentence stays up while polling (it is only cleared once ready), so this
+    // is what should be on screen through the retries, not the generic "waiting" fallback.
+    expect(await screen.findByText(/A terminal window opened/)).toBeInTheDocument()
     // The login name is rendered in its own <strong>, so the sentence is split across elements;
     // match on the paragraph's full text rather than a single text node.
     expect(await screen.findByText((_, node) => node?.textContent === 'Signed in as octocat')).toBeInTheDocument()
+    expect(screen.queryByText(/A terminal window opened/)).not.toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in to GitHub Copilot' })).toBeDisabled())
+  })
+  it('clears a stale timeout once a later refetch reports ready', async () => {
+    let ready = false
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /copilot/status': () => ready
+        ? { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true }
+        : { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false },
+    })
+    mount({ pollMs: 10, maxPollMs: 1 })
+    await screen.findByText('Not signed in to GitHub Copilot yet.')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in to GitHub Copilot' }))
+    expect(await screen.findByText('Still not signed in after ten minutes. Start the sign-in again.')).toBeInTheDocument()
+    ready = true
+    window.dispatchEvent(new Event('focus'))
+    // The login name is rendered in its own <strong>, so the sentence is split across elements;
+    // match on the paragraph's full text rather than a single text node.
+    expect(await screen.findByText((_, node) => node?.textContent === 'Signed in as octocat')).toBeInTheDocument()
+    expect(screen.queryByText('Still not signed in after ten minutes. Start the sign-in again.')).not.toBeInTheDocument()
   })
   it('refetches the status when the window regains focus', async () => {
     const fake = installFakeWhf({
