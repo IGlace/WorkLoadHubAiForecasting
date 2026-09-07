@@ -129,7 +129,10 @@ first install straight away; the installer now seeds the data itself, see "Lande
   `docs/superpowers/specs/2026-09-06-forecast-evaluation-and-chronos2-design.md`.
   - First harness run on generated data (seed 42, twelve months): `docs/eval/2026-09-07-generated/summary.md`.
     Winner on generated data: gbm, MASE 0.821 at horizon 1; demand MAE 8.778 h per member-week; overload
-    recall nan (no overload weeks in this backtest window, so precision and recall are both undefined).
+    precision 0.000 and recall undefined, because the generated truth never exceeds capacity in any
+    replayed week (maximum 40.0 h against 44 h), so every predicted overload week (292 across the four
+    models) is a false positive and recall has no positives to count — the overload metrics are
+    uninformative on generated data and only the real-data run can judge them.
     Took 31.6 minutes end to end, over the fifteen-minute budget in the brief; kept because it completed
     with exit 0 and all four models scored. Not a decision: the generator wrote the truth. The real-data
     run next week decides.
