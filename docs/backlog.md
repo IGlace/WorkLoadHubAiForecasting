@@ -18,6 +18,16 @@ first install straight away; the installer now seeds the data itself, see "Lande
 
 ## Landed
 
+- **Planned work and likely work, designed and locked, waiting for the real export** (2026-09-07): the owner
+  asked whether Copilot could predict the tasks a member will be assigned. Decided: no language model will
+  ever produce a forecast number (closed for good); instead, tasks that exist before they are assigned are
+  allocated to members by a deterministic, backtestable share rule and become a third demand component,
+  and the narrative gains a qualitative "what is likely to land" section written from new facts. Spec
+  `docs/superpowers/specs/2026-09-07-planned-work-and-likely-work-design.md`, plan
+  `docs/superpowers/plans/2026-09-07-planned-work-and-likely-work.md`. Implementation starts once the export is
+  in the database and `whf data profile` (plan task 1) has shown whether the organisation keeps a backlog;
+  the plan marks which tasks run in each case. The harness then decides, on the real data, whether the
+  planned component stays on.
 - **The live Copilot view, what a run cost, and the "run again" wording** (2026-09-07): a narration used
   to be a several-minute wait behind one progress line. The session now runs with `streaming=True` and
   forwards what it receives to the Run and team pages as it arrives: the model's intent and reasoning under

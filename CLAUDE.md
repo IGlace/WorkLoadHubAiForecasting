@@ -13,6 +13,9 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 - `docs/requirements/2026-09-03-discovery-qa.md`: the owner's answers, source of truth for scope questions.
 - `docs/research/2026-09-03-research-notes.md`: sourced facts about Copilot CLI/SDK, forecasting methods, prior art.
 - `docs/superpowers/specs/2026-09-06-forecast-evaluation-and-chronos2-design.md`: the evaluation harness and Chronos-2 candidate design.
+- `docs/superpowers/specs/2026-09-07-planned-work-and-likely-work-design.md`: planned-work allocation and the
+  "likely work" narrative section, locked on 2026-09-07 and implemented once the real export has landed
+  (plan: `docs/superpowers/plans/2026-09-07-planned-work-and-likely-work.md`).
 - `docs/superpowers/plans/`: implementation plans, when present.
 - `docs/backlog.md`: open items after version 1 (polish, Windows verification, design decisions, future topics).
 
@@ -20,6 +23,8 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 
 - The language model never produces a forecast number. Deterministic code computes
   demand, capacity and overload; Copilot reads facts through tools and writes narrative.
+  This is permanent: on 2026-09-07 the owner closed the idea of an LLM forecast candidate for good
+  (`docs/superpowers/specs/2026-09-07-planned-work-and-likely-work-design.md`, section 2). Do not reopen it.
 - Demand is never capped by capacity; overload is reported.
 - Everything must run on Windows in PowerShell. No WSL at install or run time.
 - Copilot access goes through the GitHub Copilot SDK or CLI with the user's login.
