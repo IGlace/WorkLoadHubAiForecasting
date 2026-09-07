@@ -118,9 +118,42 @@ def test_predict_quantiles_are_ordered_and_clipped() -> None:
 
 def test_the_fast_suite_never_reaches_the_real_model() -> None:
     """The conftest guard, asserted here so that dropping it is a test failure and not a 53-minute
-    test run: outside `-m slow` a Chronos2Arrival with no injected pipeline must refuse to load."""
+    test run: a Chronos2Arrival with no injected pipeline must refuse to load."""
     with pytest.raises(ModelUnavailable, match="disabled"):
         Chronos2Arrival().fit(_frame(), (1,))
+
+
+@pytest.mark.slow
+def test_slow_tests_are_guarded_too() -> None:
+    """`slow` alone must not lift the guard: the accuracy gate is slow and would otherwise download
+    456 MB of weights on CI, and would score a different set of models depending on the machine.
+    Only `chronos2_real` opts in. Kept cheap so it costs nothing in the `-m slow` job."""
+    with pytest.raises(ModelUnavailable, match="disabled"):
+        Chronos2Arrival().fit(_frame(members=1, weeks=6), (1,))
+
+
+def test_the_cache_fallback_never_downloads(monkeypatch) -> None:
+    """With no bundled weights and no WHF_CHRONOS2_PATH, `load` reads a warm Hugging Face cache but
+    must never fill one: `local_files_only=True` turns a missing cache into ModelUnavailable rather
+    than an unannounced 456 MB download in a test run, a CI job or `whf serve` from a checkout."""
+    import whf.models.chronos2 as mod
+
+    seen: dict = {}
+
+    class _Recording:
+        @staticmethod
+        def from_pretrained(name, **kwargs):
+            seen["name"] = name
+            seen.update(kwargs)
+            return StubPipeline()
+
+    monkeypatch.setattr(mod, "_pipeline", None)
+    monkeypatch.setattr(mod, "weights_path", lambda env=None: None)
+    monkeypatch.setattr(mod, "_import_pipeline_class", lambda: _Recording)
+    mod.load(shared=False)
+    assert seen["name"] == mod.WEIGHTS_REPO
+    assert seen["revision"] == mod.WEIGHTS_REVISION
+    assert seen["local_files_only"] is True
 
 
 def test_registered_and_unavailable_without_torch(monkeypatch) -> None:

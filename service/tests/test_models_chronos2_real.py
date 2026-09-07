@@ -6,17 +6,25 @@ import pytest
 
 from whf.models.chronos2 import Chronos2Arrival, load, weights_path
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.chronos2_real]
 
 
 def _can_run() -> bool:
-    """Both halves are needed: the library (torch + chronos) and weights it may load offline."""
+    """Both halves are needed: the library (torch + chronos) and weights it may load offline.
+
+    The cache half has to ask about the cache `load()` will actually read - which HF_HOME moves -
+    and about a snapshot rather than the repo folder, because a failed offline lookup leaves an
+    empty `models--amazon--chronos-2/` behind. `load()` never downloads, so getting this wrong
+    turns a skip into a failure.
+    """
     if importlib.util.find_spec("torch") is None or importlib.util.find_spec("chronos") is None:
         return False
     if weights_path() is not None:
         return True
-    cache = os.path.expanduser("~/.cache/huggingface/hub/models--amazon--chronos-2")
-    return os.path.isdir(cache)
+    hf_home = os.environ.get("HF_HOME")
+    hub = os.path.join(hf_home, "hub") if hf_home else os.path.expanduser("~/.cache/huggingface/hub")
+    snapshots = os.path.join(hub, "models--amazon--chronos-2", "snapshots")
+    return os.path.isdir(snapshots) and bool(os.listdir(snapshots))
 
 
 @pytest.mark.skipif(not _can_run(), reason="Chronos-2 library or weights not present")

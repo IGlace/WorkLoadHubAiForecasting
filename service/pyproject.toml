@@ -32,6 +32,7 @@ dev = [
 build = [
     "pyinstaller>=6.22,<7",
     "pyinstaller-hooks-contrib>=2026.7",
+    "huggingface-hub>=0.30",  # installer/pyinstaller/download_weights.py imports it directly
 ]
 
 # torch resolves to the CUDA build by default (1.2 GB plus NVIDIA runtime libraries); the service
@@ -61,6 +62,10 @@ ignore = ["E501", "B008"]  # B008: FastAPI Depends/Query defaults are idiomatic
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["slow: long-running accuracy gates", "copilot: needs a signed-in Copilot CLI (WHF_COPILOT_LIVE=1)"]
+markers = [
+    "slow: long-running accuracy gates",
+    "copilot: needs a signed-in Copilot CLI (WHF_COPILOT_LIVE=1)",
+    "chronos2_real: loads the real Chronos-2 weights; skipped without them",
+]
 pythonpath = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning:starlette.*", "ignore::DeprecationWarning:fastapi.*"]

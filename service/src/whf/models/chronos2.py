@@ -71,6 +71,12 @@ def load(env: Mapping[str, str] | None = None, *, shared: bool = True) -> Any:
     builds a fresh one from the same weights and leaves the cached instance alone; fine-tuning uses
     it so that a LoRA fit can never reach the plain `chronos2` candidate running beside it.
 
+    This never reaches the network, in any environment. Weights come from the frozen folder, from
+    WHF_CHRONOS2_PATH, or from a Hugging Face cache that is already populated; a machine with none of
+    those gets ModelUnavailable rather than a 456 MB download it did not ask for - which is what a
+    test run, a CI job or `whf serve` in a checkout would otherwise trigger. Put the weights in place
+    deliberately, with `installer/pyinstaller/download_weights.py` or a warm cache.
+
     Everything the load touches sits inside one handler: a missing library raises ImportError, but a
     broken torch install raises OSError (`[WinError 126]` on Windows) and a corrupt checkpoint raises
     whatever the library likes. All of them mean the same thing here - the model cannot run - and none
@@ -95,7 +101,11 @@ def load(env: Mapping[str, str] | None = None, *, shared: bool = True) -> Any:
             if path is not None:
                 pipeline = cls.from_pretrained(str(path), device_map="cpu")
             else:
-                pipeline = cls.from_pretrained(WEIGHTS_REPO, revision=WEIGHTS_REVISION, device_map="cpu")
+                # local_files_only: the cache fallback reads a cache that is already there and
+                # never fills one, so a machine without the weights fails fast instead of downloading.
+                pipeline = cls.from_pretrained(
+                    WEIGHTS_REPO, revision=WEIGHTS_REVISION, device_map="cpu", local_files_only=True
+                )
         except ModelUnavailable:
             raise
         except Exception as exc:

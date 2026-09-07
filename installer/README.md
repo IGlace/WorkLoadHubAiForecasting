@@ -47,6 +47,11 @@ afterwards. Passing `-SkipModelDownload` to `scripts/build-service.ps1` leaves
 the weights out; the installer still builds and works, but its forecasts use
 the three classical models only and the app reports Chronos-2 as unavailable.
 
+Expect the result to be much larger than before Chronos-2: the frozen service
+folder grows from about 150 MB to about 1.5 GB with the weights bundled (about
+982 MB with `-SkipModelDownload`, which is the CPU PyTorch runtime), so the
+installer grows by roughly a gigabyte.
+
 The `package-windows` job in `.github/workflows/ci.yml` runs the same script
 on `windows-latest` and uploads the `.exe` as a build artifact on every push,
 pull request and manual dispatch.

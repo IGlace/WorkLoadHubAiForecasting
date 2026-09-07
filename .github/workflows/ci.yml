@@ -12,6 +12,8 @@ jobs:
   service:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: service } }
+    # Belt and braces beside the conftest guard: nothing in a test run may fetch model weights.
+    env: { HF_HUB_OFFLINE: "1" }
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

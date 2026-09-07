@@ -145,7 +145,7 @@ def main(dist_dir: str) -> int:
             env={**os.environ, "HF_HUB_OFFLINE": "1", "HF_HOME": str(Path(tmp) / "hf_home")},
         )
         if weights.is_dir():
-            if eval_out.returncode != 0 or "skipped" in eval_out.stdout:
+            if eval_out.returncode != 0 or "skipped chronos2" in eval_out.stdout:
                 raise SystemExit(f"chronos2 should run from bundled weights:\n{eval_out.stdout}\n{eval_out.stderr}")
             print("ok chronos2 eval from bundled weights")
         else:
