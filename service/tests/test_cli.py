@@ -199,6 +199,12 @@ def test_eval_command_writes_outputs_and_reports_skips(tmp_path, monkeypatch) ->
     )
     assert ok.exit_code == 0, ok.output
     assert (out / "summary.md").exists() and "tsb" in ok.output
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    # the run's provenance: the exact weights, the seed, the machine and the truth assumptions
+    from whf.models.chronos2 import WEIGHTS_REVISION
+
+    assert WEIGHTS_REVISION in summary and "torch seed: 0" in summary
+    assert "thread cap" in summary and "## Truth and replay assumptions" in summary
     from whf.models import MODEL_FACTORIES
     from whf.models.base import ModelUnavailable
 

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from whf.calendar import days_in_ranges
 from whf.db.connection import connect
 from whf.db.repo import insert_rows, read_df, table_names, with_dates
 from whf.models.effort import place_hours
@@ -40,19 +41,34 @@ def truth_from_answer_key(path: Path) -> pd.DataFrame:
 
 def realised_hours(conn: sqlite3.Connection) -> pd.DataFrame:
     """Real-data truth: each completed task's actual hours spread evenly over the working days between
-    assignment and completion (holidays from the holidays table), summed per member and week.
+    assignment and completion, summed per member and week.
 
-    This is the only place that definition lives; replace the body if the export carries logged hours.
+    The working days are the assignee's own: weekdays minus holidays minus that member's vacation
+    days, the same calendar `run_forecast` places forecast effort on. Anything else would compare a
+    forecast and a truth that disagree about which days a member could have worked.
+
+    Two assumptions the summary states for the reader: the even spread itself (the export carries no
+    hours per day), and that work still open at export time contributes nothing, which deflates the
+    most recent weeks. This is the only place that definition lives; replace the body if the export
+    ever carries logged hours.
     """
     tasks = with_dates(
         read_df(conn, "SELECT assignee_id, assigned_at, completed_at, actual_hours FROM tasks"),
         ["assigned_at", "completed_at"],
     )
     holidays = {d for d in with_dates(read_df(conn, "SELECT date FROM holidays"), ["date"])["date"] if d}
+    vacations = with_dates(
+        read_df(conn, "SELECT member_id, start_date, end_date FROM vacations"), ["start_date", "end_date"]
+    )
+    off_by_member: dict[int, set[dt.date]] = {}
+    for v in vacations.itertuples(index=False):
+        if v.start_date and v.end_date:
+            off_by_member.setdefault(int(v.member_id), set()).update(days_in_ranges([(v.start_date, v.end_date)]))
     done = tasks.dropna(subset=["completed_at", "actual_hours"])
     acc: dict[tuple[int, dt.date], float] = {}
     for t in done.itertuples(index=False):
-        for ws, h in place_hours(float(t.actual_hours), t.assigned_at, t.completed_at, holidays).items():
+        off = holidays | off_by_member.get(int(t.assignee_id), set())
+        for ws, h in place_hours(float(t.actual_hours), t.assigned_at, t.completed_at, off).items():
             acc[(int(t.assignee_id), ws)] = acc.get((int(t.assignee_id), ws), 0.0) + h
     rows = [{"member_id": m, "week_start": w, "hours": round(h, 6)} for (m, w), h in sorted(acc.items())]
     return pd.DataFrame(rows, columns=TRUTH_COLUMNS)

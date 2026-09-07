@@ -18,6 +18,16 @@ class _Broken:
         raise ModelUnavailable("broken: missing")
 
 
+class _Banded(SeasonalNaive):
+    """A model with native quantiles, the way chronos2 has them."""
+
+    name = "banded"
+
+    def predict_quantiles(self, rows, horizon):
+        point = self.predict(rows, horizon)
+        return point * 0.5, point * 1.5
+
+
 def test_arrival_level_reports_every_metric_per_model_and_horizon(db, generated) -> None:
     frames = _load_frames(db)
     origin = last_complete_week(generated.config.as_of)
@@ -29,6 +39,40 @@ def test_arrival_level_reports_every_metric_per_model_and_horizon(db, generated)
     assert set(scores["metric"]) == {"mae", "mase", "beats_naive", "coverage80", "wql", "seconds"}
     cov = scores[(scores.metric == "coverage80") & (scores.model == "tsb")]["value"]
     assert ((cov >= 0) & (cov <= 1)).all()
+
+
+def test_arrival_level_scores_the_interval_of_native_quantile_and_residual_models_alike(db, generated) -> None:
+    """Every model must be measured on the band a run would actually show for it: its own quantiles
+    when it has them, the leave-one-origin-out residual band otherwise. A NaN `wql` for the residual
+    models would mean the interval column compares nothing."""
+    frames = _load_frames(db)
+    origin = last_complete_week(generated.config.as_of)
+    _, feat, _ = arrival_feature_matrix(frames, origin)
+    origins = [origin - 2 * ONE_WEEK, origin - 4 * ONE_WEEK]
+    scores, skipped = arrival_level(feat, {"banded": _Banded, "tsb": MODEL_FACTORIES["tsb"]}, origins, (1, 2))
+    assert skipped == {}
+    for model in ("banded", "tsb"):
+        for metric in ("coverage80", "wql"):
+            values = scores[(scores.model == model) & (scores.metric == metric)]["value"]
+            assert len(values) == len(origins) * 2
+            assert values.notna().all(), f"{model} has no {metric}"
+            assert (values >= 0).all()
+        cov = scores[(scores.model == model) & (scores.metric == "coverage80")]["value"]
+        assert (cov <= 1).all()
+
+
+def test_arrival_level_reports_seconds_once_per_model_over_the_origins_it_scored(db, generated) -> None:
+    """The timing is per model over the whole backtest, so it belongs on one row: the first horizon,
+    divided by the origins that model actually scored, and NaN elsewhere rather than repeated."""
+    frames = _load_frames(db)
+    origin = last_complete_week(generated.config.as_of)
+    _, feat, _ = arrival_feature_matrix(frames, origin)
+    origins = [origin - 2 * ONE_WEEK, origin - 4 * ONE_WEEK]
+    scores, _ = arrival_level(feat, {"tsb": MODEL_FACTORIES["tsb"]}, origins, (1, 2))
+    seconds = scores[scores.metric == "seconds"]
+    assert seconds[seconds.horizon == 1]["value"].notna().all()
+    assert seconds[seconds.horizon == 2]["value"].isna().all()
+    assert (seconds[seconds.horizon == 1]["value"] > 0).all()
 
 
 def test_arrival_level_single_origin_yields_nan_coverage_for_a_residual_model(db, generated) -> None:
@@ -45,6 +89,7 @@ def test_arrival_level_single_origin_yields_nan_coverage_for_a_residual_model(db
     cov = scores[scores.metric == "coverage80"]["value"]
     assert len(cov) == 1
     assert cov.isna().all()
+    assert scores[scores.metric == "wql"]["value"].isna().all()  # the same band, so the same silence
 
 
 def test_demand_level_replays_origins_without_leakage(db, generated, tmp_path) -> None:

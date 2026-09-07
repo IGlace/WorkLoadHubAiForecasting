@@ -140,9 +140,9 @@ first install straight away; the installer now seeds the data itself, see "Lande
     in the Chronos-2 context (up to three weeks stale for the deadline-proximity covariate).
   - Deferred: the fine-tuned harness candidate loads the weights twice (shared availability check, then a
     private copy).
-  - Deferred: a single-origin evaluation reports NaN interval coverage without saying why.
-  - Deferred: `whf eval` level A `seconds` is per origin including skipped origins and repeated on every
-    horizon row.
+  - Deferred: the app does not surface `model.unavailable` in the interface. The narrative says when a
+    candidate (typically chronos2, with no weights on the machine) was skipped and why, but the run page
+    shows only the champion, so a user reading the screen alone cannot tell that a model was missing.
 
 ## Approved, not yet built
 

@@ -196,7 +196,10 @@ def eval_cmd(
 
 
 def _versions() -> dict[str, str]:
+    """What a reader needs to reproduce a run: package versions, the exact weights, and the seed."""
     from importlib.metadata import PackageNotFoundError, version
+
+    from whf.models.chronos2 import TORCH_SEED, WEIGHTS_REVISION
 
     out = {"whf": __version__}
     for pkg in ("torch", "chronos-forecasting", "scikit-learn", "pandas"):
@@ -204,6 +207,8 @@ def _versions() -> dict[str, str]:
             out[pkg] = version(pkg)
         except PackageNotFoundError:
             out[pkg] = "absent"
+    out["chronos-2 weights revision"] = WEIGHTS_REVISION
+    out["torch seed"] = str(TORCH_SEED)
     return out
 
 

@@ -1,6 +1,7 @@
 import datetime as dt
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -145,6 +146,24 @@ def test_run_forecast_accepts_a_harness_local_factory_not_in_the_registry(db, ge
         persist=False,
     )
     assert result.champion == "local_naive" and result.run_id == 0
+
+
+class _Poor(SeasonalNaive):
+    """Absurdly wrong on purpose, so it can never beat the naive floor and `select_champion`
+    must fall back to it (predicting zeros is not enough: on sparse arrivals zeros win)."""
+
+    name = "poor"
+
+    def predict(self, rows, horizon):
+        return np.full(len(rows), 1e6, dtype=float)
+
+
+def test_an_unforced_run_with_a_custom_factory_mapping_can_still_fall_back_to_the_floor(db, generated) -> None:
+    """`select_champion` returns the floor model whenever no candidate beats it, including when the
+    caller's `factories` never contained the floor: resolving it must not be a KeyError."""
+    result = run_forecast(db, team_id=1, as_of=generated.config.as_of, factories={"poor": _Poor}, persist=False)
+    assert result.champion == FLOOR_MODEL
+    assert not result.forecasts.empty and (result.forecasts["demand_hours"] >= 0).all()
 
 
 def test_force_model_and_no_persist(db, generated) -> None:

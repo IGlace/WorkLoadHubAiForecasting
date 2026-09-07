@@ -89,8 +89,10 @@ def rolling_backtest(
                     }
                 )
                 residuals.setdefault((name, h), []).extend((y - y_hat).tolist())
+                # `y` travels with the residual so a consumer can rebuild the point forecast
+                # (point = y - residual) and score a residual band on the observed scale.
                 residual_rows.setdefault((name, h), []).extend(
-                    {"origin": origin, "residual": float(v)} for v in (y - y_hat)
+                    {"origin": origin, "y": float(a), "residual": float(a - b)} for a, b in zip(y, y_hat, strict=True)
                 )
                 if band is not None:
                     low, high = (np.clip(np.asarray(b, dtype=float), 0.0, None) for b in band)
@@ -111,7 +113,7 @@ def rolling_backtest(
     return BacktestResult(
         scores=scores,
         residuals={k: np.array(v) for k, v in residuals.items()},
-        residual_frames={k: pd.DataFrame(v, columns=["origin", "residual"]) for k, v in residual_rows.items()},
+        residual_frames={k: pd.DataFrame(v, columns=["origin", "y", "residual"]) for k, v in residual_rows.items()},
         quantiles={k: pd.DataFrame(v, columns=["origin", "y", "low", "high"]) for k, v in quantiles.items()},
         unavailable=unavailable,
         timings=timings,

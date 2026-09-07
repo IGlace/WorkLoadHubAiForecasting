@@ -111,8 +111,10 @@ def test_backtest_skips_unavailable_models_and_records_the_reason() -> None:
     assert result.unavailable == {"broken": "broken: no weights"}
     assert result.timings["seasonal_naive"] >= 0.0 and "broken" not in result.timings
     frame = result.residual_frames[("seasonal_naive", 1)]
-    assert list(frame.columns) == ["origin", "residual"] and set(frame["origin"]) == set(origins)
+    assert list(frame.columns) == ["origin", "y", "residual"] and set(frame["origin"]) == set(origins)
     assert np.allclose(frame["residual"].to_numpy(), result.residuals[("seasonal_naive", 1)])
+    # `y` travels with the residual so a consumer can rebuild the point forecast it came from
+    assert frame["y"].notna().all()
 
 
 def test_backtest_collects_native_quantiles_when_a_model_offers_them() -> None:

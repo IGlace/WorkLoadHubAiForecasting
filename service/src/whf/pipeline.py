@@ -197,7 +197,11 @@ def run_forecast(
         champion, champion_mase = force_model, (float(mine.mean()) if len(mine) else float("nan"))
     else:
         champion, champion_mase = select_champion(backtest.scores)
-    model = run_factories[champion]().fit(feat, horizons)
+    # `select_champion` may fall back to the floor model, which a caller-supplied `factories`
+    # mapping need not contain (a harness or a test may pass one candidate); fall back to the
+    # registry for it rather than raising KeyError on a run that was going fine.
+    champion_factory = run_factories[champion] if champion in run_factories else MODEL_FACTORIES[champion]
+    model = champion_factory().fit(feat, horizons)
     latest = feat[(feat["week_start"] == origin) & (feat["member_id"].astype(int).isin(member_ids))]
     predicted_rows = []
     for week, h in zip((f1, f2), horizons, strict=True):

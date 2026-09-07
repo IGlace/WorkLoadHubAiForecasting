@@ -13,6 +13,8 @@ $ErrorActionPreference = "Stop"
 # step reports its own name and duration.
 $PSNativeCommandUseErrorActionPreference = $false
 
+$env:HF_HUB_OFFLINE = "1"  # as CI does: nothing in a test run may fetch model weights from the network
+
 $root = Split-Path -Parent $PSScriptRoot
 $service = Join-Path $root "service"
 $app = Join-Path $root "app"

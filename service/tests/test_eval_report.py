@@ -1,9 +1,11 @@
 import datetime as dt
+import os
 
 import pandas as pd
 
 from whf.eval.harness import EvalConfig, EvalResult
 from whf.eval.report import summary_tables, write_outputs
+from whf.models.chronos2 import WEIGHTS_REVISION
 
 W = dt.date(2026, 8, 3)
 
@@ -107,7 +109,12 @@ def test_write_outputs_creates_the_three_files_with_the_fingerprint(tmp_path) ->
         },
         config=EvalConfig(as_of=W, origins=1, models=("tsb",)),
         out_dir=tmp_path / "eval",
-        versions={"whf": "0.1.0", "torch": "absent"},
+        versions={
+            "whf": "0.1.0",
+            "torch": "absent",
+            "chronos-2 weights revision": WEIGHTS_REVISION,
+            "torch seed": "0",
+        },
     )
     assert {p.name for p in out.iterdir()} == {"scores.csv", "demand.csv", "summary.md"}
     text = (out / "summary.md").read_text(encoding="utf-8")
@@ -115,3 +122,30 @@ def test_write_outputs_creates_the_three_files_with_the_fingerprint(tmp_path) ->
         "answer key" in text and "chronos2" in text and "no weights" in text and "ab" * 32 in text and "torch" in text
     )
     assert "| tsb |" in text
+    # provenance: the exact weights, the seed, and the machine the timings were measured on
+    assert WEIGHTS_REVISION in text and "torch seed" in text
+    assert "thread" in text and str(os.cpu_count()) in text
+
+
+def test_write_outputs_states_the_truth_and_replay_assumptions(tmp_path) -> None:
+    """A number without its assumptions is unreadable next week: the summary has to say what the
+    truth is, what it leaves out, and why a single-origin run has no interval to report."""
+    realised = EvalResult(
+        scores=pd.DataFrame(columns=["model", "horizon", "origin", "metric", "value"]),
+        demand=pd.DataFrame(columns=["model", "truth", "forecast", "capacity", "open_hours"]),
+        truth_source="realised hours",
+    )
+    out = write_outputs(realised, {}, EvalConfig(as_of=W), tmp_path / "r", {"whf": "0.1.0"})
+    text = (out / "summary.md").read_text(encoding="utf-8")
+    assert "## Truth and replay assumptions" in text
+    assert "vacation days" in text and "open at export time" in text
+    assert "Monday-morning" in text and "single-origin" in text
+
+    key = EvalResult(
+        scores=pd.DataFrame(columns=["model", "horizon", "origin", "metric", "value"]),
+        demand=pd.DataFrame(columns=["model", "truth", "forecast", "capacity", "open_hours"]),
+        truth_source="answer key",
+    )
+    out = write_outputs(key, {}, EvalConfig(as_of=W), tmp_path / "k", {"whf": "0.1.0"})
+    text = (out / "summary.md").read_text(encoding="utf-8")
+    assert "generator's answer key" in text and "open at export time" not in text

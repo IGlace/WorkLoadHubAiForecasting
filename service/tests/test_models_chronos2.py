@@ -11,7 +11,7 @@ from hypothesis import strategies as st
 from whf.features import build_feature_matrix, weekly_arrivals
 from whf.models import MODEL_FACTORIES
 from whf.models.base import ModelUnavailable
-from whf.models.chronos2 import PAST_COVARIATES, Chronos2Arrival, weights_path
+from whf.models.chronos2 import PAST_COVARIATES, PAST_ONLY_COVARIATES, Chronos2Arrival, weights_path
 
 W0 = dt.date(2025, 1, 6)
 
@@ -97,6 +97,10 @@ def test_predict_builds_contiguous_history_and_future_covariates() -> None:
         assert set(PAST_COVARIATES) <= set(g.columns) and g[list(PAST_COVARIATES)].notna().all().all()
     assert set(future["member_id"]) == set(rows["member_id"].astype(int))
     assert len(future) == 2 * len(rows) and set(PAST_COVARIATES) <= set(future.columns)
+    # the assignment-mode shares are past-only: present in the history frame, absent from the future
+    # one, which is how Chronos-2 is told not to expect them for the target weeks
+    assert set(PAST_ONLY_COVARIATES) <= set(df.columns) and df[list(PAST_ONLY_COVARIATES)].notna().all().all()
+    assert not set(PAST_ONLY_COVARIATES) & set(future.columns)
     # the gap weeks between train and the origin row come from the row's lag columns
     m0 = int(rows["member_id"].astype(int).iloc[0])
     g0 = df[df.member_id == m0].set_index("timestamp")["est_hours"]
@@ -237,6 +241,21 @@ def test_point_and_band_for_the_same_rows_cost_one_pipeline_call() -> None:
     model.fit(feat[feat["week_start"] < origin], (1, 2))  # fit invalidates the memo
     model.predict(rows, horizon=2)
     assert len(stub.calls) == 3
+
+
+def test_the_memo_survives_the_order_a_run_asks_in() -> None:
+    """A run asks point h1, point h2, then band h1, band h2. A memo of the single last answer is
+    evicted before either band arrives and never hits: keyed per horizon, two calls do for all four."""
+    feat = _frame()
+    origin = W0 + dt.timedelta(days=7 * 30)
+    rows = feat[feat["week_start"] == origin]
+    stub = StubPipeline()
+    model = Chronos2Arrival(pipeline=stub).fit(feat[feat["week_start"] < origin], (1, 2))
+    model.predict(rows, horizon=1)
+    model.predict(rows, horizon=2)
+    model.predict_quantiles(rows, horizon=1)
+    model.predict_quantiles(rows, horizon=2)
+    assert len(stub.calls) == 2
 
 
 def test_weights_path_prefers_env_then_bundled(tmp_path) -> None:

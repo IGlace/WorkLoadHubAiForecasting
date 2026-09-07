@@ -82,6 +82,11 @@ def arrival_level(
     result = rolling_backtest(feat, factories, origins, horizons)
     rows: list[dict] = []
     per_origin_residuals = result.residual_frames
+    # Wall-clock time is measured per model over the whole backtest, not per horizon: divide it by
+    # the origins that model actually scored (an origin without enough history is skipped for
+    # everyone, and an unavailable model scores none) and report it once, on the first horizon.
+    scored_origins = result.scores.groupby("model")["origin"].nunique().to_dict() if not result.scores.empty else {}
+    first_horizon = min(horizons) if horizons else 1
     for score in result.scores.itertuples(index=False):
         base = {"model": score.model, "horizon": score.horizon, "origin": score.origin}
         rows.append({**base, "metric": "mae", "value": score.mae})
@@ -103,18 +108,23 @@ def arrival_level(
             point = y - mine
             cov, wql = coverage(y, low, high), weighted_quantile_loss(y, {0.1: low, 0.5: point, 0.9: high})
         else:
+            # No native quantiles: score the band the run itself would show for this model, the
+            # leave-one-origin-out residual band around the point forecast, so the interval metrics
+            # compare what the user actually sees rather than nothing at all.
             low_off, high_off = _leave_one_out_band(res, score.origin)
-            cov = (
-                float("nan")
-                if np.isnan(low_off) or np.isnan(high_off)
-                else coverage(mine, np.full_like(mine, low_off), np.full_like(mine, high_off))
-            )
-            wql = float("nan")
+            if np.isnan(low_off) or np.isnan(high_off):
+                cov = wql = float("nan")
+            else:
+                mine_rows = res[res.origin == score.origin]
+                y = mine_rows["y"].to_numpy(dtype=float)
+                point = y - mine_rows["residual"].to_numpy(dtype=float)
+                low, high = point + low_off, point + high_off
+                cov = coverage(y, low, high)
+                wql = weighted_quantile_loss(y, {0.1: low, 0.5: point, 0.9: high})
         rows.append({**base, "metric": "coverage80", "value": cov})
         rows.append({**base, "metric": "wql", "value": wql})
-        rows.append(
-            {**base, "metric": "seconds", "value": result.timings.get(score.model, float("nan")) / max(len(origins), 1)}
-        )
+        seconds = result.timings.get(score.model, float("nan")) / max(scored_origins.get(score.model, 0), 1)
+        rows.append({**base, "metric": "seconds", "value": seconds if score.horizon == first_horizon else float("nan")})
     return pd.DataFrame(rows, columns=METRIC_COLUMNS), dict(result.unavailable)
 
 

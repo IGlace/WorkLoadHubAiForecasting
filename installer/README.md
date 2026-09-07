@@ -16,7 +16,11 @@ administrator rights are needed anywhere in the build or the install.
 - The Chronos-2 forecasting model weights
   (`resources/service/whf/models/chronos-2`, about 480 MB, Apache 2.0),
   downloaded at build time at a pinned revision; the service loads them from
-  there and never contacts the network for them.
+  there and never contacts the network for them. The model repository carries
+  no licence file of its own at that revision, so
+  `installer/pyinstaller/download_weights.py` copies
+  `installer/pyinstaller/LICENSE-Apache-2.0.txt` in beside the weights as
+  `models/chronos-2/LICENSE`, and refuses to finish if it is missing.
 - A custom NSIS step (`installer/nsis/installer.nsh`, wired in through `nsis.include`)
   that runs the bundled `whf.exe data generate --if-empty` at the end of the
   installation, so a fresh install starts with the sample data. `--if-empty`
@@ -47,10 +51,12 @@ afterwards. Passing `-SkipModelDownload` to `scripts/build-service.ps1` leaves
 the weights out; the installer still builds and works, but its forecasts use
 the three classical models only and the app reports Chronos-2 as unavailable.
 
-Expect the result to be much larger than before Chronos-2: the frozen service
-folder grows from about 150 MB to about 1.5 GB with the weights bundled (about
-982 MB with `-SkipModelDownload`, which is the CPU PyTorch runtime), so the
-installer grows by roughly a gigabyte.
+Expect the result to be much larger than before Chronos-2. The frozen service
+folder is about 1.5 GB with the weights bundled (about 1 GB with
+`-SkipModelDownload`, which is mostly the CPU PyTorch runtime); those two
+figures were measured on Linux, and the Windows folder is of the same order.
+The installer artifact itself is about 850 MB, measured on the Windows CI
+build of `package-windows`.
 
 The `package-windows` job in `.github/workflows/ci.yml` runs the same script
 on `windows-latest` and uploads the `.exe` as a build artifact on every push,

@@ -37,6 +37,33 @@ def test_realised_hours_spreads_actual_hours_over_working_days_of_the_task_windo
     ]
 
 
+def test_realised_hours_skips_the_assignees_vacation_days_as_the_forecast_does() -> None:
+    """Truth and forecast must share one calendar: `run_forecast` places effort on weekdays minus
+    holidays minus that member's vacation, so the realised hours may not spread onto a vacation day."""
+    conn = connect(":memory:")
+    conn.execute("INSERT INTO departments (id, name) VALUES (1, 'D')")
+    conn.execute("INSERT INTO teams (id, name, department_id) VALUES (1, 'T', 1)")
+    conn.execute(
+        "INSERT INTO members (id, name, team_id, department_id, role, counted_in_workload)"
+        " VALUES (7, 'M', 1, 1, 'member', 1)"
+    )
+    conn.execute(
+        "INSERT INTO tasks (id, title, assignee_id, team_id, type, priority, status, created_at, assigned_at,"
+        " completed_at, estimated_hours, actual_hours) VALUES (1, 't', 7, 1, 'dev', 'p2', 'done', '2026-08-05',"
+        " '2026-08-05', '2026-08-11', 8.0, 10.0)"
+    )
+    # Thursday 2026-08-06 off: four working days left, so 2.5 h each, two of them in each week
+    conn.execute(
+        "INSERT INTO vacations (member_id, start_date, end_date, type) VALUES (7, '2026-08-06', '2026-08-06', 'leave')"
+    )
+    conn.commit()
+    out = realised_hours(conn).sort_values("week_start").to_dict(orient="records")
+    assert out == [
+        {"member_id": 7, "week_start": dt.date(2026, 8, 3), "hours": 5.0},
+        {"member_id": 7, "week_start": dt.date(2026, 8, 10), "hours": 5.0},
+    ]
+
+
 def test_truncated_copy_hides_the_future(db, generated) -> None:
     as_of = generated.config.as_of - dt.timedelta(days=60)
     copy = truncated_copy(db, as_of)

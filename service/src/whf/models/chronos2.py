@@ -28,8 +28,13 @@ PAST_COVARIATES = (
     "proj_starting",
     "proj_ending",
 )
+# The assignment-mode shares are per-row already (no `_h1` version exists), so they can only ever
+# describe the past: they go into the history frame and are deliberately absent from the future
+# frame, which is how Chronos-2 is told a column is a past-only covariate.
+PAST_ONLY_COVARIATES = ("share_manual", "share_self_picked", "share_project")
 QUANTILES = (0.1, 0.5, 0.9)
 MAX_THREADS = 4
+TORCH_SEED = 0
 FINETUNE_STEPS = 200
 FINETUNE_LR = 1e-5
 _CONTIGUOUS_LAGS = tuple(k for k in LAGS if k <= 4)  # lag1..lag4 are consecutive weeks ending at the row's week
@@ -141,18 +146,26 @@ class Chronos2Arrival:
     def __init__(self, pipeline: ForecastPipeline | None = None, finetune: bool = False) -> None:
         self._pipeline = pipeline
         self._history: pd.DataFrame | None = None
-        self._memo: tuple[Any, dict[float, np.ndarray]] | None = None
+        self._memo: dict[Any, dict[float, np.ndarray]] = {}
+        self._memo_limit = len(HORIZONS)
         self.finetune = finetune
 
     def _pipe(self) -> Any:
         return self._pipeline if self._pipeline is not None else load()
 
     def fit(self, train: pd.DataFrame, horizons: tuple[int, ...] = HORIZONS) -> Chronos2Arrival:
-        keep = ["member_id", "week_start", "est_hours", *[f"{c}_h1" for c in PAST_COVARIATES]]
+        keep = [
+            "member_id",
+            "week_start",
+            "est_hours",
+            *[f"{c}_h1" for c in PAST_COVARIATES],
+            *PAST_ONLY_COVARIATES,
+        ]
         hist = train[keep].copy()
         hist["member_id"] = hist["member_id"].astype(int)
         self._history = hist.sort_values(["member_id", "week_start"]).reset_index(drop=True)
-        self._memo = None
+        self._memo = {}
+        self._memo_limit = max(len(horizons), 1)
         self._pipe()  # fail early with ModelUnavailable when the model cannot run here
         if self.finetune:
             self._finetune(max(horizons))
@@ -167,21 +180,24 @@ class Chronos2Arrival:
 
     def _quantiles(self, rows: pd.DataFrame, horizon: int) -> dict[float, np.ndarray]:
         # The callers ask for the point value and the band separately (the backtest and the pipeline
-        # both do), which is the same inference twice; one memo of the last answer halves it.
+        # both do), which is the same inference twice; a memo halves it. It is keyed per horizon
+        # because a run asks in horizon order - point h1, point h2, band h1, band h2 - so a memo of
+        # the single last answer would be evicted before either band arrives and never hit.
         key = (
             tuple(sorted(set(rows["week_start"]))),
             tuple(int(m) for m in rows["member_id"].astype(int)),
             horizon,
         )
-        if self._memo is not None and self._memo[0] == key:
-            return self._memo[1]
+        memoized = self._memo.get(key)
+        if memoized is not None:
+            return memoized
         df, future = self._frames(rows, horizon)
         # Seed the library the pipeline actually runs on. `load()` imports torch before it builds a
         # real pipeline, so this finds it there; an injected stub never needs torch and must not
         # cause it to be imported (importing torch costs a test worker seconds and ~400 MB).
         torch = sys.modules.get("torch")
         if torch is not None:
-            torch.manual_seed(0)
+            torch.manual_seed(TORCH_SEED)
         out = self._pipe().predict_df(
             df,
             future_df=future,
@@ -205,7 +221,9 @@ class Chronos2Arrival:
             )
             for q in QUANTILES
         }
-        self._memo = (key, answer)
+        if len(self._memo) >= self._memo_limit:  # one entry per horizon of the current fit, no more
+            self._memo.clear()
+        self._memo[key] = answer
         return answer
 
     def _frames(self, rows: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -226,12 +244,14 @@ class Chronos2Arrival:
                     series[w0 - (k - 1) * ONE_WEEK] = float(value)
             first = min(series) if series else w0
             weeks = [first + i * ONE_WEEK for i in range((w0 - first).days // 7 + 1)]
-            cov: dict[str, dict[dt.date, float]] = {c: {} for c in PAST_COVARIATES}
+            cov: dict[str, dict[dt.date, float]] = {c: {} for c in (*PAST_COVARIATES, *PAST_ONLY_COVARIATES)}
             prev = None
             for h_row in hist.itertuples(index=False):
                 if prev is not None:  # x_h1 on week w describes week w+1
                     for c in PAST_COVARIATES:
                         cov[c][h_row.week_start] = float(getattr(prev, f"{c}_h1"))
+                for c in PAST_ONLY_COVARIATES:  # already the value of the row's own week
+                    cov[c][h_row.week_start] = float(getattr(h_row, c))
                 prev = h_row
             if len(hist):
                 head = hist.iloc[0]
@@ -244,7 +264,7 @@ class Chronos2Arrival:
                     "est_hours": [series.get(w, 0.0) for w in weeks],
                 }
             )
-            for c in PAST_COVARIATES:
+            for c in (*PAST_COVARIATES, *PAST_ONLY_COVARIATES):
                 values = pd.Series([cov[c].get(w, np.nan) for w in weeks]).ffill().bfill().fillna(0.0)
                 frame[c] = values.to_numpy(dtype=float)
             past_frames.append(frame)
