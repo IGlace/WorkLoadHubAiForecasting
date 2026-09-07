@@ -150,6 +150,63 @@ def run(
             raise typer.Exit(code=4)
 
 
+@app.command("eval")
+def eval_cmd(
+    db: DbOption = None,
+    as_of: Annotated[str | None, typer.Option("--as-of")] = None,
+    origins: Annotated[int, typer.Option("--origins", help="Backtest origins, two weeks apart")] = 6,
+    models: Annotated[str | None, typer.Option("--models", help="Comma-separated model names; default all")] = None,
+    teams: Annotated[str | None, typer.Option("--teams", help="Comma-separated team ids; default all")] = None,
+    finetune: Annotated[bool, typer.Option("--finetune", help="Also evaluate a LoRA-fine-tuned Chronos-2")] = False,
+    out: Annotated[Path | None, typer.Option("--out", help="Output folder; default <data dir>/eval/<as-of>")] = None,
+    answer_key: Annotated[
+        Path | None, typer.Option("--answer-key", help="Generator answer key; omit for real data")
+    ] = None,
+) -> None:
+    """Measure every arrival model and the demand forecast on this database; write scores.csv, demand.csv, summary.md."""
+    from whf.eval.harness import EvalConfig, evaluate
+    from whf.eval.report import summary_tables, write_outputs
+    from whf.eval.truth import data_fingerprint
+
+    when = _date(as_of) or dt.date.today()
+    config = EvalConfig(
+        as_of=when,
+        origins=origins,
+        models=tuple(m.strip() for m in models.split(",")) if models else (),
+        teams=tuple(int(t) for t in teams.split(",")) if teams else (),
+        finetune=finetune,
+        answer_key=answer_key,
+    )
+    conn = _conn(db)
+    try:
+        result = evaluate(conn, config)
+    except ValueError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=2) from exc
+    fingerprint = data_fingerprint(conn, db or db_path())
+    target = write_outputs(result, fingerprint, config, out or (data_dir() / "eval" / when.isoformat()), _versions())
+    level_a, level_b = summary_tables(result)
+    typer.echo(level_a.to_string(index=False) if not level_a.empty else "no arrival scores")
+    typer.echo(level_b.to_string(index=False) if not level_b.empty else "no demand rows")
+    typer.echo(f"written to {target}")
+    if result.skipped:
+        for name, reason in result.skipped.items():
+            typer.echo(f"skipped {name}: {reason}")
+        raise typer.Exit(code=1)
+
+
+def _versions() -> dict[str, str]:
+    from importlib.metadata import PackageNotFoundError, version
+
+    out = {"whf": __version__}
+    for pkg in ("torch", "chronos-forecasting", "scikit-learn", "pandas"):
+        try:
+            out[pkg] = version(pkg)
+        except PackageNotFoundError:
+            out[pkg] = "absent"
+    return out
+
+
 @copilot_app.command("status")
 def copilot_status_cmd(as_json: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Show where the Copilot CLI is and whether the user is signed in."""

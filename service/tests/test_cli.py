@@ -171,3 +171,69 @@ def test_generate_without_if_empty_still_replaces(tmp_path) -> None:
     assert result.exit_code == 0, result.output
     listed = runner.invoke(app, ["runs", "list", "--db", str(db)])
     assert listed.exit_code == 0 and "team   1" not in listed.output
+
+
+def test_eval_command_writes_outputs_and_reports_skips(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "e.db"
+    key = tmp_path / "k.json"
+    result = runner.invoke(app, ["data", "generate", "--db", str(db), "--months", "6", "--answer-key", str(key)])
+    assert result.exit_code == 0, result.output
+    out = tmp_path / "out"
+    ok = runner.invoke(
+        app,
+        [
+            "eval",
+            "--db",
+            str(db),
+            "--models",
+            "seasonal_naive,tsb",
+            "--origins",
+            "2",
+            "--teams",
+            "1",
+            "--out",
+            str(out),
+            "--answer-key",
+            str(key),
+        ],
+    )
+    assert ok.exit_code == 0, ok.output
+    assert (out / "summary.md").exists() and "tsb" in ok.output
+    from whf.models import MODEL_FACTORIES
+    from whf.models.base import ModelUnavailable
+
+    class Broken:
+        name = "broken"
+
+        def __init__(self) -> None:
+            raise ModelUnavailable("broken: missing")
+
+    monkeypatch.setitem(MODEL_FACTORIES, "broken", Broken)
+    skipped = runner.invoke(
+        app,
+        [
+            "eval",
+            "--db",
+            str(db),
+            "--models",
+            "seasonal_naive,broken",
+            "--origins",
+            "1",
+            "--teams",
+            "1",
+            "--out",
+            str(out / "b"),
+            "--answer-key",
+            str(key),
+        ],
+    )
+    assert skipped.exit_code == 1 and "skipped" in skipped.output and "broken" in skipped.output
+
+
+def test_eval_command_reports_unknown_model(tmp_path) -> None:
+    db = tmp_path / "e.db"
+    result = runner.invoke(app, ["data", "generate", "--db", str(db), "--months", "3"])
+    assert result.exit_code == 0, result.output
+    bad = runner.invoke(app, ["eval", "--db", str(db), "--models", "nope", "--origins", "1"])
+    assert bad.exit_code == 2, bad.output
+    assert "unknown model" in bad.output
