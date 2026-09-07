@@ -76,6 +76,24 @@ def test_summary_tables_keeps_every_metric_column_even_when_all_nan() -> None:
     assert pd.isna(a["wql"].iloc[0])
 
 
+def test_summary_tables_does_not_fabricate_model_horizon_rows() -> None:
+    scores = pd.DataFrame(
+        [
+            {"model": "tsb", "horizon": 1, "origin": W, "metric": "mase", "value": 0.8},
+            {"model": "banded", "horizon": 1, "origin": W, "metric": "mase", "value": 0.5},
+            {"model": "banded", "horizon": 2, "origin": W, "metric": "mase", "value": 0.6},
+        ]
+    )
+    result = EvalResult(
+        scores=scores, demand=pd.DataFrame(columns=["model", "truth", "forecast", "capacity", "open_hours"])
+    )
+    a, _ = summary_tables(result)
+    assert list(a.columns) == ["model", "horizon", "mae", "mase", "beats_naive", "coverage80", "wql", "seconds"]
+    assert len(a) == 3
+    assert not ((a.model == "tsb") & (a.horizon == 2)).any()
+    assert a["wql"].isna().all()
+
+
 def test_write_outputs_creates_the_three_files_with_the_fingerprint(tmp_path) -> None:
     out = write_outputs(
         _result(),

@@ -18,12 +18,16 @@ LEVEL_A_METRIC_COLUMNS = ["model", "horizon", "mae", "mase", "beats_naive", "cov
 
 def summary_tables(result: EvalResult) -> tuple[pd.DataFrame, pd.DataFrame]:
     if result.scores.empty:
-        level_a = pd.DataFrame(columns=["model", "horizon"])
+        level_a = pd.DataFrame(columns=LEVEL_A_METRIC_COLUMNS)
     else:
-        # dropna=False: a metric that is NaN for every row of this run (e.g. wql when no
-        # model produced quantiles) must still show up as a NaN column, not vanish silently.
+        # Default dropna=True here (not False): with a multi-level index, dropna=False on
+        # pivot_table also materializes the full cartesian product of index levels, fabricating
+        # an all-NaN row for every (model, horizon) pair that never occurred in the scores, e.g.
+        # a phantom row for a model that was never run at a given horizon. The reindex below is
+        # what restores a metric column that is legitimately NaN for every actual row (e.g. wql
+        # when no model in the run produced quantiles) without inventing rows.
         level_a = result.scores.pivot_table(
-            index=["model", "horizon"], columns="metric", values="value", aggfunc="mean", dropna=False
+            index=["model", "horizon"], columns="metric", values="value", aggfunc="mean"
         ).reset_index()
         level_a = level_a.reindex(columns=LEVEL_A_METRIC_COLUMNS)
     rows = []
