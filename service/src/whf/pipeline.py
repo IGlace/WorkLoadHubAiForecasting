@@ -527,6 +527,9 @@ def load_run(conn: sqlite3.Connection, run_id: int) -> dict:
     # narrate.py. The app only knows the bare narrative document (app/src/shared/types.ts
     # `Narrative`), so unwrap the envelope here, on the way out; the stored row is untouched.
     narrative_doc = None
+    # What the narration cost (see whf.ai.usage): part of the envelope, not of the narrative
+    # document, so it is unwrapped beside it and stays None when there is no narration at all.
+    narrative_usage = None
     if len(narrative):
         envelope = json.loads(narrative["json"][0])
         # An envelope is a dict with both a "status" and a "narrative" key (see NarrativeOutcome);
@@ -535,11 +538,13 @@ def load_run(conn: sqlite3.Connection, run_id: int) -> dict:
         # passed through as-is.
         if isinstance(envelope, dict) and "status" in envelope and "narrative" in envelope:
             narrative_doc = envelope["narrative"]
+            narrative_usage = envelope.get("usage")
     return {
         "run": run.iloc[0].to_dict(),
         "forecasts": forecasts.to_dict(orient="records"),
         "facts": json.loads(facts["json"][0]) if len(facts) else None,
         "narrative": narrative_doc,
+        "narrative_usage": narrative_usage,
     }
 
 

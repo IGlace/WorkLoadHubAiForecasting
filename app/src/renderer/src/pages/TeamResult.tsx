@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { RunDetail } from '../../../shared/types'
 import { createNarrative, getRun } from '../api'
+import { CopilotCost } from '../components/CopilotCost'
 import { NarrativeLive } from '../components/NarrativeLive'
 import { RiskBadge } from '../components/RiskBadge'
 import { StatusMessage } from '../components/StatusMessage'
@@ -61,8 +62,14 @@ export function TeamResult(): React.JSX.Element {
       // Only replace the displayed payload if this narration's run is still the one on screen:
       // navigating away and starting another narration there must not have this one's completion
       // clobber the other run's data with a stale `Loading…` once it lands.
+      // The cost comes from the outcome rather than from the reload: it is the price of this very
+      // narration, and the stored run is only read back for the narrative it now holds.
       setFetched((prev) => (prev.id === id
-        ? { id, detail: d, error: outcome.status === 'failed' ? (outcome.error ?? outcome.ai_status) : null }
+        ? {
+            id,
+            detail: { ...d, narrative_usage: outcome.usage ?? d.narrative_usage },
+            error: outcome.status === 'failed' ? (outcome.error ?? outcome.ai_status) : null,
+          }
         : prev))
     } catch (err) {
       setFetched((prev) => (prev.id === id
@@ -102,6 +109,7 @@ export function TeamResult(): React.JSX.Element {
       <section className="panel">
         <h2>{t('team.summary')}</h2>
         <p className="muted">{t('team.narrativeStatus', { status: detail.run.ai_status })}</p>
+        <CopilotCost usage={detail.narrative_usage} />
         {detail.run.ai_status === 'unverified' && <StatusMessage kind="info">{t('team.unverified')}</StatusMessage>}
         {!narrative && <button className="primary" disabled={busy} onClick={() => { void narrate() }}>{t('team.narrate')}</button>}
         {busy && <NarrativeLive {...live} />}

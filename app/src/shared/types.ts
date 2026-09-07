@@ -75,10 +75,26 @@ export interface Narrative {
   run_summary: string; members: MemberNarrative[]; team_risks: TeamRisk[]; rebalancing: RebalancingMove[]
   suggested_adjustments: SuggestedAdjustment[]; model_notes: string
 }
-export interface RunDetail { run: RunSummary; forecasts: ForecastRow[]; facts: RunFacts | null; narrative: Narrative | null }
+/**
+ * What one narration cost. Every number is null when it is unknown: `source` says where the answer
+ * came from — `metrics` is what the account was billed (credits, money, time), `events` is the
+ * tokens the session streamed and nothing about money, `none` is a narration that never reached a
+ * session. One AI credit is one US cent.
+ */
+export interface NarrativeUsage {
+  input_tokens: number | null; output_tokens: number | null; cache_read_tokens: number | null
+  reasoning_tokens: number | null; requests: number | null; premium_requests: number | null
+  ai_credits: number | null; usd: number | null; api_seconds: number | null
+  models: Record<string, { requests: number; input_tokens: number; output_tokens: number }>
+  source: 'metrics' | 'events' | 'none'
+}
+export interface RunDetail {
+  run: RunSummary; forecasts: ForecastRow[]; facts: RunFacts | null; narrative: Narrative | null
+  narrative_usage: NarrativeUsage | null
+}
 export interface NarrativeOutcome {
   run_id: number; status: 'ok' | 'unverified' | 'failed'; ai_status: string; narrative: Narrative | null
-  error: string | null; reason: string | null; attempts: number; tool_calls: string[]
+  error: string | null; reason: string | null; attempts: number; tool_calls: string[]; usage: NarrativeUsage
 }
 
 /** What the Copilot session is doing right now. `code` is language-independent; the app phrases it. */
@@ -90,10 +106,18 @@ export interface NarrativeProgress { run_id: number; steps: NarrativeProgressSte
 /** `code` is language-independent, so the app can phrase it; `message` is the service's English detail. */
 export type CopilotStatusCode = 'signed_in' | 'not_signed_in' | 'start_failed'
 
+/** One quota type of the account (`premium_interactions`, `chat`, `completions`, …). */
+export interface CopilotQuota {
+  used: number; entitlement: number; unlimited: boolean; remaining_percentage: number; overage: number
+  reset_date: string | null
+}
+
 export interface CopilotStatus {
   cli_path: string | null; cli_source: string; authenticated: boolean | null; login: string | null; message: string
   code: CopilotStatusCode
   ready: boolean
+  /** Null when the SDK could not answer; the app then simply shows no quota. */
+  quota: Record<string, CopilotQuota> | null
 }
 
 export interface Project {

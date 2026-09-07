@@ -7,7 +7,7 @@ import { AppProvider } from '../context'
 import { setLanguage } from '../i18n'
 import { TeamResult } from '../pages/TeamResult'
 import { installFakeWhf, META } from '../test/fake-whf'
-import { RUN_DETAIL } from '../test/fixtures'
+import { RUN_DETAIL, USAGE } from '../test/fixtures'
 
 function mount() {
   return render(
@@ -36,6 +36,36 @@ describe('TeamResult', () => {
     expect(screen.getByRole('link', { name: 'Yara Tazi' })).toHaveAttribute('href', '/runs/5/members/13')
     act(() => { setLanguage('fr') })
     expect(await screen.findByText('Boosting de gradient')).toBeInTheDocument()
+  })
+  it('shows what the stored narration cost, and nothing when the run has no cost', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': { ...RUN_DETAIL, narrative_usage: USAGE },
+    })
+    mount()
+    expect(await screen.findByText(/Copilot usage: 12.50 AI credits \(about \$0.13\)/)).toBeInTheDocument()
+  })
+  it('shows no cost line for a run narrated before the cost was recorded', async () => {
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /runs/5': RUN_DETAIL })
+    mount()
+    expect(await screen.findByText('Core')).toBeInTheDocument()
+    expect(screen.queryByText(/Copilot usage:/)).not.toBeInTheDocument()
+  })
+  it('shows the cost of a narration it just asked for', async () => {
+    let detail: RunDetail = { ...RUN_DETAIL, narrative: null, narrative_usage: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /runs/5': () => detail,
+      // The reload deliberately still answers without a cost: the outcome of the narration that
+      // just finished is what the page must show.
+      'POST /runs/5/narrative': () => {
+        detail = { ...RUN_DETAIL, narrative_usage: null }
+        return { run_id: 5, status: 'ok', ai_status: 'ok', narrative: RUN_DETAIL.narrative, error: null, reason: null, attempts: 1, tool_calls: [], usage: USAGE }
+      },
+    })
+    mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask Copilot' }))
+    expect(await screen.findByText(/Copilot usage: 12.50 AI credits/)).toBeInTheDocument()
   })
   it('offers to ask Copilot when there is no narrative and flags unverified ones', async () => {
     let detail: RunDetail = { ...RUN_DETAIL, narrative: null, run: { ...RUN_DETAIL.run, ai_status: 'not_requested' } }
@@ -154,6 +184,7 @@ describe('TeamResult', () => {
       forecasts: [],
       facts: RUN_DETAIL.facts && { ...RUN_DETAIL.facts, team: { ...RUN_DETAIL.facts.team, id: 2, name: 'Nova' }, members: [] },
       narrative: null,
+      narrative_usage: null,
     }
     const fake = installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
@@ -209,6 +240,7 @@ describe('TeamResult', () => {
       forecasts: [],
       facts: RUN_DETAIL.facts && { ...RUN_DETAIL.facts, team: { ...RUN_DETAIL.facts.team, id: 2, name: 'Nova' }, members: [] },
       narrative: null,
+      narrative_usage: null,
     }
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
@@ -264,6 +296,7 @@ describe('TeamResult', () => {
       forecasts: [],
       facts: RUN_DETAIL.facts && { ...RUN_DETAIL.facts, team: { ...RUN_DETAIL.facts.team, id: 2, name: 'Nova' }, members: [] },
       narrative: null,
+      narrative_usage: null,
     }
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },

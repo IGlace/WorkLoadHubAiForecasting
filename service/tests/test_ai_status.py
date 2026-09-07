@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from ai_fakes import FakeClient
 
 from whf.ai.status import CopilotStatus, copilot_status_sync, login_command, resolve_cli_path, run_login
@@ -78,3 +80,59 @@ def test_status_stops_a_client_whose_start_failed(monkeypatch) -> None:
     status = copilot_status_sync(client_factory=lambda: client)
     assert status.code == "start_failed" and not status.ready
     assert client.stopped
+
+
+def _snapshot(**overrides):
+    """One `AccountQuotaSnapshot` as the SDK shapes it."""
+    fields = {
+        "entitlement_requests": 300,
+        "is_unlimited_entitlement": False,
+        "overage": 0.0,
+        "overage_allowed_with_exhausted_quota": False,
+        "remaining_percentage": 62.5,
+        "usage_allowed_with_exhausted_quota": True,
+        "used_requests": 112,
+        "reset_date": "2026-10-01",
+    }
+    return SimpleNamespace(**{**fields, **overrides})
+
+
+def test_status_reports_the_remaining_quota_of_a_signed_in_account(monkeypatch, tmp_path) -> None:
+    exe = tmp_path / "copilot"
+    exe.write_text("")
+    monkeypatch.setenv("COPILOT_CLI_PATH", str(exe))
+    client = FakeClient(
+        replies=[],
+        quota_snapshots={
+            "premium_interactions": _snapshot(),
+            "chat": _snapshot(entitlement_requests=-1, is_unlimited_entitlement=True, reset_date=None),
+        },
+    )
+    status = copilot_status_sync(client_factory=lambda: client)
+    assert status.code == "signed_in"
+    quota = status.quota
+    assert quota is not None
+    assert quota["premium_interactions"] == {
+        "used": 112,
+        "entitlement": 300,
+        "unlimited": False,
+        "remaining_percentage": 62.5,
+        "overage": 0.0,
+        "reset_date": "2026-10-01",
+    }
+    assert quota["chat"]["unlimited"] is True and quota["chat"]["reset_date"] is None
+    assert client.quota_requests == [None]  # the signed-in user's own quota, no token of ours
+
+
+def test_a_quota_lookup_that_fails_leaves_the_user_signed_in(monkeypatch, tmp_path) -> None:
+    """The quota is a nicety; a Copilot version that cannot answer must not read as a broken sign-in."""
+    exe = tmp_path / "copilot"
+    exe.write_text("")
+    monkeypatch.setenv("COPILOT_CLI_PATH", str(exe))
+    client = FakeClient(replies=[], quota_error=RuntimeError("unknown method account.getQuota"))
+    status = copilot_status_sync(client_factory=lambda: client)
+    assert status.code == "signed_in" and status.ready and status.quota is None
+
+
+def test_a_status_that_is_not_signed_in_has_no_quota() -> None:
+    assert CopilotStatus(None, "none", None, None, "x", "not_signed_in").quota is None

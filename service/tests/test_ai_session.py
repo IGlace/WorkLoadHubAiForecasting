@@ -1,7 +1,8 @@
-from ai_fakes import FakeClient, good_narrative
+from ai_fakes import FakeClient, good_narrative, make_metrics
 
 from whf.ai.progress import ProgressEvent
 from whf.ai.session import CopilotNarrator, NarratorConfig, _default_client_factory
+from whf.ai.usage import empty_usage
 
 # `facts` comes from tests/conftest.py: one real forecast for team 1, shared and copied per test.
 
@@ -15,7 +16,8 @@ def test_happy_path_returns_ok_and_cleans_up(facts) -> None:
     outcome = _narrator(client).narrate_sync(facts)
     assert outcome.status == "ok" and outcome.ai_status == "ok"
     assert outcome.narrative["members"][0]["member_id"] == facts["members"][0]["id"]
-    assert outcome.model == "gpt-5" and outcome.usage == {"input_tokens": 100, "output_tokens": 50}
+    assert outcome.model == "gpt-5"
+    assert outcome.usage["source"] == "metrics" and outcome.usage["input_tokens"] == 100
     assert outcome.tool_calls[:1] == ["get_run_overview"]
     assert client.started and client.stopped and client.session.disconnected
     kwargs = client.session_kwargs
@@ -196,3 +198,50 @@ def test_a_finished_tool_call_with_an_unknown_id_is_still_reported(facts) -> Non
     steps: list[ProgressEvent] = []
     _narrator(client).narrate_sync(facts, steps.append)
     assert ("tool_done", None) in [(event.code, event.detail) for event in steps]
+
+
+def test_the_session_metrics_say_what_the_narration_cost(facts) -> None:
+    """The billed numbers come from the session's own metrics, not from the streamed events."""
+    client = FakeClient(replies=[good_narrative(facts)], metrics=make_metrics(total_nano_aiu=2.5e9))
+    outcome = _narrator(client).narrate_sync(facts)
+    usage = outcome.usage
+    assert usage["source"] == "metrics"
+    assert usage["ai_credits"] == 2.5 and usage["usd"] == 0.025
+    assert usage["input_tokens"] == 100 and usage["output_tokens"] == 50
+    assert usage["requests"] == 1 and usage["premium_requests"] == 1.0
+    assert usage["api_seconds"] == 2.5
+    assert usage["models"] == {"gpt-5": {"requests": 1, "input_tokens": 100, "output_tokens": 50}}
+
+
+def test_the_metrics_are_read_while_the_session_is_still_connected(facts) -> None:
+    """A disconnected session answers nothing, so the cost must be read before disconnecting."""
+    client = FakeClient(replies=[good_narrative(facts)])
+    _narrator(client).narrate_sync(facts)
+    assert client.session.calls == ["get_metrics", "disconnect"]
+    assert client.session.metrics_timeout == 10.0
+
+
+def test_a_failed_narration_still_reports_what_it_cost(facts) -> None:
+    client = FakeClient(replies=["nope", "still nope"])
+    outcome = _narrator(client).narrate_sync(facts)
+    assert outcome.status == "failed" and outcome.usage["source"] == "metrics"
+    assert outcome.usage["ai_credits"] == 1.5
+
+
+def test_unavailable_metrics_fall_back_to_the_streamed_usage_events(facts) -> None:
+    """The RPC is experimental; when it fails the tokens the events carried are still worth showing."""
+    client = FakeClient(replies=[good_narrative(facts)], metrics_error=RuntimeError("usage rpc unavailable"))
+    usage = _narrator(client).narrate_sync(facts).usage
+    assert usage["source"] == "events"
+    assert usage["input_tokens"] == 100 and usage["output_tokens"] == 50 and usage["cache_read_tokens"] == 20
+    assert usage["requests"] == 1
+    assert usage["models"] == {"gpt-5": {"requests": 1, "input_tokens": 100, "output_tokens": 50}}
+    # Events say nothing about money; showing a zero would be a lie.
+    assert usage["ai_credits"] is None and usage["usd"] is None and usage["premium_requests"] is None
+
+
+def test_a_narration_that_never_opened_a_session_costs_nothing_known(facts) -> None:
+    outcome = _narrator(FakeClient(replies=[], authenticated=False)).narrate_sync(facts)
+    assert outcome.usage == empty_usage() and outcome.usage["source"] == "none"
+    outcome = _narrator(FakeClient(replies=[], session_error=RuntimeError("bad skill dir"))).narrate_sync(facts)
+    assert outcome.usage["source"] == "none"

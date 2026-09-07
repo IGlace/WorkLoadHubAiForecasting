@@ -90,6 +90,25 @@ def test_get_run_serves_the_bare_narrative_over_http(client, tmp_path) -> None:
     }
 
 
+def test_get_run_serves_what_the_narration_cost(client, tmp_path) -> None:
+    """The app shows the cost of a stored run, so `GET /runs/{id}` must carry it beside the narrative."""
+    created = client.post("/runs", json={"team_id": 1, "as_of": "2026-09-03"}, headers=_h())
+    run_id = created.json()["run_id"]
+    assert client.get(f"/runs/{run_id}", headers=_h()).json()["narrative_usage"] is None
+    facts = client.get(f"/runs/{run_id}", headers=_h()).json()["facts"]
+    outcome = CopilotNarrator(
+        NarratorConfig(), client_factory=lambda: FakeClient(replies=[good_narrative(facts)])
+    ).narrate_sync(facts)
+    conn = connect(tmp_path / "api.db")
+    try:
+        narrate_run(conn, run_id, narrator=FakeNarrator(outcome))
+    finally:
+        conn.close()
+    usage = client.get(f"/runs/{run_id}", headers=_h()).json()["narrative_usage"]
+    assert usage["source"] == "metrics" and usage["ai_credits"] == 1.5 and usage["usd"] == 0.015
+    assert usage["input_tokens"] == 100 and usage["requests"] == 1
+
+
 def test_projects_capacity_and_vacations(client) -> None:
     bad = client.post(
         "/projects",

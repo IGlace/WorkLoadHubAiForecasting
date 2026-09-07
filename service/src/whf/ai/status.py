@@ -38,6 +38,9 @@ class CopilotStatus:
     login: str | None
     message: str
     code: StatusCode
+    # The account's monthly quota per type (`premium_interactions`, `chat`, `completions`, and
+    # whatever else a future Copilot reports), or None when the SDK could not say.
+    quota: dict[str, dict] | None = None
 
     @property
     def ready(self) -> bool:
@@ -56,6 +59,32 @@ def resolve_cli_path(env: Mapping[str, str] | None = None) -> tuple[str | None, 
     if cached:
         return cached, "cache"
     return None, "none"
+
+
+async def account_quota(client: Any) -> dict[str, dict] | None:
+    """How much of the account's monthly Copilot quota is left, or None when it cannot be read.
+
+    Knowing the quota is a nicety on top of being signed in: an SDK or a Copilot version that
+    cannot answer must leave the sign-in status exactly as it was.
+    """
+    try:
+        from copilot.generated.rpc import AccountGetQuotaRequest
+
+        # No token of ours: the quota wanted is the one of the user already signed in to the CLI.
+        result = await client.rpc.account.get_quota(AccountGetQuotaRequest(git_hub_token=None))
+        return {
+            key: {
+                "used": snapshot.used_requests,
+                "entitlement": snapshot.entitlement_requests,
+                "unlimited": snapshot.is_unlimited_entitlement,
+                "remaining_percentage": snapshot.remaining_percentage,
+                "overage": snapshot.overage,
+                "reset_date": snapshot.reset_date,
+            }
+            for key, snapshot in result.quota_snapshots.items()
+        }
+    except Exception:
+        return None
 
 
 async def copilot_status(client_factory: Callable[[], Any] | None = None) -> CopilotStatus:
@@ -86,6 +115,7 @@ async def copilot_status(client_factory: Callable[[], Any] | None = None) -> Cop
                 getattr(auth, "login", None),
                 f"signed in as {getattr(auth, 'login', None) or 'unknown user'}",
                 "signed_in",
+                await account_quota(client),
             )
         return CopilotStatus(
             cli_path,

@@ -75,6 +75,16 @@ def test_load_run_narrative_matches_the_apps_declared_shape(db, generated) -> No
     }
 
 
+def test_load_run_reports_what_the_stored_narration_cost(db, generated) -> None:
+    """The cost travels with the run, so reopening a result shows it without narrating again."""
+    result = run_forecast(db, team_id=1, as_of=generated.config.as_of)
+    assert load_run(db, result.run_id)["narrative_usage"] is None  # nothing narrated yet
+    narrate_run(db, result.run_id, narrator=FakeNarrator(_ok_outcome(result.facts)))
+    usage = load_run(db, result.run_id)["narrative_usage"]
+    assert usage["source"] == "metrics" and usage["ai_credits"] == 1.5
+    assert usage["input_tokens"] == 100 and usage["requests"] == 1
+
+
 def test_failed_outcome_is_stored_with_reason(db, generated) -> None:
     result = run_forecast(db, team_id=1, as_of=generated.config.as_of)
     outcome = NarrativeOutcome(status="failed", reason="not_signed_in", error="not signed in")

@@ -16,7 +16,7 @@ describe('Settings', () => {
       'GET /meta': META,
       'GET /profile': () => profile,
       'PUT /profile': (body: unknown) => { const b = body as { member_id: number }; profile = { member_id: b.member_id, role: 'team_leader' }; return profile },
-      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false },
+      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false, quota: null },
     })
     mount()
     const select = await screen.findByLabelText('I am')
@@ -28,8 +28,37 @@ describe('Settings', () => {
     // waiting message is still far off, so the login-started sentence is what's on screen.
     expect(await screen.findByText(/A terminal window opened/)).toBeInTheDocument()
   })
+  it('shows how much of the monthly quota is left, and skips the unlimited ones', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /copilot/status': {
+        cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in',
+        code: 'signed_in', ready: true,
+        quota: {
+          premium_interactions: { used: 112, entitlement: 300, unlimited: false, remaining_percentage: 62.5, overage: 0, reset_date: '2026-10-01T00:00:00Z' },
+          chat: { used: 9, entitlement: -1, unlimited: true, remaining_percentage: 100, overage: 0, reset_date: null },
+          copilot_labs: { used: 1, entitlement: 10, unlimited: false, remaining_percentage: 90, overage: 0, reset_date: null },
+        },
+      },
+    })
+    mount()
+    expect(await screen.findByText('Premium requests: 63% remaining, resets on 2026-10-01')).toBeInTheDocument()
+    // An unlimited quota has nothing to run out of, so it says nothing.
+    expect(screen.queryByText(/Chat:/)).not.toBeInTheDocument()
+    // A quota type this version has no wording for still shows, under its raw name.
+    expect(screen.getByText('copilot_labs: 90% remaining, resets on no reset date')).toBeInTheDocument()
+  })
+  it('shows no quota line when Copilot reports none', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true, quota: null },
+    })
+    mount()
+    expect(await screen.findByText((_, node) => node?.textContent === 'Signed in as octocat')).toBeInTheDocument()
+    expect(screen.queryByText(/remaining/)).not.toBeInTheDocument()
+  })
   it('saves language, model and launch at login', async () => {
-    const fake = installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false } })
+    const fake = installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false, quota: null } })
     mount()
     await userEvent.selectOptions(await screen.findByLabelText('Language'), 'fr')
     await waitFor(() => expect(fake.settings.language).toBe('fr'))
@@ -40,7 +69,7 @@ describe('Settings', () => {
     await waitFor(() => expect(fake.settings.launchAtLogin).toBe(true))
   })
   it('shows an error when Copilot sign-in rejects', async () => {
-    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false } })
+    installFakeWhf({ 'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false, quota: null } })
     window.whf.copilotLogin = () => Promise.reject(new Error('login failed'))
     mount()
     await userEvent.click(await screen.findByRole('button', { name: 'Sign in to GitHub Copilot' }))
@@ -49,7 +78,7 @@ describe('Settings', () => {
   it('shows the signed-in login and disables the sign-in button, with no Check again button', async () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
-      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true },
+      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true, quota: null },
     })
     mount()
     // The login name is rendered in its own <strong>, so the sentence is split across elements;
@@ -64,7 +93,7 @@ describe('Settings', () => {
   it('shows the CLI-not-found message and keeps the sign-in button enabled when the login does not start', async () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
-      'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false },
+      'GET /copilot/status': { cli_path: null, cli_source: 'none', authenticated: null, login: null, message: 'no cli', code: 'start_failed', ready: false, quota: null },
     })
     window.whf.copilotLogin = () => Promise.resolve({ started: false, code: 'copilot.login.noCli' })
     mount()
@@ -78,8 +107,8 @@ describe('Settings', () => {
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
       'GET /copilot/status': () => {
         calls += 1
-        if (calls <= 2) return { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false }
-        return { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true }
+        if (calls <= 2) return { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false, quota: null }
+        return { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true, quota: null }
       },
     })
     mount({ pollMs: 10 })
@@ -99,8 +128,8 @@ describe('Settings', () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
       'GET /copilot/status': () => ready
-        ? { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true }
-        : { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false },
+        ? { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: true, login: 'octocat', message: 'Signed in', code: 'signed_in', ready: true, quota: null }
+        : { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false, quota: null },
     })
     mount({ pollMs: 10, maxPollMs: 1 })
     await screen.findByText('Not signed in to GitHub Copilot yet.')
@@ -116,7 +145,7 @@ describe('Settings', () => {
   it('refetches the status when the window regains focus', async () => {
     const fake = installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
-      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false },
+      'GET /copilot/status': { cli_path: 'C:\\copilot.exe', cli_source: 'path', authenticated: false, login: null, message: 'Not signed in', code: 'not_signed_in', ready: false, quota: null },
     })
     mount()
     await screen.findByText('Not signed in to GitHub Copilot yet.')

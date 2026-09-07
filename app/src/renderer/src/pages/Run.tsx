@@ -1,8 +1,9 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import type { CopilotStatus, RunCreated } from '../../../shared/types'
+import type { CopilotStatus, NarrativeOutcome, RunCreated } from '../../../shared/types'
 import { createNarrative, createRun, getCopilotStatus } from '../api'
+import { CopilotCost } from '../components/CopilotCost'
 import { Field } from '../components/Field'
 import { NarrativeLive } from '../components/NarrativeLive'
 import { StatusMessage } from '../components/StatusMessage'
@@ -22,6 +23,8 @@ export function Run(): React.JSX.Element {
   const [copilot, setCopilot] = useState<CopilotStatus | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [result, setResult] = useState<RunCreated | null>(null)
+  // Kept whole rather than only its usage: the panel below shows what this very narration cost.
+  const [outcome, setOutcome] = useState<NarrativeOutcome | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const live = useNarrativeProgress(phase === 'narrating' && result ? result.run_id : null)
@@ -36,7 +39,7 @@ export function Run(): React.JSX.Element {
 
   async function start(): Promise<void> {
     if (!selected || !me) return
-    setError(null); setAiError(null); setResult(null); setPhase('forecasting')
+    setError(null); setAiError(null); setResult(null); setOutcome(null); setPhase('forecasting')
     let run: RunCreated
     try {
       run = await createRun(selected.id, asOf, me.id)
@@ -45,8 +48,9 @@ export function Run(): React.JSX.Element {
     if (withAi && aiPossible) {
       setPhase('narrating')
       try {
-        const outcome = await createNarrative(run.run_id, settings.model)
-        if (outcome.status === 'failed') setAiError(outcome.error ?? outcome.ai_status)
+        const narrated = await createNarrative(run.run_id, settings.model)
+        setOutcome(narrated)
+        if (narrated.status === 'failed') setAiError(narrated.error ?? narrated.ai_status)
       } catch (err) { setAiError(err instanceof Error ? err.message : String(err)) }
     }
     setPhase('done')
@@ -87,6 +91,7 @@ export function Run(): React.JSX.Element {
               return <li key={w}>{t('common.week', { date: w })}: {hours(rows.reduce((s, f) => s + f.demand_hours, 0))} / {hours(rows.reduce((s, f) => s + f.capacity_hours, 0))}</li>
             })}
           </ul>
+          <CopilotCost usage={outcome?.usage ?? null} />
           <Link to={`/runs/${result.run_id}`}>{t('run.open')}</Link>
         </section>
       )}

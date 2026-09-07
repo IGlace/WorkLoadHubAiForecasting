@@ -12,9 +12,13 @@ from whf.ai.facts_tools import FactsToolbox
 from whf.ai.progress import ProgressCode, ProgressEvent
 from whf.ai.prompt import SYSTEM_PROMPT, build_retry_prompt, build_user_prompt, skill_directories
 from whf.ai.schema import parse_narrative
+from whf.ai.usage import empty_usage, usage_from_events, usage_from_metrics
 from whf.ai.verify import verify_narrative
 
 log = logging.getLogger(__name__)
+# The usage RPC is a small local call; a session that cannot answer it in ten seconds is not worth
+# waiting for, since the narrative itself is already written by then.
+METRICS_TIMEOUT_SECONDS = 10.0
 Reason = Literal["not_signed_in", "cli_unavailable", "timeout", "invalid_output", "model_error", "other"]
 
 
@@ -27,7 +31,7 @@ class NarrativeOutcome:
     raw_text: str | None = None
     verification: dict | None = None
     model: str | None = None
-    usage: dict = field(default_factory=dict)
+    usage: dict = field(default_factory=empty_usage)
     attempts: int = 0
     tool_calls: list[str] = field(default_factory=list)
 
@@ -115,7 +119,7 @@ class CopilotNarrator:
                     error=getattr(auth, "statusMessage", None) or "not signed in to GitHub Copilot",
                 )
             toolbox = FactsToolbox(facts)
-            state: dict[str, Any] = {"messages": [], "model": None, "usage": {}, "tools": []}
+            state: dict[str, Any] = {"messages": [], "model": None, "usage": [], "tools": []}
             # A reasoning block arrives either as deltas or in one piece; a few models send both, so
             # the ids already streamed are remembered and the full block is then skipped.
             streamed_reasoning: set[str] = set()
@@ -144,10 +148,17 @@ class CopilotNarrator:
                 elif event.type == SessionEventType.TOOL_EXECUTION_COMPLETE:
                     say("tool_done", tool_names.get(event.data.tool_call_id))
                 elif event.type == SessionEventType.ASSISTANT_USAGE:
-                    state["usage"] = {
-                        "input_tokens": getattr(event.data, "input_tokens", None),
-                        "output_tokens": getattr(event.data, "output_tokens", None),
-                    }
+                    # One event per model call, kept in full: the session metrics read at the end are
+                    # the billed truth, but these are all there is when that call fails.
+                    state["usage"].append(
+                        {
+                            "input_tokens": getattr(event.data, "input_tokens", None),
+                            "output_tokens": getattr(event.data, "output_tokens", None),
+                            "cache_read_tokens": getattr(event.data, "cache_read_tokens", None),
+                            "reasoning_tokens": getattr(event.data, "reasoning_tokens", None),
+                            "model": getattr(event.data, "model", None),
+                        }
+                    )
                 elif event.type == SessionEventType.SESSION_ERROR:
                     state["error"] = getattr(event.data, "message", "session error")
 
@@ -221,6 +232,10 @@ class CopilotNarrator:
                     outcome, state, status="failed", reason="invalid_output", error="; ".join(problems), raw_text=raw
                 )
             finally:
+                # `_finish` returns the very `outcome` object built above, so every return in this
+                # block hands back the object mutated here: the cost of a narration is known only
+                # once it is over, and it must be read before the session is disconnected.
+                outcome.usage = await self._usage_of(session, state)
                 try:
                     await session.disconnect()
                 except Exception as exc:  # disconnecting must never mask the real outcome
@@ -230,6 +245,20 @@ class CopilotNarrator:
                 await client.stop()
             except Exception as exc:  # stopping must never mask the real outcome
                 log.warning("copilot client stop failed: %s", exc)
+
+    @staticmethod
+    async def _usage_of(session: Any, state: dict) -> dict:
+        """What the session cost: its own metrics, or the streamed events when they are out of reach.
+
+        The RPC is experimental and may be missing or fail; a narration must never be lost over the
+        price tag, so any failure falls back to the `assistant.usage` events collected on the way.
+        """
+        try:
+            metrics = await session.rpc.usage.get_metrics(timeout=METRICS_TIMEOUT_SECONDS)
+            return usage_from_metrics(metrics)
+        except Exception as exc:
+            log.warning("copilot usage metrics unavailable: %s", exc)
+            return usage_from_events(state.get("usage", []))
 
     @staticmethod
     def _content_of(event: Any, state: dict) -> str:
@@ -254,7 +283,6 @@ class CopilotNarrator:
         outcome.error = error
         outcome.raw_text = raw_text if raw_text is not None else outcome.raw_text
         outcome.model = state.get("model")
-        outcome.usage = state.get("usage", {})
         outcome.tool_calls = list(state.get("tools", []))
         return outcome
 

@@ -17,6 +17,25 @@ def make_event(event_type: SessionEventType, **data: Any) -> SimpleNamespace:
     return SimpleNamespace(type=event_type, data=SimpleNamespace(**data))
 
 
+def make_metrics(**overrides: Any) -> SimpleNamespace:
+    """What `session.rpc.usage.get_metrics()` answers: an SDK `UsageGetMetricsResult` in miniature."""
+    defaults: dict[str, Any] = {
+        "model_metrics": {
+            "gpt-5": SimpleNamespace(
+                requests=SimpleNamespace(count=1, cost=1.0),
+                usage=SimpleNamespace(
+                    input_tokens=100, output_tokens=50, cache_read_tokens=0, cache_write_tokens=0, reasoning_tokens=0
+                ),
+            )
+        },
+        "total_user_requests": 1,
+        "total_premium_request_cost": 1.0,
+        "total_api_duration_ms": 2500,
+        "total_nano_aiu": 1.5e9,
+    }
+    return SimpleNamespace(**{**defaults, **overrides})
+
+
 @dataclass
 class FakeSession:
     replies: list[str | Exception]
@@ -35,6 +54,23 @@ class FakeSession:
     return_none: bool = False
     emit_session_error: str | None = None
     disconnect_raises: bool = False
+    # What the usage RPC answers, and what it did in which order: the metrics must be read while
+    # the session is still connected, so the order of `calls` is part of what tests assert.
+    metrics: Any = None
+    metrics_error: Exception | None = None
+    metrics_timeout: float | None = None
+    calls: list[str] = field(default_factory=list)
+
+    @property
+    def rpc(self):
+        return SimpleNamespace(usage=SimpleNamespace(get_metrics=self._get_metrics))
+
+    async def _get_metrics(self, *, timeout: float | None = None):
+        self.calls.append("get_metrics")
+        self.metrics_timeout = timeout
+        if self.metrics_error:
+            raise self.metrics_error
+        return self.metrics if self.metrics is not None else make_metrics()
 
     def on(self, handler):
         self.handlers.append(handler)
@@ -79,7 +115,16 @@ class FakeSession:
         if isinstance(reply, Exception):
             raise reply
         for h in self.handlers:
-            h(make_event(SessionEventType.ASSISTANT_USAGE, input_tokens=100, output_tokens=50))
+            h(
+                make_event(
+                    SessionEventType.ASSISTANT_USAGE,
+                    input_tokens=100,
+                    output_tokens=50,
+                    cache_read_tokens=20,
+                    reasoning_tokens=0,
+                    model="gpt-5",
+                )
+            )
         event = make_event(SessionEventType.ASSISTANT_MESSAGE, content=reply, message_id="m1", model="gpt-5")
         for h in self.handlers:
             h(event)
@@ -90,6 +135,7 @@ class FakeSession:
             handler(event)
 
     async def disconnect(self) -> None:
+        self.calls.append("disconnect")
         self.disconnected = True
         if self.disconnect_raises:
             raise RuntimeError("disconnect failed: connection already closed")
@@ -105,6 +151,12 @@ class FakeClient:
     reply_none: bool = False
     emit_session_error: str | None = None
     disconnect_raises: bool = False
+    metrics: Any = None
+    metrics_error: Exception | None = None
+    # What `client.rpc.account.get_quota(...)` answers, and the tokens it was asked with.
+    quota_snapshots: dict[str, Any] | None = None
+    quota_error: Exception | None = None
+    quota_requests: list[Any] = field(default_factory=list)
     started: bool = False
     stopped: bool = False
     session: FakeSession | None = None
@@ -114,6 +166,18 @@ class FakeClient:
     reasoning_full: list[tuple[str, str]] = field(default_factory=list)
     message_deltas: list[str] = field(default_factory=list)
     unmatched_tool_complete_id: str | None = None
+
+    @property
+    def rpc(self):
+        return SimpleNamespace(account=SimpleNamespace(get_quota=self._get_quota))
+
+    async def _get_quota(self, params, *, timeout: float | None = None):
+        self.quota_requests.append(getattr(params, "git_hub_token", None))
+        if self.quota_error:
+            raise self.quota_error
+        if self.quota_snapshots is None:
+            raise RuntimeError("this fake account has no quota")
+        return SimpleNamespace(quota_snapshots=self.quota_snapshots)
 
     async def start(self) -> None:
         if self.start_error:
@@ -142,6 +206,8 @@ class FakeClient:
             reasoning_full=list(self.reasoning_full),
             message_deltas=list(self.message_deltas),
             unmatched_tool_complete_id=self.unmatched_tool_complete_id,
+            metrics=self.metrics,
+            metrics_error=self.metrics_error,
         )
         if kwargs.get("on_event"):
             self.session.on(kwargs["on_event"])

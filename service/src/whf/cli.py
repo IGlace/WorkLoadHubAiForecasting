@@ -234,6 +234,20 @@ def copilot_login_cmd() -> None:
     raise typer.Exit(code=run_login(cli_path))
 
 
+def _echo_cost(usage: dict) -> None:
+    """One line saying what the narration cost, and nothing at all when nothing is known.
+
+    Credits (and the money they are worth) come from the session metrics; when only the streamed
+    usage events survived, the tokens are said and the price is left unsaid rather than guessed.
+    """
+    usage = usage or {}
+    tokens = f"{usage.get('input_tokens')} in / {usage.get('output_tokens')} out, {usage.get('requests')} requests"
+    if usage.get("ai_credits") is not None:
+        typer.echo(f"cost: {usage['ai_credits']:.3f} AI credits (~${usage['usd']:.2f}), {tokens}")
+    elif usage.get("input_tokens") is not None:
+        typer.echo(f"cost: {tokens}")
+
+
 @app.command()
 def narrate(
     run_id: int,
@@ -259,6 +273,7 @@ def narrate(
         typer.echo(json.dumps(jsonable({**outcome.__dict__, "ai_status": outcome.ai_status, "run_id": run_id})))
     else:
         typer.echo(f"narrative: {outcome.ai_status}" + (f" ({outcome.error})" if outcome.error else ""))
+        _echo_cost(outcome.usage)
     raise typer.Exit(code=0 if outcome.status != "failed" else 4)
 
 

@@ -1,12 +1,13 @@
 import json
 
 import pytest
-from ai_fakes import FakeNarrator
+from ai_fakes import FakeNarrator, make_metrics
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from whf.ai.session import NarrativeOutcome
 from whf.ai.status import CopilotStatus
+from whf.ai.usage import empty_usage, usage_from_events, usage_from_metrics
 from whf.api import create_app
 from whf.cli import app
 from whf.data.generator import GeneratorConfig, generate
@@ -69,6 +70,35 @@ def test_cli_narrate_and_run_ai(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("whf.cli.default_narrator", lambda model=None: ok)
     with_ai = runner.invoke(app, ["run", "--db", str(db), "--team", "1", "--as-of", "2026-09-03", "--ai"])
     assert with_ai.exit_code == 0 and "narrative: ok" in with_ai.output
+
+
+def test_cli_narrate_prints_what_the_narration_cost(monkeypatch, tmp_path) -> None:
+    """`whf narrate` reports the price of the answer it just paid for, in credits when they are known."""
+    db = _db(tmp_path)
+    run = runner.invoke(app, ["run", "--db", str(db), "--team", "1", "--as-of", "2026-09-03", "--json"])
+    run_id = json.loads(run.output)["run_id"]
+
+    def narrating(usage: dict) -> None:
+        outcome = NarrativeOutcome(status="ok", narrative={"run_summary": "fine", "members": []}, usage=usage)
+        monkeypatch.setattr("whf.cli.default_narrator", lambda model=None: FakeNarrator(outcome))
+
+    narrating(usage_from_metrics(make_metrics(total_nano_aiu=12e9)))
+    out = runner.invoke(app, ["narrate", str(run_id), "--db", str(db)])
+    assert "cost: 12.000 AI credits (~$0.12), 100 in / 50 out, 1 requests" in out.output
+
+    # Only the streamed events survived: tokens are real, money is unknown and stays unsaid.
+    narrating(usage_from_events([{"input_tokens": 100, "output_tokens": 50, "model": "gpt-5"}]))
+    out = runner.invoke(app, ["narrate", str(run_id), "--db", str(db)])
+    assert "cost: 100 in / 50 out, 1 requests" in out.output
+    assert "AI credits" not in out.output
+
+    narrating(empty_usage())
+    assert "cost:" not in runner.invoke(app, ["narrate", str(run_id), "--db", str(db)]).output
+
+    # The JSON document on stdout stays the only thing printed there.
+    narrating(usage_from_metrics(make_metrics()))
+    shown = json.loads(runner.invoke(app, ["narrate", str(run_id), "--db", str(db), "--json"]).output)
+    assert shown["usage"]["ai_credits"] == 1.5
 
 
 def test_cli_run_json_ai_prints_a_single_json_document(monkeypatch, tmp_path) -> None:
@@ -190,6 +220,33 @@ def test_narrative_of_an_unknown_run_does_not_evict_a_real_run_being_narrated(cl
 
 def test_the_progress_route_needs_the_token(client_without_token) -> None:
     assert client_without_token.get("/runs/1/narrative/progress").status_code == 401
+
+
+def test_api_copilot_status_carries_the_remaining_quota(tmp_path) -> None:
+    """The Settings panel shows how much of the monthly quota is left; the route must pass it on."""
+    quota = {
+        "premium_interactions": {
+            "used": 112,
+            "entitlement": 300,
+            "unlimited": False,
+            "remaining_percentage": 62.5,
+            "overage": 0.0,
+            "reset_date": "2026-10-01",
+        }
+    }
+
+    def provider() -> CopilotStatus:
+        return CopilotStatus("C:/copilot.exe", "environment", True, "sara", "signed in as sara", "signed_in", quota)
+
+    client = TestClient(create_app(_db(tmp_path), TOKEN, status_provider=provider))
+    body = client.get("/copilot/status", headers={"X-WHF-Token": TOKEN}).json()
+    assert body["quota"] == quota
+    assert (
+        TestClient(create_app(_db(tmp_path), TOKEN, status_provider=_ready))
+        .get("/copilot/status", headers={"X-WHF-Token": TOKEN})
+        .json()["quota"]
+        is None
+    )
 
 
 def test_api_copilot_status_and_narrative(tmp_path) -> None:

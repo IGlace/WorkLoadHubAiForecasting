@@ -5,9 +5,9 @@ import { vi } from 'vitest'
 import { AppProvider } from '../context'
 import { Run } from '../pages/Run'
 import { installFakeWhf, META } from '../test/fake-whf'
-import { RUN_CREATED } from '../test/fixtures'
+import { RUN_CREATED, USAGE } from '../test/fixtures'
 
-const ready = { cli_path: 'c', cli_source: 'path', authenticated: true, login: 'ali', message: 'ok', ready: true }
+const ready = { cli_path: 'c', cli_source: 'path', authenticated: true, login: 'ali', message: 'ok', ready: true, quota: null }
 
 describe('Run', () => {
   it('runs the forecast then the narrative and links to the result', async () => {
@@ -30,6 +30,29 @@ describe('Run', () => {
     const body = fake.calls.find((c) => c.path === '/runs')!.body as { team_id: number; requested_by: number }
     expect(body.team_id).toBe(1)
     expect(body.requested_by).toBe(11)
+  })
+  it('shows what the narration cost once the forecast is complete', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED,
+      'POST /runs/5/narrative': { run_id: 5, status: 'ok', ai_status: 'ok', narrative: null, error: null, reason: null, attempts: 1, tool_calls: [], usage: USAGE },
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    const button = await screen.findByRole('button', { name: 'Run forecast' })
+    await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
+    await userEvent.click(button)
+    expect(await screen.findByText(/Copilot usage: 12.50 AI credits/)).toBeInTheDocument()
+  })
+  it('shows no cost when the forecast ran without Copilot', async () => {
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
+      'GET /copilot/status': { ...ready, ready: false, authenticated: false, message: 'Not signed in' },
+      'POST /runs': RUN_CREATED,
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Run forecast' }))
+    expect(await screen.findByText('Forecast complete')).toBeInTheDocument()
+    expect(screen.queryByText(/Copilot usage:/)).not.toBeInTheDocument()
   })
   it('keeps the forecast when the narrative fails and shows the reason', async () => {
     installFakeWhf({

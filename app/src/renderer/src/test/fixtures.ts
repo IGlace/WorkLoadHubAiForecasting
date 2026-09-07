@@ -1,10 +1,17 @@
-import type { RunCreated, RunDetail } from '../../../shared/types'
+import type { NarrativeUsage, RunCreated, RunDetail } from '../../../shared/types'
 
 const W1 = '2026-09-07', W2 = '2026-09-14'
 const row = (member_id: number, week_start: string, demand: number, capacity: number, low = demand - 3, high = demand + 3) => ({
   run_id: 5, member_id, week_start, demand_hours: demand, demand_low: low, demand_high: high, capacity_hours: capacity,
   overload_hours: Math.max(0, demand - capacity), open_task_hours: demand * 0.6, new_task_hours: demand * 0.4,
 })
+
+/** What a narration cost, as the service reports it from the session metrics. */
+export const USAGE: NarrativeUsage = {
+  input_tokens: 12345, output_tokens: 678, cache_read_tokens: 900, reasoning_tokens: 120, requests: 3,
+  premium_requests: 1.5, ai_credits: 12.5, usd: 0.125, api_seconds: 42.5,
+  models: { 'gpt-5': { requests: 3, input_tokens: 12345, output_tokens: 678 } }, source: 'metrics',
+}
 
 export const RUN_CREATED: RunCreated = {
   run_id: 5, team_id: 1, as_of: '2026-09-04', weeks: [W1, W2], champion: 'gbm', backtest_mase: 0.77,
@@ -40,4 +47,5 @@ export const RUN_DETAIL: RunDetail = {
     suggested_adjustments: [],
     model_notes: 'Champion gbm beat TSB.',
   },
+  narrative_usage: null,
 }
