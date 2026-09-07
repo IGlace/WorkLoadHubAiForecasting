@@ -45,6 +45,10 @@ first install straight away; the installer now seeds the data itself, see "Lande
     through what has already gone by while the answer is still being written.
   - Deferred: `keep_chars=0` disables the bound on the stored live text instead of storing nothing, which is
     the reading a caller would expect from a zero.
+  - Deferred: a turn that ends without a final `assistant.message` (read from the deltas instead) records no
+    model name in the audit row, because the name only arrives on the final message; and a retried
+    narration whose first attempt ended with a message but whose second sent deltas only would keep the
+    first attempt's text. The SDK produces neither shape as far as its documentation and the fakes show.
 
 - **Local checks in place of CI** (2026-09-04): `scripts/check.ps1` (fast, `-Full`, `-Package`),
   `scripts/release.ps1` (gate then fast-forward `main`) and the hooks in `scripts/hooks/`, activated by
