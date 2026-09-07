@@ -196,6 +196,20 @@ def create_app(
 
     @app.post("/runs/{run_id}/narrative", dependencies=guarded)
     def create_narrative(run_id: int, body: NarrativeRequest, conn: sqlite3.Connection = Depends(db)) -> dict:
+        def live(kind: str, text: str) -> None:
+            """Route one chunk of streamed text into the store the app polls.
+
+            An empty answer chunk is the narrator saying "a new answer starts here": a retry attempt
+            rewrites its answer from the beginning, so the rejected one is dropped, thinking kept.
+            """
+            if kind == "answer":
+                if text == "":
+                    narrative_progress.reset_answer(run_id)
+                else:
+                    narrative_progress.append(run_id, "answer", text)
+            else:
+                narrative_progress.append(run_id, "thinking", text)
+
         try:
             outcome = narrate_run(
                 conn,
@@ -203,6 +217,7 @@ def create_app(
                 narrator=narrator_factory(body.model),
                 progress=lambda event: narrative_progress.record(run_id, event),
                 on_valid=lambda: narrative_progress.begin(run_id),
+                live=live,
             )
         except RunNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -217,7 +232,13 @@ def create_app(
     def narrative_progress_route(run_id: int) -> dict:
         # No 404 for an unknown run: the app polls this the moment it sends the POST, and an empty
         # list is the honest answer both before the first step and long after the last one.
-        return {"run_id": run_id, "steps": narrative_progress.steps(run_id)}
+        live = narrative_progress.live(run_id)
+        return {
+            "run_id": run_id,
+            "steps": narrative_progress.steps(run_id),
+            "thinking": live["thinking"],
+            "answer": live["answer"],
+        }
 
     @app.get("/projects", dependencies=guarded)
     def get_projects(conn: sqlite3.Connection = Depends(db)) -> list:

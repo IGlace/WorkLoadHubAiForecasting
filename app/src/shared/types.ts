@@ -82,9 +82,10 @@ export interface NarrativeOutcome {
 }
 
 /** What the Copilot session is doing right now. `code` is language-independent; the app phrases it. */
-export type NarrativeProgressCode = 'starting' | 'session' | 'asking' | 'tool' | 'checking'
+export type NarrativeProgressCode = 'starting' | 'session' | 'asking' | 'tool' | 'tool_done' | 'checking'
 export interface NarrativeProgressStep { code: NarrativeProgressCode; detail: string | null; at: string }
-export interface NarrativeProgress { run_id: number; steps: NarrativeProgressStep[] }
+/** `thinking` and `answer` are the tails of what Copilot has reasoned and written so far. */
+export interface NarrativeProgress { run_id: number; steps: NarrativeProgressStep[]; thinking: string; answer: string }
 
 /** `code` is language-independent, so the app can phrase it; `message` is the service's English detail. */
 export type CopilotStatusCode = 'signed_in' | 'not_signed_in' | 'start_failed'

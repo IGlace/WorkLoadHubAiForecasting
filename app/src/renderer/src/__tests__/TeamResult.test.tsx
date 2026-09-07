@@ -59,7 +59,7 @@ describe('TeamResult', () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
       'GET /runs/5': () => detail,
-      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
       'POST /runs/5/narrative': () => held,
     })
     mount()
@@ -86,7 +86,7 @@ describe('TeamResult', () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
       'GET /runs/5': () => detail,
-      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
       'POST /runs/5/narrative': () => held,
     })
     mount()
@@ -113,7 +113,7 @@ describe('TeamResult', () => {
     const fake = installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
       'GET /runs/5': () => detail,
-      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
       'POST /runs/5/narrative': () => {
         detail = { ...RUN_DETAIL, run: { ...RUN_DETAIL.run, ai_status: 'ok' } }
         return held
@@ -158,8 +158,8 @@ describe('TeamResult', () => {
     const fake = installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
       'GET /runs/5': () => detail5, 'GET /runs/6': () => detail6,
-      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
-      'GET /runs/6/narrative/progress': { run_id: 6, steps: [{ code: 'checking', detail: null, at: '2026-09-04T10:00:00' }] },
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
+      'GET /runs/6/narrative/progress': { run_id: 6, steps: [{ code: 'checking', detail: null, at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
       'POST /runs/5/narrative': () => held,
     })
     function Nav() {
@@ -213,8 +213,8 @@ describe('TeamResult', () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' },
       'GET /runs/5': () => detail5, 'GET /runs/6': () => detail6,
-      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
-      'GET /runs/6/narrative/progress': { run_id: 6, steps: [{ code: 'checking', detail: null, at: '2026-09-04T10:00:00' }] },
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
+      'GET /runs/6/narrative/progress': { run_id: 6, steps: [{ code: 'checking', detail: null, at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
       'POST /runs/5/narrative': () => held5,
       'POST /runs/6/narrative': () => held6,
     })

@@ -45,9 +45,18 @@ class NarratorConfig:
     log_level: str = "error"
 
 
+# The live text of a narration: `(kind, text)` with `kind` in "thinking" | "answer". An answer
+# chunk that is the empty string means "a new answer starts here" — the caller drops what it has
+# shown of the answer so far, because a retry attempt rewrites it from the beginning.
+LiveCallback = Callable[[str, str], None]
+
+
 class Narrator(Protocol):
     def narrate_sync(
-        self, facts: dict, progress: Callable[[ProgressEvent], None] | None = None
+        self,
+        facts: dict,
+        progress: Callable[[ProgressEvent], None] | None = None,
+        live: LiveCallback | None = None,
     ) -> NarrativeOutcome: ...
 
 
@@ -65,11 +74,22 @@ class CopilotNarrator:
         self.config = config or NarratorConfig()
         self._client_factory = client_factory or _default_client_factory(self.config)
 
-    def narrate_sync(self, facts: dict, progress: Callable[[ProgressEvent], None] | None = None) -> NarrativeOutcome:
-        return asyncio.run(self.narrate(facts, progress))
+    def narrate_sync(
+        self,
+        facts: dict,
+        progress: Callable[[ProgressEvent], None] | None = None,
+        live: LiveCallback | None = None,
+    ) -> NarrativeOutcome:
+        return asyncio.run(self.narrate(facts, progress, live))
 
-    async def narrate(self, facts: dict, progress: Callable[[ProgressEvent], None] | None = None) -> NarrativeOutcome:
+    async def narrate(
+        self,
+        facts: dict,
+        progress: Callable[[ProgressEvent], None] | None = None,
+        live: LiveCallback | None = None,
+    ) -> NarrativeOutcome:
         emit = progress or (lambda _event: None)
+        stream = live or (lambda _kind, _text: None)
 
         def say(code: ProgressCode, detail: str | None = None) -> None:
             emit(ProgressEvent(code, detail))
@@ -96,6 +116,10 @@ class CopilotNarrator:
                 )
             toolbox = FactsToolbox(facts)
             state: dict[str, Any] = {"messages": [], "model": None, "usage": {}, "tools": []}
+            # A reasoning block arrives either as deltas or in one piece; a few models send both, so
+            # the ids already streamed are remembered and the full block is then skipped.
+            streamed_reasoning: set[str] = set()
+            tool_names: dict[str, str] = {}
 
             def on_event(event: Any) -> None:
                 from copilot.generated.session_events import SessionEventType
@@ -103,9 +127,22 @@ class CopilotNarrator:
                 if event.type == SessionEventType.ASSISTANT_MESSAGE:
                     state["messages"].append(event.data.content)
                     state["model"] = getattr(event.data, "model", None) or state["model"]
+                elif event.type == SessionEventType.ASSISTANT_MESSAGE_DELTA:
+                    stream("answer", event.data.delta_content)
+                elif event.type == SessionEventType.ASSISTANT_INTENT:
+                    stream("thinking", event.data.intent + "\n")
+                elif event.type == SessionEventType.ASSISTANT_REASONING_DELTA:
+                    streamed_reasoning.add(event.data.reasoning_id)
+                    stream("thinking", event.data.delta_content)
+                elif event.type == SessionEventType.ASSISTANT_REASONING:
+                    if event.data.reasoning_id not in streamed_reasoning:
+                        stream("thinking", event.data.content + "\n")
                 elif event.type == SessionEventType.TOOL_EXECUTION_START:
                     state["tools"].append(event.data.tool_name)
+                    tool_names[event.data.tool_call_id] = event.data.tool_name
                     say("tool", event.data.tool_name)
+                elif event.type == SessionEventType.TOOL_EXECUTION_COMPLETE:
+                    say("tool_done", tool_names.get(event.data.tool_call_id))
                 elif event.type == SessionEventType.ASSISTANT_USAGE:
                     state["usage"] = {
                         "input_tokens": getattr(event.data, "input_tokens", None),
@@ -128,7 +165,7 @@ class CopilotNarrator:
                     available_tools=ToolSet().add_custom("*").add_builtin("skill"),
                     enable_skills=True,
                     skill_directories=self.config.skill_directories or skill_directories(),
-                    streaming=False,
+                    streaming=True,
                     on_event=on_event,
                 )
             except Exception as exc:
@@ -142,6 +179,7 @@ class CopilotNarrator:
                 for attempt in range(1, max(1, self.config.max_attempts) + 1):
                     outcome.attempts = attempt
                     say("asking", str(attempt))
+                    stream("answer", "")  # this attempt writes its own answer; drop the rejected one
                     try:
                         event = await session.send_and_wait(prompt, timeout=self.config.timeout_seconds)
                     except TimeoutError as exc:  # asyncio.TimeoutError is an alias since Python 3.11

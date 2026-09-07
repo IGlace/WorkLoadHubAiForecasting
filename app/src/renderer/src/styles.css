@@ -28,3 +28,4 @@ button:disabled { opacity: 0.6; cursor: default; }
 .status.info { background: #e8effc; } .status.error { background: #fde8e6; } .status.success { background: #e3f5ea; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .muted { color: var(--muted); }
+.live { font-family: Consolas, ui-monospace, monospace; max-height: 16em; overflow: auto; white-space: pre-wrap; margin: 0; }

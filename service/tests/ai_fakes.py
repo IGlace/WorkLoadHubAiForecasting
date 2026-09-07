@@ -21,6 +21,13 @@ def make_event(event_type: SessionEventType, **data: Any) -> SimpleNamespace:
 class FakeSession:
     replies: list[str | Exception]
     tools: list[Any] = field(default_factory=list)
+    # What a streaming turn sends before the final message: an intent line, reasoning as deltas
+    # (id, chunk) or in one piece (id, content), and the answer in chunks.
+    intents: list[str] = field(default_factory=list)
+    reasoning_deltas: list[tuple[str, str]] = field(default_factory=list)
+    reasoning_full: list[tuple[str, str]] = field(default_factory=list)
+    message_deltas: list[str] = field(default_factory=list)
+    unmatched_tool_complete_id: str | None = None
     prompts: list[str] = field(default_factory=list)
     handlers: list[Any] = field(default_factory=list)
     disconnected: bool = False
@@ -36,13 +43,33 @@ class FakeSession:
     async def send_and_wait(self, prompt: str, *, timeout: float = 60.0):
         self.prompts.append(prompt)
         if self.call_tools_first and self.tools:
-            for tool in self.tools[:2]:
-                for h in self.handlers:
-                    h(
-                        make_event(
-                            SessionEventType.TOOL_EXECUTION_START, tool_name=tool.name, tool_call_id="c1", arguments={}
-                        )
+            for index, tool in enumerate(self.tools[:2]):
+                call_id = f"c{index}"
+                self._emit(
+                    make_event(
+                        SessionEventType.TOOL_EXECUTION_START,
+                        tool_name=tool.name,
+                        tool_call_id=call_id,
+                        arguments={},
                     )
+                )
+                self._emit(make_event(SessionEventType.TOOL_EXECUTION_COMPLETE, tool_call_id=call_id, success=True))
+        if self.unmatched_tool_complete_id:
+            self._emit(
+                make_event(
+                    SessionEventType.TOOL_EXECUTION_COMPLETE, tool_call_id=self.unmatched_tool_complete_id, success=True
+                )
+            )
+        for intent in self.intents:
+            self._emit(make_event(SessionEventType.ASSISTANT_INTENT, intent=intent))
+        for reasoning_id, chunk in self.reasoning_deltas:
+            self._emit(
+                make_event(SessionEventType.ASSISTANT_REASONING_DELTA, delta_content=chunk, reasoning_id=reasoning_id)
+            )
+        for reasoning_id, content in self.reasoning_full:
+            self._emit(make_event(SessionEventType.ASSISTANT_REASONING, content=content, reasoning_id=reasoning_id))
+        for chunk in self.message_deltas:
+            self._emit(make_event(SessionEventType.ASSISTANT_MESSAGE_DELTA, delta_content=chunk, message_id="m1"))
         if self.return_none:
             return None
         if self.emit_session_error:
@@ -57,6 +84,10 @@ class FakeSession:
         for h in self.handlers:
             h(event)
         return event
+
+    def _emit(self, event) -> None:
+        for handler in self.handlers:
+            handler(event)
 
     async def disconnect(self) -> None:
         self.disconnected = True
@@ -78,6 +109,11 @@ class FakeClient:
     stopped: bool = False
     session: FakeSession | None = None
     session_kwargs: dict = field(default_factory=dict)
+    intents: list[str] = field(default_factory=list)
+    reasoning_deltas: list[tuple[str, str]] = field(default_factory=list)
+    reasoning_full: list[tuple[str, str]] = field(default_factory=list)
+    message_deltas: list[str] = field(default_factory=list)
+    unmatched_tool_complete_id: str | None = None
 
     async def start(self) -> None:
         if self.start_error:
@@ -101,6 +137,11 @@ class FakeClient:
             return_none=self.reply_none,
             emit_session_error=self.emit_session_error,
             disconnect_raises=self.disconnect_raises,
+            intents=list(self.intents),
+            reasoning_deltas=list(self.reasoning_deltas),
+            reasoning_full=list(self.reasoning_full),
+            message_deltas=list(self.message_deltas),
+            unmatched_tool_complete_id=self.unmatched_tool_complete_id,
         )
         if kwargs.get("on_event"):
             self.session.on(kwargs["on_event"])
@@ -141,8 +182,11 @@ class FakeNarrator:
         self.outcome = outcome if outcome is not None else NarrativeOutcome(status="ok")
         self.calls: list[dict] = []
 
-    def narrate_sync(self, facts: dict, progress=None):
+    def narrate_sync(self, facts: dict, progress=None, live=None):
         self.calls.append(facts)
         if progress:
             progress(ProgressEvent("asking", "1"))
+        if live:
+            live("thinking", "reading the facts")
+            live("answer", "{")
         return self.outcome

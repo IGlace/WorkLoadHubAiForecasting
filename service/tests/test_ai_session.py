@@ -1,5 +1,6 @@
 from ai_fakes import FakeClient, good_narrative
 
+from whf.ai.progress import ProgressEvent
 from whf.ai.session import CopilotNarrator, NarratorConfig, _default_client_factory
 
 # `facts` comes from tests/conftest.py: one real forecast for team 1, shared and copied per test.
@@ -123,3 +124,75 @@ def test_default_client_factory_uses_only_log_level_and_the_logged_in_user(monke
     factory = _default_client_factory(NarratorConfig(log_level="warn"))
     factory()
     assert calls == [{"log_level": "warn"}]
+
+
+def _record_live(client: FakeClient, facts: dict, **cfg) -> list[tuple[str, str]]:
+    """Narrate and return every live chunk the narrator sent, as (kind, text) in order."""
+    chunks: list[tuple[str, str]] = []
+    _narrator(client, **cfg).narrate_sync(facts, live=lambda kind, text: chunks.append((kind, text)))
+    return chunks
+
+
+def _joined(chunks: list[tuple[str, str]], kind: str) -> str:
+    return "".join(text for chunk_kind, text in chunks if chunk_kind == kind)
+
+
+def test_the_session_streams_so_the_app_can_show_the_answer_being_written(facts) -> None:
+    client = FakeClient(replies=[good_narrative(facts)])
+    _narrator(client).narrate_sync(facts)
+    assert client.session_kwargs["streaming"] is True
+
+
+def test_intent_and_reasoning_deltas_are_forwarded_as_thinking(facts) -> None:
+    client = FakeClient(
+        replies=[good_narrative(facts)],
+        intents=["Reading the capacity of each member"],
+        reasoning_deltas=[("r1", "Yara is "), ("r1", "over capacity")],
+    )
+    chunks = _record_live(client, facts)
+    assert _joined(chunks, "thinking") == "Reading the capacity of each member\nYara is over capacity"
+
+
+def test_a_full_reasoning_that_was_already_streamed_is_not_repeated(facts) -> None:
+    """Some models send the deltas and then the whole block again; showing it twice reads as a loop."""
+    client = FakeClient(
+        replies=[good_narrative(facts)],
+        reasoning_deltas=[("r1", "Yara is over capacity")],
+        reasoning_full=[("r1", "Yara is over capacity")],
+    )
+    assert _joined(_record_live(client, facts), "thinking") == "Yara is over capacity"
+
+
+def test_a_full_reasoning_that_was_never_streamed_is_shown(facts) -> None:
+    """Models that send their thinking in one piece rather than in deltas must still show up."""
+    client = FakeClient(replies=[good_narrative(facts)], reasoning_full=[("r2", "Checking the weeks")])
+    assert _joined(_record_live(client, facts), "thinking") == "Checking the weeks\n"
+
+
+def test_message_deltas_are_forwarded_as_the_answer(facts) -> None:
+    client = FakeClient(replies=[good_narrative(facts)], message_deltas=['{"run_summary"', ': "fine"}'])
+    assert _joined(_record_live(client, facts), "answer") == '{"run_summary": "fine"}'
+
+
+def test_every_attempt_starts_a_new_answer(facts) -> None:
+    """An empty answer chunk means "a new answer starts here": the rejected one must not be prepended."""
+    client = FakeClient(replies=["not JSON", good_narrative(facts)], message_deltas=["{"])
+    answers = [text for kind, text in _record_live(client, facts) if kind == "answer"]
+    assert answers == ["", "{", "", "{"]
+
+
+def test_a_finished_tool_call_is_a_step_naming_the_tool(facts) -> None:
+    client = FakeClient(replies=[good_narrative(facts)])
+    steps: list[ProgressEvent] = []
+    _narrator(client).narrate_sync(facts, steps.append)
+    pairs = [(event.code, event.detail) for event in steps]
+    assert ("tool", "get_run_overview") in pairs
+    assert pairs.index(("tool_done", "get_run_overview")) > pairs.index(("tool", "get_run_overview"))
+
+
+def test_a_finished_tool_call_with_an_unknown_id_is_still_reported(facts) -> None:
+    """A completion whose start was never seen must not be dropped, and must not name a wrong tool."""
+    client = FakeClient(replies=[good_narrative(facts)], unmatched_tool_complete_id="never-started")
+    steps: list[ProgressEvent] = []
+    _narrator(client).narrate_sync(facts, steps.append)
+    assert ("tool_done", None) in [(event.code, event.detail) for event in steps]

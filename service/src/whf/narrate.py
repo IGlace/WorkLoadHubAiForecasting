@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import asdict
 
 from whf.ai.progress import ProgressEvent
-from whf.ai.session import NarrativeOutcome, Narrator, default_narrator
+from whf.ai.session import LiveCallback, NarrativeOutcome, Narrator, default_narrator
 from whf.db.repo import read_df
 
 
@@ -27,12 +27,13 @@ def narrate_run(
     narrator: Narrator | None = None,
     progress: Callable[[ProgressEvent], None] | None = None,
     on_valid: Callable[[], None] | None = None,
+    live: LiveCallback | None = None,
 ) -> NarrativeOutcome:
     """Attach a narrative to `run_id`.
 
     `on_valid`, if given, runs after both reads have shown the run to exist and have facts, and
     before Copilot is asked anything: the caller uses it to start tracking progress only for
-    requests worth tracking.
+    requests worth tracking. `live`, if given, receives the text Copilot streams while it works.
     """
     run_rows = read_df(conn, "SELECT id FROM runs WHERE id = ?", (run_id,))
     if run_rows.empty:
@@ -43,7 +44,7 @@ def narrate_run(
     facts = json.loads(facts_rows["json"][0])
     if on_valid is not None:
         on_valid()
-    outcome = (narrator or default_narrator()).narrate_sync(facts, progress)
+    outcome = (narrator or default_narrator()).narrate_sync(facts, progress, live)
     document = {**asdict(outcome), "generated_at": dt.datetime.now().isoformat(timespec="seconds")}
     try:
         conn.execute(

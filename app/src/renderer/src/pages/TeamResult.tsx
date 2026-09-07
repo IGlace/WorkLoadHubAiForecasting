@@ -3,12 +3,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { RunDetail } from '../../../shared/types'
 import { createNarrative, getRun } from '../api'
+import { NarrativeLive } from '../components/NarrativeLive'
 import { RiskBadge } from '../components/RiskBadge'
 import { StatusMessage } from '../components/StatusMessage'
 import { WeekTable, type WeekTableRow } from '../components/WeekTable'
 import { useApp } from '../context'
 import { modelName, useT } from '../i18n'
-import { progressLabel, useNarrativeProgress } from '../narrative-progress'
+import { useNarrativeProgress } from '../narrative-progress'
 
 interface Fetched { id: number; detail: RunDetail | null; error: string | null }
 
@@ -40,7 +41,7 @@ export function TeamResult(): React.JSX.Element {
   // `useNarrativeProgress` resets whenever its `runId` argument changes (including a change to or from
   // `null`); the step label recovers on the next poll, one second later. This is not worth start-time
   // bookkeeping to avoid.
-  const { step, elapsed } = useNarrativeProgress(busy ? id : null)
+  const live = useNarrativeProgress(busy ? id : null)
 
   const load = useCallback((): Promise<RunDetail> => getRun(id), [id])
 
@@ -103,11 +104,7 @@ export function TeamResult(): React.JSX.Element {
         <p className="muted">{t('team.narrativeStatus', { status: detail.run.ai_status })}</p>
         {detail.run.ai_status === 'unverified' && <StatusMessage kind="info">{t('team.unverified')}</StatusMessage>}
         {!narrative && <button className="primary" disabled={busy} onClick={() => { void narrate() }}>{t('team.narrate')}</button>}
-        {busy && (
-          <StatusMessage kind="info">
-            {progressLabel(step)} <span className="muted">{t('run.progress.elapsed', { seconds: String(elapsed) })}</span>
-          </StatusMessage>
-        )}
+        {busy && <NarrativeLive {...live} />}
         {narrative && (
           <>
             <p>{narrative.run_summary}</p>

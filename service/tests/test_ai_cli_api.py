@@ -126,9 +126,52 @@ def test_narrating_records_the_steps_the_app_polls_for(client) -> None:
     assert [s["code"] for s in steps] == ["asking"]
 
 
+def test_narrating_reports_the_live_text_the_app_shows(client) -> None:
+    """Beside the steps, the poll carries what Copilot is thinking and the answer as it is written."""
+    run_id = _run_id(client)
+    assert client.get(f"/runs/{run_id}/narrative/progress").json()["thinking"] == ""
+    client.post(f"/runs/{run_id}/narrative", json={"model": None})
+    payload = client.get(f"/runs/{run_id}/narrative/progress").json()
+    assert payload["thinking"] == "reading the facts" and payload["answer"] == "{"
+
+
+class _RetryingNarrator:
+    """Writes an answer, is asked to start again, and writes another one — like a rejected attempt."""
+
+    def narrate_sync(self, facts, progress=None, live=None):
+        if live:
+            live("thinking", "reading the facts")
+            live("answer", "not JSON at all")
+            live("answer", "")
+            live("thinking", " and again")
+            live("answer", '{"run_summary"')
+        return NarrativeOutcome(status="ok", narrative={"run_summary": "fine", "members": []})
+
+
+def test_an_empty_answer_chunk_starts_the_answer_again(tmp_path) -> None:
+    """A retry rewrites its answer from the start; the rejected one must not stay on screen, and the
+    thinking that led to it must stay."""
+    test_client = TestClient(
+        create_app(
+            _db(tmp_path), TOKEN, narrator_factory=lambda model=None: _RetryingNarrator(), status_provider=_ready
+        )
+    )
+    test_client.headers.update({"X-WHF-Token": TOKEN})
+    run_id = _run_id(test_client)
+    test_client.post(f"/runs/{run_id}/narrative", json={"model": None})
+    payload = test_client.get(f"/runs/{run_id}/narrative/progress").json()
+    assert payload["answer"] == '{"run_summary"'
+    assert payload["thinking"] == "reading the facts and again"
+
+
 def test_progress_of_an_unknown_run_is_empty_rather_than_an_error(client) -> None:
     """The app polls as soon as it sends the POST; a poll that arrives first must not be a 404."""
-    assert client.get("/runs/999/narrative/progress").json() == {"run_id": 999, "steps": []}
+    assert client.get("/runs/999/narrative/progress").json() == {
+        "run_id": 999,
+        "steps": [],
+        "thinking": "",
+        "answer": "",
+    }
 
 
 def test_narrative_of_an_unknown_run_does_not_evict_a_real_run_being_narrated(client) -> None:

@@ -41,6 +41,19 @@ def test_narrate_persists_document_and_status(db, generated) -> None:
     assert load_run(db, result.run_id)["narrative"]["run_summary"] == "All members within capacity."
 
 
+def test_narrate_passes_the_live_text_callback_to_the_narrator(db, generated) -> None:
+    """The app shows what Copilot is thinking and writing, so the chunks must reach the caller."""
+    result = run_forecast(db, team_id=1, as_of=generated.config.as_of)
+    chunks: list[tuple[str, str]] = []
+    narrate_run(
+        db,
+        result.run_id,
+        narrator=FakeNarrator(_ok_outcome(result.facts)),
+        live=lambda kind, text: chunks.append((kind, text)),
+    )
+    assert chunks == [("thinking", "reading the facts"), ("answer", "{")]
+
+
 def test_load_run_narrative_matches_the_apps_declared_shape(db, generated) -> None:
     """The contract test, and the reason this task exists.
 

@@ -4,11 +4,12 @@ import { Link, useSearchParams } from 'react-router-dom'
 import type { CopilotStatus, RunCreated } from '../../../shared/types'
 import { createNarrative, createRun, getCopilotStatus } from '../api'
 import { Field } from '../components/Field'
+import { NarrativeLive } from '../components/NarrativeLive'
 import { StatusMessage } from '../components/StatusMessage'
 import { useApp } from '../context'
 import { hours, today } from '../format'
 import { modelName, t } from '../i18n'
-import { progressLabel, useNarrativeProgress } from '../narrative-progress'
+import { useNarrativeProgress } from '../narrative-progress'
 
 type Phase = 'idle' | 'forecasting' | 'narrating' | 'done'
 
@@ -23,7 +24,7 @@ export function Run(): React.JSX.Element {
   const [result, setResult] = useState<RunCreated | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { step, elapsed } = useNarrativeProgress(phase === 'narrating' && result ? result.run_id : null)
+  const live = useNarrativeProgress(phase === 'narrating' && result ? result.run_id : null)
 
   useEffect(() => { getCopilotStatus().then(setCopilot).catch(() => setCopilot(null)) }, [])
 
@@ -74,11 +75,7 @@ export function Run(): React.JSX.Element {
         <button className="primary" disabled={!selected || busy} onClick={() => { void start() }}>{t('run.start')}</button>
       </section>
       {phase === 'forecasting' && <StatusMessage kind="info">{t('run.progress.forecasting', { team: selected?.name ?? '' })}</StatusMessage>}
-      {phase === 'narrating' && (
-        <StatusMessage kind="info">
-          {progressLabel(step)} <span className="muted">{t('run.progress.elapsed', { seconds: String(elapsed) })}</span>
-        </StatusMessage>
-      )}
+      {phase === 'narrating' && <NarrativeLive {...live} />}
       {aiError && <StatusMessage kind="error">{t('run.aiFailed', { reason: aiError })}</StatusMessage>}
       {phase === 'done' && result && (
         <section className="panel">

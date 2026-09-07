@@ -74,7 +74,7 @@ describe('Run', () => {
     installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
       'POST /runs': RUN_CREATED,
-      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
       'POST /runs/5/narrative': () => held,
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
@@ -99,6 +99,21 @@ describe('Run', () => {
       vi.useRealTimers()
     }
   })
+  it('shows what Copilot is thinking while it writes the narrative', async () => {
+    const held = new Promise(() => {})
+    installFakeWhf({
+      'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
+      'POST /runs': RUN_CREATED,
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: 'Reading capacity…', answer: '' },
+      'POST /runs/5/narrative': () => held,
+    })
+    render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
+    const button = await screen.findByRole('button', { name: 'Run forecast' })
+    await waitFor(() => expect(screen.getByLabelText('Ask Copilot for the narrative')).not.toBeDisabled())
+    await userEvent.click(button)
+    expect(await screen.findByText('Reading capacity…')).toBeInTheDocument()
+    expect(screen.getByText('What Copilot is thinking')).toBeInTheDocument()
+  })
   it('keeps the last known step instead of reverting to the generic message when a poll comes back empty', async () => {
     let finish: (value: unknown) => void = () => {}
     const held = new Promise((resolve) => { finish = resolve })
@@ -109,8 +124,8 @@ describe('Run', () => {
       'GET /runs/5/narrative/progress': () => {
         pollCount += 1
         return pollCount === 1
-          ? { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] }
-          : { run_id: 5, steps: [] }
+          ? { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' }
+          : { run_id: 5, steps: [], thinking: '', answer: '' }
       },
       'POST /runs/5/narrative': () => held,
     })
@@ -142,7 +157,7 @@ describe('Run', () => {
     const fake = installFakeWhf({
       'GET /meta': META, 'GET /profile': { member_id: 11, role: 'team_leader' }, 'GET /copilot/status': ready,
       'POST /runs': RUN_CREATED,
-      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }] },
+      'GET /runs/5/narrative/progress': { run_id: 5, steps: [{ code: 'tool', detail: 'team_overview', at: '2026-09-04T10:00:00' }], thinking: '', answer: '' },
       'POST /runs/5/narrative': () => held,
     })
     render(<MemoryRouter initialEntries={['/run?team=1']}><AppProvider><Run /></AppProvider></MemoryRouter>)
