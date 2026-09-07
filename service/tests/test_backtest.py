@@ -54,6 +54,7 @@ def test_rolling_backtest_scores_every_model_origin_and_horizon() -> None:
     origins = default_origins(W0 + dt.timedelta(days=7 * 76), count=3)
     result = rolling_backtest(feat, MODEL_FACTORIES, origins, horizons=(1, 2))
     runnable = set(MODEL_FACTORIES) - set(result.unavailable)  # chronos2 needs torch and weights
+    assert {"seasonal_naive", "tsb", "gbm"} <= runnable  # those three always run
     assert set(result.scores["model"]) == runnable
     assert len(result.scores) == len(runnable) * 3 * 2
     assert ("gbm", 1) in result.residuals and len(result.residuals[("gbm", 1)]) == 3 * 8

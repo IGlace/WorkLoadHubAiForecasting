@@ -1,4 +1,6 @@
 import datetime as dt
+import sys
+import types
 
 import numpy as np
 import pandas as pd
@@ -60,6 +62,8 @@ class StubPipeline:
         rows = []
         for member, g in df.groupby(id_column, sort=False):
             last = float(g.sort_values(timestamp_column)[target].iloc[-1])
+            if last == 0.0:
+                last = float("nan")  # a real model may answer NaN; the adapter must not pass it on
             for k in range(1, prediction_length + 1):
                 ts = g[timestamp_column].max() + pd.Timedelta(weeks=k)
                 rows.append(
@@ -120,6 +124,79 @@ def test_registered_and_unavailable_without_torch(monkeypatch) -> None:
     monkeypatch.setattr(mod, "_import_pipeline_class", lambda: (_ for _ in ()).throw(ImportError("no torch")))
     with pytest.raises(ModelUnavailable, match="chronos2"):
         Chronos2Arrival().fit(_frame(), (1,))
+
+
+def test_a_broken_torch_install_is_reported_as_unavailable_not_raised(monkeypatch) -> None:
+    """The classic Windows failure is OSError [WinError 126], not ImportError; the run must survive it."""
+    import whf.models.chronos2 as mod
+
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace(set_num_threads=lambda n: None))
+    monkeypatch.setattr(mod, "_pipeline", None)
+    monkeypatch.setattr(
+        mod,
+        "_import_pipeline_class",
+        lambda: (_ for _ in ()).throw(OSError("[WinError 126] The specified module could not be found")),
+    )
+    with pytest.raises(ModelUnavailable, match="chronos2"):
+        Chronos2Arrival().fit(_frame(), (1,))
+
+
+def test_fine_tuning_never_replaces_the_process_wide_pipeline(monkeypatch) -> None:
+    import whf.models.chronos2 as mod
+
+    class _Tuned(StubPipeline):
+        pass
+
+    class _Base(StubPipeline):
+        def fit(self, inputs, **kw):
+            return _Tuned()
+
+    sentinel = object()
+    monkeypatch.setattr(mod, "_pipeline", sentinel)
+    monkeypatch.setattr(mod, "load", lambda *a, **kw: pytest.fail("an injected pipeline must be used as the base"))
+    model = Chronos2Arrival(pipeline=_Base(), finetune=True).fit(_frame(), (1,))
+    assert mod._pipeline is sentinel
+    assert isinstance(model._pipeline, _Tuned)
+
+
+def test_fine_tuning_loads_a_private_copy_when_no_pipeline_is_injected(monkeypatch) -> None:
+    import whf.models.chronos2 as mod
+
+    class _Tuned(StubPipeline):
+        pass
+
+    class _Base(StubPipeline):
+        def fit(self, inputs, **kw):
+            return _Tuned()
+
+    shared_flags = []
+
+    def _load(env=None, *, shared=True):
+        shared_flags.append(shared)
+        return _Base()
+
+    sentinel = object()
+    monkeypatch.setattr(mod, "_pipeline", sentinel)
+    monkeypatch.setattr(mod, "load", _load)
+    model = Chronos2Arrival(finetune=True).fit(_frame(), (1,))
+    assert False in shared_flags  # the fine-tune base is a private pipeline
+    assert mod._pipeline is sentinel and isinstance(model._pipeline, _Tuned)
+
+
+def test_point_and_band_for_the_same_rows_cost_one_pipeline_call() -> None:
+    feat = _frame()
+    origin = W0 + dt.timedelta(days=7 * 30)
+    rows = feat[feat["week_start"] == origin]
+    stub = StubPipeline()
+    model = Chronos2Arrival(pipeline=stub).fit(feat[feat["week_start"] < origin], (1, 2))
+    model.predict(rows, horizon=1)
+    model.predict_quantiles(rows, horizon=1)
+    assert len(stub.calls) == 1
+    model.predict(rows, horizon=2)  # a different horizon is a different question
+    assert len(stub.calls) == 2
+    model.fit(feat[feat["week_start"] < origin], (1, 2))  # fit invalidates the memo
+    model.predict(rows, horizon=2)
+    assert len(stub.calls) == 3
 
 
 def test_weights_path_prefers_env_then_bundled(tmp_path) -> None:

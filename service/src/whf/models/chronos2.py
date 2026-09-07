@@ -64,30 +64,43 @@ def _import_pipeline_class() -> Any:
     return Chronos2Pipeline
 
 
-def load(env: Mapping[str, str] | None = None) -> Any:
-    """The process-wide Chronos2Pipeline on CPU, loaded on first use. Raises ModelUnavailable with the reason."""
+def load(env: Mapping[str, str] | None = None, *, shared: bool = True) -> Any:
+    """A Chronos2Pipeline on CPU. Raises ModelUnavailable with the reason instead of failing the run.
+
+    `shared` (the default) returns the process-wide instance, loaded on first use. `shared=False`
+    builds a fresh one from the same weights and leaves the cached instance alone; fine-tuning uses
+    it so that a LoRA fit can never reach the plain `chronos2` candidate running beside it.
+
+    Everything the load touches sits inside one handler: a missing library raises ImportError, but a
+    broken torch install raises OSError (`[WinError 126]` on Windows) and a corrupt checkpoint raises
+    whatever the library likes. All of them mean the same thing here - the model cannot run - and none
+    of them may reach the backtest, which only knows how to skip a ModelUnavailable candidate.
+    """
     global _pipeline
     with _lock:
-        if _pipeline is not None:
+        if shared and _pipeline is not None:
             return _pipeline
         path = weights_path(env)
         if path is not None:
-            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            # Bundled weights exist, so nothing may go to the network: an explicit HF_HUB_OFFLINE=0
+            # in the user's environment is overridden on purpose, not merely defaulted.
+            os.environ["HF_HUB_OFFLINE"] = "1"
         try:
             import torch
 
             cls = _import_pipeline_class()
-        except ImportError as exc:
-            raise ModelUnavailable(f"chronos2: library not installed ({exc})") from exc
-        torch.set_num_threads(min(MAX_THREADS, os.cpu_count() or 1))
-        try:
+            torch.set_num_threads(min(MAX_THREADS, os.cpu_count() or 1))
             if path is not None:
-                _pipeline = cls.from_pretrained(str(path), device_map="cpu")
+                pipeline = cls.from_pretrained(str(path), device_map="cpu")
             else:
-                _pipeline = cls.from_pretrained(WEIGHTS_REPO, revision=WEIGHTS_REVISION, device_map="cpu")
-        except Exception as exc:  # noqa: BLE001 - any loading failure means "unavailable here"
-            raise ModelUnavailable(f"chronos2: cannot load weights ({exc})") from exc
-        return _pipeline
+                pipeline = cls.from_pretrained(WEIGHTS_REPO, revision=WEIGHTS_REVISION, device_map="cpu")
+        except ModelUnavailable:
+            raise
+        except Exception as exc:
+            raise ModelUnavailable(f"chronos2: cannot load ({type(exc).__name__}: {exc})") from exc
+        if shared:
+            _pipeline = pipeline
+        return pipeline
 
 
 def warm_up() -> threading.Thread:
@@ -96,8 +109,8 @@ def warm_up() -> threading.Thread:
     def _run() -> None:
         try:
             load()
-        except ModelUnavailable:
-            pass
+        except Exception as exc:  # a daemon thread must never dump a traceback into the service's stderr
+            print(f"chronos2: warm-up skipped ({exc})", file=sys.stderr)
 
     thread = threading.Thread(target=_run, name="chronos2-warm-up", daemon=True)
     thread.start()
@@ -105,11 +118,18 @@ def warm_up() -> threading.Thread:
 
 
 class Chronos2Arrival:
+    """Zero-shot Chronos-2 over the weekly arrival series, with the feature matrix's covariates.
+
+    Fine-tuning is harness-only and always runs on a private pipeline: it never touches the
+    process-wide one that the plain `chronos2` candidate shares.
+    """
+
     name = "chronos2"
 
     def __init__(self, pipeline: ForecastPipeline | None = None, finetune: bool = False) -> None:
         self._pipeline = pipeline
         self._history: pd.DataFrame | None = None
+        self._memo: tuple[Any, dict[float, np.ndarray]] | None = None
         self.finetune = finetune
 
     def _pipe(self) -> Any:
@@ -120,19 +140,29 @@ class Chronos2Arrival:
         hist = train[keep].copy()
         hist["member_id"] = hist["member_id"].astype(int)
         self._history = hist.sort_values(["member_id", "week_start"]).reset_index(drop=True)
+        self._memo = None
         self._pipe()  # fail early with ModelUnavailable when the model cannot run here
         if self.finetune:
             self._finetune(max(horizons))
         return self
 
     def predict(self, rows: pd.DataFrame, horizon: int) -> np.ndarray:
-        return self._quantiles(rows, horizon)[0.5]
+        return self._quantiles(rows, horizon)[0.5].copy()  # a copy: the memo below hands out the same array
 
     def predict_quantiles(self, rows: pd.DataFrame, horizon: int) -> tuple[np.ndarray, np.ndarray]:
         q = self._quantiles(rows, horizon)
         return np.minimum(q[0.1], q[0.5]), np.maximum(q[0.9], q[0.5])
 
     def _quantiles(self, rows: pd.DataFrame, horizon: int) -> dict[float, np.ndarray]:
+        # The callers ask for the point value and the band separately (the backtest and the pipeline
+        # both do), which is the same inference twice; one memo of the last answer halves it.
+        key = (
+            tuple(sorted(set(rows["week_start"]))),
+            tuple(int(m) for m in rows["member_id"].astype(int)),
+            horizon,
+        )
+        if self._memo is not None and self._memo[0] == key:
+            return self._memo[1]
         df, future = self._frames(rows, horizon)
         try:
             import torch
@@ -153,7 +183,18 @@ class Chronos2Arrival:
         id_col = "member_id" if "member_id" in out.columns else "item_id"
         last = out.sort_values("timestamp").groupby(id_col).tail(1).set_index(id_col)
         ids = rows["member_id"].astype(int).to_numpy()
-        return {q: np.clip(last.loc[ids, str(q)].to_numpy(dtype=float), 0.0, None) for q in QUANTILES}
+        # A NaN or infinity from the model would travel straight into the demand; it means "no
+        # signal", so it becomes zero here rather than poisoning the arithmetic downstream.
+        answer = {
+            q: np.clip(
+                np.nan_to_num(last.loc[ids, str(q)].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0),
+                0.0,
+                None,
+            )
+            for q in QUANTILES
+        }
+        self._memo = (key, answer)
+        return answer
 
     def _frames(self, rows: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         if self._history is None:
@@ -206,10 +247,16 @@ class Chronos2Arrival:
         return pd.concat(past_frames, ignore_index=True), pd.DataFrame(future_rows)
 
     def _finetune(self, prediction_length: int) -> None:
-        """Harness-only LoRA fine-tune on the training window (targets only). Replaces this instance's pipeline."""
+        """Harness-only LoRA fine-tune on the training window (targets only). Replaces this instance's pipeline.
+
+        The base is an injected pipeline or a private copy of the weights, never the process-wide
+        instance: `fit` may return `self` or attach adapters in place, which would silently turn every
+        later `chronos2` fit in this process into the fine-tuned model.
+        """
         assert self._history is not None
+        base = self._pipeline if self._pipeline is not None else load(shared=False)
         inputs = [g["est_hours"].to_numpy(dtype=np.float32) for _, g in self._history.groupby("member_id", sort=True)]
-        self._pipeline = self._pipe().fit(
+        self._pipeline = base.fit(
             inputs,
             prediction_length=prediction_length,
             finetune_mode="lora",

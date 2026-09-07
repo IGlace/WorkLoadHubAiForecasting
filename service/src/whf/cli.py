@@ -401,6 +401,6 @@ def serve(
             port = s.getsockname()[1]
     from whf.models.chronos2 import warm_up
 
-    warm_up()
     typer.echo(json.dumps({"port": port, "token": token}), nl=True)
+    warm_up()  # after the handshake line: the client must not wait on a model load
     uvicorn.run(create_app(db or db_path(), token), host="127.0.0.1", port=port, log_level="warning")
