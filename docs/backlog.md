@@ -127,6 +127,12 @@ first install straight away; the installer now seeds the data itself, see "Lande
   or resolves a CUDA build at run time). Pending: which candidates become the default champion set is a
   decision for the real data, not this harness's dummy-data run. Spec:
   `docs/superpowers/specs/2026-09-06-forecast-evaluation-and-chronos2-design.md`.
+  - First harness run on generated data (seed 42, twelve months): `docs/eval/2026-09-07-generated/summary.md`.
+    Winner on generated data: gbm, MASE 0.821 at horizon 1; demand MAE 8.778 h per member-week; overload
+    recall nan (no overload weeks in this backtest window, so precision and recall are both undefined).
+    Took 31.6 minutes end to end, over the fifteen-minute budget in the brief; kept because it completed
+    with exit 0 and all four models scored. Not a decision: the generator wrote the truth. The real-data
+    run next week decides.
   - Deferred: gap weeks between the training cut-off and the forecast origin carry forward-filled covariates
     in the Chronos-2 context (up to three weeks stale for the deadline-proximity covariate).
   - Deferred: the fine-tuned harness candidate loads the weights twice (shared availability check, then a
