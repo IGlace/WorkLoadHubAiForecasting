@@ -62,6 +62,10 @@ docs/      research, requirements, specs, plans
 - Commands: `uv run pytest` in `service/`; `npm test`, `npm run lint`, `npm run typecheck` in `app/`;
   `uv run whf eval` in `service/` runs the evaluation harness, writing `scores.csv`, `demand.csv` and
   `summary.md`.
+- Notebooks: `docs/notebooks/gbm-forecast-walkthrough.ipynb` walks one team through load, feature matrix,
+  backtest, forecast with a forced model and the Copilot narrative, using the service's own functions. Run from
+  `service/` with `uv run --with jupyter --with matplotlib jupyter lab <path>`; Jupyter and matplotlib are not
+  project dependencies. Copilot calls go through a worker thread there because they own their asyncio loop.
 - Local gate (mirrors CI): `pwsh scripts/check.ps1` runs the fast
   checks in about two and a half minutes, `-Full` adds the slow pytest suite and the app build,
   `-Package` adds the installer. `pwsh scripts/release.ps1` runs the full gate and then
