@@ -36,6 +36,13 @@ below has a source link; verify before relying on details that may have changed.
 - Supports custom tools (`defineTool` in TS, `@define_tool` + Pydantic in Python),
   custom agents, skills, MCP servers, streaming, sessions. Node/Python/.NET packages
   bundle the CLI binary. Runtime: Node 20+ or Python 3.11+.
+- Java (checked 2026-09-08 for the server-side design): `com.github:copilot-sdk-java`
+  on Maven Central (1.0.13 at the time of checking), Java 17+, bundles the CLI runtime,
+  `@CopilotTool` for custom tools, `setGitHubToken` / `setGitHubTokenProvider` with
+  `setUseLoggedInUser(false)` for per-user OAuth tokens (`gho_`, `ghu_`, `github_pat_`;
+  classic `ghp_` not accepted). Each user still needs a Copilot seat; the calling
+  application owns the OAuth refresh.
+  https://github.com/github/copilot-sdk/tree/main/java
   https://github.com/github/copilot-sdk
   https://github.com/github/copilot-sdk/blob/main/docs/getting-started.md
   https://github.blog/news-insights/company-news/build-an-agent-into-any-app-with-the-github-copilot-sdk/
