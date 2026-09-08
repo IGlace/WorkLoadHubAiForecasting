@@ -18,6 +18,9 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
   (plan: `docs/superpowers/plans/2026-09-07-planned-work-and-likely-work.md`).
 - `docs/design/2026-09-07-forecasting-internals.md`: the feature matrix, the four arrival models' algorithms,
   and the backtest tournament end to end, as the code does it (update it when that code changes).
+- `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md`: the real WorkloadHub schema mapped to
+  the forecast, and the feature matrix redesigned for it; the basis of the server-side Java implementation.
+  The export it was written from holds credentials and personal data and is never committed.
 - `docs/superpowers/plans/`: implementation plans, when present.
 - `docs/backlog.md`: open items after version 1 (polish, Windows verification, design decisions, future topics).
 
