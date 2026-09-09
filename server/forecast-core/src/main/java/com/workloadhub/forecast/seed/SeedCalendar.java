@@ -24,7 +24,11 @@ public final class SeedCalendar {
         List<LinkedHashMap<String, Object>> all = new ArrayList<>(rows);
         Set<Integer> yearsWithRows = new HashSet<>();
         for (LinkedHashMap<String, Object> h : rows) {
-            yearsWithRows.add(LocalDate.parse((String) h.get("start_date")).getYear());
+            LocalDate rowStart = LocalDate.parse((String) h.get("start_date"));
+            LocalDate rowEnd = LocalDate.parse((String) h.get("end_date"));
+            for (int y = rowStart.getYear(); y <= rowEnd.getYear(); y++) {
+                yearsWithRows.add(y);
+            }
         }
         for (int year = cfg.firstMonday().getYear(); year <= cfg.lastDay().getYear(); year++) {
             if (yearsWithRows.contains(year)) {
@@ -34,18 +38,24 @@ public final class SeedCalendar {
                 if (!"NATIONAL".equals(h.get("type")) || !"CONFIRMED".equals(h.get("status"))) {
                     continue;
                 }
-                LocalDate start = LocalDate.parse((String) h.get("start_date")).withYear(year);
-                LocalDate end = LocalDate.parse((String) h.get("end_date")).withYear(year);
+                LocalDate start = LocalDate.parse((String) h.get("start_date"));
+                LocalDate end = LocalDate.parse((String) h.get("end_date"));
+                long delta = (long) year - start.getYear();
+                LocalDate shiftedStart = start.plusYears(delta);
+                LocalDate shiftedEnd = end.plusYears(delta);
                 LinkedHashMap<String, Object> copy = new LinkedHashMap<>(h);
                 copy.put("id", java.util.UUID.nameUUIDFromBytes((h.get("id") + ":" + year).getBytes()).toString());
-                copy.put("start_date", start.toString());
-                copy.put("end_date", end.toString());
+                copy.put("start_date", shiftedStart.toString());
+                copy.put("end_date", shiftedEnd.toString());
                 all.add(copy);
             }
         }
         Set<LocalDate> days = new TreeSet<>();
         for (LinkedHashMap<String, Object> h : all) {
-            boolean active = h.get("active") == null || Boolean.TRUE.equals(h.get("active")) || Long.valueOf(1).equals(h.get("active"));
+            Object activeVal = h.get("active");
+            boolean active = activeVal == null
+                    || (activeVal instanceof Boolean b && b)
+                    || (activeVal instanceof Number n && n.intValue() != 0);
             if (!"CONFIRMED".equals(h.get("status")) || !active) {
                 continue;
             }

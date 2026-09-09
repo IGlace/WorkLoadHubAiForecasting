@@ -52,4 +52,19 @@ class SeedCalendarTest {
         assertEquals(3, cal.holidayRows().size());
         assertTrue(cal.holidayRows().stream().anyMatch(h -> "2025-11-18".equals(h.get("start_date"))));
     }
+
+    @Test
+    void replicationOfAYearBoundaryHolidayShiftsBothEndsTogether() {
+        SeedCalendar cal = SeedCalendar.fromHolidayRows(List.of(
+                holiday("New Year", "2026-12-31", "2027-01-02", "CONFIRMED", "NATIONAL")), cfg());
+        assertFalse(cal.isWorkingDay(LocalDate.of(2025, 12, 31)), "replica for 2025 spanning into 2026");
+        assertFalse(cal.isWorkingDay(LocalDate.of(2026, 1, 2)), "replica for 2025 spanning into 2026");
+        for (LinkedHashMap<String, Object> h : cal.holidayRows()) {
+            LocalDate start = LocalDate.parse((String) h.get("start_date"));
+            LocalDate end = LocalDate.parse((String) h.get("end_date"));
+            assertFalse(start.isAfter(end), "start_date after end_date: " + h);
+        }
+        // 2026 and 2027 are already covered by the original row's range; only 2025 is missing.
+        assertEquals(2, cal.holidayRows().size());
+    }
 }
