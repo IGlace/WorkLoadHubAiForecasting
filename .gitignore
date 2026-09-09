@@ -27,3 +27,7 @@ app/out/
 
 # Rendered reports (regenerate from the HTML; the pre-commit hook blocks binaries)
 docs/reports/**/*.pdf
+
+# Java module build output and jqwik state
+server/**/target/
+server/**/.jqwik-database
