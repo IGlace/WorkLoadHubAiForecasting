@@ -54,6 +54,8 @@ app/       Electron + React + TypeScript desktop app (`src/main`, `src/preload`,
 installer/ PyInstaller and electron-builder configuration, installer README, weight prefetch
            (`installer/pyinstaller/download_weights.py`)
 scripts/   PowerShell and shell helpers (`dev-app.ps1`, `build-service.{ps1,sh}`, `build-installer.ps1`)
+server/    Java 21 module for the WorkloadHub Spring Boot server: `forecast-core` (library) and `forecast-cli`
+           (WSL command line: init-db, import, export, seed); see docs/superpowers/specs/2026-09-09-java-forecast-module-design.md
 docs/      research, requirements, specs, plans
 .claude/   skills, agents, hooks, settings
 ```
@@ -76,6 +78,9 @@ docs/      research, requirements, specs, plans
   has no pre-merge hook for a fast-forward. Activate the hooks once per clone with
   `git config core.hooksPath scripts/hooks`; escape them with `git commit --no-verify` or
   `WHF_SKIP_HOOKS=1`.
+- Java: Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik; `mvn -B verify` in `server/` is the gate (under three
+  minutes without Docker; PostgreSQL tests run when Docker is present). The real export and any real-mode
+  seed output stay outside the repository.
 - Packaging: PyInstaller (`installer/pyinstaller/whf.spec`), electron-builder
   (`installer/electron-builder.yml`); `pwsh scripts/build-installer.ps1` builds the
   installer. `.github/workflows/ci.yml` runs the same gate on GitHub for pushes to `dev` and

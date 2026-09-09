@@ -263,3 +263,9 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   smoke test already checks the handshake below the UI. Revisit when the app is installed on more than one
   machine, or when the manual checklist has to be run often enough to be worth automating. Everything beyond
   the smoke path stays deferred as it was (spec section 10: "later").
+
+## Java migration
+
+- Seed realism to revisit after the first forecast on seeded data: per-department rhythms, the share of
+  reopened and unlogged tasks, and whether department teams (people without a manager) should run their own
+  forecast.

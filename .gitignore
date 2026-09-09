@@ -31,3 +31,11 @@ docs/reports/**/*.pdf
 # Java module build output and jqwik state
 server/**/target/
 server/**/.jqwik-database
+
+# Java module: build output, local databases, real-mode seed output (personal data)
+server/**/target/
+server/**/*.db
+server/**/*.db-journal
+*seeded*.json
+*seeded*.sql
+workloadhub_export*.json
