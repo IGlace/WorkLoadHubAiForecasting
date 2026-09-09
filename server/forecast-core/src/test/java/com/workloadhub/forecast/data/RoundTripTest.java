@@ -17,7 +17,8 @@ import org.junit.jupiter.api.Test;
 
 class RoundTripTest {
 
-    private static final Pattern TIMESTAMP = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?");
+    private static final Pattern TIMESTAMP =
+            Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?");
 
     /** Rows compared with numbers as doubles and timestamps parsed, so 16 and 16.0 or .54207 and .542070 are equal. */
     static Map<String, List<TreeMap<String, Object>>> canonical(ExportEnvelope env) {

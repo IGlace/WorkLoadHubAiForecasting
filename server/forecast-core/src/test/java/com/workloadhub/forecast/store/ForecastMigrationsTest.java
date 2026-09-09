@@ -13,7 +13,8 @@ class ForecastMigrationsTest {
 
     static TreeSet<String> tables(DataSource ds) throws Exception {
         TreeSet<String> out = new TreeSet<>();
-        try (Connection c = ds.getConnection(); ResultSet rs = c.getMetaData().getTables(null, null, "forecast_%", null)) {
+        try (Connection c = ds.getConnection();
+                ResultSet rs = c.getMetaData().getTables(null, null, "forecast_%", new String[] {"TABLE"})) {
             while (rs.next()) {
                 out.add(rs.getString("TABLE_NAME"));
             }
