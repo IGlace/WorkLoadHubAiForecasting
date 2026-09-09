@@ -50,6 +50,10 @@ public class SeedCommand implements Callable<Integer> {
             System.err.println("Real mode needs --export <file>; or pass --synthetic");
             return 2;
         }
+        if (!synthetic && users > 0) {
+            System.err.println("--users only applies with --synthetic (real mode keeps every user from --export)");
+            return 2;
+        }
         if (!synthetic && !force && insideGitRepository(out)) {
             System.err.println("Real-mode output holds personal data; write it outside the repository or pass --force");
             return 2;

@@ -89,6 +89,9 @@ public final class ExportImporter {
     }
 
     private int insert(Connection c, String table, List<LinkedHashMap<String, Object>> rows) throws SQLException {
+        // a self-referencing row (e.g. users.manager_id) must not land in a later batch than its parent:
+        // PostgreSQL's non-deferrable foreign keys are checked at the end of each statement/batch.
+        rows = WorkloadHubSchema.parentsFirst(table, rows);
         LinkedHashMap<String, String> schemaColumns = columns(c, table);
         List<String> cols = new ArrayList<>();
         for (String col : schemaColumns.keySet()) {

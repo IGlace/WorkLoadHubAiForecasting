@@ -6,6 +6,10 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,7 +39,66 @@ public final class WorkloadHubSchema {
             "user_roles", Set.of("active"),
             "users", Set.of("active"));
 
+    /**
+     * Table to the column that self-references a row of the same table. None of these are DEFERRABLE
+     * in the DDL, so PostgreSQL checks them at the end of each statement: a row referencing a parent
+     * written in a later batch or statement fails. {@link #parentsFirst} reorders around this.
+     */
+    public static final Map<String, String> SELF_REFERENCES = Map.of(
+            "users", "manager_id",
+            "teams", "parent_team_id",
+            "tasks", "parent_task_id",
+            "task_comments", "parent_comment_id",
+            "task_types", "subtask_type_id");
+
     private WorkloadHubSchema() {
+    }
+
+    /**
+     * Reorders a self-referencing table's rows so every row's parent (by {@link #SELF_REFERENCES}'s
+     * column for that table) comes before it, when that parent is present in {@code rows}; rows with no
+     * such column, an absent parent, or no dependency on one another keep their original relative order.
+     * A cycle among self-references cannot be topologically ordered; it is broken (not looped forever) by
+     * placing the first row of the cycle encountered without waiting on the rest of the cycle.
+     */
+    public static List<LinkedHashMap<String, Object>> parentsFirst(String table, List<LinkedHashMap<String, Object>> rows) {
+        String column = SELF_REFERENCES.get(table);
+        if (column == null || rows.size() < 2) {
+            return rows;
+        }
+        Map<Object, LinkedHashMap<String, Object>> byId = new HashMap<>();
+        for (LinkedHashMap<String, Object> r : rows) {
+            byId.put(r.get("id"), r);
+        }
+        List<LinkedHashMap<String, Object>> out = new ArrayList<>(rows.size());
+        Set<Object> placed = new HashSet<>();
+        for (LinkedHashMap<String, Object> r : rows) {
+            placeAncestorsFirst(r, column, byId, out, placed);
+        }
+        return out;
+    }
+
+    /**
+     * Walks {@code row}'s chain of self-referenced parents (stopping at one already placed, one absent
+     * from {@code byId}, or one already seen in this walk, which marks a cycle), then places the chain
+     * from its oldest unplaced ancestor down to {@code row} itself, each row placed at most once.
+     */
+    private static void placeAncestorsFirst(LinkedHashMap<String, Object> row, String column,
+            Map<Object, LinkedHashMap<String, Object>> byId, List<LinkedHashMap<String, Object>> out, Set<Object> placed) {
+        List<LinkedHashMap<String, Object>> chain = new ArrayList<>();
+        Set<Object> onChain = new HashSet<>();
+        LinkedHashMap<String, Object> current = row;
+        while (current != null && !placed.contains(current.get("id")) && onChain.add(current.get("id"))) {
+            chain.add(current);
+            Object parentId = current.get(column);
+            current = parentId == null ? null : byId.get(parentId);
+        }
+        for (int i = chain.size() - 1; i >= 0; i--) {
+            LinkedHashMap<String, Object> r = chain.get(i);
+            if (placed.add(r.get("id"))) {
+                out.add(r);
+            }
+        }
     }
 
     public static boolean isBoolean(String table, String column) {

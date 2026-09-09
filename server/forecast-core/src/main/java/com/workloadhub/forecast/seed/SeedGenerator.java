@@ -18,20 +18,40 @@ public final class SeedGenerator {
     private SeedGenerator() {
     }
 
-    /** Replaces every occurrence of a scrubbed identity's original text with its replacement, in place. */
+    /**
+     * Replaces every occurrence of a scrubbed identity's original text with its replacement, in place.
+     * Keys are applied longest first, so a name that is a literal prefix of another (e.g. "Amina" inside
+     * "Aminata") cannot consume part of the longer name before the longer name's own entry gets a chance
+     * to match the whole thing. Blank keys are never present (the caller filters them), but are skipped
+     * here too: {@code "".replace("", x)} would otherwise splice x between every character of every string.
+     */
     private static void scrubIdentities(LinkedHashMap<String, Object> row, Map<String, String> identityScrub) {
         if (identityScrub.isEmpty()) {
             return;
         }
+        List<Map.Entry<String, String>> byLengthDesc = new ArrayList<>(identityScrub.entrySet());
+        byLengthDesc.removeIf(e -> e.getKey() == null || e.getKey().isBlank());
+        byLengthDesc.sort(Comparator.comparingInt((Map.Entry<String, String> e) -> e.getKey().length()).reversed());
         for (Map.Entry<String, Object> e : row.entrySet()) {
             if (e.getValue() instanceof String s) {
                 String scrubbed = s;
-                for (Map.Entry<String, String> r : identityScrub.entrySet()) {
+                for (Map.Entry<String, String> r : byLengthDesc) {
                     scrubbed = scrubbed.replace(r.getKey(), r.getValue());
                 }
                 if (!scrubbed.equals(s)) {
                     e.setValue(scrubbed);
                 }
+            }
+        }
+    }
+
+    /** Non-blank original identity fields of {@code original}, mapped to the same fields of {@code replacement}. */
+    private static void addIdentityScrub(Map<String, String> identityScrub, LinkedHashMap<String, Object> original,
+            LinkedHashMap<String, Object> replacement) {
+        for (String field : List.of("full_name", "email", "username", "account_name")) {
+            Object oldValue = original.get(field);
+            if (oldValue instanceof String s && !s.isBlank()) {
+                identityScrub.put(s, (String) replacement.get(field));
             }
         }
     }
@@ -54,6 +74,10 @@ public final class SeedGenerator {
         List<LinkedHashMap<String, Object>> holidays;
         List<LinkedHashMap<String, Object>> jobTitles;
         List<LinkedHashMap<String, Object>> syncMetadata;
+        // every non-blank full_name/email/username/account_name of every input user (kept or not,
+        // built before shrink) mapped to its anonymised replacement, for scrubbing free text carried
+        // over unmodified from the input; empty (and unused) outside synthetic-mode-with-real-input.
+        Map<String, String> identityScrub = new HashMap<>();
         if (input != null) {
             users = input.rows("users");
             teams = input.rows("teams");
@@ -66,7 +90,18 @@ public final class SeedGenerator {
             jobTitles = input.rows("job_titles");
             syncMetadata = input.rows("sync_metadata");
             if (synthetic) {
-                users = Anonymiser.anonymise(Anonymiser.shrink(users, cfg.users()), rnd);
+                // anonymise every input user first (not just the kept ones), so a person's original
+                // identity can be scrubbed from carried-over free text even when they get shrunk out
+                // of the users table entirely; shrink afterwards to select who is actually kept. The
+                // fields shrink sorts and filters on (department, manager_id, id) are untouched by
+                // anonymise, so which users end up kept is the same either order.
+                List<LinkedHashMap<String, Object>> anonymisedAll = Anonymiser.anonymise(users, rnd);
+                for (int i = 0; i < users.size(); i++) {
+                    addIdentityScrub(identityScrub, users.get(i), anonymisedAll.get(i));
+                }
+                users = Anonymiser.shrink(anonymisedAll, cfg.users());
+                // operator usernames with no forecast value; never carried into a synthetic export
+                syncMetadata = List.of();
             }
             if (!Reference.covers(statuses, types)) {
                 // a partial export (tests, early installs): use the reference rows instead
@@ -97,28 +132,9 @@ public final class SeedGenerator {
             users.forEach(u -> ids.add(u.get("id")));
             members = members.stream().filter(m -> ids.contains(m.get("user_id"))).toList();
             // real identities can be embedded in free text carried over from the input (a team name
-            // built as "<dept> · <manager's full name>", say): replace every kept user's original
-            // full name and email, wherever they appear in the rows kept from the input, with their
+            // built as "<dept> · <manager's full name>", say): scrub every kept and dropped input
+            // user's original identity, wherever it appears in the rows kept from the input, with its
             // anonymised replacement, so no leftover string in the export can identify anyone.
-            Map<String, String> identityScrub = new HashMap<>();
-            if (input != null) {
-                Map<String, LinkedHashMap<String, Object>> originalById = new HashMap<>();
-                for (LinkedHashMap<String, Object> u : input.rows("users")) {
-                    originalById.put((String) u.get("id"), u);
-                }
-                for (LinkedHashMap<String, Object> u : users) {
-                    LinkedHashMap<String, Object> original = originalById.get((String) u.get("id"));
-                    if (original == null) {
-                        continue;
-                    }
-                    if (original.get("full_name") != null) {
-                        identityScrub.put((String) original.get("full_name"), (String) u.get("full_name"));
-                    }
-                    if (original.get("email") != null) {
-                        identityScrub.put((String) original.get("email"), (String) u.get("email"));
-                    }
-                }
-            }
             teams = teams.stream().map(t -> {
                 LinkedHashMap<String, Object> row = new LinkedHashMap<>(t);
                 if (row.get("manager_id") != null && !ids.contains(row.get("manager_id"))) {

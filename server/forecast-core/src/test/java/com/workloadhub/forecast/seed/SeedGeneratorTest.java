@@ -158,12 +158,14 @@ class SeedGeneratorTest {
     @Test
     void capacityRowsAreConsistent() {
         ExportEnvelope env = generated();
+        SeedCalendar cal = SeedCalendar.fromHolidayRows(env.rows("holidays"), CFG);
         Map<String, Double> available = new HashMap<>();
         for (var r : env.rows("user_capacity")) {
-            double base = (Double) r.get("base_capacity_hrs");
             double abs = (Double) r.get("absence_hrs");
             double avail = (Double) r.get("available_hrs");
-            assertTrue(avail <= base - abs + 1e-9 && avail >= 0);
+            LocalDate monday = LocalDate.parse((String) r.get("week_start"));
+            double expected = Math.max(0.0, 40.0 * cal.workingDays(monday) / 5.0 - abs);
+            assertEquals(expected, avail, 1e-9, "available_hrs for " + r.get("user_id") + "@" + monday);
             available.put(r.get("user_id") + "|" + r.get("week_start"), avail);
         }
         Map<String, List<String>> members = new HashMap<>();
@@ -201,16 +203,59 @@ class SeedGeneratorTest {
     @Test
     void syntheticModeLeavesNoInputIdentityBehind() throws Exception {
         ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
-        SeedConfig cfg = new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, true, 0);
+        // users=1 shrinks the fixture's second user out of the users table entirely: the scrub must
+        // still cover them, not just whoever ends up kept.
+        SeedConfig cfg = new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, true, 1);
         String json = ExportFiles.toJson(SeedGenerator.generate(real, cfg));
         for (var u : real.rows("users")) {
-            for (String col : List.of("full_name", "email")) {
+            for (String col : List.of("full_name", "email", "username")) {
                 assertFalse(json.contains((String) u.get(col)), col + " leaked: " + u.get(col));
             }
         }
         ExportEnvelope out = ExportFiles.parse(json);
+        assertEquals(1, out.rows("users").size(), "the second user was shrunk out");
         assertTrue(out.rows("users").stream().allMatch(u -> ((String) u.get("username")).startsWith("user") && u.get("password") == null
                 && u.get("object_id") == null && u.get("manager_object_id") == null));
+    }
+
+    @Test
+    void syntheticModeScrubsAPrefixNameWithoutLeakingTheLongerOne() throws Exception {
+        ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        // "Zed" is a literal prefix of "Zedwards"; neither is in ReferenceData's name pool, so a newly
+        // generated replacement name can never coincidentally contain either. A shortest-key-first scrub
+        // would consume "Zed" out of "Zedwards" first and leave a corrupted "<replacement>wards" behind
+        // instead of the whole, correct replacement for "Zedwards".
+        real.rows("users").get(0).put("full_name", "Zed");
+        real.rows("users").get(1).put("full_name", "Zedwards");
+        real.rows("teams").get(0).put("name", "Zedwards");
+        SeedConfig cfg = new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, true, 0);
+        ExportEnvelope out = SeedGenerator.generate(real, cfg);
+        String newLongName = out.rows("users").stream()
+                .filter(u -> "30000000-0000-0000-0000-000000000002".equals(u.get("id")))
+                .findFirst().orElseThrow().get("full_name").toString();
+        String teamName = out.rows("teams").stream()
+                .filter(t -> "40000000-0000-0000-0000-000000000001".equals(t.get("id")))
+                .findFirst().orElseThrow().get("name").toString();
+        assertEquals(newLongName, teamName);
+    }
+
+    @Test
+    void selfReferencingTablesAreParentsFirstOrdered() {
+        ExportEnvelope env = generated();
+        for (String table : WorkloadHubSchema.SELF_REFERENCES.keySet()) {
+            String column = WorkloadHubSchema.SELF_REFERENCES.get(table);
+            List<LinkedHashMap<String, Object>> ordered = WorkloadHubSchema.parentsFirst(table, env.rows(table));
+            Map<Object, Integer> indexOf = new HashMap<>();
+            for (int i = 0; i < ordered.size(); i++) {
+                indexOf.put(ordered.get(i).get("id"), i);
+            }
+            for (int i = 0; i < ordered.size(); i++) {
+                Object parentId = ordered.get(i).get(column);
+                if (parentId != null && indexOf.containsKey(parentId)) {
+                    assertTrue(indexOf.get(parentId) < i, table + ": parent " + parentId + " not before row at " + i);
+                }
+            }
+        }
     }
 
     @Test

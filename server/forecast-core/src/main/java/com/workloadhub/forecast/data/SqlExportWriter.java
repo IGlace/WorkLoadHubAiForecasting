@@ -18,7 +18,7 @@ public final class SqlExportWriter {
     public static void write(ExportEnvelope env, Writer out) throws IOException {
         out.write("BEGIN;\nSET search_path TO task_service;\n");
         for (String table : WorkloadHubSchema.TABLE_ORDER) {
-            List<LinkedHashMap<String, Object>> rows = env.rows(table);
+            List<LinkedHashMap<String, Object>> rows = WorkloadHubSchema.parentsFirst(table, env.rows(table));
             if (rows.isEmpty()) {
                 continue;
             }

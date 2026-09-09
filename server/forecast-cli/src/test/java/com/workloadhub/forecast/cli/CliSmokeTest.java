@@ -46,4 +46,13 @@ class CliSmokeTest {
         assertEquals(2, cli.execute("seed", "--export", fixture.toString(), "--weeks", "8", "--out", inRepo.toString()));
         assertFalse(Files.exists(inRepo));
     }
+
+    @Test
+    void realModeRefusesUsersWithoutSynthetic(@TempDir Path dir) throws Exception {
+        CommandLine cli = new CommandLine(new ForecastCli.Root());
+        Path fixture = Path.of("../forecast-core/src/test/resources/fixtures/mini-export.json");
+        Path out = dir.resolve("real-seeded.json");
+        assertEquals(2, cli.execute("seed", "--export", fixture.toString(), "--weeks", "8", "--users", "5", "--out", out.toString()));
+        assertFalse(Files.exists(out));
+    }
 }
