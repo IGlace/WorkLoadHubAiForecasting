@@ -10,9 +10,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
@@ -100,6 +102,17 @@ class WorkQueueTest {
                     .map(h -> ts(h.get("changed_at"))).max(LocalDateTime::compareTo).orElse(created);
             if (created.isAfter(assigned)) return false;
             if (started != null && assigned.isAfter(started)) return false;
+            // a task starts 0 to 3 present working days after its assignment
+            if (started != null && assignee != null) {
+                Person assigneePerson = byId.get(UUID.fromString(assignee));
+                int presentBetween = 0;
+                for (LocalDate d = assigned.toLocalDate().plusDays(1); d.isBefore(started.toLocalDate()); d = d.plusDays(1)) {
+                    if (w.plans().get(assigneePerson.id()).hoursPresent(assigneePerson, d) > 0) {
+                        presentBetween++;
+                    }
+                }
+                if (presentBetween > 3) return false;
+            }
             double logged = 0;
             for (var log : logs) {
                 LocalDate day = LocalDate.parse((String) log.get("log_date"));
@@ -144,7 +157,8 @@ class WorkQueueTest {
         Map<String, Long> assigneeRows = new HashMap<>();
         r.historyRows().stream().filter(h -> "assignee".equals(h.get("field_name")))
                 .forEach(h -> assigneeRows.merge((String) h.get("task_id"), 1L, Long::sum));
-        long epics = r.taskRows().stream().filter(t -> t.get("parent_task_id") == null && t.get("original_estimate_hrs") == null).count();
+        UUID epicType = reference().typeIds().get("Epic");
+        long epics = r.taskRows().stream().filter(t -> epicType.toString().equals(t.get("task_type_id"))).count();
         long withRow = r.taskRows().stream().filter(t -> assigneeRows.containsKey(t.get("id"))).count();
         // every non-epic task of a member with selfPicked share is either self-picked (no row) or backlog (one row)
         assertTrue(withRow > 0);
@@ -203,5 +217,122 @@ class WorkQueueTest {
         double fromMap = r.assignedHours().values().stream().flatMap(m -> m.values().stream()).mapToDouble(Double::doubleValue).sum();
         assertEquals(fromRows, fromMap, 1e-6);
         assertNull(r.taskRows().stream().filter(t -> t.get("original_estimate_hrs") == null).findFirst().orElseThrow().get("remaining_estimate_hrs"), "epics carry no estimate");
+    }
+
+    /** The `changed_at` of the task's assignee history row (backlog), else its `created_date` (self/leader/epic). */
+    static LocalDateTime assignedTimestamp(WorkQueue.Result r, LinkedHashMap<String, Object> t) {
+        return r.historyRows().stream()
+                .filter(h -> "assignee".equals(h.get("field_name")) && t.get("id").equals(h.get("task_id")))
+                .map(h -> ts(h.get("changed_at"))).max(LocalDateTime::compareTo).orElse(ts(t.get("created_date")));
+    }
+
+    @Test
+    void defaultRatesCoverAllModesSubTasksAndDataIntegrity() {
+        long seed = 7;
+        World w = world(seed);
+        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.teams(), w.projects(), w.rhythm(), w.ref(),
+                WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
+        Map<UUID, Person> byId = new HashMap<>();
+        w.people().forEach(p -> byId.put(p.id(), p));
+
+        // (a) all three creation modes occur
+        Set<String> withAssigneeHistory = new HashSet<>();
+        r.historyRows().stream().filter(h -> "assignee".equals(h.get("field_name")))
+                .forEach(h -> withAssigneeHistory.add((String) h.get("task_id")));
+        boolean backlogSeen = false;
+        boolean selfSeen = false;
+        boolean leaderSeen = false;
+        for (var t : r.taskRows()) {
+            Object assignee = t.get("assignee_id");
+            if (assignee == null) {
+                continue;
+            }
+            if (withAssigneeHistory.contains(t.get("id"))) {
+                backlogSeen = true;
+            } else if (assignee.equals(t.get("reporter_id"))) {
+                selfSeen = true;
+            } else {
+                leaderSeen = true;
+            }
+        }
+        assertTrue(backlogSeen, "backlog mode (assignee history row) occurs");
+        assertTrue(selfSeen, "self mode (reporter == assignee, no history row) occurs");
+        assertTrue(leaderSeen, "leader mode (reporter != assignee, no history row) occurs");
+
+        // (b) the sub-task path: a Sub-task under an Epic in the same project
+        UUID subTaskType = w.ref().type("Sub-task");
+        UUID epicType = w.ref().type("Epic");
+        Map<String, LinkedHashMap<String, Object>> byTaskId = new HashMap<>();
+        for (var t : r.taskRows()) {
+            byTaskId.put((String) t.get("id"), t);
+        }
+        boolean subTaskFound = r.taskRows().stream().anyMatch(t -> {
+            Object parentId = t.get("parent_task_id");
+            if (parentId == null || !subTaskType.toString().equals(t.get("task_type_id"))) {
+                return false;
+            }
+            var parent = byTaskId.get(parentId);
+            return parent != null && epicType.toString().equals(parent.get("task_type_id"))
+                    && parent.get("project_id").equals(t.get("project_id"));
+        });
+        assertTrue(subTaskFound, "at least one sub-task under an epic of the same project");
+
+        // (c) planned_week equals mondayOf(assignment day) when assigned, null when not
+        for (var t : r.taskRows()) {
+            Object plannedWeek = t.get("planned_week");
+            if (t.get("assignee_id") == null) {
+                assertNull(plannedWeek, "unassigned rows carry no planned week: " + t.get("id"));
+            } else {
+                LocalDateTime assigned = assignedTimestamp(r, t);
+                assertEquals(SeedConfig.mondayOf(assigned.toLocalDate()).toString(), plannedWeek, "planned week for " + t.get("id"));
+            }
+        }
+
+        // (d) nextTaskNumber per project equals the max task_number of that project's rows, plus one
+        Map<String, Long> maxByProject = new HashMap<>();
+        for (var t : r.taskRows()) {
+            maxByProject.merge((String) t.get("project_id"), (Long) t.get("task_number"), Long::max);
+        }
+        for (var e : maxByProject.entrySet()) {
+            UUID projectId = UUID.fromString(e.getKey());
+            assertEquals(e.getValue() + 1, r.nextTaskNumber().get(projectId), "next task number for project " + e.getKey());
+        }
+
+        // (e) per member and day, logged hours never exceed presence
+        Map<String, Double> perMemberDay = new HashMap<>();
+        for (var log : r.timeLogRows()) {
+            perMemberDay.merge(log.get("user_id") + "|" + log.get("log_date"), (Double) log.get("hours"), Double::sum);
+        }
+        for (var e : perMemberDay.entrySet()) {
+            String[] parts = e.getKey().split("\\|");
+            Person p = byId.get(UUID.fromString(parts[0]));
+            LocalDate day = LocalDate.parse(parts[1]);
+            assertTrue(e.getValue() <= w.plans().get(p.id()).hoursPresent(p, day) + 1e-9,
+                    "logged hours exceed presence for " + e.getKey());
+        }
+
+        // (f) determinism: an independently rebuilt world from the same seed (Rhythm owns a mutable
+        // SeedRandom of its own, consumed by arrivals()/estimate() as a run proceeds, so reusing `w`'s
+        // already-run rhythm would not be equal inputs) plus a fresh, equally-seeded SeedRandom gives
+        // equal rows.
+        World w2 = world(seed);
+        WorkQueue.Result r2 = WorkQueue.run(CFG, w2.cal(), w2.people(), w2.plans(), w2.teams(), w2.projects(), w2.rhythm(), w2.ref(),
+                WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
+        assertEquals(r.taskRows(), r2.taskRows());
+        assertEquals(r.historyRows(), r2.historyRows());
+        assertEquals(r.timeLogRows(), r2.timeLogRows());
+
+        // (g) every column of the export, in the export's order
+        List<String> taskColumns = List.of("id", "key", "title", "version", "archived", "due_date", "priority",
+                "created_at", "project_id", "updated_at", "archived_at", "assignee_id", "description", "reporter_id",
+                "task_number", "created_date", "planned_week", "started_date", "task_type_id", "finished_date",
+                "parent_task_id", "task_status_id", "last_reopened_at", "reopened_from_done", "original_estimate_hrs",
+                "remaining_estimate_hrs");
+        List<String> historyColumns = List.of("id", "task_id", "user_id", "new_value", "old_value", "changed_at",
+                "created_at", "field_name", "updated_at");
+        List<String> timeLogColumns = List.of("id", "note", "hours", "task_id", "user_id", "log_date", "created_at", "updated_at");
+        assertEquals(taskColumns, new ArrayList<>(r.taskRows().get(0).keySet()));
+        assertEquals(historyColumns, new ArrayList<>(r.historyRows().get(0).keySet()));
+        assertEquals(timeLogColumns, new ArrayList<>(r.timeLogRows().get(0).keySet()));
     }
 }

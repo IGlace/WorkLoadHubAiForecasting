@@ -43,6 +43,7 @@ public final class WorkQueue {
         double logged;
         boolean started;
         boolean unlogged;
+        boolean willBlock;
         int unloggedDaysLeft;
         int blockedLeft;
         boolean wasBlocked;
@@ -79,12 +80,12 @@ public final class WorkQueue {
     private final Rates rates;
     private final SeedRandom rnd;
     private final Map<UUID, Person> people = new HashMap<>();
-    private final Map<UUID, Long> nextNumber = new HashMap<>();
+    private final Map<UUID, Long> nextNumber = new TreeMap<>();
     private final Map<UUID, List<UUID>> epicsByProject = new HashMap<>();
     private final List<LinkedHashMap<String, Object>> taskRows = new ArrayList<>();
     private final List<LinkedHashMap<String, Object>> historyRows = new ArrayList<>();
     private final List<LinkedHashMap<String, Object>> timeLogRows = new ArrayList<>();
-    private final Map<UUID, Map<LocalDate, Double>> assignedHours = new HashMap<>();
+    private final Map<UUID, Map<LocalDate, Double>> assignedHours = new TreeMap<>();
     private final List<Team> teams;
     private final List<Project> projects;
 
@@ -227,17 +228,17 @@ public final class WorkQueue {
                 queue.addLast(assign(p, leader, arrivals.get(next), ratio));
                 next++;
             }
-            boolean working = cal.isWorkingDay(day);
             double hours = plan.hoursPresent(p, day);
+            boolean present = hours > 0;
             // reopen scheduled tasks
             for (Work w : new ArrayList<>(sleeping)) {
-                if (w.reopenOn != null && !day.isBefore(w.reopenOn) && working) {
+                if (w.reopenOn != null && !day.isBefore(w.reopenOn) && present) {
                     sleeping.remove(w);
                     reopen(p, w, day);
                     queue.addFirst(w);
                 }
             }
-            if (working) {
+            if (present) {
                 for (Work w : queue) {
                     if (w.blockedLeft > 0) {
                         w.blockedLeft--;
@@ -340,6 +341,7 @@ public final class WorkQueue {
         assignedHours.computeIfAbsent(p.id(), k -> new TreeMap<>()).merge(SeedConfig.mondayOf(a.assignDay()), a.estimate(), Double::sum);
         Work w = new Work(row, a.estimate(), actual, a.assignAt());
         w.unlogged = rnd.chance(rates.unlogged());
+        w.willBlock = rnd.chance(rates.blocked());
         w.unloggedDaysLeft = Math.max(1, cycleDays);
         if (rnd.chance(rates.reopen())) {
             w.reopened = false;
@@ -371,15 +373,41 @@ public final class WorkQueue {
         return d;
     }
 
-    private void logDay(Person p, Deque<Work> queue, LocalDate day, double hours) {
-        List<Work> active = new ArrayList<>();
-        for (Work w : queue) {
-            if (!w.unlogged && w.blockedLeft == 0 && !w.inReview && !w.finished()) {
-                active.add(w);
-                if (active.size() == MAX_ACTIVE) {
-                    break;
-                }
+    /** Present working days strictly between `assignDay` and `today`, excluding today itself. */
+    private int presentDaysSince(Person p, LocalDate assignDay, LocalDate today) {
+        AbsencePlanner.Plan plan = plans.get(p.id());
+        int n = 0;
+        for (LocalDate d = assignDay.plusDays(1); d.isBefore(today); d = d.plusDays(1)) {
+            if (plan.hoursPresent(p, d) > 0) {
+                n++;
             }
+        }
+        return n;
+    }
+
+    private void logDay(Person p, Deque<Work> queue, LocalDate day, double hours) {
+        // a task starts 0 to 3 working days after assignment: any not-yet-started, eligible task that
+        // has waited 3 present days or more is overdue and must be worked today, ahead of the usual
+        // top-three FIFO order and beyond MAX_ACTIVE if there are more than three of them at once.
+        List<Work> overdue = new ArrayList<>();
+        List<Work> rest = new ArrayList<>();
+        for (Work w : queue) {
+            if (w.unlogged || w.blockedLeft > 0 || w.inReview || w.finished()) {
+                continue;
+            }
+            if (!w.started && presentDaysSince(p, w.assignedAt.toLocalDate(), day) >= 3) {
+                overdue.add(w);
+            } else {
+                rest.add(w);
+            }
+        }
+        List<Work> active = new ArrayList<>(overdue);
+        int limit = Math.max(MAX_ACTIVE, overdue.size());
+        for (Work w : rest) {
+            if (active.size() >= limit) {
+                break;
+            }
+            active.add(w);
         }
         double left = hours;
         int i = 0;
@@ -407,7 +435,7 @@ public final class WorkQueue {
                 } else {
                     finish(p, w, day.atTime(17, 0));
                 }
-            } else if (!w.wasBlocked && w.logged >= 0.3 * w.actual && rnd.chance(rates.blocked())) {
+            } else if (!w.wasBlocked && w.willBlock && w.logged >= 0.3 * w.actual) {
                 w.wasBlocked = true;
                 w.blockedLeft = rnd.between(2, 5);
                 transition(p, w, "Blocked", day.atTime(17, 0));
