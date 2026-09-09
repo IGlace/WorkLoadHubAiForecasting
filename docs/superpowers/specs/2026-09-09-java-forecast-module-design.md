@@ -179,8 +179,8 @@ and 3 `teams`. Everything else is regenerated.
 Structure derived from the directory data:
 
 - **Teams.** One team per distinct `manager_id` among users (18 in the export), named after the
-  manager's department and name ("CT2 · Ben Salah"), `manager_id` set, the manager's role set to
-  `TEAM_LEADER`. A `team_members` row per report with `joined_at` = start of the history or a later
+  manager's department code and name ("CT2 · Ben Salah"), `manager_id` set, the manager's role set to
+  `TEAM_LEADER`. A department head's direct reports (the managers) form a team too, led by the head. A `team_members` row per report with `joined_at` = start of the history or a later
   random Monday for a 10 % minority (tenure ramps). The 3 existing teams stay for their 6 users.
 - **Departments.** One parent team per distinct department (spelling variants merged by their code:
   `CT2`, `SD1`, `DAI`, ...), `parent_team_id` on each manager team; its `manager_id` is the user in
@@ -194,19 +194,26 @@ Structure derived from the directory data:
 
 ### 4.2 Work families
 
-Job titles map to families by keyword, in this order of precedence (first match wins):
+Job titles map to families by whole-word, case-insensitive keyword match, in this order of
+precedence (the first family with a matching word wins; `data` and `support` come early so that
+"Data Analyst & SW Developer" is data, not electronics, and "IT System Administrator" is support,
+not systems):
 
 | Family | Title keywords | Type mix (delivery / defect / support / container) | Median estimate h | Self-picked share | Weekly assigned h (mean) |
 |---|---|---|---|---|---|
-| calibration | Calibration | 0.55 / 0.20 / 0.20 / 0.05 | 12 | 0.35 | 32 |
-| systems | System Dev, System engineering | 0.60 / 0.15 / 0.20 / 0.05 | 16 | 0.30 | 30 |
-| electronics | Electric, Electronics, EE, Software & Functions, SW | 0.50 / 0.30 / 0.15 / 0.05 | 10 | 0.40 | 30 |
-| data | Data Analyst, AI Engineer, DAI | 0.55 / 0.20 / 0.20 / 0.05 | 8 | 0.55 | 28 |
-| validation | Validation, Homologation, Fleet, Test | 0.45 / 0.35 / 0.15 / 0.05 | 12 | 0.30 | 30 |
-| design | Design, Simulation, CFD, DMU | 0.60 / 0.10 / 0.25 / 0.05 | 20 | 0.35 | 30 |
-| coordination | Project Manager, Coordination, Team Leader, Skill Team Leader, Center Manager, Workshop | 0.40 / 0.10 / 0.45 / 0.05 | 6 | 0.60 | 16 |
-| support | HR, Admin, Finance, Purchasing, IT, Facility | 0.50 / 0.20 / 0.30 / 0.00 | 4 | 0.70 | 20 |
-| unknown | no title | family of the department's most common title, else systems | | | |
+| calibration | calibration | 0.55 / 0.20 / 0.20 / 0.05 | 12 | 0.35 | 32 |
+| data | data, ai, dai | 0.55 / 0.20 / 0.20 / 0.05 | 8 | 0.55 | 28 |
+| support | hr, admin, administration, administrator, finance, purchasing, it, facility, specialist, generalist, officer | 0.50 / 0.20 / 0.30 / 0.00 | 4 | 0.70 | 20 |
+| systems | system, systems | 0.60 / 0.15 / 0.20 / 0.05 | 16 | 0.30 | 30 |
+| electronics | electric, electronics, ee, software, sw, functions | 0.50 / 0.30 / 0.15 / 0.05 | 10 | 0.40 | 30 |
+| validation | validation, verification, homologation, fleet, test | 0.45 / 0.35 / 0.15 / 0.05 | 12 | 0.30 | 30 |
+| design | design, simulation, cfd, dmu | 0.60 / 0.10 / 0.25 / 0.05 | 20 | 0.35 | 30 |
+| coordination | project, coordination, leader, manager, workshop, center | 0.40 / 0.10 / 0.45 / 0.05 | 6 | 0.60 | 16 |
+| unknown | no title or no match | the systems parameters | 16 | 0.30 | 30 |
+
+A `TEAM_LEADER`'s weekly target is halved: leaders spend half their week leading. The container
+share of a member's mix is folded into delivery; Epics are created per project by its owner
+(section 4.5) rather than drawn per member.
 
 Estimates are log-normal around the median with sigma 0.6, rounded to half hours, minimum 1 h.
 Priorities: HIGHEST 5 %, HIGH 20 %, MEDIUM 50 %, LOW 20 %, LOWEST 5 %; defects skew one step higher.
@@ -228,7 +235,7 @@ For member `m` and week `w` the target assigned hours are
 
 ```
 target(m, w) = base(m) × season(w) × ramp(m, w) × event(team(m), w) × availability(m, w)
-base(m)      = family mean × N(1.0, 0.15) clipped to [0.5, 1.3]
+base(m)      = family mean × N(1.0, 0.15) clipped to [0.5, 1.3], × 0.5 for a TEAM_LEADER
 season(w)    = 0.55 for ISO weeks 31..34, 0.50 for weeks 52 and 1, 0.85 for the week of a confirmed holiday, else 1.0
 ramp(m, w)   = min(1, weeks since joined / 6) for newcomers, else 1
 event(t, w)  = 1.4 during three two-week team events per year, else 1.0
@@ -265,8 +272,10 @@ For each generated task:
    back to `In Progress` and a second finish with 20 to 40 % of the estimate logged again). 5 % of
    finished tasks have **no** `time_logs` rows and `remaining_estimate_hrs = 0`: the fallback case.
 6. **Open at the end.** Tasks whose cycle crosses the end date stay `In Progress` with partial logs
-   and a positive remaining estimate; backlog tasks created but not yet assigned at the end stay
-   unassigned. This gives the forecast a real open-work state at the as-of date.
+   and a positive remaining estimate. Backlog tasks are planned three weeks beyond the end as well,
+   and those created before the end but assigned after it are written unassigned (`assignee_id`
+   null, no history row, `planned_week` null). This gives the forecast a real open-work state and a
+   real backlog at the as-of date.
 
 Statuses use the 9 existing rows: `To Do`, `In Progress`, `In Review` (10 % of delivery tasks pass
 through it for 1 to 2 days), `Blocked` (3 % of tasks for 2 to 5 days), `Done`. Notifications,
@@ -291,22 +300,27 @@ seed --synthetic --users 40 --weeks 26 --seed 7 --out src/test/resources/fixture
 seed ... --format sql --out seeded.sql
 ```
 
-- `--weeks` (default 52) full weeks ending on the Sunday before `--end` (default: today); `--end`
-  defines the as-of state; `--seed` makes the output reproducible byte for byte.
+- `--weeks` (default 52) Monday weeks, the last one being the week that contains `--end` (default:
+  today), which is the as-of date and the last generated day; `--seed` makes the output
+  reproducible byte for byte.
 - JSON output uses the export envelope so `import` and the owner's tooling read it; `--format sql`
   writes PostgreSQL `INSERT` statements in dependency order inside one transaction with
   `SET search_path TO task_service`, for `psql -f`.
 - `--synthetic` replaces names, usernames, emails and passwords with generated ones, drops
-  `object_id` and `manager_object_id`, and can shrink the population; only synthetic output is ever
-  committed. The real-mode file holds password hashes and emails and stays out of git; the CLI
+  `object_id` and `manager_object_id`, and can shrink the population; without `--export` it invents
+  a directory (nine departments, one head each, one manager per ten people) and the reference rows
+  (statuses, types, roles, Moroccan national holidays), so tests and CI need no export at all. An
+  export missing some statuses or types is completed from the same reference rows. Only synthetic
+  output is ever committed. The real-mode file holds password hashes and emails and stays out of git; the CLI
   refuses to write real-mode output under the repository unless `--force`.
 - The generator is deterministic given `--seed`, single-threaded, and writes the 264 × 52 dataset in
   well under a minute.
 
 ### 4.8 Invariants (property tests)
 
-1. For every member and week, `sum(time_logs)` is within 25 % of `target(m, w) × ratio(m)` over any
-   8-week window, and zero in weeks the member is fully absent.
+1. Logged hours track assigned work: per member, logged hours over the estimates of their finished
+   tasks lie in [0.4, 2.5] and the mean over members in [0.75, 1.3]; no member logs more than 8 h
+   on a day; no log falls on one of the member's absence days.
 2. Every task's transitions are ordered: created ≤ assigned ≤ started ≤ every log ≤ finished, all on
    working days the assignee is present; a reopened task has a second finish after the first.
 3. No `time_logs` row falls on a confirmed holiday, a weekend or an absence day of its user.
