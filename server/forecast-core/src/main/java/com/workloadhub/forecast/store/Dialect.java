@@ -60,6 +60,11 @@ public enum Dialect {
         return "?";
     }
 
+    /** A boolean literal in SQL text, for the rare WHERE that filters a boolean column. */
+    public String boolLiteral(boolean value) {
+        return this == SQLITE ? (value ? "1" : "0") : (value ? "TRUE" : "FALSE");
+    }
+
     public String flywayLocation() {
         return "classpath:db/forecast/" + name().toLowerCase(Locale.ROOT);
     }
