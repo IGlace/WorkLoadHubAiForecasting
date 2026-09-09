@@ -49,7 +49,9 @@ public final class ExportImporter {
     /** Inserts every table of the envelope that exists in the schema; with replace, deletes children then parents first. */
     public Map<String, Integer> importAll(ExportEnvelope envelope, boolean replace) {
         Map<String, Integer> counts = new LinkedHashMap<>();
-        try (Connection c = dataSource.getConnection()) {
+        Connection c = null;
+        try {
+            c = dataSource.getConnection();
             c.setAutoCommit(false);
             if (replace) {
                 List<String> reverse = new ArrayList<>(WorkloadHubSchema.TABLE_ORDER);
@@ -66,7 +68,22 @@ public final class ExportImporter {
             }
             c.commit();
         } catch (SQLException e) {
+            if (c != null) {
+                try {
+                    c.rollback();
+                } catch (SQLException rollbackFailure) {
+                    // best effort: the original exception is what matters and is kept as the cause
+                }
+            }
             throw new IllegalStateException("Import failed: " + e.getMessage(), e);
+        } finally {
+            if (c != null) {
+                try {
+                    c.close();
+                } catch (SQLException ignored) {
+                    // best effort on close
+                }
+            }
         }
         return counts;
     }

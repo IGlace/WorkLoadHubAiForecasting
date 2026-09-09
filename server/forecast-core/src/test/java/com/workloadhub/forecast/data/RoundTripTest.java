@@ -1,6 +1,7 @@
 package com.workloadhub.forecast.data;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.WorkloadHubSchema;
@@ -65,5 +66,25 @@ class RoundTripTest {
         DataSource ds = DatabaseTestSupport.postgresOrSkip();
         WorkloadHubSchema.createPostgresql(ds);
         roundTrip(ds);
+    }
+
+    @Test
+    void additiveImportKeepsExistingRowsAndFailsOnDuplicates() throws Exception {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        ExportEnvelope in = ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json"));
+
+        // importing into an empty schema with replace=false behaves like a replacing import
+        Map<String, Integer> counts = new ExportImporter(ds).importAll(in, false);
+        assertEquals(2, counts.get("users"));
+        assertEquals(1, counts.get("tasks"));
+
+        // importing the same rows again without replace hits primary-key conflicts and rolls back
+        assertThrows(IllegalStateException.class, () -> new ExportImporter(ds).importAll(in, false));
+
+        // the failed import left no partial rows behind: counts are exactly what the first import wrote
+        ExportEnvelope out = new ExportExporter(ds).exportAll();
+        assertEquals(2, out.rows("users").size());
+        assertEquals(1, out.rows("tasks").size());
     }
 }
