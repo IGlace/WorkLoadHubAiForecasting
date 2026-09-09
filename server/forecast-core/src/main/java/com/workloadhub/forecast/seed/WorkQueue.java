@@ -219,7 +219,9 @@ public final class WorkQueue {
                 ? team.managerId() : p.id();
         AbsencePlanner.Plan plan = plans.get(p.id());
         List<Arrival> arrivals = planArrivals(p, team);
-        double ratio = rnd.lognormal(1.0, 0.25); // the member's estimation bias
+        // the member's estimation bias: lognormal(1.0, 0.25), clamped so one member's draw at the
+        // distribution's tail cannot push their whole logged/estimated ratio outside a realistic band
+        double ratio = Math.max(0.6, Math.min(1.6, rnd.lognormal(1.0, 0.25)));
         Deque<Work> queue = new ArrayDeque<>();
         List<Work> sleeping = new ArrayList<>(); // done, waiting for a possible reopen
         int next = 0;
