@@ -269,3 +269,10 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 - Seed realism to revisit after the first forecast on seeded data: per-department rhythms, the share of
   reopened and unlogged tasks, and whether department teams (people without a manager) should run their own
   forecast.
+- Java module residuals parked at the close of the foundation-and-seed plan (2026-09-09): synthetic mode does
+  not scrub `projects.key` (keys are department codes by construction); `scripts/check.sh` runs only the Java
+  slice and CI's Maven call lacks `-q`; `check.ps1` prints its skip line during step collection; the seed's log
+  rows use quarter-hour slices (spec says 1 to 8 h); `Reference.covers` replaces rather than completes
+  reference rows; the importer leaves autocommit off before close; CLI errors fall to picocli's default
+  handler; `.gitignore` lists `server/**/target/` twice. The CLAUDE.md hard rule "no WSL" predates the
+  server direction and is rewritten by the migration plan.
