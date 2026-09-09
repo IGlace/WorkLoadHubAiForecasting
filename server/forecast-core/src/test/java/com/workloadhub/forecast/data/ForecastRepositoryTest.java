@@ -76,5 +76,19 @@ class ForecastRepositoryTest {
             assertTrue(cmp < 0 || (cmp == 0 && !cur.weekStart().isBefore(prev.weekStart())),
                     "capacity out of order at " + i);
         }
+        for (int i = 1; i < data.absences().size(); i++) {
+            var prev = data.absences().get(i - 1);
+            var cur = data.absences().get(i);
+            int cmp = prev.userId().toString().compareTo(cur.userId().toString());
+            assertTrue(cmp < 0 || (cmp == 0 && !cur.day().isBefore(prev.day())),
+                    "absences out of order at " + i);
+        }
+        for (int i = 1; i < data.holidays().size(); i++) {
+            var prev = data.holidays().get(i - 1);
+            var cur = data.holidays().get(i);
+            int cmp = prev.start().compareTo(cur.start());
+            assertTrue(cmp < 0 || (cmp == 0 && !cur.end().isBefore(prev.end())),
+                    "holidays out of order at " + i);
+        }
     }
 }
