@@ -3324,7 +3324,8 @@ class AbsencePlannerTest {
         boolean allWorking = plan.absentDays().stream().allMatch(d -> cal.isWorkingDay(d) && p.employedOn(d)
                 && !d.isBefore(cfg().firstMonday()) && !d.isAfter(cfg().lastDay()));
         boolean distinct = plan.absentDays().size() == plan.absenceRows().size();
-        return allWorking && distinct && vacation >= 10 && vacation <= 20 && sick <= 4
+        // two blocks of 5..10 days; the second block is cut short when it runs into the first, so 5 is the floor
+        return allWorking && distinct && vacation >= 5 && vacation <= 20 && sick <= 4
                 && plan.leaveRows().stream().allMatch(l -> "APPROVED".equals(l.get("status")));
     }
 
