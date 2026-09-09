@@ -58,6 +58,16 @@ class JdbcGitHubTokenStoreTest {
     }
 
     @Test
+    void refusesEmptyTokens() throws Exception {
+        DataSource ds = sqliteWithFixture();
+        JdbcGitHubTokenStore s = store(ds);
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> s.save(ENG, "")).code());
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> s.save(ENG, "   ")).code());
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> s.save(ENG, null)).code());
+        assertFalse(s.has(ENG));
+    }
+
+    @Test
     void withoutKeyEveryCallFails() throws Exception {
         DataSource ds = sqliteWithFixture();
         JdbcGitHubTokenStore s = new JdbcGitHubTokenStore(JdbcClient.create(ds), Dialect.of(ds), null);

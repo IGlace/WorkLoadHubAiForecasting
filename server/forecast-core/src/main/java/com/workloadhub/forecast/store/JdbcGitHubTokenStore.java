@@ -55,22 +55,21 @@ public final class JdbcGitHubTokenStore implements GitHubTokenStore {
     @Override
     public Optional<String> load(UUID userId) {
         AesGcmCipher c = cipherOrFail();
-        return jdbc.sql("SELECT github_token FROM users WHERE id = " + idPlaceholder())
-                .param(userId.toString())
-                .query(String.class)
-                .optional()
-                .filter(v -> v != null && !v.isBlank())
-                .map(c::decrypt);
+        return rawToken(userId).map(c::decrypt);
     }
 
     @Override
     public boolean has(UUID userId) {
+        return rawToken(userId).isPresent();
+    }
+
+    /** The raw (still encrypted) github_token column value for a user, or empty when unset. */
+    private Optional<String> rawToken(UUID userId) {
         return jdbc.sql("SELECT github_token FROM users WHERE id = " + idPlaceholder())
                 .param(userId.toString())
                 .query(String.class)
                 .optional()
-                .filter(v -> v != null && !v.isBlank())
-                .isPresent();
+                .filter(v -> v != null && !v.isBlank());
     }
 
     @Override
