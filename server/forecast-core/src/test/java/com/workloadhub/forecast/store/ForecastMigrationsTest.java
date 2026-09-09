@@ -1,0 +1,52 @@
+package com.workloadhub.forecast.store;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.util.TreeSet;
+import javax.sql.DataSource;
+import org.junit.jupiter.api.Test;
+
+class ForecastMigrationsTest {
+
+    static TreeSet<String> tables(DataSource ds) throws Exception {
+        TreeSet<String> out = new TreeSet<>();
+        try (Connection c = ds.getConnection(); ResultSet rs = c.getMetaData().getTables(null, null, "forecast_%", null)) {
+            while (rs.next()) {
+                out.add(rs.getString("TABLE_NAME"));
+            }
+        }
+        return out;
+    }
+
+    static boolean hasColumn(DataSource ds, String table, String column) throws Exception {
+        try (Connection c = ds.getConnection(); ResultSet rs = c.getMetaData().getColumns(null, null, table, column)) {
+            return rs.next();
+        }
+    }
+
+    static void check(DataSource ds) throws Exception {
+        ForecastMigrations.run(ds);
+        ForecastMigrations.run(ds); // idempotent
+        assertEquals(new TreeSet<>(java.util.List.of("forecast_facts", "forecast_member_weeks", "forecast_narratives",
+                "forecast_runs", "forecast_schema_history")), tables(ds));
+        assertTrue(hasColumn(ds, "users", "github_token"));
+        assertTrue(hasColumn(ds, "users", "github_token_updated_at"));
+    }
+
+    @Test
+    void migratesSqlite() throws Exception {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        check(ds);
+    }
+
+    @Test
+    void migratesPostgresql() throws Exception {
+        DataSource ds = DatabaseTestSupport.postgresOrSkip();
+        WorkloadHubSchema.createPostgresql(ds);
+        check(ds);
+    }
+}
