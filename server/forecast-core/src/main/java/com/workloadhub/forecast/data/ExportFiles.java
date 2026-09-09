@@ -13,6 +13,8 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import tools.jackson.core.util.DefaultIndenter;
+import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
@@ -20,8 +22,17 @@ import tools.jackson.databind.json.JsonMapper;
 /** Reads and writes the export envelope. Numbers become Long or Double, nothing else. */
 public final class ExportFiles {
 
+    /**
+     * "\n" line endings regardless of platform, so the written file is byte-identical on Windows and
+     * Linux: the default pretty printer's indenter otherwise uses {@code line.separator}.
+     */
+    private static final DefaultIndenter LF_INDENTER = new DefaultIndenter("  ", "\n");
+
     private static final JsonMapper MAPPER = JsonMapper.builder()
             .enable(SerializationFeature.INDENT_OUTPUT)
+            .defaultPrettyPrinter(new DefaultPrettyPrinter()
+                    .withObjectIndenter(LF_INDENTER)
+                    .withArrayIndenter(LF_INDENTER))
             .build();
 
     private ExportFiles() {

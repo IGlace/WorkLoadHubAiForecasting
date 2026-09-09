@@ -57,6 +57,8 @@ class ExportFilesTest {
         Path out = dir.resolve("out.json");
         ExportFiles.write(out, env);
         assertEquals(env, ExportFiles.read(out));
-        assertTrue(Files.readString(out).startsWith("{\n"), "pretty printed");
+        String written = Files.readString(out);
+        assertTrue(written.startsWith("{\n"), "pretty printed");
+        assertTrue(written.indexOf('\r') < 0, "no CR: line endings must be \\n on every platform");
     }
 }
