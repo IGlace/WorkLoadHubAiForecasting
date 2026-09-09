@@ -58,7 +58,7 @@ server/
     src/main/resources/
       db/forecast/postgresql/V1__forecast_tables.sql
       db/forecast/sqlite/V1__forecast_tables.sql
-      skills/whf-*/SKILL.md                 the five product skills, moved from the Python package
+      skills/whf-*/SKILL.md                 the five product skills, moved from the Python package, embedded in the system message
       META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
   forecast-cli/                             artifact workloadhub-forecast-cli, runnable jar for WSL
     src/main/java/com/workloadhub/forecast/cli/
@@ -70,8 +70,14 @@ server/
 ```
 
 `forecast-core` depends on `spring-boot-starter-jdbc`, `flyway-core` with the PostgreSQL plugin,
-`xgboost4j_2.12` 3.4.0, `copilot-sdk-java` (latest on Maven Central at writing: 1.0.13-preview.6),
-Jackson and the PostgreSQL driver as `runtime` optional. It has no web dependency; the controller is
+`xgboost4j_2.12` 3.4.0, `copilot-sdk-java` 1.0.13-preview.6 (the latest on Maven Central at
+writing; every 1.0.13 build is a preview) plus its runtime artifact `copilot-sdk-java-runtime`
+with classifier `linux-x64` (44 MB: the Copilot CLI binary and its Node runtime, unpacked by the SDK
+into `COPILOT_HOME` on first use, so nothing is downloaded at run time), Jackson 3 and the PostgreSQL
+driver as `runtime` optional. Verified on 2026-09-09 in this environment: the versions resolve
+together under Spring Boot 4.1.1 (JUnit 6.0.3, Flyway 12.4.0, Jackson 3.1.5), jqwik 1.10.1 runs on
+the JUnit 6 platform, and XGBoost4J 3.4.0 trains a Poisson booster with categorical feature types
+on Linux x86-64 deterministically. It has no web dependency; the controller is
 compiled against `spring-web` marked optional and only activates when the host has Spring MVC.
 `forecast-cli` adds picocli 4.7.7 and `sqlite-jdbc` 3.53.4.0.
 
@@ -457,10 +463,15 @@ repeated (each narration is a new `forecast_narratives` row). It:
 
 1. Loads the requesting user's token through `GitHubTokenStore`; without one, returns
    `TOKEN_MISSING` and does nothing else.
-2. Creates a `CopilotClient` with the bundled CLI runtime (override with `whf.copilot.cli-path` or
-   `COPILOT_CLI_PATH`), logged-in user disabled, and a `SessionConfig` with the token, the model
-   (`whf.copilot.model`, request override, blank = account default), streaming on, the nine tools,
-   the skill directories and the tool permission handler set to approve the module's own tools only.
+2. Creates a `CopilotClient` whose `CopilotClientOptions` carry the user's token
+   (`setGitHubToken`), `COPILOT_HOME` under the module's work directory, and the CLI from the
+   runtime artifact (override with `whf.copilot.cli-path` or `COPILOT_CLI_PATH`). No `copilot auth
+   login` ever runs on the server; the token on the options is the only credential. The
+   `SessionConfig` sets the model (`whf.copilot.model`, request override, blank = account default),
+   the nine tools, a system message that embeds the five product skills (this SDK version has no
+   skill-directory setting, so the skill texts are classpath resources concatenated into the system
+   message, which also makes the prompt deterministic), and a permission handler that approves the
+   module's own tools only.
 3. Sends the user prompt (facts summary plus the contract, in the requested language), streams
    events into the run's progress (assistant deltas, reasoning deltas when the SDK emits them, tool
    calls and results), and waits for the final assistant message.
@@ -469,8 +480,11 @@ repeated (each narration is a new `forecast_narratives` row). It:
 5. Verifies every number in the narrative against the facts (section 10.5), stores the narrative,
    the verification report and the usage, and closes the session and client.
 
-Skills are shipped as classpath resources and copied at startup to a temporary directory, because the
-SDK takes directories. One CLI process per narration; sessions are never resumed.
+Skills are classpath resources read once at startup. One CLI process per narration; sessions are
+never resumed. Streaming uses the SDK's `AssistantMessageDeltaEvent`, `AssistantReasoningDeltaEvent`,
+`ToolExecutionStartEvent`, `ToolExecutionCompleteEvent`, `AssistantUsageEvent` and
+`SessionIdleEvent`; usage metrics come from the session usage RPC and the account quota from the
+account quota RPC on `client.getRpc()`.
 
 ### 10.3 Tools
 
@@ -500,10 +514,11 @@ surfaced as `verified = false` with the list of problems.
 
 ### 10.6 Usage, cost and quota
 
-From the SDK's usage events: input, output and cached tokens, and premium-request or credit counters
-when present, converted as in the Python `usage.py` (`ai_credits = nano_aiu / 1e9`,
-`usd = credits / 100`), with `source` `metrics`, `events` or `none`. Account quota is reported when
-the Java SDK exposes the account RPC; otherwise the quota fields are null and the status says so.
+From the session usage metrics RPC, else the `AssistantUsageEvent` stream: input, output and
+cached tokens, and premium-request or credit counters when present, converted as in the Python
+`usage.py` (`ai_credits = nano_aiu / 1e9`, `usd = credits / 100`), with `source` `metrics`, `events`
+or `none`. Account quota comes from the account quota RPC with a 10-second timeout; on timeout or
+error the quota fields are null and the status says why.
 `copilotStatus(userId)` reports: token present, CLI runtime path and version, and quota.
 
 ## 11. Public API
