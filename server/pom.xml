@@ -15,6 +15,7 @@
   <name>WorkloadHub forecast (parent)</name>
   <modules>
     <module>forecast-core</module>
+    <module>forecast-cli</module>
   </modules>
   <properties>
     <java.version>21</java.version>
