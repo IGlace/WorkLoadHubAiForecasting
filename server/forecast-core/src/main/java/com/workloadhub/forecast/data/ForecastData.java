@@ -46,9 +46,17 @@ public record ForecastData(
                 .sorted(Comparator.comparing(TransitionRow::changedAt).thenComparing(t -> t.taskId().toString())).toList());
         timeLogs = List.copyOf(timeLogs.stream()
                 .sorted(Comparator.comparing(TimeLogRow::day).thenComparing(l -> l.taskId().toString())).toList());
-        capacity = List.copyOf(capacity);
-        absences = List.copyOf(absences);
-        holidays = List.copyOf(holidays);
+        capacity = List.copyOf(capacity.stream()
+                .sorted(Comparator.<CapacityRow, String>comparing(c -> c.userId().toString()).thenComparing(CapacityRow::weekStart))
+                .toList());
+        absences = List.copyOf(absences.stream()
+                .sorted(Comparator.<AbsenceRow, String>comparing(a -> a.userId().toString()).thenComparing(AbsenceRow::day))
+                .toList());
+        holidays = List.copyOf(holidays.stream()
+                .sorted(Comparator.comparing(HolidayRow::start)
+                        .thenComparing(HolidayRow::end)
+                        .thenComparing(HolidayRow::title, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList());
         users = sortedBy(users, UserRef::id);
         statusCategoryByName = Map.copyOf(statusCategoryByName);
     }

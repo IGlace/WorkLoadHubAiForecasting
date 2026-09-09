@@ -69,5 +69,12 @@ class ForecastRepositoryTest {
         MemberRow m = data.members().get(0);
         assertFalse(data.projectIdsOfTeamAndParent(m.primaryTeamId()).isEmpty());
         assertEquals(SeededData.envelope().rows("users").size(), data.users().size());
+        for (int i = 1; i < data.capacity().size(); i++) {
+            var prev = data.capacity().get(i - 1);
+            var cur = data.capacity().get(i);
+            int cmp = prev.userId().toString().compareTo(cur.userId().toString());
+            assertTrue(cmp < 0 || (cmp == 0 && !cur.weekStart().isBefore(prev.weekStart())),
+                    "capacity out of order at " + i);
+        }
     }
 }
