@@ -243,7 +243,8 @@ For each generated task:
    is a working-day timestamp. 15 % of delivery tasks are sub-tasks of an Epic created earlier in
    the same project (`parent_task_id`). Keys follow `project.key-next_task_number`.
 2. **Assignment.** A `task_history` row `field_name = 'assignee'`, `old_value = null`,
-   `new_value = <user id>`, `changed_at` = assignment timestamp; `planned_week` = the Monday of the
+   `new_value = <the assignee's full_name>` (what the application writes), `changed_at` =
+   assignment timestamp; `planned_week` = the Monday of the
    assignment week (what the application does today); `due_date` = assignment + cycle × N(1.1, 0.2)
    working days, so due dates are sometimes missed.
 3. **Start.** Status transition `To Do → In Progress` (`field_name = 'status'`, old and new status
@@ -323,8 +324,13 @@ section 3, restated here where the module decides:
 - **Counted members**: active users with role `MEMBER` or `TEAM_LEADER` in `team_members` of the
   team, from `joined_at` to `deactivated_at`.
 - **Assigned date**: `changed_at` of the latest `task_history` row with `field_name = 'assignee'`
-  and `new_value` = the current assignee; else `created_date`. Assignee values in history are UUID
-  strings; `None`, empty and `null` mean unassigned.
+  whose `new_value` resolves to the current assignee; else `created_date`. The application writes
+  the assignee's display name or email into `old_value` and `new_value` (the export shows
+  `"Developer Two"` and `"test1@workloadhub.com"`), so a value is resolved in this order: a UUID of a
+  user, else a user's `email`, else a user's `full_name`, matched among the team's members first and
+  all users second; `None`, empty and `null` mean unassigned. An ambiguous name (two users with the
+  same `full_name`) or an unresolvable value falls back to `created_date` and is counted in
+  `facts.data_quality.unresolved_assignments`.
 - **Started / finished**: the columns, else the first transition into an `IN_PROGRESS` / `DONE`
   category, by `task_statuses.category`.
 - **Actual hours**: sum of `time_logs.hours` for the task and user. When the task is finished and
