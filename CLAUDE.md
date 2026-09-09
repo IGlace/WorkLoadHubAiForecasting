@@ -78,9 +78,9 @@ docs/      research, requirements, specs, plans
   has no pre-merge hook for a fast-forward. Activate the hooks once per clone with
   `git config core.hooksPath scripts/hooks`; escape them with `git commit --no-verify` or
   `WHF_SKIP_HOOKS=1`.
-- Java: Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik; `mvn -B verify` in `server/` is the gate (under three
-  minutes without Docker; PostgreSQL tests run when Docker is present). The real export and any real-mode
-  seed output stay outside the repository.
+- Java: Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik; `scripts/check.ps1` and `scripts/check.sh` run
+  `mvn -B -q verify` in `server/` (under three minutes without Docker; PostgreSQL tests run when Docker is
+  present). The real export and any real-mode seed output stay outside the repository.
 - Packaging: PyInstaller (`installer/pyinstaller/whf.spec`), electron-builder
   (`installer/electron-builder.yml`); `pwsh scripts/build-installer.ps1` builds the
   installer. `.github/workflows/ci.yml` runs the same gate on GitHub for pushes to `dev` and

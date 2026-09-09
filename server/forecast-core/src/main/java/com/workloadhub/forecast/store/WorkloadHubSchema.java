@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -75,6 +76,10 @@ public final class WorkloadHubSchema {
         for (LinkedHashMap<String, Object> r : rows) {
             placeAncestorsFirst(r, column, byId, out, placed);
         }
+        if (out.size() != rows.size()) {
+            throw new IllegalStateException(table + ": " + (rows.size() - out.size())
+                    + " row(s) with a missing or duplicate id were dropped while ordering parents first");
+        }
         return out;
     }
 
@@ -103,6 +108,19 @@ public final class WorkloadHubSchema {
 
     public static boolean isBoolean(String table, String column) {
         return BOOLEAN_COLUMNS.getOrDefault(table, Set.of()).contains(column);
+    }
+
+    /**
+     * The ordered union of every row's keys, in first-seen order across the whole list. Rows of the same
+     * table can carry different keys (an existing row kept as-is versus one this module builds fresh), so
+     * taking the columns of one row alone (row 0, say) can silently drop a column only a later row has.
+     */
+    public static List<String> columnsOf(List<LinkedHashMap<String, Object>> rows) {
+        Set<String> columns = new LinkedHashSet<>();
+        for (LinkedHashMap<String, Object> row : rows) {
+            columns.addAll(row.keySet());
+        }
+        return new ArrayList<>(columns);
     }
 
     /** Creates the 24 tables on an empty SQLite database. */

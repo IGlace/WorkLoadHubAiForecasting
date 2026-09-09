@@ -1,7 +1,7 @@
 # Run locally the checks that GitHub Actions used to run. This repository has no remote, so this
 # script and the hooks in scripts/hooks are the only gate there is.
 #
-# Usage: pwsh scripts/check.ps1                     fast gate: ruff, non-slow pytest, app lint/typecheck/test
+# Usage: pwsh scripts/check.ps1                     fast gate: ruff, non-slow pytest, app lint/typecheck/test, mvn verify
 #        pwsh scripts/check.ps1 -Full               plus the slow pytest suite and the app build
 #        pwsh scripts/check.ps1 -Full -Package      plus the installer build
 #        pwsh scripts/check.ps1 -DryRun             print the steps without running them
@@ -18,6 +18,7 @@ $env:HF_HUB_OFFLINE = "1"  # as CI does: nothing in a test run may fetch model w
 $root = Split-Path -Parent $PSScriptRoot
 $service = Join-Path $root "service"
 $app = Join-Path $root "app"
+$server = Join-Path $root "server"
 
 $steps = [System.Collections.Generic.List[object]]::new()
 function Add-Step([string]$Name, [string]$Dir, [string]$Exe, [string[]]$Arguments) {
@@ -39,6 +40,11 @@ Add-Step "app lint" $app "npm" @("run", "lint")
 Add-Step "app typecheck" $app "npm" @("run", "typecheck")
 Add-Step "app tests" $app "npm" @("test")
 Add-Step "pytest (fast)" $service "uv" (@("run", "pytest", "-q", "-m", "not slow") + $xdist)
+if (Get-Command mvn -ErrorAction SilentlyContinue) {
+    Add-Step "server (mvn verify)" $server "mvn" @("-B", "-q", "verify")
+} else {
+    Write-Host "SKIP server (mvn verify): mvn not found on PATH" -ForegroundColor Yellow
+}
 if ($Full) {
     Add-Step "pytest (slow)" $service "uv" (@("run", "pytest", "-q", "-m", "slow") + $xdist)
     Add-Step "app build" $app "npm" @("run", "build")

@@ -3,7 +3,6 @@ package com.workloadhub.forecast.data;
 import com.workloadhub.forecast.store.WorkloadHubSchema;
 import java.io.IOException;
 import java.io.Writer;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 
@@ -22,7 +21,7 @@ public final class SqlExportWriter {
             if (rows.isEmpty()) {
                 continue;
             }
-            List<String> columns = new ArrayList<>(rows.get(0).keySet());
+            List<String> columns = WorkloadHubSchema.columnsOf(rows);
             for (int start = 0; start < rows.size(); start += ROWS_PER_STATEMENT) {
                 out.write("INSERT INTO " + table + " (" + String.join(", ", columns) + ") VALUES\n");
                 int end = Math.min(rows.size(), start + ROWS_PER_STATEMENT);

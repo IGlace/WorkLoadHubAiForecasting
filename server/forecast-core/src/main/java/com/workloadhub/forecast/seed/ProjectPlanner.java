@@ -88,6 +88,14 @@ public final class ProjectPlanner {
                     cfg.firstMonday(), cfg.lastDay().plusWeeks(1), true, WorkFamily.UNKNOWN));
         }
         List<LocalDate> mondays = cfg.mondays();
+        // global, not per department: projects.key is UNIQUE across the whole export, and the export's
+        // own projects (existingProjectRows, already added to `out` above) must never be re-minted.
+        Set<String> used = new HashSet<>();
+        for (LinkedHashMap<String, Object> row : existingProjectRows) {
+            if (row.get("key") instanceof String s) {
+                used.add(s);
+            }
+        }
         for (Team team : teams) {
             if (!team.department()) {
                 continue;
@@ -96,7 +104,6 @@ public final class ProjectPlanner {
             WorkFamily family = dominantFamily(team, teams, people);
             List<Template> templates = TEMPLATES.get(family);
             int count = rnd.between(2, 4);
-            Set<String> used = new HashSet<>();
             for (int i = 0; i < count; i++) {
                 Template t = templates.get(i % templates.size());
                 int n = 1;

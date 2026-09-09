@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 
@@ -18,21 +19,39 @@ public final class SeedGenerator {
     private SeedGenerator() {
     }
 
+    /** Free-text columns a carried-over row may embed a real identity in; never an id, key, status or date column. */
+    private static final Set<String> SCRUBBABLE_COLUMNS = Set.of("name", "description", "title", "note");
+
     /**
-     * Replaces every occurrence of a scrubbed identity's original text with its replacement, in place.
-     * Keys are applied longest first, so a name that is a literal prefix of another (e.g. "Amina" inside
-     * "Aminata") cannot consume part of the longer name before the longer name's own entry gets a chance
-     * to match the whole thing. Blank keys are never present (the caller filters them), but are skipped
-     * here too: {@code "".replace("", x)} would otherwise splice x between every character of every string.
+     * The scrub map's keys, sorted longest first so a name that is a literal prefix of another (e.g.
+     * "Amina" inside "Aminata") cannot consume part of the longer name before the longer name's own
+     * entry gets a chance to match the whole thing; equal-length keys break ties by the key string
+     * itself, for a total order and so applying them is deterministic regardless of map iteration order.
+     * Blank keys are dropped: {@code "".replace("", x)} would otherwise splice x between every character
+     * of every string. Computed once per {@link #generate} call, not per row.
      */
-    private static void scrubIdentities(LinkedHashMap<String, Object> row, Map<String, String> identityScrub) {
-        if (identityScrub.isEmpty()) {
-            return;
-        }
+    private static List<Map.Entry<String, String>> sortedScrubKeys(Map<String, String> identityScrub) {
         List<Map.Entry<String, String>> byLengthDesc = new ArrayList<>(identityScrub.entrySet());
         byLengthDesc.removeIf(e -> e.getKey() == null || e.getKey().isBlank());
-        byLengthDesc.sort(Comparator.comparingInt((Map.Entry<String, String> e) -> e.getKey().length()).reversed());
+        byLengthDesc.sort(Comparator.<Map.Entry<String, String>>comparingInt(e -> e.getKey().length()).reversed()
+                .thenComparing(Map.Entry::getKey));
+        return byLengthDesc;
+    }
+
+    /**
+     * Replaces every occurrence of a scrubbed identity's original text with its replacement, in place,
+     * in {@code row}'s {@link #SCRUBBABLE_COLUMNS} only: an id, a foreign key, a key, a status or a date
+     * must never be touched, since a coincidental substring match there would corrupt a value the rest of
+     * the pipeline parses (a UUID, an ISO date) rather than merely reword free text.
+     */
+    private static void scrubIdentities(LinkedHashMap<String, Object> row, List<Map.Entry<String, String>> byLengthDesc) {
+        if (byLengthDesc.isEmpty()) {
+            return;
+        }
         for (Map.Entry<String, Object> e : row.entrySet()) {
+            if (!SCRUBBABLE_COLUMNS.contains(e.getKey())) {
+                continue;
+            }
             if (e.getValue() instanceof String s) {
                 String scrubbed = s;
                 for (Map.Entry<String, String> r : byLengthDesc) {
@@ -41,6 +60,26 @@ public final class SeedGenerator {
                 if (!scrubbed.equals(s)) {
                     e.setValue(scrubbed);
                 }
+            }
+        }
+    }
+
+    /** Guards {@link #scrubIdentities} never corrupted an id or foreign key column of {@code row}. */
+    private static void assertIdsAreUuids(String table, LinkedHashMap<String, Object> row) {
+        for (Map.Entry<String, Object> e : row.entrySet()) {
+            String column = e.getKey();
+            if (!column.equals("id") && !column.endsWith("_id")) {
+                continue;
+            }
+            Object value = e.getValue();
+            if (value == null) {
+                continue;
+            }
+            try {
+                UUID.fromString(String.valueOf(value));
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalStateException(
+                        "Identity scrub corrupted " + table + "." + column + " = " + value, ex);
             }
         }
     }
@@ -135,19 +174,22 @@ public final class SeedGenerator {
             // built as "<dept> · <manager's full name>", say): scrub every kept and dropped input
             // user's original identity, wherever it appears in the rows kept from the input, with its
             // anonymised replacement, so no leftover string in the export can identify anyone.
+            List<Map.Entry<String, String>> scrubKeys = sortedScrubKeys(identityScrub);
             teams = teams.stream().map(t -> {
                 LinkedHashMap<String, Object> row = new LinkedHashMap<>(t);
                 if (row.get("manager_id") != null && !ids.contains(row.get("manager_id"))) {
                     row.put("manager_id", null);
                 }
-                scrubIdentities(row, identityScrub);
+                scrubIdentities(row, scrubKeys);
+                assertIdsAreUuids("teams", row);
                 return row;
             }).toList();
             projectRows = projectRows.stream()
                     .filter(p -> p.get("owner_id") == null || ids.contains(p.get("owner_id")))
                     .map(p -> {
                         LinkedHashMap<String, Object> row = new LinkedHashMap<>(p);
-                        scrubIdentities(row, identityScrub);
+                        scrubIdentities(row, scrubKeys);
+                        assertIdsAreUuids("projects", row);
                         return row;
                     })
                     .toList();

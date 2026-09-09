@@ -54,6 +54,24 @@ class SeedCalendarTest {
     }
 
     @Test
+    void twoRowsOfTheSameAnnualHolidayReplicateWithoutDuplicates() {
+        // "Labour Day" 2025 and 2026 both replicate into the missing year 2024 at the same shifted date:
+        // without dedupe that is two rows with an identical (title, start_date, end_date, country_code).
+        SeedCalendar cal = SeedCalendar.fromHolidayRows(List.of(
+                holiday("Labour Day", "2025-05-01", "2025-05-01", "CONFIRMED", "NATIONAL"),
+                holiday("Labour Day", "2026-05-01", "2026-05-01", "CONFIRMED", "NATIONAL")),
+                new SeedConfig(104, LocalDate.of(2026, 9, 6), 1, false, 0));
+        List<LinkedHashMap<String, Object>> rows2024 = cal.holidayRows().stream()
+                .filter(h -> "2024-05-01".equals(h.get("start_date"))).toList();
+        assertEquals(1, rows2024.size(), "exactly one 2024 replica: " + rows2024);
+        java.util.Set<List<Object>> keys = new java.util.HashSet<>();
+        for (LinkedHashMap<String, Object> h : cal.holidayRows()) {
+            List<Object> key = List.of(h.get("title"), h.get("start_date"), h.get("end_date"), h.get("country_code"));
+            assertTrue(keys.add(key), "duplicate (title, start_date, end_date, country_code): " + key);
+        }
+    }
+
+    @Test
     void replicationOfAYearBoundaryHolidayShiftsBothEndsTogether() {
         SeedCalendar cal = SeedCalendar.fromHolidayRows(List.of(
                 holiday("New Year", "2026-12-31", "2027-01-02", "CONFIRMED", "NATIONAL")), cfg());

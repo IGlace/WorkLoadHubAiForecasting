@@ -152,6 +152,45 @@ class WorkQueueTest {
     }
 
     @Test
+    void membersOfAnExportTeamAlsoSeeThatTeamsProjects() {
+        // e1 belongs to both the ordinary manager team (via Rhythm.teamOf, its "primary" team) and an
+        // export-style team (no department, no parent) that owns one project of its own; before the fix
+        // planArrivals only ever considered the primary team's candidates, so e1's export-owned project
+        // never received anything but its epics.
+        long seed = 21;
+        SeedRandom rnd = new SeedRandom(seed);
+        SeedCalendar cal = AbsencePlannerTest.cal();
+        UUID lead = UUID.fromString("30000000-0000-0000-0000-000000000001");
+        UUID e1 = UUID.fromString("30000000-0000-0000-0000-000000000002");
+        List<Person> people = List.of(
+                new Person(lead, "Lead One", "l@example.test", "Team Leader Calibration", "PTE / CT2", "CT2", null, "TEAM_LEADER", WorkFamily.CALIBRATION, CFG.firstMonday(), null),
+                new Person(e1, "Eng Two", "a@example.test", "Calibration Engineer", "PTE / CT2", "CT2", lead, "MEMBER", WorkFamily.CALIBRATION, CFG.firstMonday(), null));
+        Map<UUID, Person> byId = new HashMap<>();
+        Map<UUID, AbsencePlanner.Plan> plans = new HashMap<>();
+        for (Person p : people) {
+            byId.put(p.id(), p);
+            plans.put(p.id(), AbsencePlanner.plan(p, cal, CFG, rnd));
+        }
+        Team dept = new Team(UUID.fromString("40000000-0000-0000-0000-000000000001"), "PTE / CT2", lead, null, List.of(lead), true, "CT2");
+        Team team = new Team(UUID.fromString("40000000-0000-0000-0000-000000000002"), "CT2 · Lead One", lead, dept.id(), List.of(lead, e1), false, "CT2");
+        Team exportTeam = new Team(UUID.fromString("40000000-0000-0000-0000-000000000003"), "Legacy Squad", null, null, List.of(e1), false, null);
+        List<Team> teams = List.of(dept, team, exportTeam);
+        UUID exportProjectId = UUID.fromString("80000000-0000-0000-0000-000000000099");
+        Project exportProject = new Project(exportProjectId, "LEG", "Legacy platform", exportTeam.id(), lead, "ACTIVE",
+                CFG.firstMonday(), CFG.lastDay().plusWeeks(1), true, WorkFamily.UNKNOWN);
+        List<Project> projects = new ArrayList<>();
+        projects.add(exportProject);
+        projects.addAll(ProjectPlanner.plan(teams, byId, List.of(), CFG, rnd));
+        Rhythm rhythm = new Rhythm(CFG, cal, byId, plans, teams, rnd);
+        WorkQueue.Result r = WorkQueue.run(CFG, cal, people, plans, teams, projects, rhythm, reference(),
+                WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
+        UUID epicType = reference().typeIds().get("Epic");
+        boolean landed = r.taskRows().stream().anyMatch(t -> exportProjectId.toString().equals(t.get("project_id"))
+                && !epicType.toString().equals(t.get("task_type_id")));
+        assertTrue(landed, "at least one non-epic task of the export team's member lands in its own project");
+    }
+
+    @Test
     void backlogTasksCarryOneAssigneeTransitionAndOthersNone() {
         WorkQueue.Result r = run(3, new WorkQueue.Rates(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
         Map<String, Long> assigneeRows = new HashMap<>();

@@ -154,8 +154,27 @@ public final class WorkQueue {
         return x;
     }
 
-    private List<Arrival> planArrivals(Person p, Team team) {
-        List<Project> candidates = ProjectPlanner.projectsFor(team, teams, projects);
+    /**
+     * The projects a member can pick up: the union, without duplicates and in a fixed order (by project
+     * key), of every team the member belongs to (a person can be on both a department team and a manager
+     * team, and an export's own team as well) rather than only their {@link Rhythm#teamOf} primary team,
+     * so members of an export's own team also see that team's own projects and not only its epics.
+     */
+    private List<Project> candidatesFor(Person p) {
+        Map<String, Project> byKey = new TreeMap<>();
+        for (Team t : teams) {
+            if (!t.memberIds().contains(p.id())) {
+                continue;
+            }
+            for (Project pr : ProjectPlanner.projectsFor(t, teams, projects)) {
+                byKey.put(pr.key(), pr);
+            }
+        }
+        return new ArrayList<>(byKey.values());
+    }
+
+    private List<Arrival> planArrivals(Person p) {
+        List<Project> candidates = candidatesFor(p);
         List<Arrival> out = new ArrayList<>();
         AbsencePlanner.Plan plan = plans.get(p.id());
         List<LocalDate> mondays = new ArrayList<>(cfg.mondays());
@@ -218,7 +237,7 @@ public final class WorkQueue {
         UUID leader = team.managerId() != null && people.containsKey(team.managerId()) && !team.managerId().equals(p.id())
                 ? team.managerId() : p.id();
         AbsencePlanner.Plan plan = plans.get(p.id());
-        List<Arrival> arrivals = planArrivals(p, team);
+        List<Arrival> arrivals = planArrivals(p);
         // the member's estimation bias: lognormal(1.0, 0.25), clamped so one member's draw at the
         // distribution's tail cannot push their whole logged/estimated ratio outside a realistic band
         double ratio = Math.max(0.6, Math.min(1.6, rnd.lognormal(1.0, 0.25)));

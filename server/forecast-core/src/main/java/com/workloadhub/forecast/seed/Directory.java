@@ -5,10 +5,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -21,8 +23,32 @@ public final class Directory {
 
     private static final double LEAVE_SHARE = 0.03;
     private static final double LATE_JOIN_SHARE = 0.10;
+    /** `teams.name varchar(100)`. */
+    private static final int MAX_TEAM_NAME = 100;
 
     private Directory() {
+    }
+
+    /**
+     * {@code candidate}, truncated to {@link #MAX_TEAM_NAME} and, if that collides with a name already
+     * in {@code usedNames} (the export's own teams, plus every name generated so far this run), given a
+     * numeric suffix (`"CT2 · Lead One 2"`) until it is unique. `teams.name` is UNIQUE, and both a real
+     * export's own rows and a naming pattern this generator reuses can otherwise collide.
+     */
+    private static String uniqueName(String candidate, Set<String> usedNames) {
+        String truncated = candidate.length() > MAX_TEAM_NAME ? candidate.substring(0, MAX_TEAM_NAME) : candidate;
+        if (usedNames.add(truncated)) {
+            return truncated;
+        }
+        for (int n = 2;; n++) {
+            String suffix = " " + n;
+            int maxBase = MAX_TEAM_NAME - suffix.length();
+            String base = candidate.length() > maxBase ? candidate.substring(0, maxBase) : candidate;
+            String name = base + suffix;
+            if (usedNames.add(name)) {
+                return name;
+            }
+        }
     }
 
     /** "PTE / CT2 Calibration & Testing 2" -> "CT2"; the first token after the slash, trailing punctuation dropped. */
@@ -113,6 +139,14 @@ public final class Directory {
         // 4. department teams (one per code, plus "Unassigned" for people with neither manager nor department)
         List<Team> teams = new ArrayList<>();
         Map<String, UUID> deptTeamIds = new TreeMap<>();
+        // seeded from the export's own team names so a generated name never collides with one of theirs
+        // (teams.name is UNIQUE); every name this loop and the next one mint is added as it is chosen.
+        Set<String> usedNames = new HashSet<>();
+        for (LinkedHashMap<String, Object> t : teamRows) {
+            if (t.get("name") instanceof String s) {
+                usedNames.add(s);
+            }
+        }
         for (String code : byDept.keySet()) {
             UUID teamId = rnd.uuid();
             deptTeamIds.put(code, teamId);
@@ -124,7 +158,7 @@ public final class Directory {
                     members.add(id);
                 }
             }
-            String name = code.isEmpty() ? "Unassigned" : deptLabel.getOrDefault(code, code);
+            String name = uniqueName(code.isEmpty() ? "Unassigned" : deptLabel.getOrDefault(code, code), usedNames);
             teams.add(new Team(teamId, name, heads.get(code), null, members, true, code.isEmpty() ? null : code));
         }
 
@@ -145,8 +179,8 @@ public final class Directory {
             List<UUID> members = new ArrayList<>();
             members.add(m.id());
             members.addAll(e.getValue());
-            teams.add(new Team(rnd.uuid(), (code.isEmpty() ? "Team" : code) + " · " + m.fullName(), m.id(),
-                    deptTeamIds.get(code), members, false, code.isEmpty() ? null : code));
+            String name = uniqueName((code.isEmpty() ? "Team" : code) + " · " + m.fullName(), usedNames);
+            teams.add(new Team(rnd.uuid(), name, m.id(), deptTeamIds.get(code), members, false, code.isEmpty() ? null : code));
         }
 
         // 6. rows: users updated, existing teams and memberships kept, new ones appended

@@ -94,8 +94,8 @@ public final class ExportImporter {
         rows = WorkloadHubSchema.parentsFirst(table, rows);
         LinkedHashMap<String, String> schemaColumns = columns(c, table);
         List<String> cols = new ArrayList<>();
-        for (String col : schemaColumns.keySet()) {
-            if (rows.stream().anyMatch(r -> r.containsKey(col))) {
+        for (String col : WorkloadHubSchema.columnsOf(rows)) {
+            if (schemaColumns.containsKey(col)) {
                 cols.add(col);
             }
         }

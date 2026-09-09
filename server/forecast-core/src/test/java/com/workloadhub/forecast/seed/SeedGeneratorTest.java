@@ -240,6 +240,55 @@ class SeedGeneratorTest {
     }
 
     @Test
+    void scrubNeverCorruptsIdsOrDates() throws Exception {
+        // "0001" as an account_name and "2026" as a username are both literal substrings of, respectively,
+        // a UUID (every id in this fixture ends "-0000-0000-0000-00000000000N") and every "2026-..." ISO
+        // timestamp in the export: an unscoped scrub replaces them there too, corrupting ids and dates.
+        ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        real.rows("users").get(0).put("account_name", "0001");
+        real.rows("users").get(1).put("username", "2026");
+        SeedConfig cfg = new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, true, 2);
+        ExportEnvelope out = SeedGenerator.generate(real, cfg);
+        for (String table : List.of("teams", "projects")) {
+            for (var row : out.rows(table)) {
+                for (var e : row.entrySet()) {
+                    Object v = e.getValue();
+                    if (v == null) {
+                        continue;
+                    }
+                    if (e.getKey().equals("id") || e.getKey().endsWith("_id")) {
+                        java.util.UUID.fromString(String.valueOf(v));
+                    }
+                    if (e.getKey().equals("created_at")) {
+                        java.time.LocalDateTime.parse(String.valueOf(v));
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void realModeOfTheFixtureImportsIntoSqlite() throws Exception {
+        // the fixture's own manager team is named exactly the way Directory.derive would name a fresh
+        // one ("CT2 · Lead One"), and its own project key ("CT2-CAL") is exactly the pattern
+        // ProjectPlanner.plan mints for the CT2 department: real mode must disambiguate both so the
+        // result still imports into teams.name/projects.key's UNIQUE constraints.
+        ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        ExportEnvelope out = SeedGenerator.generate(real, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        new ExportImporter(ds).importAll(out, false);
+        Set<String> teamNames = new HashSet<>();
+        for (var t : out.rows("teams")) {
+            assertTrue(teamNames.add((String) t.get("name")), "duplicate team name: " + t.get("name"));
+        }
+        Set<String> projectKeys = new HashSet<>();
+        for (var p : out.rows("projects")) {
+            assertTrue(projectKeys.add((String) p.get("key")), "duplicate project key: " + p.get("key"));
+        }
+    }
+
+    @Test
     void selfReferencingTablesAreParentsFirstOrdered() {
         ExportEnvelope env = generated();
         for (String table : WorkloadHubSchema.SELF_REFERENCES.keySet()) {

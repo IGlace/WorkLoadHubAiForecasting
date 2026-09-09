@@ -2,6 +2,7 @@ package com.workloadhub.forecast.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
@@ -78,5 +79,26 @@ class WorkloadHubSchemaTest {
     void fewerThanTwoRowsAreReturnedUnchanged() {
         List<LinkedHashMap<String, Object>> rows = List.of(row("only", "missing"));
         assertSame(rows, WorkloadHubSchema.parentsFirst("users", rows));
+    }
+
+    @Test
+    void duplicateIdsThrow() {
+        // both rows carry id "dup": only the first can ever be placed, so the output is one row short.
+        List<LinkedHashMap<String, Object>> rows = List.of(row("dup", null), row("dup", null));
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> WorkloadHubSchema.parentsFirst("users", rows));
+        assertTrue(e.getMessage().contains("users"), e.getMessage());
+        assertTrue(e.getMessage().contains("1"), e.getMessage());
+    }
+
+    @Test
+    void rowsWithoutAnIdKeyThrow() {
+        // neither row carries an "id" key at all: both resolve to the same null id, same as a duplicate.
+        LinkedHashMap<String, Object> a = new LinkedHashMap<>();
+        a.put("manager_id", null);
+        LinkedHashMap<String, Object> b = new LinkedHashMap<>();
+        b.put("manager_id", null);
+        List<LinkedHashMap<String, Object>> rows = List.of(a, b);
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> WorkloadHubSchema.parentsFirst("users", rows));
+        assertTrue(e.getMessage().contains("users"), e.getMessage());
     }
 }
