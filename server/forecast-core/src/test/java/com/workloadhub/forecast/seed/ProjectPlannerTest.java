@@ -80,4 +80,23 @@ class ProjectPlannerTest {
         assertEquals("The app", out.get("description"));
         assertEquals(List.of(wh), ProjectPlanner.projectsFor(existing, List.of(existing), projects));
     }
+
+    @Test
+    void headlessDepartmentProjectsGetTheFallbackOwner() {
+        UUID member = UUID.randomUUID();
+        UUID centerManager = UUID.randomUUID();
+        Team dept = new Team(UUID.randomUUID(), "Unassigned", null, null, List.of(member), true, "GEN");
+        Map<UUID, Person> people = new HashMap<>();
+        people.put(member, new Person(member, "Member", "m@example.test", "Generalist", null, null, null, "MEMBER",
+                WorkFamily.SUPPORT, CFG.firstMonday(), null));
+        people.put(centerManager, new Person(centerManager, "Center Manager", "cm@example.test", "Center Manager",
+                null, null, null, "CENTER_MANAGER", WorkFamily.COORDINATION, CFG.firstMonday(), null));
+        List<Project> projects = ProjectPlanner.plan(List.of(dept), people, List.of(), CFG, new SeedRandom(7));
+        assertTrue(!projects.isEmpty(), "a headless department still gets projects");
+        for (Project p : projects) {
+            assertEquals(centerManager, p.ownerId());
+            LinkedHashMap<String, Object> row = ProjectPlanner.row(p, null, 1, CFG);
+            assertTrue(row.get("owner_id") != null, "owner_id must not be null");
+        }
+    }
 }

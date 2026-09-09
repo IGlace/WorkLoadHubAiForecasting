@@ -2,6 +2,7 @@ package com.workloadhub.forecast.seed;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -58,9 +59,27 @@ public final class ProjectPlanner {
         return votes.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(WorkFamily.SYSTEMS);
     }
 
+    /**
+     * The owner for a headless department's projects: `projects.owner_id` is NOT NULL, but a department
+     * team (e.g. the "Unassigned" one `Directory` builds for people with neither manager nor department,
+     * or a real department without a head) can have a null `managerId`. Deterministic given the seed:
+     * among `people`'s values sorted by id string, the first `CENTER_MANAGER`, else the first `ADMIN`,
+     * else the first person at all.
+     */
+    static UUID fallbackOwner(Map<UUID, Person> people) {
+        List<Person> sorted = new ArrayList<>(people.values());
+        sorted.sort(Comparator.comparing(p -> p.id().toString()));
+        return sorted.stream().filter(p -> p.role().equals("CENTER_MANAGER")).findFirst()
+                .or(() -> sorted.stream().filter(p -> p.role().equals("ADMIN")).findFirst())
+                .or(() -> sorted.stream().findFirst())
+                .map(Person::id)
+                .orElse(null);
+    }
+
     public static List<Project> plan(List<Team> teams, Map<UUID, Person> people,
             List<LinkedHashMap<String, Object>> existingProjectRows, SeedConfig cfg, SeedRandom rnd) {
         List<Project> out = new ArrayList<>();
+        UUID fallbackOwner = fallbackOwner(people);
         for (LinkedHashMap<String, Object> row : existingProjectRows) {
             UUID teamId = row.get("team_id") == null ? null : UUID.fromString((String) row.get("team_id"));
             UUID ownerId = row.get("owner_id") == null ? null : UUID.fromString((String) row.get("owner_id"));
@@ -104,7 +123,8 @@ public final class ProjectPlanner {
                     }
                     status = "ACTIVE";
                 }
-                out.add(new Project(rnd.uuid(), key, String.format(t.name(), code, n), team.id(), team.managerId(),
+                UUID owner = team.managerId() != null ? team.managerId() : fallbackOwner;
+                out.add(new Project(rnd.uuid(), key, String.format(t.name(), code, n), team.id(), owner,
                         status, start, end, false, family));
             }
         }
