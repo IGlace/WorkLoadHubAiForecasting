@@ -1,0 +1,49 @@
+{
+  "database": "avl_workloadhub",
+  "schema": "task_service",
+  "exported_at": "2026-09-08T16:45:02.63994+01:00",
+  "excluded_tables": ["refresh_tokens"],
+  "data": {
+    "user_roles": [
+      {"id": "10000000-0000-0000-0000-000000000001", "code": "MEMBER", "label": "Member", "active": true, "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "job_titles": [
+      {"id": "20000000-0000-0000-0000-000000000001", "value": "Calibration Engineer", "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "users": [
+      {"id": "30000000-0000-0000-0000-000000000001", "role": "TEAM_LEADER", "email": "lead@example.test", "active": true, "version": 0, "password": null, "username": "lead", "full_name": "Lead One", "job_title": "Team Leader Calibration", "object_id": null, "created_at": "2026-09-01T08:00:00", "department": "PTE / CT2 Calibration & Testing 2", "manager_id": null, "updated_at": "2026-09-01T08:00:00", "account_name": "lead", "deactivated_at": null, "manager_object_id": null},
+      {"id": "30000000-0000-0000-0000-000000000002", "role": "MEMBER", "email": "eng@example.test", "active": true, "version": 0, "password": null, "username": "eng", "full_name": "Engineer Two", "job_title": "Calibration Engineer", "object_id": null, "created_at": "2026-09-01T08:00:00", "department": "PTE / CT2 Calibration & Testing 2", "manager_id": "30000000-0000-0000-0000-000000000001", "updated_at": "2026-09-01T08:00:00", "account_name": "eng", "deactivated_at": null, "manager_object_id": null}
+    ],
+    "teams": [
+      {"id": "40000000-0000-0000-0000-000000000001", "name": "CT2 · Lead One", "active": true, "version": 0, "manager_id": "30000000-0000-0000-0000-000000000001", "parent_team_id": null, "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "team_members": [
+      {"id": "50000000-0000-0000-0000-000000000001", "team_id": "40000000-0000-0000-0000-000000000001", "user_id": "30000000-0000-0000-0000-000000000002", "joined_at": "2026-09-01T08:00:00", "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "task_statuses": [
+      {"id": "60000000-0000-0000-0000-000000000001", "name": "To Do", "active": true, "category": "TO_DO", "sort_order": 1, "description": null, "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"},
+      {"id": "60000000-0000-0000-0000-000000000002", "name": "In Progress", "active": true, "category": "IN_PROGRESS", "sort_order": 2, "description": null, "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "task_types": [
+      {"id": "70000000-0000-0000-0000-000000000001", "name": "Task", "active": true, "icon": null, "description": null, "subtask_type_id": null, "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "projects": [
+      {"id": "80000000-0000-0000-0000-000000000001", "key": "CT2-CAL", "name": "CT2 calibration campaign Q1", "status": "ACTIVE", "previous_status": null, "archived": false, "archived_at": null, "archived_by": null, "owner_id": "30000000-0000-0000-0000-000000000001", "team_id": "40000000-0000-0000-0000-000000000001", "version": 0, "description": null, "next_task_number": 2, "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "tasks": [
+      {"id": "90000000-0000-0000-0000-000000000001", "key": "CT2-CAL-1", "title": "Map base calibration", "description": null, "version": 0, "archived": false, "due_date": "2026-09-10", "priority": "HIGH", "project_id": "80000000-0000-0000-0000-000000000001", "assignee_id": "30000000-0000-0000-0000-000000000002", "reporter_id": "30000000-0000-0000-0000-000000000001", "task_number": 1, "created_date": "2026-09-01T09:00:00.54207", "planned_week": "2026-08-31", "started_date": "2026-09-02T09:00:00", "task_type_id": "70000000-0000-0000-0000-000000000001", "finished_date": null, "parent_task_id": null, "task_status_id": "60000000-0000-0000-0000-000000000002", "last_reopened_at": null, "reopened_from_done": false, "original_estimate_hrs": 16, "remaining_estimate_hrs": 12.5, "archived_at": null, "created_at": "2026-09-01T09:00:00.54207", "updated_at": "2026-09-02T09:00:00"}
+    ],
+    "task_history": [
+      {"id": "a0000000-0000-0000-0000-000000000001", "task_id": "90000000-0000-0000-0000-000000000001", "user_id": "30000000-0000-0000-0000-000000000001", "field_name": "assignee", "old_value": null, "new_value": "Engineer Two", "changed_at": "2026-09-01T09:30:00", "created_at": "2026-09-01T09:30:00", "updated_at": "2026-09-01T09:30:00"}
+    ],
+    "time_logs": [
+      {"id": "b0000000-0000-0000-0000-000000000001", "task_id": "90000000-0000-0000-0000-000000000001", "user_id": "30000000-0000-0000-0000-000000000002", "hours": 3.5, "log_date": "2026-09-02", "note": "Worked on map", "created_at": "2026-09-02T17:00:00", "updated_at": "2026-09-02T17:00:00"}
+    ],
+    "holidays": [
+      {"id": "c0000000-0000-0000-0000-000000000001", "title": "New Year’s Day", "type": "NATIONAL", "status": "CONFIRMED", "active": true, "start_date": "2026-01-01", "end_date": "2026-01-01", "country_code": "MA", "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ],
+    "user_capacity": [
+      {"id": "d0000000-0000-0000-0000-000000000001", "user_id": "30000000-0000-0000-0000-000000000002", "week_start": "2026-08-31", "base_capacity_hrs": 40, "absence_hrs": 4, "available_hrs": 36, "created_at": "2026-09-01T08:00:00", "updated_at": "2026-09-01T08:00:00"}
+    ]
+  }
+}
