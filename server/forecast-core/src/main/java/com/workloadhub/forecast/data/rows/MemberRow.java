@@ -11,4 +11,8 @@ public record MemberRow(UUID id, String fullName, String email, String role, Str
     public boolean employedOn(LocalDate d) {
         return !d.isBefore(joined) && (left == null || d.isBefore(left));
     }
+
+    public MemberRow withFullName(String fullName) {
+        return new MemberRow(id, fullName, email, role, jobTitle, teamIds, primaryTeamId, joined, left);
+    }
 }
