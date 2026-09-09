@@ -100,7 +100,9 @@ Docker is reachable and are skipped with a message otherwise.
 
 ### 3.2 The module's tables
 
-Created by Flyway from `db/forecast/<vendor>/`, with `table = forecast_schema_history` so the host's
+Created by Flyway from `db/forecast/<vendor>/`, with `table = forecast_schema_history` and
+`baselineOnMigrate` at version 0 (the WorkloadHub tables already exist, so Flyway must accept a
+non-empty schema and still apply V1), so the host's
 own Flyway or Liquibase history is untouched. Names carry the `forecast_` prefix.
 
 ```sql
@@ -222,7 +224,9 @@ Priorities: HIGHEST 5 %, HIGH 20 %, MEDIUM 50 %, LOW 20 %, LOWEST 5 %; defects s
 
 Each department team receives 2 to 4 generated projects with keys from the department code
 (`CT2-CAL`, `CT2-VAL`), names from family templates ("CT2 calibration campaign Q1", "SD1 diagnostics
-validation wave 2"), status `ACTIVE`, `owner_id` the department head, `team_id` the department team.
+validation wave 2"), status `ACTIVE`, `owner_id` the department head (for a department without a
+head, such as "Unassigned", a deterministic fallback: the first center manager, else admin, else
+person by id), `team_id` the department team.
 Each project has an internal active window (a start and end week inside the history) that shapes
 when its tasks are created; the window is not stored, because the schema has no project dates, and
 the forecast must not need it. About one project in six is `PLANNING` at the end of the history with
@@ -243,8 +247,9 @@ availability = working days minus absence days, over 5
 ```
 
 Assigned hours are the estimates of tasks whose assignment date falls in the week. Tasks arrive as
-a Poisson count with mean `target / median estimate`, sizes from the family distribution, so the sum
-scatters around the target. Zero weeks are real when the draw is zero.
+a Poisson count with mean `target / mean estimate` (the log-normal's mean is the median times
+`exp(0.6² / 2)`, about 1.2 × the median), sizes from the family distribution, so the expected sum of
+estimates equals the target and the realised sum scatters around it. Zero weeks are real when the draw is zero.
 
 ### 4.5 Task lifecycle written as the application would
 
@@ -261,12 +266,19 @@ For each generated task:
    assignment week (what the application does today); `due_date` = assignment + cycle × N(1.1, 0.2)
    working days, so due dates are sometimes missed.
 3. **Start.** Status transition `To Do → In Progress` (`field_name = 'status'`, old and new status
-   names) 0 to 3 working days after assignment; `started_date` set.
+   names) on the first present day the task reaches the member's active set, never before the
+   assignment timestamp, and at most 3 present working days after it: a task still unstarted after
+   3 present days takes precedence in that day's active set (the bound holds while the overdue tasks
+   fit the day's quarter-hour slices, which arrival rates keep far from the limit); `started_date`
+   set.
 4. **Work.** Daily `time_logs` rows spread the actual hours over the cycle, on working days the member
-   is present, 1 to 8 h a day, actual = estimate × ratio(m) where `ratio(m)` is log-normal(0, 0.25)
-   fixed per member, times a per-task noise log-normal(0, 0.2). `remaining_estimate_hrs` is updated
-   after each log to `max(0, estimate − logged)`, and the final row keeps the last value. Cycle length
-   is `actual / (daily share × hours available)`, where each member works on 2 to 3 tasks at once.
+   is present, in quarter-hour steps, at most 8 h a day across a member's tasks, actual = estimate ×
+   ratio(m) where `ratio(m)` is log-normal(0, 0.25) fixed per member and clamped to [0.6, 1.6], times a
+   per-task noise log-normal(0, 0.2). `remaining_estimate_hrs` is updated after each log to
+   `max(0, estimate − logged)`, and the final row keeps the last value. Each member works on at most
+   three tasks at once (plus any overdue starts of step 3), the day's present hours split evenly over
+   them, so the cycle length emerges from the queue. Status changes are written only on days the
+   member is present; a review or blocked period counts present days.
 5. **Finish.** Transition into `Done` at the last log, `finished_date` set, `remaining = 0`. 4 % of
    finished tasks are reopened later (`reopened_from_done = true`, `last_reopened_at`, a transition
    back to `In Progress` and a second finish with 20 to 40 % of the estimate logged again). 5 % of
@@ -278,8 +290,8 @@ For each generated task:
    real backlog at the as-of date.
 
 Statuses use the 9 existing rows: `To Do`, `In Progress`, `In Review` (10 % of delivery tasks pass
-through it for 1 to 2 days), `Blocked` (3 % of tasks for 2 to 5 days), `Done`. Notifications,
-comments and attachments are not generated.
+through it for 1 to 2 days), `Blocked` (3 % of tasks, drawn once per task, for 2 to 5 days), `Done`.
+Notifications, comments and attachments are not generated.
 
 ### 4.6 Absences, leaves, holidays and capacity
 
@@ -305,14 +317,20 @@ seed ... --format sql --out seeded.sql
   reproducible byte for byte.
 - JSON output uses the export envelope so `import` and the owner's tooling read it; `--format sql`
   writes PostgreSQL `INSERT` statements in dependency order inside one transaction with
-  `SET search_path TO task_service`, for `psql -f`.
+  `SET search_path TO task_service`, for `psql -f`. Within the five self-referencing tables (`users`,
+  `teams`, `tasks`, `task_comments`, `task_types`) rows are written parents first, because
+  PostgreSQL checks the non-deferrable foreign keys at the end of each statement; the JDBC importer
+  applies the same order before its batches.
 - `--synthetic` replaces names, usernames, emails and passwords with generated ones, drops
   `object_id` and `manager_object_id`, and can shrink the population; without `--export` it invents
   a directory (nine departments, one head each, one manager per ten people) and the reference rows
   (statuses, types, roles, Moroccan national holidays), so tests and CI need no export at all. An
-  export missing some statuses or types is completed from the same reference rows. Only synthetic
-  output is ever committed. The real-mode file holds password hashes and emails and stays out of git; the CLI
-  refuses to write real-mode output under the repository unless `--force`.
+  export missing some statuses or types is replaced by the same reference rows. Team and project
+  names carried over from a real export are scrubbed of every input identity (full name, email,
+  username, account name, longest first) and `sync_metadata` is dropped. `--users` is a synthetic-mode
+  option; real mode refuses it. Only synthetic output is ever committed. The real-mode file holds
+  password hashes and emails and stays out of git; the CLI refuses to write real-mode output under
+  the repository unless `--force`.
 - The generator is deterministic given `--seed`, single-threaded, and writes the 264 × 52 dataset in
   well under a minute.
 
