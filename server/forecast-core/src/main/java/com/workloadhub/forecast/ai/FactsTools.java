@@ -30,7 +30,7 @@ final class FactsTools {
                         id -> runOverview()),
                 new ToolSpec("get_member_history", "Last 13 weeks of task arrivals (hours and counts), logged hours of the last 4 weeks, unlogged and reopened tasks for one member.",
                         true, this::memberHistory),
-                new ToolSpec("get_member_forecast", "Forecast rows per window (five weekdays each: demand, low, high, capacity, overload, open, new and planned hours, due hours) for one member.",
+                new ToolSpec("get_member_forecast", "Forecast rows per window (five weekdays each: demand, low, high, capacity, overload, open, new and planned hours, due hours) and the day-by-day rows for one member.",
                         true, this::memberForecast),
                 new ToolSpec("get_member_patterns", "Deterministic pattern statistics for one member (assignment style, weekday rhythm, trend, estimate bias, cycle time, lateness, cluster, backlog).",
                         true, this::memberPatterns),
@@ -88,7 +88,8 @@ final class FactsTools {
 
     Map<String, Object> memberForecast(String id) {
         JsonNode m = members.get(id);
-        return m == null ? unknown(id) : map("member_id", id, "name", m.path("name").asText(), "forecast", plain(m.path("forecast")));
+        return m == null ? unknown(id)
+                : map("member_id", id, "name", m.path("name").asText(), "forecast", plain(m.path("forecast")), "days", plain(m.path("days")));
     }
 
     Map<String, Object> memberPatterns(String id) {

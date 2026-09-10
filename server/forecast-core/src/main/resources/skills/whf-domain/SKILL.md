@@ -19,10 +19,9 @@ description: Vocabulary and data dictionary of the WorkloadHub forecast facts. U
 - **overload**: max(0, demand minus capacity). Demand is never cut to fit capacity.
 - **low / high**: an interval around demand from the model's backtest residuals; wide bands mean an unstable history.
 - **due_hours**: remaining hours of the member's open tasks that fall due inside the window.
-- **days**: one entry per weekday of the horizon (`day`, `window`, `demand`, `capacity`, `overload`, `open_hours`, `new_hours`, `planned_hours`, `working_day`); a window's figures are the sums of its days.
 
 ## Member facts
-`history_13w` (weekly arrival hours and task counts), `logged_hours_4w` (hours logged per week), `unlogged_tasks` (finished tasks with no time logged; their actual hours were estimated), `reopened_tasks`, `patterns` (see whf-pattern-discovery), `likely_work` (see whf-likely-work).
+`history_13w` (weekly arrival hours and task counts), `logged_hours_4w` (hours logged per week), `unlogged_tasks` (finished tasks with no time logged; their actual hours were estimated), `reopened_tasks`, `patterns` (see whf-pattern-discovery), `likely_work` (see whf-likely-work). Each member also carries `days`, one entry per weekday of the horizon (`day`, `window`, `demand`, `capacity`, `overload`, `open_hours`, `new_hours`, `planned_hours`, `working_day`); a window's figures are the sums of its days, rounded.
 
 ## Team and run facts
 `team.totals` (demand, capacity and planned per window), `team.team_capacity` (the team's own capacity plan: total and allocated), `projects` (key, name, status, open and backlog task counts, first due date), `pending_holidays` (declared but unconfirmed), `data_quality` (unresolved assignments, unlogged tasks, history weeks), `run.windows` (`index`, `start`, `end`, `working_days`).

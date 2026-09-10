@@ -40,7 +40,7 @@ class FactsToolsTest {
         assertEquals(FACTS.path("members").size(), members.size());
 
         assertEquals(Set.of("member_id", "name", "history_13w", "logged_hours_4w", "unlogged_tasks", "reopened_tasks"), TOOLS.memberHistory(FIRST).keySet());
-        assertEquals(Set.of("member_id", "name", "forecast"), TOOLS.memberForecast(FIRST).keySet());
+        assertEquals(Set.of("member_id", "name", "forecast", "days"), TOOLS.memberForecast(FIRST).keySet());
         assertEquals(Set.of("member_id", "name", "patterns"), TOOLS.memberPatterns(FIRST).keySet());
         assertEquals(Set.of("member_id", "name", "open_tasks"), TOOLS.memberOpenTasks(FIRST).keySet());
         Map<String, Object> capacity = TOOLS.memberCapacity(FIRST);

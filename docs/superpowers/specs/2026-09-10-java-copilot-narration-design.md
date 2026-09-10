@@ -98,6 +98,8 @@ All of these are thrown by `narrate` before a session exists, so nothing is stor
 
 ### 4.2 The session
 
+> Amended on 2026-09-10: the horizon is two windows of five weekdays; the facts carry `run.windows`, per-window forecast rows and a member-level `days` list, the tools return `windows` (and `days` for capacity), and the contract fields are `window` (a window's first day, ISO 8601); see `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`, sections 8 and 9.
+
 `SessionSpec` holds the model (request override, else `whf.copilot.model`, blank means unset, the
 account default), the system message, the tool definitions and the tool names. The gateway builds
 `SessionConfig` with: `setModel` when not blank; `setSystemMessage(mode REPLACE, content)`;
@@ -156,6 +158,8 @@ its full block arrives. Intent events are forwarded as thinking with a trailing 
 
 ## 5. Tools
 
+> Amended on 2026-09-10: the horizon is two windows of five weekdays; the facts carry `run.windows`, per-window forecast rows and a member-level `days` list, the tools return `windows` (and `days` for capacity), and the contract fields are `window` (a window's first day, ISO 8601); see `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`, sections 8 and 9.
+
 Nine tools, built with `ToolDefinition.from`, each `skipPermission(true)`, reading only the facts
 JSON of the run (never the database). Member tools take `member_id` (string, the UUID from
 `get_run_overview`); an unknown id returns `{"error": "...", "known_member_ids": [...]}`.
@@ -176,6 +180,8 @@ Tool results are `Map`/`List` values converted from the facts tree; numbers keep
 exactly, so a number the model copies from a tool result is a number the verifier will find.
 
 ## 6. Contract and validation
+
+> Amended on 2026-09-10: the horizon is two windows of five weekdays; the facts carry `run.windows`, per-window forecast rows and a member-level `days` list, the tools return `windows` (and `days` for capacity), and the contract fields are `window` (a window's first day, ISO 8601); see `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`, sections 8 and 9.
 
 `contract.schema.json` (classpath, also the text embedded in the user prompt) describes:
 

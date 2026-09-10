@@ -52,7 +52,7 @@ class FactsBuilderTest {
         assertEquals("2026-09-06", run.get("as_of"));
         List<?> windows = (List<?>) run.get("windows");
         assertEquals(2, windows.size());
-        assertEquals(Map.of("index", 1, "start", "2026-09-07", "end", "2026-09-11", "working_days", ((Map<?, ?>) windows.get(0)).get("working_days")), windows.get(0));
+        assertEquals(Map.of("index", 1, "start", "2026-09-07", "end", "2026-09-11", "working_days", 5), windows.get(0));
         assertEquals("2026-09-14", ((Map<?, ?>) windows.get(1)).get("start"));
         assertEquals(List.of(2, 3), run.get("horizons"));
         Map<?, ?> team = (Map<?, ?>) facts.get("team");

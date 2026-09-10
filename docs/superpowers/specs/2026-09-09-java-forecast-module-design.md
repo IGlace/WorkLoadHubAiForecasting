@@ -572,7 +572,7 @@ error the quota fields are null and the status says why.
 
 ```java
 public interface ForecastService {
-    UUID startRun(RunRequest request);                     // teamId, requestedBy, asOf, forcedModel, plannedWork
+    UUID startRun(RunRequest request);                     // teamId, requestedBy, forcedModel, plannedWork (the run day is the server's today)
     RunResult getRun(UUID runId);                          // status, champion, scores, member weeks, error
     List<RunSummary> listRuns(UUID teamId, int limit);
     RunProgress progress(UUID runId);                      // phase, percent, live thinking/answer while narrating

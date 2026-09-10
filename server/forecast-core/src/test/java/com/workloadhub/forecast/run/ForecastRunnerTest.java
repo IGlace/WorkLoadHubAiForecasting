@@ -113,6 +113,7 @@ class ForecastRunnerTest {
             assertEquals(r.newHrs(), days.stream().mapToDouble(MemberDayForecast::newHrs).sum(), 0.05);
             assertEquals(r.plannedHrs(), days.stream().mapToDouble(MemberDayForecast::plannedHrs).sum(), 0.05);
             assertEquals(r.capacityHrs(), days.stream().mapToDouble(MemberDayForecast::capacityHrs).sum(), 0.05);
+            assertEquals(r.demandHrs(), days.stream().mapToDouble(MemberDayForecast::demandHrs).sum(), 0.05);
             assertEquals(r.workingDays(), days.stream().filter(MemberDayForecast::workingDay).count());
             for (MemberDayForecast d : days) {
                 assertEquals(d.demandHrs(), ForecastRunner.round2(d.openHrs() + d.newHrs() + d.plannedHrs()), 1e-9);
@@ -129,6 +130,28 @@ class ForecastRunnerTest {
     @Test
     void unknownOrEmptyTeamIsRejected() {
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> runner.forTeam(prepared, UUID.randomUUID(), null)).code());
+    }
+
+    @Test
+    void aHolidayInsideWindowOneLowersCapacityAndArrivalsWithoutMovingTheWindow() {
+        LocalDate wednesday = LocalDate.of(2026, 4, 29);               // Labour Day, Friday 1 May, is inside window 1
+        Prepared p = runner.prepare(data, wednesday, Backtest.FLOOR, ForecastRunner.ProgressListener.NONE);
+        assertEquals(LocalDate.of(2026, 4, 30), p.windows().get(0).start());
+        assertEquals(LocalDate.of(2026, 5, 6), p.windows().get(0).end());
+        assertTrue(p.windows().get(0).contains(LocalDate.of(2026, 5, 1)), "the holiday stays inside the window");
+        TeamOutcome out = runner.forTeam(p, team, null);
+        for (MemberWindowForecast r : out.memberWindows()) {
+            if (r.windowIndex() == 1) {
+                assertEquals(4, r.workingDays(), "five weekdays, one holiday");
+            }
+        }
+        for (MemberDayForecast d : out.memberDays()) {
+            if (d.day().equals(LocalDate.of(2026, 5, 1))) {
+                assertFalse(d.workingDay());
+                assertEquals(0.0, d.capacityHrs(), 1e-9);
+                assertEquals(0.0, d.newHrs(), 1e-9, "no arrivals land on a holiday");
+            }
+        }
     }
 
     @Test

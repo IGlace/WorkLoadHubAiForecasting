@@ -283,6 +283,16 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   (REST refuses `asOf`; the CLI keeps `--as-of` for seeded experiments); the evaluation's demand level is per
   member-window while its arrival level, the parity gate, is unchanged. Spec
   `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`.
+- **Rolling windows, recorded follow-ups** (2026-09-10 final review): a `new_hours_after_window` fact for
+  predicted arrival hours that spill past window 2 (planned work already reports `hours_after_window`); a
+  guard so a CLI `run --as-of` on a live database cannot overwrite arrived days in `forecast_current_days`
+  (today it is scoped to seeded databases by convention only); `GET .../current` and `current` with only
+  `from` given far ahead default `to` to today + 20 and answer `INVALID_REQUEST`; the 20-day default is
+  written twice (controller and CLI); `Truth.realisedHours` (weekly) has no production caller;
+  `JdbcRunStore.finish` re-reads the team id and re-sorts what `ORDER BY` already ordered; a window row's
+  `absence_hours` comes from the day rows while its capacity may come from the application's week row;
+  `CapacityRule`'s identity-keyed index is mutated from run threads (predates this branch) and two concurrent
+  `finish` calls on SQLite contend for the write lock (a `busy_timeout` when SQLite is used for real).
 - Seed realism to revisit after the first forecast on seeded data: per-department rhythms, the share of
   reopened and unlogged tasks, and whether department teams (people without a manager) should run their own
   forecast.

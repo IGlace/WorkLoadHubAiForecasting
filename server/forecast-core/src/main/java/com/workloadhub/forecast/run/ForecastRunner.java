@@ -202,6 +202,7 @@ public final class ForecastRunner {
                     double pl = planned.hours().getOrDefault(key, 0.0);
                     double cap = capacityRule.dayCapacity(m, d, data, p.calendar());
                     boolean workingDay = p.calendar().isWorkingDay(d);
+                    // Day rows round each component so the stored day figures add up exactly; the window band rounds the raw sums, so a window and the sum of its days can differ by a few hundredths of an hour.
                     double demand = round2(round2(o) + round2(n) + round2(pl));
                     dayRows.add(new MemberDayForecast(m.id(), d, w.index(), round2(o), round2(n), round2(pl), demand, cap,
                             round2(Math.max(0.0, demand - cap)), workingDay));
