@@ -2,12 +2,14 @@ package com.workloadhub.forecast.cli;
 
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.MemberWeekForecast;
+import com.workloadhub.forecast.api.ModelScore;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.data.ExportFiles;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -72,6 +74,12 @@ public class RunCommand implements Callable<Integer> {
         }
     }
 
+    /** Same convention as {@code DefaultForecastService}'s {@code finite}: NaN scores are excluded, not zeroed. */
+    private static String meanMase(List<Double> mases) {
+        double[] finite = mases.stream().mapToDouble(Double::doubleValue).filter(m -> !Double.isNaN(m)).toArray();
+        return finite.length == 0 ? "n/a" : String.format("%.3f", java.util.stream.DoubleStream.of(finite).average().orElseThrow());
+    }
+
     private void print(RunResult r, Services s) {
         Map<UUID, String> names = new HashMap<>();
         s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
@@ -84,8 +92,8 @@ public class RunCommand implements Callable<Integer> {
         System.out.println();
         System.out.printf("%-16s %8s %10s%n", "model", "horizon", "mean MASE");
         r.scores().stream().collect(Collectors.groupingBy(sc -> sc.model() + "|" + sc.horizon(), java.util.TreeMap::new,
-                Collectors.averagingDouble(sc -> Double.isNaN(sc.mase()) ? 0 : sc.mase())))
-                .forEach((key, v) -> System.out.printf("%-16s %8s %10.3f%n", key.split("\\|")[0], key.split("\\|")[1], v));
+                Collectors.mapping(ModelScore::mase, Collectors.toList())))
+                .forEach((key, mases) -> System.out.printf("%-16s %8s %10s%n", key.split("\\|")[0], key.split("\\|")[1], meanMase(mases)));
         if (!r.unavailable().isEmpty()) {
             r.unavailable().forEach((k, v) -> System.out.println("unavailable: " + k + ": " + v));
         }

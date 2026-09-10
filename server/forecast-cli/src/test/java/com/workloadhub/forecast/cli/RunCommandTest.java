@@ -33,7 +33,8 @@ class RunCommandTest {
         assertEquals(0, cli.execute("init-db", "--db", db.toString()));
         assertEquals(0, cli.execute("import", "--db", db.toString(), seeded.toString()));
         String teams = capture(cli, 0, "teams", "--db", db.toString());
-        String team = teams.lines().filter(l -> !l.isBlank() && !l.startsWith("id")).map(l -> l.split("\\s{2,}")[0]).findFirst().orElseThrow();
+        String team = teams.lines().filter(l -> !l.isBlank() && !l.startsWith("id")).map(l -> l.split("\\s{2,}"))
+                .filter(cols -> Integer.parseInt(cols[cols.length - 1].trim()) > 0).map(cols -> cols[0]).findFirst().orElseThrow();
         String run = capture(cli, 0, "run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--model", "seasonal_naive");
         assertTrue(run.contains("champion seasonal_naive"), run);
         assertTrue(run.contains("capacity"), run);
