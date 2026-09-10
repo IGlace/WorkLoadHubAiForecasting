@@ -385,7 +385,7 @@ call extracts, how to point at an installed CLI instead).
 - `ForecastControllerTest` (`WebMvcTest` with a mocked service): every route, the error mapping, the
   base path property.
 - `SampleHostIntegrationTest`: section 12.
-- CLI: `CliSmokeTest` gains `narrate` without `WHF_TOKEN_KEY` (exit 1, message), `narrate` on an
+- CLI: `CliSmokeTest` gains `narrate` without `WHF_TOKEN_KEY` (exit 2, message: a usage error, section 13), `narrate` on an
   unknown run (exit 1), `copilot status` for a user without a token (exit 0, `hasToken false`).
 - `SdkCopilotGatewayTest`: option mapping only (token set, `useLoggedInUser` off, Copilot home, CLI
   path when configured, the permission handler's decisions), without starting a client.
@@ -406,6 +406,10 @@ call extracts, how to point at an installed CLI instead).
    validated against the source's open tasks only. The `whf-rebalancing-advice` skill is worded for
    that.
 8. New properties: `whf.work-dir` (default `${user.home}/.workloadhub-forecast`).
+9. `GET /runs/{id}/narratives/{lang}` answers `NARRATIVE_NOT_FOUND` (404) when no narrative of that language
+   exists; the code was not in the 2026-09-09 list and follows the handler's `_NOT_FOUND` rule.
+10. `narrate` and `copilot status` without `WHF_TOKEN_KEY` exit 2, the usage-error code of section 13; the test
+    list of section 14 said 1 and has been corrected.
 
 ## 16. Non-goals
 

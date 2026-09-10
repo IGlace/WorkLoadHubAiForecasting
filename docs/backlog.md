@@ -322,6 +322,8 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   not `@CopilotTool`; `forecast_narratives` was recreated by V2 with `status`, `raw_text`, `error`, `attempts`,
   `tool_calls`; `narrate` returns a FAILED result (with its cost) instead of throwing `NARRATIVE_INVALID`;
   `DELETE /users/{id}/github-token` added; the rebalancing fit table of the 2026-09-07 design is not built
-  (`task_keys` are checked against the source's open tasks only); new property `whf.work-dir`.
+  (`task_keys` are checked against the source's open tasks only); new property `whf.work-dir`; the controller
+  answers `NARRATIVE_NOT_FOUND` (404) for a missing narrative row; `narrate` without `WHF_TOKEN_KEY` exits 2
+  (a usage error, spec section 13) where spec section 14's test list said 1 — section 14 has been corrected.
 - Copilot narration residuals: the narration runs on the caller's thread (the host schedules it); the quota
   snapshot keys are whatever the account reports; no live SDK test in CI (manual procedure in `server/README.md`).
