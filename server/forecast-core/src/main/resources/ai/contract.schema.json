@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Narrative",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_summary", "members"],
+  "properties": {
+    "run_summary": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "members": {"type": "array", "items": {"$ref": "#/$defs/member"}},
+    "team_risks": {"type": "array", "default": [], "items": {"$ref": "#/$defs/team_risk"}},
+    "rebalancing": {"type": "array", "default": [], "items": {"$ref": "#/$defs/move"}},
+    "suggested_adjustments": {"type": "array", "default": [], "items": {"$ref": "#/$defs/adjustment"}},
+    "model_notes": {"type": "string", "default": "", "maxLength": 1000}
+  },
+  "$defs": {
+    "level": {"type": "string", "enum": ["low", "medium", "high"]},
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["member_id", "name", "risk_level", "summary"],
+      "properties": {
+        "member_id": {"type": "string", "description": "The member's id from get_run_overview, copied exactly"},
+        "name": {"type": "string"},
+        "risk_level": {"$ref": "#/$defs/level"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 1200},
+        "patterns": {"type": "array", "default": [], "items": {"$ref": "#/$defs/pattern"}},
+        "warnings": {"type": "array", "default": [], "items": {"type": "string"}},
+        "likely_work": {"type": "array", "default": [], "maxItems": 4, "items": {"$ref": "#/$defs/likely_work"}}
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "statement", "evidence"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["assignment_style", "weekday_rhythm", "trend", "estimate_bias", "cycle_time", "lateness", "project_phase", "cluster", "other"]},
+        "statement": {"type": "string", "minLength": 1, "maxLength": 400},
+        "evidence": {"type": "string", "minLength": 1, "maxLength": 400}
+      }
+    },
+    "likely_work": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "evidence", "confidence"],
+      "properties": {
+        "statement": {"type": "string", "minLength": 1, "maxLength": 300},
+        "evidence": {"type": "string", "minLength": 1, "maxLength": 300},
+        "confidence": {"$ref": "#/$defs/level"}
+      }
+    },
+    "team_risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "detail", "severity"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 120},
+        "detail": {"type": "string", "minLength": 1, "maxLength": 800},
+        "severity": {"$ref": "#/$defs/level"},
+        "member_ids": {"type": "array", "default": [], "items": {"type": "string"}}
+      }
+    },
+    "move": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_member_id", "to_member_id", "week", "hours", "reason", "confidence"],
+      "properties": {
+        "from_member_id": {"type": "string"},
+        "to_member_id": {"type": "string"},
+        "week": {"type": "string", "format": "date", "description": "A forecast week's Monday, ISO 8601"},
+        "hours": {"type": "number", "exclusiveMinimum": 0},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 600},
+        "confidence": {"$ref": "#/$defs/level"},
+        "task_keys": {"type": "array", "default": [], "items": {"type": "string"}, "description": "Open tasks of the source member to move"}
+      }
+    },
+    "adjustment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["member_id", "week", "delta_hours", "reason"],
+      "properties": {
+        "member_id": {"type": "string"},
+        "week": {"type": "string", "format": "date"},
+        "delta_hours": {"type": "number"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 600}
+      }
+    }
+  }
+}
