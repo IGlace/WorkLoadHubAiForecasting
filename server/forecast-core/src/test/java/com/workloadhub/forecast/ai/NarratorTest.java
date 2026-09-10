@@ -1,6 +1,7 @@
 package com.workloadhub.forecast.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -310,5 +311,46 @@ class NarratorTest {
         assertEquals(20, u.path("cache_read_tokens").asInt());
         assertEquals(1, u.path("requests").asInt());
         assertTrue(u.path("ai_credits").isNull() && u.path("usd").isNull() && u.path("premium_requests").isNull());
+    }
+
+    @Test
+    void perAttemptStateResetsSoARetryNeverReturnsAPriorAttemptsAnswer() {
+        FakeGateway g = new FakeGateway("not JSON", GOOD);
+        g.finalMessagePerAttempt = List.of(true, false);
+        NarrationOutcome o = narrate(g);
+        assertEquals(NarrativeStatus.OK, o.status());
+        assertEquals(2, o.attempts());
+        assertTrue(o.narrativeJson().contains("All members within capacity."));
+    }
+
+    @Test
+    void aSessionErrorFromAnEarlierAttemptIsNotCarriedIntoALaterModelError() {
+        FakeGateway g = new FakeGateway("not JSON", new IllegalStateException("model call failed"));
+        g.sessionErrorText = "rate limited on attempt one";
+        NarrationOutcome o = narrate(g);
+        assertEquals("model_error", o.reason());
+        assertTrue(o.error().contains("model call failed"));
+        assertFalse(o.error().contains("rate limited on attempt one"), "attempt 1's session error must not leak into attempt 2's failure: " + o.error());
+    }
+
+    @Test
+    void usageEventsFromAnotherThreadAreStillCountedUnderTheLock() {
+        FakeGateway g = new FakeGateway(GOOD);
+        g.usageFromWorkerThread = true;
+        g.metricsError = new IllegalStateException("usage rpc unavailable");
+        JsonNode u = usage(narrate(g));
+        assertEquals("events", u.path("source").asText());
+        assertEquals(100, u.path("input_tokens").asInt());
+    }
+
+    @Test
+    void noMetricsAndNoStreamedUsageYieldsSourceNone() {
+        FakeGateway g = new FakeGateway(new IllegalStateException("model call failed"));
+        g.metricsError = new IllegalStateException("usage rpc unavailable");
+        NarrationOutcome o = narrate(g);
+        assertEquals(NarrativeStatus.FAILED, o.status());
+        JsonNode u = usage(o);
+        assertEquals("none", u.path("source").asText());
+        assertTrue(u.path("input_tokens").isNull());
     }
 }

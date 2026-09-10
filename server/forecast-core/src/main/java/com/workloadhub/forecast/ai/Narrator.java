@@ -99,7 +99,11 @@ public final class Narrator {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             progress.step(Step.ASKING, String.valueOf(attempt));
             progress.resetAnswer();
-            state.deltas.setLength(0);
+            synchronized (state) {
+                state.deltas.setLength(0);
+                state.messages.clear();
+                state.lastError = null;
+            }
             String content;
             try {
                 content = session.ask(prompt, timeout);
@@ -107,8 +111,12 @@ public final class Narrator {
                 return failed(session, state, attempt, "timeout", "no answer within " + timeout.toSeconds() + " s", null);
             } catch (RuntimeException e) {
                 String error = e.getMessage();
-                if (state.lastError != null) {
-                    error += "; session error: " + state.lastError;
+                String sessionError;
+                synchronized (state) {
+                    sessionError = state.lastError;
+                }
+                if (sessionError != null) {
+                    error += "; session error: " + sessionError;
                 }
                 return failed(session, state, attempt, "model_error", error, null);
             }
@@ -143,7 +151,7 @@ public final class Narrator {
         }
     }
 
-    /** The cost, read while the session is still open: its own metrics, else the streamed events. */
+    /** The cost, read while the session is still open: its own metrics, else the streamed events, else nothing. */
     private static String usageOf(NarrationSession session, State state) {
         try {
             Optional<UsageMetrics> metrics = session.usage(METRICS_TIMEOUT);
@@ -154,6 +162,9 @@ public final class Narrator {
             LOG.warn("copilot usage metrics unavailable: {}", e.getMessage());
         }
         synchronized (state) {
+            if (state.usageEvents.isEmpty()) {
+                return Usage.toJson(Usage.empty());
+            }
             return Usage.toJson(Usage.fromEvents(List.copyOf(state.usageEvents)));
         }
     }

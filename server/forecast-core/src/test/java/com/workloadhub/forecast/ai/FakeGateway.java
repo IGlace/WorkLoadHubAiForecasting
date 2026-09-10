@@ -7,6 +7,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import tools.jackson.databind.JsonNode;
@@ -23,9 +27,14 @@ final class FakeGateway implements CopilotGateway {
     RuntimeException authError;
     RuntimeException sessionError;
     boolean finalMessage = true;
+    /** Overrides {@link #finalMessage} per attempt (0-based); an attempt beyond the list falls back to it. */
+    List<Boolean> finalMessagePerAttempt;
     boolean replyNull;
+    /** Emitted as an ERROR event on the next {@code ask} call only, then cleared: a session error does not outlive its attempt. */
     String sessionErrorText;
     boolean closeThrows;
+    /** When true, the usage event is delivered from a background thread (joined before {@code ask} returns), exercising the state lock across threads. */
+    boolean usageFromWorkerThread;
     UsageMetrics metrics = metrics(1.5e9);
     RuntimeException metricsError;
     List<String> intents = new ArrayList<>();
@@ -127,6 +136,7 @@ final class FakeGateway implements CopilotGateway {
         @Override
         public String ask(String prompt, Duration timeout) throws TimeoutException {
             prompts.add(prompt);
+            int attemptIndex = prompts.size() - 1;
             List<ToolSpec> tools = spec.tools();
             for (int i = 0; i < Math.min(2, tools.size()); i++) {
                 events.accept(NarrationEvent.toolStart("c" + i, tools.get(i).name()));
@@ -153,6 +163,7 @@ final class FakeGateway implements CopilotGateway {
             }
             if (sessionErrorText != null) {
                 events.accept(NarrationEvent.error(sessionErrorText));
+                sessionErrorText = null; // one-shot: a session error does not outlive the attempt that raised it
             }
             Object reply = replies.remove(0);
             if (reply == TIMEOUT) {
@@ -161,9 +172,28 @@ final class FakeGateway implements CopilotGateway {
             if (reply instanceof RuntimeException e) {
                 throw e;
             }
-            events.accept(NarrationEvent.usage(new UsageEvent("gpt-5", 100L, 50L, 20L, 0L)));
+            UsageEvent usage = new UsageEvent("gpt-5", 100L, 50L, 20L, 0L);
+            if (usageFromWorkerThread) {
+                ExecutorService pool = Executors.newSingleThreadExecutor();
+                try {
+                    Future<?> f = pool.submit(() -> events.accept(NarrationEvent.usage(usage)));
+                    f.get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                } catch (ExecutionException e) {
+                    throw new IllegalStateException(e.getCause());
+                } finally {
+                    pool.shutdown();
+                }
+            } else {
+                events.accept(NarrationEvent.usage(usage));
+            }
             String text = (String) reply;
-            if (!finalMessage) {
+            boolean useFinalMessage = finalMessagePerAttempt != null && attemptIndex < finalMessagePerAttempt.size()
+                    ? finalMessagePerAttempt.get(attemptIndex)
+                    : finalMessage;
+            if (!useFinalMessage) {
                 int half = text.length() / 2;
                 events.accept(NarrationEvent.answerDelta(text.substring(0, half)));
                 events.accept(NarrationEvent.answerDelta(text.substring(half)));
