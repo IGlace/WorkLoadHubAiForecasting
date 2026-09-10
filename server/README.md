@@ -43,7 +43,20 @@ $CLI seed --synthetic --users 40 --weeks 26 --seed 7 --end 2026-09-06 --out /tmp
 
 # 5. dump a database back to JSON
 $CLI export --db ~/whf/workloadhub.db /tmp/dump.json
+
+# 6. list the teams, run a forecast, list its runs, and score every model
+$CLI teams --db ~/whf/workloadhub.db
+$CLI run --team "Platform" --db ~/whf/workloadhub.db --as-of 2026-09-06
+$CLI runs --team "Platform" --db ~/whf/workloadhub.db
+$CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal_naive --out ~/whf/eval
 ```
+
+| command | options | what it does |
+|---|---|---|
+| `teams` | `[--db]` | Lists the teams with their counted member count. |
+| `run` | `--team <name or id> [--as-of] [--db] [--model xgboost\|seasonal_naive] [--user] [--no-planned] [--json]` | Runs a forecast for one team as of a date (default: today) and prints the champion, the scores and the member-week table; `--model` forces a model, `--no-planned` switches off planned-work allocation, `--json` prints the result as JSON. Exits 2 on a usage error, 1 on a failed run. |
+| `runs` | `--team <name or id> [--db] [--limit 20]` | Lists the runs of a team, newest first. |
+| `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
@@ -58,3 +71,28 @@ ramps, team events and absences; tasks are created into the backlog or assigned 
 three at a time, logged day by day, reviewed, blocked or reopened at the design's rates, and a few
 finish without logs. Capacity rows follow the application's formula. The invariants the tests hold
 are listed in the design, section 4.8.
+
+## Parity check
+
+`server/tools/parity.sh EXPORT_JSON OUT_DIR [AS_OF]` runs the Java and Python harnesses on the same
+WorkloadHub export and compares them: `forecast init-db`, `import` and `eval --models xgboost,seasonal_naive`
+into `OUT_DIR/java`, then, from `service/`, `uv run whf import-workloadhub` and
+`uv run whf eval --models gbm,seasonal_naive` into `OUT_DIR/python`, then
+`server/tools/parity_compare.py` on the two `scores.csv` files. When `AS_OF` is omitted, it is read back from
+the Java summary's first line (`forecast eval` computes it as the latest task date), so both harnesses score
+the same origins.
+
+The Python import keeps fresh arrivals only (`--arrivals fresh`, the default): only tasks assigned within two
+days of creation count as arrivals, which is the series the Java pipeline forecasts, so the two harnesses are
+scoring the same thing rather than the Python harness's usual `est_hours` series.
+
+The gate itself (design section 13): the booster's mean MASE over horizons 1 and 2, every origin, agrees within
+0.10 between the two harnesses, and both sides pick the same champion (booster when its mean MASE is below
+1.0, else the seasonal-naive floor). It is measured at the arrival level (the global backtest over every
+counted member), not per team. `parity_compare.py` exits 0 on a pass, 1 on a fail, 2 on a usage error, and
+`--out` writes the Markdown report.
+
+The first synthetic result (36 users, 52 weeks, seed 11, as of 2026-09-06) is in
+[`docs/eval/2026-09-10-java-parity-synthetic/parity.md`](../docs/eval/2026-09-10-java-parity-synthetic/parity.md),
+alongside both harnesses' `summary.md`. Never run the procedure on the real export inside the repository: point
+`OUT_DIR` outside git and keep the real-mode result in the owner's own folder.

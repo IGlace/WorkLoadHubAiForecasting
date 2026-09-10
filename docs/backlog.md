@@ -291,3 +291,9 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   - The Python parity check compares apples to oranges as it stands: the Python harness still forecasts
     `est_hours`, while the Java pipeline's target is `fresh_hours`. Either switch the Python harness to
     `fresh_hours` first, or compare `est_hours`-driven runs on both sides, before trusting a parity number.
+- The parity gate is measured at the arrival level over all counted members (the harness's global backtest); a
+  per-team gate needs per-team champions in `demand.csv`, not produced by either harness.
+- Narration (`narrate`, `narrative`, `copilotStatus`) throws `COPILOT_UNAVAILABLE` until the Copilot plan lands.
+- `whf import-workloadhub` sets no capacity overrides: Python capacity is the 40-hour default over working days
+  minus vacations, Java uses `user_capacity`; demand-level numbers differ for that reason and are not part of
+  the gate.
