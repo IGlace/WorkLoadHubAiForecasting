@@ -93,6 +93,37 @@ def data_generate(
     )
 
 
+@app.command("import-workloadhub")
+def import_workloadhub_cmd(
+    file: Annotated[Path, typer.Argument(help="A WorkloadHub JSON export (real or seeded)")],
+    db: DbOption = None,
+    arrivals: Annotated[
+        str,
+        typer.Option(
+            "--arrivals",
+            help="fresh: keep arrivals assigned within two days (the series the Java module forecasts); all: every assigned task",
+        ),
+    ] = "fresh",
+    replace: Annotated[
+        bool, typer.Option("--replace", help="Delete the existing organisation and tasks first")
+    ] = False,
+) -> None:
+    """Load a WorkloadHub export into this database's schema for the parity check against the Java module."""
+    from whf.data.workloadhub import clear_for_replace, import_workloadhub
+
+    conn = _conn(db)
+    if conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] and not replace:
+        typer.echo("error: the database already holds tasks; pass --replace to overwrite")
+        raise typer.Exit(code=2)
+    if replace:
+        clear_for_replace(conn)
+    export = json.loads(Path(file).read_text(encoding="utf-8"))
+    counts = import_workloadhub(conn, export, arrivals=arrivals)
+    for table, n in counts.items():
+        typer.echo(f"{table:<16}{n:>8}")
+    typer.echo(f"Imported {counts['members']} members and {counts['tasks']} tasks ({arrivals} arrivals) from {file}")
+
+
 @app.command()
 def run(
     team: Annotated[int, typer.Option("--team", help="Team id to forecast")],
