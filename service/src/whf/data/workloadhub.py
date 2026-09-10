@@ -108,6 +108,19 @@ def import_workloadhub(conn: sqlite3.Connection, export: dict[str, Any], *, arri
     for t in teams:
         tid = str(t["id"])
         department_of_team[tid] = ids.of("teams", parent_of[tid] or tid)
+    user_int = {str(u["id"]): ids.of("users", u["id"]) for u in users}
+    department_rows = [
+        {
+            "id": ids.of("teams", t["id"]),
+            "name": t["name"],
+            "skill_team_leader_id": user_int.get(str(t.get("manager_id"))) if t.get("manager_id") else None,
+        }
+        for t in sorted(teams, key=lambda t: str(t["id"]))
+        if not parent_of[str(t["id"])]
+    ]
+    if not department_rows:
+        department_rows = [{"id": 1, "name": "Unassigned", "skill_team_leader_id": None}]
+        department_of_team = {tid: 1 for tid in parent_of}
 
     # directory
     teams_of_user: dict[str, list[str]] = defaultdict(list)
@@ -134,19 +147,6 @@ def import_workloadhub(conn: sqlite3.Connection, export: dict[str, Any], *, arri
             "active_from": joined_of_user[uid],
             "active_to": _date(u.get("deactivated_at")),
         }
-    user_int = {str(u["id"]): ids.of("users", u["id"]) for u in users}
-    department_rows = [
-        {
-            "id": ids.of("teams", t["id"]),
-            "name": t["name"],
-            "skill_team_leader_id": user_int.get(str(t.get("manager_id"))) if t.get("manager_id") else None,
-        }
-        for t in sorted(teams, key=lambda t: str(t["id"]))
-        if not parent_of[str(t["id"])]
-    ]
-    if not department_rows:
-        department_rows = [{"id": 1, "name": "Unassigned", "skill_team_leader_id": None}]
-        department_of_team = {tid: 1 for tid in parent_of}
     team_rows = [
         {
             "id": ids.of("teams", t["id"]),
@@ -203,8 +203,9 @@ def import_workloadhub(conn: sqlite3.Connection, export: dict[str, Any], *, arri
                         completed = _datetime(h["changed_at"])
                         break
         estimate = float(t.get("original_estimate_hrs") or 0.0)
-        actual = logs.get((tid, assignee))
-        if not actual and category == "DONE":
+        has_logs = (tid, assignee) in logs
+        actual = logs[(tid, assignee)] if has_logs else None
+        if not has_logs and completed is not None:
             actual = max(0.0, estimate - float(t.get("remaining_estimate_hrs") or 0.0))
         reporter = str(t["reporter_id"]) if t.get("reporter_id") else None
         mode = "self_picked" if reporter == assignee else ("project" if t.get("parent_task_id") else "manual")
