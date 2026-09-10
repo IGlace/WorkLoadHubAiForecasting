@@ -5,6 +5,7 @@ import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
+import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.lifecycle.Family;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
@@ -267,21 +268,113 @@ public final class FeatureBuilder {
         }
 
         double dueHours(LocalDate w, LocalDate target) {
-            return Double.NaN;                                                   // Task 6
+            LocalDate end = w.plusDays(6);
+            LocalDate targetEnd = target.plusDays(6);
+            double sum = 0;
+            for (TaskFacts t : tasks) {
+                LocalDate due = t.task().dueDate();
+                if (due != null && t.openAtEndOf(end) && !due.isBefore(target) && !due.isAfter(targetEnd)) {
+                    sum += remainingAsOf(t, end);
+                }
+            }
+            return sum;
         }
     }
 
-    // ---- Task 6 fills these in; in Task 5 they leave their columns NaN ----
-
     private void throughput(double[] r, Map<String, Integer> col, MemberContext mc, LocalDate w) {
+        for (int k = 1; k <= 4; k++) {
+            r[col.get("logged_hours_lag" + k)] = mc.loggedInWeek(w.minusWeeks(k - 1));
+        }
+        LocalDate end = w.plusDays(6);
+        int open = 0;
+        int overdue = 0;
+        int running = 0;
+        double remaining = 0;
+        for (TaskFacts t : mc.tasks) {
+            if (!t.openAtEndOf(end)) {
+                continue;
+            }
+            open++;
+            remaining += mc.remainingAsOf(t, end);
+            if (t.task().dueDate() != null && !t.task().dueDate().isAfter(end)) {
+                overdue++;
+            }
+            if (t.inProgressAtEndOf(end)) {
+                running++;
+            }
+        }
+        r[col.get("open_tasks")] = open;
+        r[col.get("open_remaining_hrs")] = remaining;
+        r[col.get("overdue_open")] = overdue;
+        r[col.get("in_progress_tasks")] = running;
     }
 
     /** Per-team, per-week values shared by every member of the team. */
     static final class TeamContext {
+        private final ForecastData data;
+        private final Lifecycle lc;
+        private final Map<UUID, Map<LocalDate, double[]>> cache = new HashMap<>();
+        private final Map<UUID, List<TaskFacts>> tasksByProject = new HashMap<>();
+
         TeamContext(ForecastData data, Lifecycle lc, List<LocalDate> weeks) {
+            this.data = data;
+            this.lc = lc;
+            for (TaskFacts f : lc.all()) {
+                if (f.task().projectId() != null) {
+                    tasksByProject.computeIfAbsent(f.task().projectId(), k -> new ArrayList<>()).add(f);
+                }
+            }
         }
 
         void fill(double[] r, Map<String, Integer> col, UUID team, LocalDate w) {
+            double[] v = cache.computeIfAbsent(team, k -> new HashMap<>()).computeIfAbsent(w, k -> compute(team, w));
+            r[col.get("team_backlog_unassigned_hrs")] = v[0];
+            r[col.get("proj_active")] = v[1];
+            r[col.get("proj_planning")] = v[2];
+            r[col.get("proj_first_due_weeks")] = v[3];
+        }
+
+        private double[] compute(UUID team, LocalDate w) {
+            LocalDate end = w.plusDays(6);
+            double backlog = 0;
+            int active = 0;
+            int planning = 0;
+            double firstDue = NEVER_WEEKS;
+            Map<UUID, ProjectRow> projects = data.projectById();
+            for (UUID pid : data.projectIdsOfTeamAndParent(team)) {
+                ProjectRow p = projects.get(pid);
+                boolean hasWork = false;
+                double projectDue = Double.NaN;
+                for (TaskFacts t : tasksByProject.getOrDefault(pid, List.of())) {
+                    if (t.task().createdDate().toLocalDate().isAfter(end)) {
+                        continue;
+                    }
+                    boolean finishedByEnd = t.finished() != null && !t.finished().toLocalDate().isAfter(end);
+                    boolean assignedByEnd = t.isAssigned() && !t.assigned().toLocalDate().isAfter(end);
+                    if (!finishedByEnd && !assignedByEnd) {
+                        backlog += t.estimate();
+                        hasWork = true;
+                    }
+                    if (t.openAtEndOf(end)) {
+                        hasWork = true;
+                        LocalDate due = t.task().dueDate();
+                        if (due != null && !due.isBefore(w)) {
+                            double weeks = java.time.temporal.ChronoUnit.DAYS.between(w, due) / 7.0;
+                            projectDue = Double.isNaN(projectDue) ? weeks : Math.min(projectDue, weeks);
+                        }
+                    }
+                }
+                if ("ACTIVE".equals(p.status()) && hasWork) {
+                    active++;
+                }
+                if ("PLANNING".equals(p.status())) {
+                    planning++;
+                }
+                if (!Double.isNaN(projectDue)) {
+                    firstDue = Math.min(firstDue, projectDue);
+                }
+            }
+            return new double[] {backlog, active, planning, firstDue};
         }
     }
 }

@@ -65,6 +65,11 @@ public record ForecastData(
         return List.copyOf(items.stream().sorted(Comparator.comparing(id, BY_ID)).toList());
     }
 
+    public ForecastData withProjects(List<ProjectRow> projects) {
+        return new ForecastData(members, teams, projects, tasks, transitions, timeLogs, capacity, absences, holidays, users,
+                statusCategoryByName);
+    }
+
     public Map<UUID, MemberRow> memberById() {
         return index(members, MemberRow::id);
     }
