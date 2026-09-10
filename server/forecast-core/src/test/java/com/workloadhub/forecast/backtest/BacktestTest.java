@@ -125,6 +125,10 @@ class BacktestTest {
         assertEquals("gone at the second origin", r.unavailable().get("flaky"));
         assertTrue(r.scores().stream().noneMatch(s -> s.model().equals("flaky")));
         assertFalse(r.residuals().containsKey("flaky"));
+        assertFalse(r.residualRows().containsKey("flaky"), "the unavailable model's residual rows are purged too");
+        assertTrue(r.residualRows("flaky", 1).isEmpty());
+        assertEquals(origins.size(), r.residualRows(Backtest.FLOOR, 1).stream().map(Backtest.Residual::origin).distinct().count(),
+                "the floor keeps residual rows at every scored origin");
         assertFalse(r.secondsPerModel().containsKey("flaky"));
         assertEquals(Backtest.FLOOR, Backtest.selectChampion(r.scores()).model());
     }
