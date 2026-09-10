@@ -8,34 +8,15 @@
 # OS / editor
 .DS_Store
 
-# Python
-.venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-.ruff_cache/
-.hypothesis/
-service/build/
-
-# Build outputs
-dist/
-installer/pyinstaller/build/
-
-# Node / Electron
-node_modules/
-app/out/
-
-# Rendered reports (regenerate from the HTML; the pre-commit hook blocks binaries)
-docs/reports/**/*.pdf
-
-# Java module build output and jqwik state
+# Java module: build output, jqwik state, local databases, real-mode seed output (personal data)
 server/**/target/
 server/**/.jqwik-database
-
-# Java module: build output, local databases, real-mode seed output (personal data)
-server/**/target/
 server/**/*.db
 server/**/*.db-journal
 *seeded*.json
 *seeded*.sql
 workloadhub_export*.json
+
+# Python caches of the tools test
+__pycache__/
+.pytest_cache/
