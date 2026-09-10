@@ -72,6 +72,21 @@ class JdbcRunStoreTest {
         UUID nanRun = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0.plusMinutes(4));
         store.finish(nanRun, "seasonal_naive", Double.NaN, "{}", List.of(), "{}", T0.plusMinutes(5));
         assertNull(store.find(nanRun).orElseThrow().championMase(), "NaN is stored as null");
+
+        UUID bigRun = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0.plusMinutes(6));
+        List<MemberWeekForecast> manyRows = manyRows(450);
+        store.finish(bigRun, "xgboost", 0.5, "{}", manyRows, "{}", T0.plusMinutes(7));
+        assertEquals(manyRows, store.memberWeeks(bigRun), "450 rows survive a batched insert, in order");
+    }
+
+    /** {@code count} consecutive Monday weeks for one user, spanning more than one batch of {@link JdbcRunStore#BATCH}. */
+    static List<MemberWeekForecast> manyRows(int count) {
+        LocalDate week = LocalDate.of(2027, 1, 4);
+        List<MemberWeekForecast> out = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            out.add(new MemberWeekForecast(USER, week.plusWeeks(i), 1, 2, 0, 3, 2, 5, 40, 0, 5, 0));
+        }
+        return out;
     }
 
     @Test

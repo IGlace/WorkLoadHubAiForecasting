@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -24,11 +25,13 @@ public final class JdbcRunStore {
     static final int ERROR_MAX = 500;
 
     private final JdbcClient jdbc;
+    private final JdbcTemplate jdbcTemplate;
     private final Dialect dialect;
     private final TransactionTemplate tx;
 
     public JdbcRunStore(DataSource dataSource, Dialect dialect) {
         this.jdbc = JdbcClient.create(dataSource);
+        this.jdbcTemplate = new JdbcTemplate(dataSource);
         this.dialect = dialect;
         this.tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
     }
@@ -72,17 +75,26 @@ public final class JdbcRunStore {
                     + " WHERE id = " + ph("uuid"))
                     .param(RunStatus.DONE.name()).param(champion).param(Double.isNaN(championMase) ? null : championMase).param(backtestJson)
                     .param(ts(finishedAt)).param(runId.toString()).update();
-            String insert = "INSERT INTO forecast_member_weeks (run_id, user_id, week_start, open_hrs, new_hrs, planned_hrs, low_hrs, high_hrs,"
-                    + " capacity_hrs, overload_hrs, working_days, absence_hrs) VALUES (" + ph("uuid") + ", " + ph("uuid") + ", " + ph("date")
-                    + ", ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            for (MemberWeekForecast r : rows) {
-                jdbc.sql(insert).param(runId.toString()).param(r.userId().toString()).param(r.weekStart().toString())
-                        .param(r.openHrs()).param(r.newHrs()).param(r.plannedHrs()).param(r.lowHrs()).param(r.highHrs())
-                        .param(r.capacityHrs()).param(r.overloadHrs()).param(r.workingDays()).param(r.absenceHrs()).update();
-            }
+            insertMemberWeeks(runId, rows);
             jdbc.sql("INSERT INTO forecast_facts (run_id, facts_json, created_at) VALUES (" + ph("uuid") + ", ?, " + ph("timestamp") + ")")
                     .param(runId.toString()).param(factsJson).param(ts(finishedAt)).update();
         });
+    }
+
+    /** Batches of {@link #BATCH} rows, same typed placeholders and binding order as a single-row insert. */
+    private void insertMemberWeeks(UUID runId, List<MemberWeekForecast> rows) {
+        String insert = "INSERT INTO forecast_member_weeks (run_id, user_id, week_start, open_hrs, new_hrs, planned_hrs, low_hrs, high_hrs,"
+                + " capacity_hrs, overload_hrs, working_days, absence_hrs) VALUES (" + ph("uuid") + ", " + ph("uuid") + ", " + ph("date")
+                + ", ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        for (int start = 0; start < rows.size(); start += BATCH) {
+            List<MemberWeekForecast> chunk = rows.subList(start, Math.min(start + BATCH, rows.size()));
+            List<Object[]> args = new ArrayList<>(chunk.size());
+            for (MemberWeekForecast r : chunk) {
+                args.add(new Object[] {runId.toString(), r.userId().toString(), r.weekStart().toString(), r.openHrs(), r.newHrs(),
+                        r.plannedHrs(), r.lowHrs(), r.highHrs(), r.capacityHrs(), r.overloadHrs(), r.workingDays(), r.absenceHrs()});
+            }
+            jdbcTemplate.batchUpdate(insert, args);
+        }
     }
 
     public Optional<RunSummary> find(UUID runId) {
