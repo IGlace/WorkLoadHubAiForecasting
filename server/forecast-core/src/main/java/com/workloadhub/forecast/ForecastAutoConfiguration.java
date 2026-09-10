@@ -1,5 +1,9 @@
 package com.workloadhub.forecast;
 
+import com.workloadhub.forecast.ai.CopilotGateway;
+import com.workloadhub.forecast.ai.Narrator;
+import com.workloadhub.forecast.ai.Prompts;
+import com.workloadhub.forecast.ai.SdkCopilotGateway;
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
 import com.workloadhub.forecast.capacity.CapacityRule;
@@ -10,7 +14,10 @@ import com.workloadhub.forecast.store.AesGcmCipher;
 import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.ForecastMigrations;
 import com.workloadhub.forecast.store.JdbcGitHubTokenStore;
+import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
+import java.nio.file.Path;
+import java.time.Duration;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -80,12 +87,30 @@ public class ForecastAutoConfiguration {
         return new RunProgressTracker();
     }
 
+    @Bean
+    @ConditionalOnMissingBean
+    CopilotGateway copilotGateway(ForecastProperties properties) {
+        return new SdkCopilotGateway(Path.of(properties.getWorkDir(), "copilot"), properties.getCopilot().getCliPath());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    JdbcNarrativeStore jdbcNarrativeStore(DataSource dataSource, Dialect dialect, ForecastMigrationsRunner migrated) {
+        return new JdbcNarrativeStore(dataSource, dialect);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    Narrator narrator(CopilotGateway gateway, ForecastProperties properties) {
+        return new Narrator(gateway, Prompts.load(), Duration.ofSeconds(properties.getCopilot().getTimeoutSeconds()), properties.getCopilot().getModel());
+    }
+
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
     ForecastService forecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
-            ForecastProperties properties) {
+            ForecastProperties properties, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway) {
         return new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
-                properties.getPlannedWork().isEnabled());
+                properties.getPlannedWork().isEnabled(), tokens, narratives, narrator, gateway);
     }
 
     /** Marker bean so that beans needing the tables can depend on the migrations having run. */

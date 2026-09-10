@@ -16,53 +16,53 @@ import java.util.function.Consumer;
 import tools.jackson.databind.JsonNode;
 
 /** A scripted stand-in for the SDK: replies in order, streamed events before each reply, recorded calls. */
-final class FakeGateway implements CopilotGateway {
+public final class FakeGateway implements CopilotGateway {
 
     /** Put this in {@link #replies} to make the next ask time out. */
-    static final Object TIMEOUT = new Object();
+    public static final Object TIMEOUT = new Object();
 
-    final List<Object> replies;
-    boolean authenticated = true;
-    RuntimeException openError;
-    RuntimeException authError;
-    RuntimeException sessionError;
-    boolean finalMessage = true;
+    public final List<Object> replies;
+    public boolean authenticated = true;
+    public RuntimeException openError;
+    public RuntimeException authError;
+    public RuntimeException sessionError;
+    public boolean finalMessage = true;
     /** Overrides {@link #finalMessage} per attempt (0-based); an attempt beyond the list falls back to it. */
-    List<Boolean> finalMessagePerAttempt;
-    boolean replyNull;
+    public List<Boolean> finalMessagePerAttempt;
+    public boolean replyNull;
     /** Emitted as an ERROR event on the next {@code ask} call only, then cleared: a session error does not outlive its attempt. */
-    String sessionErrorText;
-    boolean closeThrows;
+    public String sessionErrorText;
+    public boolean closeThrows;
     /** When true, the usage event is delivered from a background thread (joined before {@code ask} returns), exercising the state lock across threads. */
-    boolean usageFromWorkerThread;
-    UsageMetrics metrics = metrics(1.5e9);
-    RuntimeException metricsError;
-    List<String> intents = new ArrayList<>();
-    List<String[]> reasoningDeltas = new ArrayList<>();
-    List<String[]> reasoningFull = new ArrayList<>();
-    List<String> messageDeltas = new ArrayList<>();
-    String unmatchedToolDoneId;
-    Map<String, Object> quota;
-    RuntimeInfo runtimeInfo = new RuntimeInfo(true, "/tmp/runtime.node", "1.0.13-preview.6", "in-process runtime");
+    public boolean usageFromWorkerThread;
+    public UsageMetrics metrics = metrics(1.5e9);
+    public RuntimeException metricsError;
+    public List<String> intents = new ArrayList<>();
+    public List<String[]> reasoningDeltas = new ArrayList<>();
+    public List<String[]> reasoningFull = new ArrayList<>();
+    public List<String> messageDeltas = new ArrayList<>();
+    public String unmatchedToolDoneId;
+    public Map<String, Object> quota;
+    public RuntimeInfo runtimeInfo = new RuntimeInfo(true, "/tmp/runtime.node", "1.0.13-preview.6", "in-process runtime");
 
-    boolean opened;
-    boolean closed;
-    String tokenSeen;
-    FakeSession session;
-    SessionSpec spec;
+    public boolean opened;
+    public boolean closed;
+    public String tokenSeen;
+    public FakeSession session;
+    public SessionSpec spec;
 
-    FakeGateway(Object... replies) {
+    public FakeGateway(Object... replies) {
         this.replies = new ArrayList<>(List.of(replies));
     }
 
-    static UsageMetrics metrics(Double nanoAiu) {
+    public static UsageMetrics metrics(Double nanoAiu) {
         Map<String, UsageMetrics.ModelMetric> models = new LinkedHashMap<>();
         models.put("gpt-5", new UsageMetrics.ModelMetric(1, 100, 50, 0, 0L));
         return new UsageMetrics(nanoAiu, 1L, 1.0, 2500L, models);
     }
 
     /** A narrative that cites, for every member, the demand and capacity of their first forecast row. */
-    static String goodNarrative(JsonNode facts) {
+    public static String goodNarrative(JsonNode facts) {
         StringBuilder members = new StringBuilder();
         for (JsonNode m : facts.path("members")) {
             JsonNode row = m.path("forecast").get(0);

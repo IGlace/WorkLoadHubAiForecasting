@@ -1,11 +1,21 @@
 package com.workloadhub.forecast.service;
 
+import com.workloadhub.forecast.ai.AuthStatus;
+import com.workloadhub.forecast.ai.CopilotConnection;
+import com.workloadhub.forecast.ai.CopilotGateway;
+import com.workloadhub.forecast.ai.NarrationOutcome;
+import com.workloadhub.forecast.ai.NarrationProgress;
+import com.workloadhub.forecast.ai.Narrator;
+import com.workloadhub.forecast.ai.Prompts;
+import com.workloadhub.forecast.ai.RuntimeInfo;
 import com.workloadhub.forecast.api.CopilotStatus;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.ForecastService;
+import com.workloadhub.forecast.api.GitHubTokenStore;
 import com.workloadhub.forecast.api.ModelScore;
 import com.workloadhub.forecast.api.NarrativeRequest;
 import com.workloadhub.forecast.api.NarrativeResult;
+import com.workloadhub.forecast.api.NarrativeStatus;
 import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
@@ -21,12 +31,15 @@ import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
 import com.workloadhub.forecast.store.Dialect;
+import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -53,13 +66,24 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     private final RunProgressTracker progress;
     private final ExecutorService executor;
 
+    public static final Duration QUOTA_TIMEOUT = Duration.ofSeconds(10);
+
+    private final GitHubTokenStore tokens;
+    private final JdbcNarrativeStore narratives;
+    private final Narrator narrator;
+    private final CopilotGateway gateway;
+
     public DefaultForecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
-            int threads, boolean plannedWorkDefault) {
+            int threads, boolean plannedWorkDefault, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway) {
         this.dataSource = dataSource;
         this.dialect = dialect;
         this.runner = runner;
         this.store = store;
         this.progress = progress;
+        this.tokens = tokens;
+        this.narratives = narratives;
+        this.narrator = narrator;
+        this.gateway = gateway;
         this.executor = Executors.newFixedThreadPool(Math.max(1, threads), r -> {
             Thread t = new Thread(r, "forecast-run");
             t.setDaemon(true);
@@ -196,17 +220,90 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
 
     @Override
     public NarrativeResult narrate(NarrativeRequest request) {
-        throw ForecastException.of("COPILOT_UNAVAILABLE", "narration is not part of this build yet");
+        if (request == null || request.runId() == null) {
+            throw ForecastException.invalidRequest("runId is required");
+        }
+        if (request.requestedBy() == null) {
+            throw ForecastException.invalidRequest("requestedBy is required");
+        }
+        String language = request.language() == null ? "" : request.language().trim().toLowerCase(Locale.ROOT);
+        if (!Prompts.SUPPORTED_LANGUAGES.contains(language)) {
+            throw ForecastException.invalidRequest("language must be en or fr");
+        }
+        UUID runId = request.runId();
+        RunSummary run = store.find(runId).orElseThrow(() -> ForecastException.of("RUN_NOT_FOUND", "run " + runId + " not found"));
+        if (run.status() != RunStatus.DONE) {
+            throw ForecastException.of("RUN_NOT_DONE", "run " + runId + " is " + run.status());
+        }
+        // The one place the module reads a user's token.
+        String token = tokens.load(request.requestedBy())
+                .orElseThrow(() -> ForecastException.of("TOKEN_MISSING", "no GitHub token stored for user " + request.requestedBy()));
+        JsonNode facts = ExportFiles.mapper().readTree(store.facts(runId).orElse("{}"));
+        NarrationProgress live = progress.narrationProgress(runId);
+        NarrationOutcome outcome;
+        try {
+            outcome = narrator.narrate(facts, language, request.model(), token, live);
+        } catch (ForecastException e) {
+            progress.narrationFailed(runId, e.code() + ": " + e.getMessage());
+            throw e;
+        } catch (RuntimeException e) {
+            LOG.error("narration of run {} failed", runId, e);
+            progress.narrationFailed(runId, "COPILOT_UNAVAILABLE: " + e.getMessage());
+            throw ForecastException.of("COPILOT_UNAVAILABLE", e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+        NarrativeResult result = narratives.save(runId, language, outcome, LocalDateTime.now());
+        if (outcome.status() == NarrativeStatus.FAILED) {
+            progress.narrationFailed(runId, outcome.error());
+        } else {
+            progress.narrated(runId);
+        }
+        return result;
     }
 
     @Override
     public Optional<NarrativeResult> narrative(UUID runId, String language) {
-        throw ForecastException.of("COPILOT_UNAVAILABLE", "narration is not part of this build yet");
+        if (store.find(runId).isEmpty()) {
+            throw ForecastException.of("RUN_NOT_FOUND", "run " + runId + " not found");
+        }
+        return narratives.latest(runId, language == null ? "" : language.trim().toLowerCase(Locale.ROOT));
     }
 
     @Override
     public CopilotStatus copilotStatus(UUID userId) {
-        throw ForecastException.of("COPILOT_UNAVAILABLE", "narration is not part of this build yet");
+        if (userId == null) {
+            throw ForecastException.invalidRequest("userId is required");
+        }
+        boolean hasToken = tokens.has(userId);
+        RuntimeInfo rt = gateway.runtime();
+        if (!hasToken) {
+            return new CopilotStatus(userId, false, rt.available(), rt.path(), rt.version(), null, null, null, "no GitHub token stored for this user");
+        }
+        if (!rt.available()) {
+            return new CopilotStatus(userId, true, false, rt.path(), rt.version(), null, null, null, rt.message());
+        }
+        String token = tokens.load(userId).orElseThrow(() -> ForecastException.of("TOKEN_MISSING", "no GitHub token stored for user " + userId));
+        CopilotConnection connection;
+        try {
+            connection = gateway.open(token);
+        } catch (ForecastException e) {
+            return new CopilotStatus(userId, true, false, rt.path(), rt.version(), null, null, null, e.getMessage());
+        }
+        try (connection) {
+            AuthStatus auth;
+            try {
+                auth = connection.authStatus();
+            } catch (RuntimeException e) {
+                return new CopilotStatus(userId, true, true, rt.path(), rt.version(), false, null, null, "could not read Copilot sign-in status: " + e.getMessage());
+            }
+            if (!auth.authenticated()) {
+                return new CopilotStatus(userId, true, true, rt.path(), rt.version(), false, null, null,
+                        auth.message() != null ? auth.message() : "the token is not accepted by Copilot");
+            }
+            Optional<Map<String, Object>> quota = connection.quota(QUOTA_TIMEOUT);
+            String quotaJson = quota.map(q -> ExportFiles.mapper().writeValueAsString(q)).orElse(null);
+            String message = "signed in as " + auth.login() + (quota.isPresent() ? "" : "; quota unavailable");
+            return new CopilotStatus(userId, true, true, rt.path(), rt.version(), true, auth.login(), quotaJson, message);
+        }
     }
 
     @Override

@@ -59,6 +59,22 @@ class ForecastAutoConfigurationTest {
                 .run(context -> {
                     assertNotNull(context.getBean(ForecastService.class));
                     assertNotNull(context.getBean(com.workloadhub.forecast.run.ForecastRunner.class));
+                    assertNotNull(context.getBean(com.workloadhub.forecast.ai.CopilotGateway.class));
+                    assertNotNull(context.getBean(com.workloadhub.forecast.ai.Narrator.class));
+                    assertNotNull(context.getBean(com.workloadhub.forecast.store.JdbcNarrativeStore.class));
+                    assertTrue(context.getBean(com.workloadhub.forecast.ai.CopilotGateway.class) instanceof com.workloadhub.forecast.ai.SdkCopilotGateway);
                 });
+    }
+
+    @Test
+    void aHostSuppliedGatewayReplacesTheSdkOne() {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        com.workloadhub.forecast.ai.FakeGateway fake = new com.workloadhub.forecast.ai.FakeGateway();
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
+                .withBean(DataSource.class, () -> ds)
+                .withBean(com.workloadhub.forecast.ai.CopilotGateway.class, () -> fake)
+                .run(context -> assertTrue(context.getBean(com.workloadhub.forecast.ai.CopilotGateway.class) == fake));
     }
 }
