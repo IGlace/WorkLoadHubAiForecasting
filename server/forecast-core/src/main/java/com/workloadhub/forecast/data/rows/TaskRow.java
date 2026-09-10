@@ -59,4 +59,9 @@ public record TaskRow(UUID id, String key, String title, UUID projectId, UUID as
         return new TaskRow(id, key, title, projectId, assigneeId, reporterId, parentId, typeName, statusCategory,
                 priority, estimate, remaining, createdDate, startedDate, finishedDate, dueDate, reopened, archived);
     }
+
+    public TaskRow withPriority(String priority) {
+        return new TaskRow(id, key, title, projectId, assigneeId, reporterId, parentId, typeName, statusCategory,
+                priority, estimate, remaining, createdDate, startedDate, finishedDate, dueDate, reopened, archived);
+    }
 }
