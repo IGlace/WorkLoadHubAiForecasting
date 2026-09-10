@@ -15,7 +15,9 @@ import com.workloadhub.forecast.testing.TestData;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -173,6 +175,35 @@ class FeatureBuilderTest {
         assertEquals(0.0, m.get(origin, "due_hrs_h2"));
         assertEquals(1.0, m.get(origin, "estimate_ratio_13w"), 1e-9, "8 h logged on an 8 h estimate");
         assertEquals(15.0, m.get(origin, "cycle_days_13w"), "assigned −4 w, finished −2 w: 14 days + 1");
+    }
+
+    @Test
+    void targetHEqualsFreshHoursHWeeksLaterWhereBothExist() {
+        ForecastData data = SeededData.data();
+        LocalDate origin = com.workloadhub.forecast.calendar.Weeks.lastCompleteWeek(SeededData.asOf());
+        FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE)
+                .build(data.members(), origin);
+        Map<MemberWeek, Integer> rowOf = new HashMap<>();
+        for (int i = 0; i < m.rowCount(); i++) {
+            rowOf.put(m.key(i), i);
+        }
+        int checked = 0;
+        for (int h : Features.HORIZONS) {
+            double[] target = m.target(h);
+            for (int i = 0; i < m.rowCount(); i++) {
+                if (Double.isNaN(target[i])) {
+                    continue;
+                }
+                MemberWeek future = new MemberWeek(m.key(i).member(), m.key(i).week().plusWeeks(h));
+                Integer j = rowOf.get(future);
+                if (j == null) {
+                    continue;
+                }
+                assertEquals(m.get(j, "fresh_hours"), target[i], 1e-9, () -> future + " at h" + h);
+                checked++;
+            }
+        }
+        assertTrue(checked > 0, "the seed gives at least one row with both a target and its future fresh_hours");
     }
 
     @Test

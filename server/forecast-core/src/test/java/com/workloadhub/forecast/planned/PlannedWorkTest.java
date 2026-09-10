@@ -151,6 +151,21 @@ class PlannedWorkTest {
     }
 
     @Test
+    void aMemberAbsentEveryWorkingDayOfTheForecastWindowGetsNoShare() {
+        TaskRow c = TestData.task("c1", null, AS_OF.minusDays(4).atTime(9, 0), 10).withProject(PROJECT);
+        ForecastData data = world(List.of(c));
+        Lifecycle lc = Lifecycle.derive(data);
+        EffortModel effort = EffortModel.fit(lc, data);
+        PlannedWork.Request req = new PlannedWork.Request(TestData.TEAM, List.of(ANA, BEN), AS_OF, new LocalDate[] {F1, F1.plusWeeks(1)});
+        Set<LocalDate> anaOff = Set.copyOf(CAL.workingDays(F1, F1.plusWeeks(1).plusDays(6), Set.of()));
+        PlannedWork.Allocation a = PlannedWork.allocate(req, lc, data, effort, CAL, id -> id.equals(ANA.id()) ? anaOff : Set.of());
+        assertEquals(1, a.pieces().size(), "only Ben is eligible");
+        assertEquals(BEN.id(), a.pieces().get(0).member());
+        assertEquals(1.0, a.pieces().get(0).share(), 1e-9, "all shares go to the other member");
+        assertTrue(a.hours().keySet().stream().noneMatch(k -> k.member().equals(ANA.id())));
+    }
+
+    @Test
     void noEligibleMemberMeansAnEmptyAllocationThatStillCountsTheBacklog() {
         TaskRow c = TestData.task("c1", null, AS_OF.minusDays(4).atTime(9, 0), 10).withProject(PROJECT);
         ForecastData data = world(List.of(c));

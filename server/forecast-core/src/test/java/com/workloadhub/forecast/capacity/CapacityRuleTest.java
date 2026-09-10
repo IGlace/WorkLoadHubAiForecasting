@@ -51,6 +51,15 @@ class CapacityRuleTest {
     }
 
     @Test
+    void capacityNeverGoesBelowZero() {
+        ForecastData d = data(List.of(),
+                List.of(new AbsenceRow(M, LocalDate.of(2026, 4, 27), 20), new AbsenceRow(M, LocalDate.of(2026, 4, 28), 20)));
+        WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
+        // week of 27 April has 4 working days (Labour Day): 40 * 4/5 = 32 h base, 40 h of absence outweighs it.
+        assertEquals(0.0, new CapacityRule(40).capacity(d.members().get(0), LocalDate.of(2026, 4, 27), d, cal), 1e-9);
+    }
+
+    @Test
     void seededCapacityMatchesTheCapacityRows() {
         ForecastData d = SeededData.data();
         WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());

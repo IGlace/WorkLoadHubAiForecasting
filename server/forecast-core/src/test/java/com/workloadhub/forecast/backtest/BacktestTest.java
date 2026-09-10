@@ -13,6 +13,7 @@ import com.workloadhub.forecast.model.SeasonalNaive;
 import com.workloadhub.forecast.model.XgboostArrival;
 import com.workloadhub.forecast.testing.SyntheticMatrix;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +63,36 @@ class BacktestTest {
         Backtest.Champion c = Backtest.selectChampion(r.scores());
         assertEquals(XgboostArrival.NAME, c.model());
         assertEquals(r.meanMase(XgboostArrival.NAME), c.meanMase(), 1e-12);
+    }
+
+    @Test
+    void runInsertsTheFloorEvenWhenTheCallerLeftItOutOfFactories() {
+        Map<String, Supplier<ArrivalModel>> factories = new LinkedHashMap<>();
+        factories.put(XgboostArrival.NAME, XgboostArrival::new);
+        List<LocalDate> origins = Backtest.origins(LAST, M.key(0).week()).subList(2, 5);
+        Backtest.Result r = Backtest.run(M, factories, origins, Features.HORIZONS);
+        assertTrue(r.scores().stream().anyMatch(s -> s.model().equals(Backtest.FLOOR)), "the floor is scored");
+        assertTrue(r.residuals().containsKey(Backtest.FLOOR), "the floor's residuals are pooled");
+        assertTrue(r.residuals(Backtest.FLOOR, 1).length > 0);
+        assertEquals(0, r.residuals("nope", 1).length, "unknown model");
+        assertEquals(0, r.residuals(Backtest.FLOOR, 99).length, "unknown horizon");
+        Backtest.Champion c = Backtest.selectChampion(r.scores());
+        assertEquals(XgboostArrival.NAME, c.model(), "selectChampion still finds the planted signal");
+    }
+
+    @Test
+    void meanMaseByModelIsSortedByNameAndMatchesMeanMase() {
+        Map<String, Supplier<ArrivalModel>> factories = new LinkedHashMap<>();
+        factories.put(Backtest.FLOOR, SeasonalNaive::new);
+        factories.put(XgboostArrival.NAME, XgboostArrival::new);
+        List<LocalDate> origins = Backtest.origins(LAST, M.key(0).week()).subList(2, 5);
+        Backtest.Result r = Backtest.run(M, factories, origins, Features.HORIZONS);
+        Map<String, Double> byModel = r.meanMaseByModel();
+        assertEquals(new ArrayList<>(byModel.keySet()), byModel.keySet().stream().sorted().toList(), "sorted by name");
+        assertFalse(byModel.isEmpty());
+        for (Map.Entry<String, Double> e : byModel.entrySet()) {
+            assertEquals(r.meanMase(e.getKey()), e.getValue(), 1e-12, e.getKey());
+        }
     }
 
     @Test
