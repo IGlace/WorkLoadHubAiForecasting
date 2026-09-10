@@ -315,3 +315,13 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   default; the Python service's own stock default, outside this import path, is 44 h/week. Java also reads
   `user_capacity` for per-member overrides that the importer does not set; demand-level numbers between the two
   harnesses still differ for that reason and are not part of the gate.
+- Rulings of the Copilot narration plan (2026-09-10), design
+  `docs/superpowers/specs/2026-09-10-java-copilot-narration-design.md` section 15: the SDK runtime is in process
+  (JNA, `~/.copilot/runtime-cache`), `whf.copilot.cli-path` switches to a subprocess; the six product skills are
+  embedded in the system message although the SDK supports skill directories; tools use `ToolDefinition.from`,
+  not `@CopilotTool`; `forecast_narratives` was recreated by V2 with `status`, `raw_text`, `error`, `attempts`,
+  `tool_calls`; `narrate` returns a FAILED result (with its cost) instead of throwing `NARRATIVE_INVALID`;
+  `DELETE /users/{id}/github-token` added; the rebalancing fit table of the 2026-09-07 design is not built
+  (`task_keys` are checked against the source's open tasks only); new property `whf.work-dir`.
+- Copilot narration residuals: the narration runs on the caller's thread (the host schedules it); the quota
+  snapshot keys are whatever the account reports; no live SDK test in CI (manual procedure in `server/README.md`).

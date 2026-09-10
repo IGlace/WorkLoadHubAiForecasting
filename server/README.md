@@ -57,6 +57,8 @@ $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal
 | `run` | `--team <name or id> [--as-of] [--db] [--model xgboost\|seasonal_naive] [--user] [--no-planned] [--json]` | Runs a forecast for one team as of a date (default: today) and prints the champion, the scores and the member-week table; `--model` forces a model, `--no-planned` switches off planned-work allocation, `--json` prints the result as JSON. Exits 2 on a usage error, 1 on a failed run. |
 | `runs` | `--team <name or id> [--db] [--limit 20]` | Lists the runs of a team, newest first. |
 | `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
+| `narrate` | `--run <id> --user <name or id> [--lang en\|fr] [--model m] [--token-env GITHUB_TOKEN] [--db] [--json]` | Stores the user's GitHub token, narrates a finished run through their Copilot seat, streams progress to stderr, and prints the stored result. Exits 0 OK, 3 UNVERIFIED, 1 FAILED or error, 2 usage. |
+| `copilot status` | `--user <name or id> [--db]` | Reports whether this user can narrate: token presence, runtime availability, sign-in and quota. |
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
@@ -71,6 +73,35 @@ ramps, team events and absences; tasks are created into the backlog or assigned 
 three at a time, logged day by day, reviewed, blocked or reopened at the design's rates, and a few
 finish without logs. Capacity rows follow the application's formula. The invariants the tests hold
 are listed in the design, section 4.8.
+
+## Narrating with Copilot
+
+Narration uses the requesting user's own GitHub Copilot seat through `copilot-sdk-java`. The SDK runs an
+**in-process runtime** (`runtime.node`, from the `copilot-sdk-java-runtime` artifact with classifier
+`linux-x64`, 44 MB on the classpath); on first use it is unpacked into `~/.copilot/runtime-cache/<version>/`
+(91 MB, once per SDK version, nothing downloaded). To use an installed Copilot CLI as a subprocess instead, set
+`whf.copilot.cli-path` (server) or `WHF_COPILOT_CLI_PATH` (CLI).
+
+Tokens are stored encrypted on `users.github_token` with the key in `whf.token-key` (server) or
+`WHF_TOKEN_KEY` (CLI): a base64 AES-256 key, `openssl rand -base64 32`. Accepted tokens: `gho_`, `ghu_`,
+`github_pat_`; classic `ghp_` tokens are refused.
+
+```bash
+export WHF_TOKEN_KEY="$(openssl rand -base64 32)"   # keep it: the stored tokens are unreadable without it
+export GITHUB_TOKEN="gho_..."                      # the user's own token
+$CLI copilot status --db ~/whf/workloadhub.db --user "Sara Tazi"
+$CLI narrate --db ~/whf/workloadhub.db --run <run id> --user "Sara Tazi" --lang fr
+```
+
+`narrate` stores the token for the user, narrates, streams the steps, the thinking and the answer to stderr, and
+prints the stored result on stdout: status (`OK`, `UNVERIFIED` with the numbers it could not find in the facts,
+`FAILED` with the reason and the last answer), model, attempts, cost, then the narrative JSON. Exit codes: 0 OK,
+3 UNVERIFIED, 1 FAILED or error, 2 usage. Every narration is a row in `forecast_narratives`, whatever its
+status, so a failed one keeps its cost.
+
+No automated test talks to Copilot. The live check is manual: run the two commands above on a seeded database
+with a real token, and read `copilot status` first (it starts the runtime with the token and reports the login
+and the quota). Sessions never resume; each narration is one client and one session, closed at the end.
 
 ## Parity check
 

@@ -32,22 +32,19 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
 Done, each as a reviewed plan landed on `dev` and fast-forwarded to `main`:
 `docs/superpowers/plans/2026-09-09-java-foundation-and-seed.md` (skeleton, database, import, token store,
 seed generator), `2026-09-09-java-pipeline-core.md` (lifecycle, calendar, capacity, feature matrix, models,
-backtest, effort, planned work) and `2026-09-10-java-run-eval-and-parity.md` (run pipeline, facts JSON, run
+backtest, effort, planned work), `2026-09-10-java-run-eval-and-parity.md` (run pipeline, facts JSON, run
 store, service, CLI `run`/`runs`/`teams`/`eval`, evaluation harness, Python import for parity, parity gate;
-synthetic result in `docs/eval/2026-09-10-java-parity-synthetic/`). Rulings taken on the way are in each
-plan's closing notes and under "Java migration" in `docs/backlog.md`.
+synthetic result in `docs/eval/2026-09-10-java-parity-synthetic/`) and
+`docs/superpowers/plans/2026-09-10-java-copilot-narration.md` (Copilot narration through the SDK, tools,
+contract, verification, usage, REST controller, sample host, CLI `narrate` and `copilot status`). Rulings
+taken on the way are in each plan's closing notes and under "Java migration" in `docs/backlog.md`.
 
-Next, in this order, each with the standing workflow (`brainstorming`, `writing-plans`, subagent-driven
-execution with a review per task, a final whole-branch review, one fix wave, CI green on `dev`, then
-fast-forward `main`):
-
-1. Plan 4: Copilot narration through the Copilot SDK from Java (spec sections 10 and 11), the REST
-   controller, the auto-configuration test in a sample host, CLI `narrate` and `copilot status`. Narration
-   currently throws `COPILOT_UNAVAILABLE`.
-2. The migration plan: spec section 14 steps 1, 4 and 5 (branch `archive/python-desktop-v1` from `main`,
-   remove `service/`, `app/`, `installer/` and the desktop-only scripts and skills, rewrite this file, the
-   README, `scripts/` and CI for Java only, including dropping the "no WSL" hard rule below). Until then the
-   Python service stays as the parity oracle and the desktop app is untouched.
+Next, with the standing workflow (`brainstorming`, `writing-plans`, subagent-driven execution with a review
+per task, a final whole-branch review, one fix wave, CI green on `dev`, then fast-forward `main`): the
+migration plan, spec section 14 steps 1, 4 and 5 (branch `archive/python-desktop-v1` from `main`, remove
+`service/`, `app/`, `installer/` and the desktop-only scripts and skills, rewrite this file, the README,
+`scripts/` and CI for Java only, including dropping the "no WSL" hard rule below). Until then the Python
+service stays as the parity oracle and the desktop app is untouched.
 
 ## Hard rules
 
@@ -80,7 +77,8 @@ installer/ PyInstaller and electron-builder configuration, installer README, wei
            (`installer/pyinstaller/download_weights.py`)
 scripts/   PowerShell and shell helpers (`dev-app.ps1`, `build-service.{ps1,sh}`, `build-installer.ps1`)
 server/    Java 21 module for the WorkloadHub Spring Boot server: `forecast-core` (library) and `forecast-cli`
-           (WSL command line: init-db, import, export, seed); see docs/superpowers/specs/2026-09-09-java-forecast-module-design.md
+           (WSL command line: init-db, import, export, seed, run, runs, teams, eval, narrate, copilot status);
+           see docs/superpowers/specs/2026-09-09-java-forecast-module-design.md
 docs/      research, requirements, specs, plans
 .claude/   skills, agents, hooks, settings
 ```

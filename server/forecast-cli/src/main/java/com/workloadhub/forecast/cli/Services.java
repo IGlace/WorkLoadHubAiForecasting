@@ -37,6 +37,12 @@ record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc
         return key != null && !key.isBlank();
     }
 
+    /** The system property wins over the environment, so tests can point at a stub without touching the environment. */
+    static String cliPath() {
+        String fromProperty = System.getProperty("whf.copilot.cli-path");
+        return fromProperty != null && !fromProperty.isBlank() ? fromProperty : System.getenv(CLI_PATH_ENV);
+    }
+
     static Services open(DataSource ds) {
         ForecastMigrations.run(ds);
         Dialect dialect = Dialect.of(ds);
@@ -45,7 +51,7 @@ record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc
         String key = System.getenv(TOKEN_KEY_ENV);
         JdbcGitHubTokenStore tokens = new JdbcGitHubTokenStore(jdbc, dialect, key == null || key.isBlank() ? null : AesGcmCipher.fromBase64Key(key.trim()));
         Path home = Path.of(System.getProperty("user.home"), ".workloadhub-forecast", "copilot");
-        SdkCopilotGateway gateway = new SdkCopilotGateway(home, System.getenv(CLI_PATH_ENV));
+        SdkCopilotGateway gateway = new SdkCopilotGateway(home, cliPath());
         Narrator narrator = new Narrator(gateway, Prompts.load(), NARRATION_TIMEOUT, System.getenv(MODEL_ENV));
         RunProgressTracker progress = new RunProgressTracker();
         DefaultForecastService service = new DefaultForecastService(ds, dialect, runner, new JdbcRunStore(ds, dialect), progress, 1, true, tokens,
