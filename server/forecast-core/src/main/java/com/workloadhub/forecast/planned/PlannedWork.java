@@ -3,6 +3,7 @@ package com.workloadhub.forecast.planned;
 import com.workloadhub.forecast.calendar.HourPlacement;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Family;
@@ -12,6 +13,7 @@ import com.workloadhub.forecast.model.EffortModel;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +55,7 @@ public final class PlannedWork {
         return lc.all().stream()
                 .filter(f -> f.assignee() == null && !f.done() && f.task().projectId() != null && projects.contains(f.task().projectId()))
                 .filter(f -> !f.task().createdDate().toLocalDate().isAfter(latestCreation))
-                .sorted(Comparator.comparing(f -> f.id().toString()))
+                .sorted(Comparator.comparing(TaskFacts::id, Ids.UUID_ORDER))
                 .toList();
     }
 
@@ -73,7 +75,7 @@ public final class PlannedWork {
     }
 
     public static Map<UUID, Double> weights(TaskFacts candidate, List<MemberRow> eligible, List<TaskFacts> history) {
-        List<UUID> ids = eligible.stream().map(MemberRow::id).sorted(Comparator.comparing(UUID::toString)).toList();
+        List<UUID> ids = eligible.stream().map(MemberRow::id).sorted(Ids.UUID_ORDER).toList();
         Map<UUID, Double> level = new LinkedHashMap<>();
         for (UUID id : ids) {
             level.put(id, 1.0 / ids.size());
@@ -108,30 +110,45 @@ public final class PlannedWork {
     }
 
     public static long lagDays(TaskFacts candidate, Lifecycle lc, ForecastData data, Set<UUID> teamMembers) {
-        UUID project = candidate.task().projectId();
-        List<Long> projectLags = new ArrayList<>();
-        List<Long> teamLags = new ArrayList<>();
-        List<Long> allLags = new ArrayList<>();
-        for (TaskFacts f : lc.all()) {
-            if (!f.isAssigned()) {
-                continue;
+        return lagDays(candidate, LagIndex.of(lc, teamMembers));
+    }
+
+    /** The assigned tasks' lag days, grouped once per {@code allocate} call instead of rescanned per candidate. */
+    private record LagIndex(Map<UUID, List<Long>> byProject, List<Long> team, List<Long> all) {
+
+        static LagIndex of(Lifecycle lc, Set<UUID> teamMembers) {
+            Map<UUID, List<Long>> byProject = new HashMap<>();
+            List<Long> team = new ArrayList<>();
+            List<Long> all = new ArrayList<>();
+            for (TaskFacts f : lc.all()) {
+                if (!f.isAssigned()) {
+                    continue;
+                }
+                long lag = f.lagDays();
+                all.add(lag);
+                UUID project = f.task().projectId();
+                if (project != null) {
+                    byProject.computeIfAbsent(project, k -> new ArrayList<>()).add(lag);
+                }
+                if (teamMembers.contains(f.assignee())) {
+                    team.add(lag);
+                }
             }
-            allLags.add(f.lagDays());
-            if (project != null && project.equals(f.task().projectId())) {
-                projectLags.add(f.lagDays());
-            }
-            if (teamMembers.contains(f.assignee())) {
-                teamLags.add(f.lagDays());
-            }
+            return new LagIndex(byProject, team, all);
         }
+    }
+
+    private static long lagDays(TaskFacts candidate, LagIndex idx) {
+        UUID project = candidate.task().projectId();
+        List<Long> projectLags = project == null ? List.of() : idx.byProject().getOrDefault(project, List.of());
         if (projectLags.size() >= MIN_PROJECT_TASKS_FOR_LAG) {
             return median(projectLags);
         }
-        if (!teamLags.isEmpty()) {
-            return median(teamLags);
+        if (!idx.team().isEmpty()) {
+            return median(idx.team());
         }
-        if (!allLags.isEmpty()) {
-            return median(allLags);
+        if (!idx.all().isEmpty()) {
+            return median(idx.all());
         }
         return Lifecycle.BACKLOG_LAG_DAYS;
     }
@@ -148,19 +165,24 @@ public final class PlannedWork {
         List<TaskFacts> candidates = candidates(lc, data, req.teamId(), req.asOf());
         int count = candidates.size();
         double candidateHours = candidates.stream().mapToDouble(TaskFacts::estimate).sum();
-        List<MemberRow> eligible = req.members().stream().filter(m -> m.employedOn(req.asOf())).toList();
+        LocalDate f1 = req.forecastWeeks()[0];
+        LocalDate windowEnd = req.forecastWeeks()[req.forecastWeeks().length - 1].plusDays(6);
+        // design section 5.2: a member present on no working day of the forecast window carries no share.
+        List<MemberRow> eligible = req.members().stream()
+                .filter(m -> m.employedOn(req.asOf()))
+                .filter(m -> !cal.workingDays(f1, windowEnd, offDaysOf.apply(m.id())).isEmpty())
+                .toList();
         if (eligible.isEmpty() || candidates.isEmpty()) {
             return new Allocation(new TreeMap<>(), List.of(), 0.0, count, candidateHours);
         }
         Set<UUID> teamMembers = req.members().stream().map(MemberRow::id).collect(Collectors.toSet());
         List<TaskFacts> history = history(lc, eligible, req.asOf());
-        LocalDate f1 = req.forecastWeeks()[0];
-        LocalDate windowEnd = req.forecastWeeks()[req.forecastWeeks().length - 1].plusDays(6);
+        LagIndex lagIndex = LagIndex.of(lc, teamMembers);
         SortedMap<MemberWeek, Double> hours = new TreeMap<>();
         List<Piece> pieces = new ArrayList<>();
         double after = 0.0;
         for (TaskFacts c : candidates) {
-            LocalDate expected = c.task().createdDate().toLocalDate().plusDays(lagDays(c, lc, data, teamMembers));
+            LocalDate expected = c.task().createdDate().toLocalDate().plusDays(lagDays(c, lagIndex));
             if (expected.isBefore(f1)) {
                 expected = f1;
             }

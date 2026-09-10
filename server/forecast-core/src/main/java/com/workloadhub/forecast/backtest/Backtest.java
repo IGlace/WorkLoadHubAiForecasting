@@ -46,6 +46,16 @@ public final class Backtest {
             }
             return out;
         }
+
+        /** The pooled residuals of one model at one horizon, or an empty array when either is unknown. */
+        public double[] residuals(String model, int h) {
+            Map<Integer, double[]> byHorizon = residuals.get(model);
+            if (byHorizon == null) {
+                return new double[0];
+            }
+            double[] found = byHorizon.get(h);
+            return found == null ? new double[0] : found;
+        }
     }
 
     private Backtest() {
@@ -81,6 +91,13 @@ public final class Backtest {
     }
 
     public static Result run(FeatureMatrix feat, Map<String, Supplier<ArrivalModel>> factories, List<LocalDate> origins, int[] horizons) {
+        // the floor must always be scored and pooled, even when the caller only asked for other models.
+        Map<String, Supplier<ArrivalModel>> withFloor = factories;
+        if (!factories.containsKey(FLOOR)) {
+            withFloor = new LinkedHashMap<>();
+            withFloor.put(FLOOR, SeasonalNaive::new);
+            withFloor.putAll(factories);
+        }
         int maxH = Arrays.stream(horizons).max().orElse(1);
         List<Score> scores = new ArrayList<>();
         Map<String, Map<Integer, List<Double>>> residuals = new LinkedHashMap<>();
@@ -93,7 +110,7 @@ public final class Backtest {
                 continue;
             }
             Map<String, ArrivalModel> fitted = new LinkedHashMap<>();
-            for (Map.Entry<String, Supplier<ArrivalModel>> e : factories.entrySet()) {
+            for (Map.Entry<String, Supplier<ArrivalModel>> e : withFloor.entrySet()) {
                 String name = e.getKey();
                 if (unavailable.containsKey(name)) {
                     continue;

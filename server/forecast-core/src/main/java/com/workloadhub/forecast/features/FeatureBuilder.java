@@ -4,6 +4,7 @@ import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
@@ -14,6 +15,7 @@ import com.workloadhub.forecast.lifecycle.TaskFacts;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,7 +41,7 @@ public final class FeatureBuilder {
     }
 
     public FeatureMatrix build(List<MemberRow> membersIn, LocalDate origin) {
-        List<MemberRow> members = membersIn.stream().sorted((a, b) -> a.id().toString().compareTo(b.id().toString())).toList();
+        List<MemberRow> members = membersIn.stream().sorted(Comparator.comparing(MemberRow::id, Ids.UUID_ORDER)).toList();
         LocalDate firstWeek = origin.minusWeeks(Features.HISTORY_WEEKS - 1);
         List<LocalDate> weeks = Weeks.between(firstWeek, origin);
         WeeklySeries series = WeeklySeries.build(lc, members, weeks);
@@ -49,7 +51,7 @@ public final class FeatureBuilder {
         for (int i = 0; i < columns.size(); i++) {
             col.put(columns.get(i), i);
         }
-        TeamContext teams = new TeamContext(data, lc, weeks);          // Task 6
+        TeamContext teams = new TeamContext(data, lc);                 // Task 6
         Map<MemberWeek, double[]> availability = new HashMap<>();
         List<MemberWeek> keys = new ArrayList<>();
         List<double[]> rows = new ArrayList<>();
@@ -312,13 +314,11 @@ public final class FeatureBuilder {
     /** Per-team, per-week values shared by every member of the team. */
     static final class TeamContext {
         private final ForecastData data;
-        private final Lifecycle lc;
         private final Map<UUID, Map<LocalDate, double[]>> cache = new HashMap<>();
         private final Map<UUID, List<TaskFacts>> tasksByProject = new HashMap<>();
 
-        TeamContext(ForecastData data, Lifecycle lc, List<LocalDate> weeks) {
+        TeamContext(ForecastData data, Lifecycle lc) {
             this.data = data;
-            this.lc = lc;
             for (TaskFacts f : lc.all()) {
                 if (f.task().projectId() != null) {
                     tasksByProject.computeIfAbsent(f.task().projectId(), k -> new ArrayList<>()).add(f);
