@@ -21,11 +21,12 @@ public final class Report {
             + " is measured on the interval a user actually sees. `seconds` is fit plus predict for the whole backtest divided by the origins that model"
             + " scored; it is reported on the first horizon row and left empty on the others.";
     static final List<String> ASSUMPTIONS = List.of(
-            "Truth is the hours logged in time_logs, summed per member and Monday week; work still in progress at export time has few logs, so the"
-                    + " most recent origins are deflated and every model looks high there.",
+            "Level B truth is the hours logged in time_logs on the window's five weekdays, summed per member and window; work still in progress at"
+                    + " export time has few logs, so the most recent origins are deflated and every model looks high there.",
             "The replay is a Monday-morning evaluation: each origin is replayed as of the Monday after it, so a task assigned on the first forecast"
                     + " Monday counts as open work rather than as an arrival.",
-            "Only horizons 1 and 2 are scored, the two weeks a run forecasts.",
+            "The arrival level scores horizons 1 and 2 at every origin, the shape the Python parity gate compares; a replayed run itself touches the"
+                    + " two or three horizon weeks its two windows of five weekdays cover.",
             "A single-origin run reports NaN interval coverage and NaN weighted quantile loss: the leave-one-origin-out band needs another origin.");
 
     private Report() {
