@@ -19,4 +19,8 @@ public record MemberRow(UUID id, String fullName, String email, String role, Str
     public MemberRow withJoined(LocalDate joined) {
         return new MemberRow(id, fullName, email, role, jobTitle, teamIds, primaryTeamId, joined, left);
     }
+
+    public MemberRow withLeft(LocalDate left) {
+        return new MemberRow(id, fullName, email, role, jobTitle, teamIds, primaryTeamId, joined, left);
+    }
 }
