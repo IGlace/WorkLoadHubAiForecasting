@@ -49,9 +49,7 @@ Then update the version line above.
 | Skill | Source | License | Used for |
 |-------|--------|---------|----------|
 | copilot-sdk | [microsoft/skills](https://github.com/microsoft/skills) `.github/skills/copilot-sdk`, commit `c6dec4a` | MIT | Copilot SDK sessions, custom tools, agents, skills |
-| pydantic-models-py | [microsoft/skills](https://github.com/microsoft/skills) `.github/plugins/azure-sdk-python/skills/pydantic-models-py`, commit `c6dec4a` | MIT | API and data schemas in the service |
-| modern-python | [trailofbits/skills](https://github.com/trailofbits/skills) `plugins/modern-python`, commit `d3323ce` | CC BY-SA 4.0 | uv, ruff, ty, pytest project setup |
-| property-based-testing | [trailofbits/skills](https://github.com/trailofbits/skills) `plugins/property-based-testing`, commit `d3323ce` | CC BY-SA 4.0 | Hypothesis tests for capacity, placement and generator invariants |
+| property-based-testing | [trailofbits/skills](https://github.com/trailofbits/skills) `plugins/property-based-testing`, commit `d3323ce` | CC BY-SA 4.0 | jqwik properties for the forecast's arithmetic invariants |
 
 Each directory carries its upstream LICENSE file. These were selected from the
 [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills)
@@ -59,6 +57,6 @@ index, which is a list of links rather than a collection of files.
 
 ## Product skills
 
-Skills prefixed `whf-` live in `service/src/whf/ai/skills/` (one source of truth).
-The Copilot session loads them through `skill_directories`; they are shipped inside
-the service bundle. See the design spec, section 6.
+Skills prefixed `whf-` live in `server/forecast-core/src/main/resources/skills/` (one source of truth).
+The Java narrator embeds them in the Copilot session's system message (`Prompts`); they are shipped
+inside `forecast-core`. See `docs/superpowers/specs/2026-09-10-java-copilot-narration-design.md`, section 4.2.

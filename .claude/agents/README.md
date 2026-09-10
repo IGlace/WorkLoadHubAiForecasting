@@ -11,23 +11,20 @@ needs were copied.
 
 | Subagent | Category | Used for |
 |----------|----------|----------|
-| python-pro | language specialists | forecast service, CLI, models |
-| typescript-pro | language specialists | Electron app code |
-| electron-pro | core development | main process, tray, notifications, packaging |
-| react-specialist | language specialists | renderer screens |
-| cli-developer | developer experience | `whf` command design |
-| data-scientist | data and AI | feature engineering, models, backtesting |
-| data-engineer | data and AI | data model, generator, adapters |
-| ai-engineer | data and AI | Copilot session, tools, output validation |
-| prompt-engineer | data and AI | agent system prompt and product skills |
-| test-automator | quality and security | pytest, Vitest, CI |
+| cli-developer | developer experience | the picocli commands of forecast-cli |
+| data-scientist | data and AI | feature matrix, models, backtest |
+| data-engineer | data and AI | schema mapping, seed generator, import and export |
+| ai-engineer | data and AI | Copilot session, tools, contract and verification |
+| prompt-engineer | data and AI | system prompt and product skills |
+| test-automator | quality and security | JUnit, jqwik, CI |
 | code-reviewer | quality and security | reviews before merge |
 | architect-reviewer | quality and security | design and boundary reviews |
-| security-auditor | quality and security | local API token, data at rest, Copilot data flow |
+| security-auditor | quality and security | token storage, Copilot data flow |
 | technical-writer | business and product | user guide, docs |
 
 Not installed on purpose: debugger (the `systematic-debugging` skill covers it),
 mcp-developer (no MCP server in version 1), build-engineer and dependency-manager
 (scope too small), machine-learning-engineer (model serving at scale is not needed).
+python-pro, typescript-pro, electron-pro and react-specialist left with the Python service and the desktop app (archive/python-desktop-v1).
 
 To update, copy the same files again from the upstream `categories/` folder.
