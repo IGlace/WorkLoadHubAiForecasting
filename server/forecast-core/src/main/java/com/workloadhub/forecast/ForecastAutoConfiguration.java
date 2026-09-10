@@ -1,10 +1,16 @@
 package com.workloadhub.forecast;
 
+import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
+import com.workloadhub.forecast.capacity.CapacityRule;
+import com.workloadhub.forecast.run.ForecastRunner;
+import com.workloadhub.forecast.service.DefaultForecastService;
+import com.workloadhub.forecast.service.RunProgressTracker;
 import com.workloadhub.forecast.store.AesGcmCipher;
 import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.ForecastMigrations;
 import com.workloadhub.forecast.store.JdbcGitHubTokenStore;
+import com.workloadhub.forecast.store.JdbcRunStore;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -48,6 +54,38 @@ public class ForecastAutoConfiguration {
         String key = properties.getTokenKey();
         AesGcmCipher cipher = key == null || key.isBlank() ? null : AesGcmCipher.fromBase64Key(key);
         return new JdbcGitHubTokenStore(jdbc, dialect, cipher);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    CapacityRule capacityRule(ForecastProperties properties) {
+        return new CapacityRule(properties.getDefaultWeeklyHours());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    ForecastRunner forecastRunner(CapacityRule capacityRule, ForecastProperties properties) {
+        return new ForecastRunner(capacityRule, properties.getPlannedWork().isEnabled());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    JdbcRunStore jdbcRunStore(DataSource dataSource, Dialect dialect, ForecastMigrationsRunner migrated) {
+        return new JdbcRunStore(dataSource, dialect);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    RunProgressTracker runProgressTracker() {
+        return new RunProgressTracker();
+    }
+
+    @Bean(destroyMethod = "close")
+    @ConditionalOnMissingBean
+    ForecastService forecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
+            ForecastProperties properties) {
+        return new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
+                properties.getPlannedWork().isEnabled());
     }
 
     /** Marker bean so that beans needing the tables can depend on the migrations having run. */

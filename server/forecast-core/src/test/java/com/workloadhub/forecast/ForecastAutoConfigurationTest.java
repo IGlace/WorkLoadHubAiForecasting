@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.Dialect;
@@ -44,6 +45,20 @@ class ForecastAutoConfigurationTest {
                     // migrations ran: the users table has the token column
                     var jdbc = org.springframework.jdbc.core.simple.JdbcClient.create(DS);
                     jdbc.sql("SELECT github_token FROM users WHERE 1 = 0").query().listOfRows();
+                });
+    }
+
+    @Test
+    void registersTheServiceOnTopOfTheHostDataSource() {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
+                .withBean(DataSource.class, () -> ds)
+                .withPropertyValues("whf.run-threads=1")
+                .run(context -> {
+                    assertNotNull(context.getBean(ForecastService.class));
+                    assertNotNull(context.getBean(com.workloadhub.forecast.run.ForecastRunner.class));
                 });
     }
 }
