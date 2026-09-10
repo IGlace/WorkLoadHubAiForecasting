@@ -280,20 +280,38 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   - The Python effort model's cycle-time regressor was not ported; `EffortModel.familyCycleDays` uses the
     hierarchy fallback only (member, then team × family, then team, then a global median), with no learned
     regression on top of it.
-  - Two approximations the review accepted rather than fixed: `Truncation.at` carries a task's present-day
+  - Three approximations the review accepted rather than fixed: `Truncation.at` carries a task's present-day
     `reopened_from_done` flag and its project's current `status` forward into every replayed origin week
     instead of rewinding them (alongside the due date and original estimate already read as of today; see
-    `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md` section 5's closing paragraph).
+    `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md` section 5's closing paragraph);
+    `Truncation` also carries `team_capacity` forward untruncated, so a replayed origin sees today's realised
+    allocations rather than what was known as of that origin — this reaches only the facts, never the backtest
+    harness itself.
   - Planned-work's open- and new-hour placement falls back to the start week when a member has no present
     working day in the placement span, matching the Python `place_hours`. Whether that fallback (rather than,
     say, dropping the hours or pushing them past the absence) is the right behaviour is a design decision for
     the owner, not something the port should have silently inherited.
-  - The Python parity check compares apples to oranges as it stands: the Python harness still forecasts
-    `est_hours`, while the Java pipeline's target is `fresh_hours`. Either switch the Python harness to
-    `fresh_hours` first, or compare `est_hours`-driven runs on both sides, before trusting a parity number.
+  - **Resolved** (fix wave, 2026-09-10): the Python parity check no longer compares apples to oranges. The
+    WorkloadHub importer (`service/src/whf/data/workloadhub.py`) keeps fresh arrivals only by default
+    (assignment lag under two days), so both harnesses forecast the same series; see `server/README.md`'s
+    "Parity check" section.
 - The parity gate is measured at the arrival level over all counted members (the harness's global backtest); a
   per-team gate needs per-team champions in `demand.csv`, not produced by either harness.
+- Plan 3's remaining rulings (`docs/superpowers/plans/2026-09-10-java-run-eval-and-parity.md`), alongside the
+  two recorded just above (the parity gate is global; the Python side matches Java by importing fresh arrivals
+  only):
+  3. Patterns drop `deadline_proximity_corr` (no project dates in the WorkloadHub schema) and key
+     `cycle_days_by_type` by family; `similar_projects` is not built and `project_roles.phase` is always
+     `active` — superseding `docs/superpowers/specs/2026-09-07-planned-work-and-likely-work-design.md`'s
+     phases (`starting`|`active`|`ending`) and its `similar_projects` block.
+  4. `forecast_member_weeks` has no `demand_hrs` column; demand is recomputed as `open + new + planned` on
+     read.
+  5. Progress lives in the JVM that runs the run: a run seen as `RUNNING` from another instance reports 50 %.
+  6. A team without counted members fails the run on the row (`TEAM_NOT_FOUND`) rather than being refused at
+     submission.
 - Narration (`narrate`, `narrative`, `copilotStatus`) throws `COPILOT_UNAVAILABLE` until the Copilot plan lands.
-- `whf import-workloadhub` sets no capacity overrides: Python capacity is the 40-hour default over working days
-  minus vacations, Java uses `user_capacity`; demand-level numbers differ for that reason and are not part of
-  the gate.
+- `whf import-workloadhub` sets no per-member capacity overrides, but it does set `capacity_defaults.weekly_hours`
+  to 40 h (`DEFAULT_WEEKLY_HOURS` in the converter) to match the Java module's `whf.default-weekly-hours`
+  default; the Python service's own stock default, outside this import path, is 44 h/week. Java also reads
+  `user_capacity` for per-member overrides that the importer does not set; demand-level numbers between the two
+  harnesses still differ for that reason and are not part of the gate.

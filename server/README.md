@@ -94,5 +94,20 @@ counted member), not per team. `parity_compare.py` exits 0 on a pass, 1 on a fai
 
 The first synthetic result (36 users, 52 weeks, seed 11, as of 2026-09-06) is in
 [`docs/eval/2026-09-10-java-parity-synthetic/parity.md`](../docs/eval/2026-09-10-java-parity-synthetic/parity.md),
-alongside both harnesses' `summary.md`. Never run the procedure on the real export inside the repository: point
-`OUT_DIR` outside git and keep the real-mode result in the owner's own folder.
+alongside both harnesses' `summary.md`. It was produced with:
+
+```bash
+java -jar forecast-cli/target/workloadhub-forecast-cli-0.1.0-SNAPSHOT.jar \
+  seed --synthetic --users 36 --weeks 52 --seed 11 --end 2026-09-06 --out <file>
+tools/parity.sh <file> <out> 2026-09-06
+```
+
+Never run the procedure on the real export inside the repository: point `OUT_DIR` outside git and keep the
+real-mode result in the owner's own folder.
+
+The gate's own test, `service/tests/test_parity_compare.py`, runs `parity_compare.py` as a subprocess against
+hand-built `scores.csv` fixtures (pass, tolerance-exceeded, champions-differ, no-booster-rows and
+exactly-at-the-tolerance-boundary); it moved under `service/tests` so `uv run pytest` picks it up with the rest
+of the Python suite. `parity_compare.py` and `translate-schema.py` stay standalone scripts under `server/tools/`
+(no Python package there to import), so `ruff check`/`ruff format` run on them explicitly from `service/`:
+`uv run ruff check . ../server/tools` and `uv run ruff format --check . ../server/tools`.

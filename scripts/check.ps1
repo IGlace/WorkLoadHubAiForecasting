@@ -30,9 +30,11 @@ function Add-Step([string]$Name, [string]$Dir, [string]$Exe, [string[]]$Argument
 # cores oversubscribe and come out slower: measured 254 s serial, 127 s at -n 6, 159 s at -n 12.
 $xdist = @("-n", "6")
 
-# Cheapest first: a lint error should not cost two minutes of pytest.
-Add-Step "ruff check" $service "uv" @("run", "ruff", "check", ".")
-Add-Step "ruff format" $service "uv" @("run", "ruff", "format", "--check", ".")
+# Cheapest first: a lint error should not cost two minutes of pytest. server/tools/ holds
+# standalone Python (the schema translator, the parity gate); its own tests moved under
+# service/tests, but ruff still has to see it as it is not part of the service package.
+Add-Step "ruff check" $service "uv" @("run", "ruff", "check", ".", "../server/tools")
+Add-Step "ruff format" $service "uv" @("run", "ruff", "format", "--check", ".", "../server/tools")
 if (-not (Test-Path (Join-Path $app "node_modules"))) {
     Add-Step "npm ci" $app "npm" @("ci", "--no-audit", "--no-fund")
 }
