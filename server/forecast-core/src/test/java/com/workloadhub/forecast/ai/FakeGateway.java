@@ -1,0 +1,194 @@
+package com.workloadhub.forecast.ai;
+
+import com.workloadhub.forecast.api.ForecastException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
+import tools.jackson.databind.JsonNode;
+
+/** A scripted stand-in for the SDK: replies in order, streamed events before each reply, recorded calls. */
+final class FakeGateway implements CopilotGateway {
+
+    /** Put this in {@link #replies} to make the next ask time out. */
+    static final Object TIMEOUT = new Object();
+
+    final List<Object> replies;
+    boolean authenticated = true;
+    RuntimeException openError;
+    RuntimeException authError;
+    RuntimeException sessionError;
+    boolean finalMessage = true;
+    boolean replyNull;
+    String sessionErrorText;
+    boolean closeThrows;
+    UsageMetrics metrics = metrics(1.5e9);
+    RuntimeException metricsError;
+    List<String> intents = new ArrayList<>();
+    List<String[]> reasoningDeltas = new ArrayList<>();
+    List<String[]> reasoningFull = new ArrayList<>();
+    List<String> messageDeltas = new ArrayList<>();
+    String unmatchedToolDoneId;
+    Map<String, Object> quota;
+    RuntimeInfo runtimeInfo = new RuntimeInfo(true, "/tmp/runtime.node", "1.0.13-preview.6", "in-process runtime");
+
+    boolean opened;
+    boolean closed;
+    String tokenSeen;
+    FakeSession session;
+    SessionSpec spec;
+
+    FakeGateway(Object... replies) {
+        this.replies = new ArrayList<>(List.of(replies));
+    }
+
+    static UsageMetrics metrics(Double nanoAiu) {
+        Map<String, UsageMetrics.ModelMetric> models = new LinkedHashMap<>();
+        models.put("gpt-5", new UsageMetrics.ModelMetric(1, 100, 50, 0, 0L));
+        return new UsageMetrics(nanoAiu, 1L, 1.0, 2500L, models);
+    }
+
+    /** A narrative that cites, for every member, the demand and capacity of their first forecast row. */
+    static String goodNarrative(JsonNode facts) {
+        StringBuilder members = new StringBuilder();
+        for (JsonNode m : facts.path("members")) {
+            JsonNode row = m.path("forecast").get(0);
+            if (members.length() > 0) {
+                members.append(',');
+            }
+            members.append("{\"member_id\": \"").append(m.path("id").asText()).append("\", \"name\": \"").append(m.path("name").asText().replace("\"", ""))
+                    .append("\", \"risk_level\": \"low\", \"summary\": \"Demand ").append(row.path("demand").asDouble()).append(" h against ")
+                    .append(row.path("capacity").asDouble()).append(" h capacity in the week of ").append(row.path("week").asText())
+                    .append(".\", \"patterns\": [], \"warnings\": []}");
+        }
+        return "{\"run_summary\": \"All members within capacity.\", \"members\": [" + members + "], \"team_risks\": [], \"rebalancing\": [],"
+                + " \"suggested_adjustments\": [], \"model_notes\": \"\"}";
+    }
+
+    @Override
+    public CopilotConnection open(String token) {
+        if (openError != null) {
+            throw ForecastException.of("COPILOT_UNAVAILABLE", openError.getMessage());
+        }
+        opened = true;
+        tokenSeen = token;
+        return new FakeConnection();
+    }
+
+    @Override
+    public RuntimeInfo runtime() {
+        return runtimeInfo;
+    }
+
+    final class FakeConnection implements CopilotConnection {
+        @Override
+        public AuthStatus authStatus() {
+            if (authError != null) {
+                throw authError;
+            }
+            return new AuthStatus(authenticated, authenticated ? "sara" : null, authenticated ? null : "not signed in");
+        }
+
+        @Override
+        public NarrationSession createSession(SessionSpec s, Consumer<NarrationEvent> events) {
+            if (sessionError != null) {
+                throw sessionError;
+            }
+            spec = s;
+            session = new FakeSession(events);
+            return session;
+        }
+
+        @Override
+        public Optional<Map<String, Object>> quota(Duration timeout) {
+            return Optional.ofNullable(quota);
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+    }
+
+    final class FakeSession implements NarrationSession {
+        final Consumer<NarrationEvent> events;
+        final List<String> prompts = new ArrayList<>();
+        final List<String> calls = new ArrayList<>();
+        boolean closed;
+
+        FakeSession(Consumer<NarrationEvent> events) {
+            this.events = events;
+        }
+
+        @Override
+        public String ask(String prompt, Duration timeout) throws TimeoutException {
+            prompts.add(prompt);
+            List<ToolSpec> tools = spec.tools();
+            for (int i = 0; i < Math.min(2, tools.size()); i++) {
+                events.accept(NarrationEvent.toolStart("c" + i, tools.get(i).name()));
+                tools.get(i).handler().apply(tools.get(i).memberScoped() ? "nobody" : null);
+                events.accept(NarrationEvent.toolDone("c" + i));
+            }
+            if (unmatchedToolDoneId != null) {
+                events.accept(NarrationEvent.toolDone(unmatchedToolDoneId));
+            }
+            for (String intent : intents) {
+                events.accept(NarrationEvent.intent(intent));
+            }
+            for (String[] d : reasoningDeltas) {
+                events.accept(NarrationEvent.thinkingDelta(d[0], d[1]));
+            }
+            for (String[] f : reasoningFull) {
+                events.accept(NarrationEvent.thinkingFull(f[0], f[1]));
+            }
+            for (String chunk : messageDeltas) {
+                events.accept(NarrationEvent.answerDelta(chunk));
+            }
+            if (replyNull) {
+                return null;
+            }
+            if (sessionErrorText != null) {
+                events.accept(NarrationEvent.error(sessionErrorText));
+            }
+            Object reply = replies.remove(0);
+            if (reply == TIMEOUT) {
+                throw new TimeoutException("no answer within " + timeout.toSeconds() + " s");
+            }
+            if (reply instanceof RuntimeException e) {
+                throw e;
+            }
+            events.accept(NarrationEvent.usage(new UsageEvent("gpt-5", 100L, 50L, 20L, 0L)));
+            String text = (String) reply;
+            if (!finalMessage) {
+                int half = text.length() / 2;
+                events.accept(NarrationEvent.answerDelta(text.substring(0, half)));
+                events.accept(NarrationEvent.answerDelta(text.substring(half)));
+                return null;
+            }
+            events.accept(NarrationEvent.message(text, "gpt-5"));
+            return text;
+        }
+
+        @Override
+        public Optional<UsageMetrics> usage(Duration timeout) {
+            calls.add("usage");
+            if (metricsError != null) {
+                throw metricsError;
+            }
+            return Optional.of(metrics);
+        }
+
+        @Override
+        public void close() {
+            calls.add("close");
+            closed = true;
+            if (closeThrows) {
+                throw new IllegalStateException("close failed: connection already closed");
+            }
+        }
+    }
+}
