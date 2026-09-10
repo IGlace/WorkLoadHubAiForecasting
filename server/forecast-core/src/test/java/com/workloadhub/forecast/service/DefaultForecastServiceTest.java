@@ -107,6 +107,42 @@ class DefaultForecastServiceTest {
     }
 
     @Test
+    void progressOfARunEvictedFromTheTrackerFallsBackToTheStoredRow() throws Exception {
+        Dialect dialect = Dialect.of(SeededData.dataSource());
+        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource(), dialect);
+        RunProgressTracker tracker = new RunProgressTracker();
+        DefaultForecastService svc = new DefaultForecastService(SeededData.dataSource(), dialect,
+                new ForecastRunner(new CapacityRule(40), true), raw, tracker, 1, true);
+        try {
+            UUID id = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
+            raw.finish(id, "seasonal_naive", 0.9, "{}", List.of(), "{}", LocalDateTime.now());
+            tracker.start(id);
+            // MAX_TRACKED further, distinct runs push the id above out of the 256-entry bound.
+            for (int i = 0; i < RunProgressTracker.MAX_TRACKED; i++) {
+                tracker.start(UUID.randomUUID());
+            }
+            assertTrue(tracker.get(id).isEmpty(), "the run's tracker entry was evicted by the later starts");
+            RunProgress progress = svc.progress(id);
+            assertEquals("DONE", progress.phase());
+            assertEquals(100, progress.percent());
+
+            UUID failedId = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
+            raw.fail(failedId, "boom", LocalDateTime.now());
+            tracker.start(failedId);
+            for (int i = 0; i < RunProgressTracker.MAX_TRACKED; i++) {
+                tracker.start(UUID.randomUUID());
+            }
+            assertTrue(tracker.get(failedId).isEmpty());
+            RunProgress failedProgress = svc.progress(failedId);
+            assertEquals("FAILED", failedProgress.phase());
+            assertEquals(100, failedProgress.percent());
+            assertEquals("boom", failedProgress.message());
+        } finally {
+            svc.close();
+        }
+    }
+
+    @Test
     void aFailedRunIsRecordedNotSwallowed() {
         UUID emptyTeam = SeededData.data().teams().stream().filter(t -> SeededData.data().membersOfTeam(t.id()).isEmpty()).map(TeamRow::id)
                 .findFirst().orElseGet(DefaultForecastServiceTest::insertEmptyTeam);

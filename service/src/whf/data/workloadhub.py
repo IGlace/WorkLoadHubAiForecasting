@@ -68,16 +68,24 @@ class _Resolver:
         self.member_by_name: dict[str, list[str]] = defaultdict(list)
         for u in users:
             uid = str(u["id"])
+            normalized_uid = uid.strip().lower()
             for key, index, member_index in (
                 (u.get("email"), self.by_email, self.member_by_email),
                 (u.get("full_name"), self.by_name, self.member_by_name),
             ):
                 if key:
-                    index[str(key).strip().lower()].append(uid)
+                    # Every index stores the normalized (lower-cased) id, never the raw one, so resolve()
+                    # returns the same normalized shape regardless of which branch matched - the id branch
+                    # below already returns a lower-cased key, and the two must agree for a caller comparing
+                    # resolve()'s result against another normalized id (e.g. a task's own assignee_id.lower()).
+                    index[str(key).strip().lower()].append(normalized_uid)
                     if uid in member_ids:
-                        member_index[str(key).strip().lower()].append(uid)
+                        member_index[str(key).strip().lower()].append(normalized_uid)
 
     def resolve(self, value: Any) -> str | None:
+        """The matched user id, normalized (stripped, lower-cased) the same way regardless of whether `value`
+        was an id, an email or a name - so two resolve() results, or one compared against another id normalized
+        the same way, are comparable."""
         if value is None or str(value).strip().lower() in UNASSIGNED:
             return None
         key = str(value).strip().lower()

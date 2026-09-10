@@ -279,6 +279,62 @@ def test_an_upper_case_assignee_id_still_resolves_the_transition_date() -> None:
     assert tasks["assigned_at"][0] == "2026-01-05", "the transition date, not the fallback to created_date"
 
 
+def test_an_upper_case_email_in_the_transition_still_resolves_an_upper_case_id() -> None:
+    """The same case-insensitive match, but through the email branch of _Resolver.resolve(): the history row
+    names the new assignee by email, not by id, and both the email and the id carry mixed case."""
+    export = {
+        "data": {
+            "users": [
+                {
+                    "id": "U1",
+                    "role": "MEMBER",
+                    "email": "alice@example.test",
+                    "active": True,
+                    "full_name": "Alice A",
+                    "manager_id": None,
+                    "deactivated_at": None,
+                }
+            ],
+            "teams": [{"id": "t1", "name": "Team One", "active": True, "manager_id": None, "parent_team_id": None}],
+            "team_members": [{"id": "tm1", "team_id": "t1", "user_id": "U1", "joined_at": "2026-01-01T08:00:00"}],
+            "task_statuses": [{"id": "s_todo", "name": "To Do", "active": True, "category": "TO_DO"}],
+            "task_types": [{"id": "ty1", "name": "Task", "active": True}],
+            "projects": [],
+            "tasks": [
+                {
+                    "id": "taskA",
+                    "title": "Reassigned task",
+                    "archived": False,
+                    "assignee_id": "U1",
+                    "reporter_id": None,
+                    "created_date": "2026-01-01T09:00:00",
+                    "task_status_id": "s_todo",
+                    "finished_date": None,
+                    "original_estimate_hrs": 4,
+                    "remaining_estimate_hrs": 4,
+                },
+            ],
+            "task_history": [
+                {
+                    "id": "h1",
+                    "task_id": "taskA",
+                    "field_name": "assignee",
+                    "new_value": "Alice@Example.TEST",  # the email, mixed case, not the id
+                    "changed_at": "2026-01-05T10:00:00",
+                },
+            ],
+            "time_logs": [],
+            "absences": [],
+            "holidays": [],
+        },
+    }
+    conn = connect(":memory:")
+    import_workloadhub(conn, export, arrivals="all")
+    tasks = read_df(conn, "SELECT assigned_at, created_at FROM tasks")
+    assert tasks["created_at"][0] == "2026-01-01"
+    assert tasks["assigned_at"][0] == "2026-01-05", "the transition date, not the fallback to created_date"
+
+
 def test_cli_imports_and_refuses_to_overwrite(tmp_path: Path) -> None:
     from typer.testing import CliRunner
 
