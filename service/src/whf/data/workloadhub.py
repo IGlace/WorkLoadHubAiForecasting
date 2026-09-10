@@ -61,7 +61,7 @@ class Ids:
 
 class _Resolver:
     def __init__(self, users: list[dict[str, Any]], member_ids: set[str]) -> None:
-        self.user_ids = {str(u["id"]) for u in users}
+        self.user_ids = {str(u["id"]).strip().lower() for u in users}
         self.by_email: dict[str, list[str]] = defaultdict(list)
         self.by_name: dict[str, list[str]] = defaultdict(list)
         self.member_by_email: dict[str, list[str]] = defaultdict(list)
@@ -186,7 +186,7 @@ def import_workloadhub(conn: sqlite3.Connection, export: dict[str, Any], *, arri
         assert created is not None
         assigned = created
         for h in reversed(history.get(tid, [])):
-            if h.get("field_name") == "assignee" and resolver.resolve(h.get("new_value")) == assignee:
+            if h.get("field_name") == "assignee" and resolver.resolve(h.get("new_value")) == assignee.strip().lower():
                 assigned = _datetime(h["changed_at"])
                 break
         assert assigned is not None

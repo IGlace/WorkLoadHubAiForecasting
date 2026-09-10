@@ -7,6 +7,7 @@ date, time, timestamp -> TEXT; double precision -> REAL; bigint, integer, boolea
 same names, keys, foreign keys and CHECK lists). Run it again whenever the owner's schema changes
 and commit both outputs; SchemaFilesTest keeps them in step.
 """
+
 from __future__ import annotations
 
 import re

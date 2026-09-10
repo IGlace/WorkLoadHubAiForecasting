@@ -111,17 +111,25 @@ def import_workloadhub_cmd(
     """Load a WorkloadHub export into this database's schema for the parity check against the Java module."""
     from whf.data.workloadhub import clear_for_replace, import_workloadhub
 
-    conn = _conn(db)
-    if conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] and not replace:
-        typer.echo("error: the database already holds tasks; pass --replace to overwrite")
+    if arrivals not in ("fresh", "all"):
+        typer.echo(f"error: --arrivals must be 'fresh' or 'all', not {arrivals!r}")
         raise typer.Exit(code=2)
-    if replace:
-        clear_for_replace(conn)
-    export = json.loads(Path(file).read_text(encoding="utf-8"))
-    counts = import_workloadhub(conn, export, arrivals=arrivals)
-    for table, n in counts.items():
-        typer.echo(f"{table:<16}{n:>8}")
-    typer.echo(f"Imported {counts['members']} members and {counts['tasks']} tasks ({arrivals} arrivals) from {file}")
+    conn = _conn(db)
+    try:
+        if conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] and not replace:
+            typer.echo("error: the database already holds tasks; pass --replace to overwrite")
+            raise typer.Exit(code=2)
+        if replace:
+            clear_for_replace(conn)
+        export = json.loads(Path(file).read_text(encoding="utf-8"))
+        counts = import_workloadhub(conn, export, arrivals=arrivals)
+        for table, n in counts.items():
+            typer.echo(f"{table:<16}{n:>8}")
+        typer.echo(
+            f"Imported {counts['members']} members and {counts['tasks']} tasks ({arrivals} arrivals) from {file}"
+        )
+    finally:
+        conn.close()
 
 
 @app.command()
