@@ -54,8 +54,9 @@ $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal
 | command | options | what it does |
 |---|---|---|
 | `teams` | `[--db]` | Lists the teams with their counted member count. |
-| `run` | `--team <name or id> [--as-of] [--db] [--model xgboost\|seasonal_naive] [--user] [--no-planned] [--json]` | Runs a forecast for one team as of a date (default: today) and prints the champion, the scores and the member-week table; `--model` forces a model, `--no-planned` switches off planned-work allocation, `--json` prints the result as JSON. Exits 2 on a usage error, 1 on a failed run. |
+| `run` | `--team <name or id> [--as-of] [--db] [--model xgboost\|seasonal_naive] [--user] [--no-planned] [--json]` | Runs a forecast for one team from the run day (default: today; `--as-of` is an experiment override for seeded databases, the server always uses today) and prints the champion, the scores and the member-window table; `--model` forces a model, `--no-planned` switches off planned-work allocation, `--json` prints the result as JSON. Exits 2 on a usage error, 1 on a failed run. |
 | `runs` | `--team <name or id> [--db] [--limit 20]` | Lists the runs of a team, newest first. |
+| `current` | `--team <name or id> [--from] [--to] [--db] [--json]` | Prints the team's current forecast per member and day (the latest run that covered each day) between `--from` (default: today) and `--to` (default: today + 20 days). Exits 2 on a usage error. |
 | `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
 | `narrate` | `--run <id> --user <name or id> [--lang en\|fr] [--model m] [--token-env GITHUB_TOKEN] [--db] [--json]` | Stores the user's GitHub token, narrates a finished run through their Copilot seat, streams progress to stderr, and prints the stored result. Exits 0 OK, 3 UNVERIFIED, 1 FAILED or error, 2 usage. |
 | `copilot status` | `--user <name or id> [--db]` | Reports whether this user can narrate: token presence, runtime availability, sign-in and quota. |
@@ -108,15 +109,21 @@ is `@ConditionalOnMissingBean`: a host that declares its own replaces it.
 | `whf.web.base-path` | `/api/forecast` | Where the controller is mounted. |
 | `whf.flyway.enabled` | `true` | Runs the module's migrations at start-up; `false` when the host migrates the module's tables itself. |
 
+The run day is today by the `java.time.Clock` bean; the auto-configuration registers
+`Clock.systemDefaultZone()` unless the host provides one (a fixed clock in tests, a zoned clock in
+production). A forecast covers the ten weekdays after the run day in two windows of five
+(`docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`).
+
 ### The REST surface (`whf.web.enabled=true`)
 
 Paths are relative to `whf.web.base-path`. Authorisation is the host's: `requestedBy` is trusted as given.
 
 | route | body in | out |
 |---|---|---|
-| `POST /runs` | `RunRequest` (`teamId`, `requestedBy`, `asOf`, `forcedModel`, `plannedWork`) | 202, `{"id": "<uuid>"}` |
-| `GET /runs/{id}` | | 200, `RunResult` (the run, its member weeks, scores and facts) |
+| `POST /runs` | `RunRequestBody` (`teamId`, `requestedBy`, `forcedModel`, `plannedWork`; an `asOf` field is refused with 400) | 202, `{"id": "<uuid>"}` |
+| `GET /runs/{id}` | | 200, `RunResult` (the run, its member windows and days, scores and facts) |
 | `GET /teams/{teamId}/runs?limit=20` | | 200, `RunSummary[]`, newest first |
+| `GET /teams/{teamId}/current?from=YYYY-MM-DD&to=YYYY-MM-DD` | | 200, `CurrentDayForecast[]` per member and day (defaults: today and today + 20 days) |
 | `GET /runs/{id}/progress` | | 200, `RunProgress` (`phase`, `percent`, `message`, `thinking`, `answer`) |
 | `POST /runs/{id}/narratives` | `{"requestedBy", "language", "model"}` | 200, `NarrativeResult` whatever its status |
 | `GET /runs/{id}/narratives/{lang}` | | 200, the latest `NarrativeResult` of that language; 404 `NARRATIVE_NOT_FOUND` when there is none |
@@ -223,6 +230,9 @@ tools/parity.sh <file> <out> ../../whf-archive 2026-09-06
 
 Never run the procedure on the real export inside the repository: point `OUT_DIR` outside git and keep the
 real-mode result in the owner's own folder.
+
+Since 2026-09-10 the Java harness's `demand.csv` is per member-window while the archived Python harness's is
+per member-week; the gate compares `scores.csv` only.
 
 The gate's own test, `server/tools/tests/test_parity_compare.py`, runs `parity_compare.py` as a subprocess against
 hand-built `scores.csv` fixtures (pass, tolerance-exceeded, champions-differ, no-booster-rows and

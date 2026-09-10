@@ -208,8 +208,9 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   narration that *completes* as failed returns 200 and persists `ai_status`, so only a thrown request is
   silent.
 - **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual
-  per member per week) and make sure version 1 already records it, because it cannot be recovered
-  retroactively. Build the comparison once real weeks have passed.
+  per member per week); the per-day current forecast (`forecast_current_days`, since 2026-09-10) records the
+  forecast made for each day before it arrived; what remains is the comparison with the logged hours once real
+  weeks have passed.
 - **WorkloadHub integration, requirements first.** Document exactly what an importer needs from WorkloadHub
   (fields per task, per member, per project) so the owner can check whether its API or export supplies them.
   No importer code until that is known.
@@ -276,6 +277,12 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Rolling forecast windows** (2026-09-10): a forecast starts the first weekday after the run day and covers
+  ten weekdays in two windows of five, computed per day; each run upserts a per-day current forecast
+  (`forecast_current_days`) that the accuracy evaluation will read; the caller no longer chooses the run day
+  (REST refuses `asOf`; the CLI keeps `--as-of` for seeded experiments); the evaluation's demand level is per
+  member-window while its arrival level, the parity gate, is unchanged. Spec
+  `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`.
 - Seed realism to revisit after the first forecast on seeded data: per-department rhythms, the share of
   reopened and unlogged tasks, and whether department teams (people without a manager) should run their own
   forecast.

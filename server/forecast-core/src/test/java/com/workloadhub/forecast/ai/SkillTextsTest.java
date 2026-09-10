@@ -28,5 +28,7 @@ class SkillTextsTest {
         assertTrue(!all.contains("chronos2") && !all.contains("tsb") && !all.contains(" gbm"), "old model names are gone");
         assertTrue(all.contains("planned_hours") && all.contains("likely_work") && all.contains("due_hours"));
         assertTrue(all.contains("40 h"), "the Java module's default capacity");
+        assertTrue(all.contains("window") && all.contains("expected_window") && all.contains("five weekdays"), "the rolling horizon vocabulary");
+        assertTrue(!all.contains("expected_week") && !all.contains("two-week forecast") && !all.contains("per member and week"), "the weekly horizon is gone");
     }
 }

@@ -27,8 +27,11 @@ app with a Python service) is archived on `archive/python-desktop-v1`.
 ## Where the project stands (2026-09-10)
 
 Plans 1 to 4 landed on `dev` and `main` (foundation and seed; pipeline core; run, eval and parity; Copilot
-narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Next:
-the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the real
+narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Then the
+rolling forecast windows (`docs/superpowers/plans/2026-09-10-rolling-forecast-windows.md`): a run starts the
+first weekday after the run day, covers ten weekdays in two windows, is computed per day and keeps a per-day
+current forecast. Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with
+Copilot"), then the real
 export through the seed and the parity procedure, then the host integration. The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, CI green on `dev`, then fast-forward `main`.
@@ -56,7 +59,7 @@ fix wave, CI green on `dev`, then fast-forward `main`.
 
 ```text
 server/    Java 21 module: `forecast-core` (the library the host adds) and `forecast-cli` (command line:
-           init-db, import, export, seed, run, runs, teams, eval, narrate, copilot status);
+           init-db, import, export, seed, run, runs, current, teams, eval, narrate, copilot status);
            `server/tools/` holds the parity scripts and their one Python test
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.ps1` (gate, then fast-forward main to dev)
@@ -105,5 +108,6 @@ technical-writer. Index in `.claude/agents/README.md`.
 - Commit messages: imperative subject, short body explaining why.
 - Domain vocabulary: department (a team without a manager), team (team leader), member; demand (open, new and
   planned hours), capacity, overload; arrival model, effort model, champion model, backtest; narrative, facts,
-  contract, verification.
+  contract, verification; window (five weekdays; a run covers two, starting the first weekday after the run
+  day), current forecast (the latest run's value per member and day).
 - Dates are ISO 8601; weeks start on Monday; working days are Monday to Friday.

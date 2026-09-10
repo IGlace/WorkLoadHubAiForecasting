@@ -23,7 +23,12 @@ reasoning. Version 1 works on **dummy data** only.
 
 ### 3.1 Forecast
 - F1. Forecast horizon is exactly **two calendar weeks** ahead of the run date, reported per week.
+  - **[amended 2026-09-10]** The horizon is the next ten weekdays after the run day, in two windows of
+    five (a run on a Friday or a weekend starts on Monday); the user does not choose the start day; a
+    later run overwrites the days that have not arrived yet. Design:
+    `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`.
 - F2. Unit is **estimated hours per person per week**. Team and department numbers are sums of members, computed in the UI.
+  - **[amended 2026-09-10]** Reported per window and per day.
 - F3. The forecast **must respect capacity**: for each person and week, available capacity = configured weekly capacity, minus public holidays, minus planned vacations, minus per-week overrides. Predicted demand above capacity is reported as **overload**, never silently truncated. **[decision]** The report shows three figures per person per week: predicted demand, available capacity, and overload (demand minus capacity, floored at zero).
 - F4. Predicted demand combines **[decision]**: (a) hours from already-assigned open tasks that fall in the window, and (b) hours from tasks expected to arrive, estimated from each person's historical arrival and assignment pattern.
 - F5. The AI must **discover per-person assignment patterns** (manual assignment, self-picked, project-driven) from the history and use them to explain and adjust the forecast.

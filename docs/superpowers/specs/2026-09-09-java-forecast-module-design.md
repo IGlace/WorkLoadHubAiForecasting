@@ -359,6 +359,9 @@ Repositories read the WorkloadHub tables for one team and a time window into pla
 `ProjectRow`, `TeamRow`. The lifecycle rules are exactly those of the schema mapping document,
 section 3, restated here where the module decides:
 
+> Amended on 2026-09-10: capacity is computed per day and summed per forecast window; see
+> `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`, section 5.
+
 - **Counted members**: active users with role `MEMBER` or `TEAM_LEADER` in `team_members` of the
   team, from `joined_at` to `deactivated_at`.
 - **Assigned date**: `changed_at` of the latest `task_history` row with `field_name = 'assignee'`
@@ -448,6 +451,10 @@ the forced one regardless of its score.
 
 ## 9. The run pipeline
 
+> Amended on 2026-09-10: the horizon is two windows of five weekdays from the first weekday after the
+> run day, computed per day; steps 2 to 7 are as in
+> `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`, sections 3 to 7.
+
 `startRun(RunRequest)` inserts a `forecast_runs` row `QUEUED`, hands the run to a bounded executor
 (two threads, `whf.run-threads`) and returns the id. The worker sets `RUNNING`, then:
 
@@ -480,6 +487,9 @@ accepts that only the persisted state is visible.
 ## 10. Copilot narration
 
 ### 10.1 Facts
+
+> Amended on 2026-09-10: `run.windows`, per-window forecast rows with a `days` list, and
+> `expected_window`; see the rolling-windows design, section 9.
 
 `FactsBuilder` produces the same JSON shape the Python service sends today (run, weeks, members
 with history, forecast, capacity, open tasks, patterns, project timelines, rebalancing candidates,
@@ -555,6 +565,10 @@ error the quota fields are null and the status says why.
 `copilotStatus(userId)` reports: token present, CLI runtime path and version, and quota.
 
 ## 11. Public API
+
+> Amended on 2026-09-10: `RunRequest` has no `asOf` (the run day is the server's clock), `RunResult`
+> carries member windows and days, and `currentForecast(teamId, from, to)` reads the per-day current
+> forecast; see the rolling-windows design, section 8.
 
 ```java
 public interface ForecastService {

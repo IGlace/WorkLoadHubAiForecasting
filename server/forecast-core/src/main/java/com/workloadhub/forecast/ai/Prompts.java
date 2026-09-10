@@ -24,7 +24,7 @@ public final class Prompts {
                no Markdown fences. Field names and enumerations must match exactly. Member ids are the id strings from
                get_run_overview, copied exactly; task keys are copied exactly.
             4. Patterns need evidence: quote the statistic (name and value) that supports each statement.
-            5. Rebalancing moves go from a member with overload to a member with spare capacity in the same week,
+            5. Rebalancing moves go from a member with overload to a member with spare capacity in the same window,
                respect the target's capacity, name the tasks moved, and give the hours moved and the reason.
             6. Write in the language given in the user message, plainly, for a busy team leader.
 
