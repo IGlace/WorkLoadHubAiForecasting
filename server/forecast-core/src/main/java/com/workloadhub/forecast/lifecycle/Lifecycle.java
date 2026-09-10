@@ -1,6 +1,7 @@
 package com.workloadhub.forecast.lifecycle;
 
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
@@ -20,19 +21,43 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 
-/** The lifecycle rules of the spec, section 5, applied to every task once. */
-public record Lifecycle(Map<UUID, TaskFacts> facts, List<String> unresolvedAssignments, List<String> unloggedTasks) {
+/**
+ * The lifecycle rules of the spec, section 5, applied to every task once.
+ *
+ * <p>Not a record: {@link #all()} is read once per candidate/history scan in the planned-work allocation, so its
+ * sorted view is computed once here (the map is already ordered by {@link Ids#UUID_ORDER}, so this is a plain
+ * copy, not a re-sort) and cached in a real field, which a record's fixed component list cannot hold.
+ */
+public final class Lifecycle {
 
     public static final int BACKLOG_LAG_DAYS = 2;
     private static final Set<String> UNASSIGNED_VALUES = Set.of("", "none", "null");
-    private static final Comparator<UUID> BY_ID = Comparator.comparing(UUID::toString);
+    private static final Comparator<UUID> BY_ID = Ids.UUID_ORDER;
 
-    public Lifecycle {
+    private final SortedMap<UUID, TaskFacts> facts;
+    private final List<String> unresolvedAssignments;
+    private final List<String> unloggedTasks;
+    private final List<TaskFacts> all;
+
+    private Lifecycle(Map<UUID, TaskFacts> facts, List<String> unresolvedAssignments, List<String> unloggedTasks) {
         SortedMap<UUID, TaskFacts> sorted = new TreeMap<>(BY_ID);
         sorted.putAll(facts);
-        facts = Collections.unmodifiableSortedMap(sorted);
-        unresolvedAssignments = List.copyOf(unresolvedAssignments);
-        unloggedTasks = List.copyOf(unloggedTasks);
+        this.facts = Collections.unmodifiableSortedMap(sorted);
+        this.unresolvedAssignments = List.copyOf(unresolvedAssignments);
+        this.unloggedTasks = List.copyOf(unloggedTasks);
+        this.all = List.copyOf(this.facts.values());
+    }
+
+    public Map<UUID, TaskFacts> facts() {
+        return facts;
+    }
+
+    public List<String> unresolvedAssignments() {
+        return unresolvedAssignments;
+    }
+
+    public List<String> unloggedTasks() {
+        return unloggedTasks;
     }
 
     public static Lifecycle derive(ForecastData data) {
@@ -126,13 +151,13 @@ public record Lifecycle(Map<UUID, TaskFacts> facts, List<String> unresolvedAssig
     }
 
     public List<TaskFacts> all() {
-        return facts.values().stream().sorted(Comparator.comparing(f -> f.id().toString())).toList();
+        return all;
     }
 
     public List<TaskFacts> assignedTo(UUID member) {
         return facts.values().stream()
                 .filter(f -> member.equals(f.assignee()) && f.isAssigned())
-                .sorted(Comparator.comparing(TaskFacts::assigned).thenComparing(f -> f.id().toString()))
+                .sorted(Comparator.comparing(TaskFacts::assigned).thenComparing(TaskFacts::id, Ids.UUID_ORDER))
                 .toList();
     }
 

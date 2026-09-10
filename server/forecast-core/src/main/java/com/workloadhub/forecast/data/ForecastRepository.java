@@ -14,7 +14,6 @@ import com.workloadhub.forecast.store.Dialect;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,7 +72,7 @@ public final class ForecastRepository {
             if (!active || !COUNTED_ROLES.contains(str(r, "role")) || teamIds.isEmpty()) {
                 continue;
             }
-            List<UUID> sorted = teamIds.stream().sorted(Comparator.comparing(UUID::toString)).toList();
+            List<UUID> sorted = teamIds.stream().sorted(Ids.UUID_ORDER).toList();
             UUID primary = sorted.stream()
                     .filter(t -> teamById.containsKey(t) && teamById.get(t).parentId() != null)
                     .findFirst().orElse(sorted.get(0));

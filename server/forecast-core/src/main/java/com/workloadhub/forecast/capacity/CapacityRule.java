@@ -6,8 +6,13 @@ import com.workloadhub.forecast.data.rows.AbsenceRow;
 import com.workloadhub.forecast.data.rows.CapacityRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 
@@ -19,18 +24,50 @@ public final class CapacityRule {
 
     private final double defaultWeeklyHours;
 
+    /**
+     * One index per {@link ForecastData} this rule has seen, keyed by instance identity (not equals/hashCode,
+     * which would force a full scan of the lists to hash or compare): {@code capacity()} and {@code absences()}
+     * are scanned once per data set here instead of once per {@code capacity()}/{@code absenceHours()} call,
+     * which FeatureBuilder makes on the order of member-weeks × horizons.
+     */
+    private final Map<ForecastData, Index> indexes = new IdentityHashMap<>();
+
     public CapacityRule(double defaultWeeklyHours) {
         this.defaultWeeklyHours = defaultWeeklyHours;
     }
 
-    static Optional<CapacityRow> rowFor(UUID member, LocalDate monday, ForecastData data) {
-        return data.capacity().stream().filter(c -> c.userId().equals(member) && c.weekStart().equals(monday)).findFirst();
+    private record Index(Map<UUID, NavigableMap<LocalDate, CapacityRow>> capacityByMember,
+            Map<UUID, NavigableMap<LocalDate, Double>> absenceHoursByMember) {
+
+        static Index of(ForecastData data) {
+            Map<UUID, NavigableMap<LocalDate, CapacityRow>> capacity = new HashMap<>();
+            for (CapacityRow c : data.capacity()) {
+                capacity.computeIfAbsent(c.userId(), k -> new TreeMap<>()).put(c.weekStart(), c);
+            }
+            Map<UUID, NavigableMap<LocalDate, Double>> absence = new HashMap<>();
+            for (AbsenceRow a : data.absences()) {
+                absence.computeIfAbsent(a.userId(), k -> new TreeMap<>()).merge(a.day(), a.hours(), Double::sum);
+            }
+            return new Index(capacity, absence);
+        }
     }
 
-    static Optional<CapacityRow> latestRowBefore(UUID member, LocalDate monday, ForecastData data) {
-        return data.capacity().stream()
-                .filter(c -> c.userId().equals(member) && !c.weekStart().isAfter(monday))
-                .max((a, b) -> a.weekStart().compareTo(b.weekStart()));
+    private Index indexFor(ForecastData data) {
+        return indexes.computeIfAbsent(data, Index::of);
+    }
+
+    private Optional<CapacityRow> rowFor(UUID member, LocalDate monday, ForecastData data) {
+        NavigableMap<LocalDate, CapacityRow> byWeek = indexFor(data).capacityByMember().get(member);
+        return byWeek == null ? Optional.empty() : Optional.ofNullable(byWeek.get(monday));
+    }
+
+    private Optional<CapacityRow> latestRowBefore(UUID member, LocalDate monday, ForecastData data) {
+        NavigableMap<LocalDate, CapacityRow> byWeek = indexFor(data).capacityByMember().get(member);
+        if (byWeek == null) {
+            return Optional.empty();
+        }
+        Map.Entry<LocalDate, CapacityRow> floor = byWeek.floorEntry(monday);
+        return floor == null ? Optional.empty() : Optional.of(floor.getValue());
     }
 
     public double absenceHours(UUID member, LocalDate monday, ForecastData data, WorkingCalendar cal) {
@@ -39,10 +76,14 @@ public final class CapacityRule {
             return round2(row.get().absence());
         }
         LocalDate end = monday.plusDays(6);
+        NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
+        if (byDay == null || byDay.isEmpty()) {
+            return 0.0;
+        }
         double sum = 0;
-        for (AbsenceRow a : data.absences()) {
-            if (a.userId().equals(member) && !a.day().isBefore(monday) && !a.day().isAfter(end) && cal.isWorkingDay(a.day())) {
-                sum += a.hours();
+        for (Map.Entry<LocalDate, Double> e : byDay.subMap(monday, true, end, true).entrySet()) {
+            if (cal.isWorkingDay(e.getKey())) {
+                sum += e.getValue();
             }
         }
         return round2(sum);
