@@ -58,6 +58,8 @@ class BacktestTest {
         }
         assertTrue(r.meanMase(XgboostArrival.NAME) < 1.0, "planted signal: " + r.meanMase(XgboostArrival.NAME));
         assertEquals(8 * 3, r.residuals().get(XgboostArrival.NAME).get(1).length, "8 members × 3 origins");
+        assertEquals(8 * 3, r.residualRows(XgboostArrival.NAME, 1).size());
+        assertTrue(r.residualRows(XgboostArrival.NAME, 1).stream().allMatch(row -> origins.contains(row.origin())));
         assertTrue(r.unavailable().isEmpty());
         assertTrue(r.secondsPerModel().get(XgboostArrival.NAME) > 0);
         Backtest.Champion c = Backtest.selectChampion(r.scores());

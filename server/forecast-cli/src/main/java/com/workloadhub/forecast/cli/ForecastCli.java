@@ -21,7 +21,7 @@ public class ForecastCli {
     @Command(name = "forecast", mixinStandardHelpOptions = true, version = "0.1.0",
             description = "WorkloadHub forecast: database, seed, runs and narration from the terminal.",
             subcommands = {InitDbCommand.class, ImportCommand.class, ExportCommand.class, SeedCommand.class, RunCommand.class, RunsCommand.class,
-                    TeamsCommand.class})
+                    TeamsCommand.class, EvalCommand.class})
     @Component
     public static class Root {
     }

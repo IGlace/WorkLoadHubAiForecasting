@@ -45,4 +45,20 @@ class RunCommandTest {
         String json = capture(cli, 0, "run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--json");
         assertTrue(json.trim().startsWith("{") && json.contains("\"memberWeeks\""), json);
     }
+
+    @Test
+    void evalWritesTheHarnessFiles(@TempDir Path dir) {
+        Path db = dir.resolve("e.db");
+        Path seeded = dir.resolve("seeded.json");
+        CommandLine cli = new CommandLine(new ForecastCli.Root());
+        assertEquals(0, cli.execute("seed", "--synthetic", "--users", "14", "--weeks", "24", "--seed", "5", "--end", "2026-09-06", "--out", seeded.toString()));
+        assertEquals(0, cli.execute("init-db", "--db", db.toString()));
+        assertEquals(0, cli.execute("import", "--db", db.toString(), seeded.toString()));
+        Path out = dir.resolve("eval");
+        String text = capture(cli, 0, "eval", "--db", db.toString(), "--as-of", "2026-09-06", "--origins", "2", "--models", "seasonal_naive", "--out", out.toString());
+        assertTrue(text.contains("seasonal_naive"), text);
+        assertTrue(java.nio.file.Files.exists(out.resolve("scores.csv")) && java.nio.file.Files.exists(out.resolve("demand.csv"))
+                && java.nio.file.Files.exists(out.resolve("summary.md")));
+        assertEquals(2, cli.execute("eval", "--db", db.toString(), "--models", "gbm", "--out", out.toString()));
+    }
 }

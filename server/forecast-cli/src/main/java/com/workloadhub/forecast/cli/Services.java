@@ -11,14 +11,14 @@ import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /** The module's services on a CLI-owned SQLite file: one thread, planned work on, default capacity 40. */
-record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc) implements AutoCloseable {
+record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc, ForecastRunner runner) implements AutoCloseable {
 
     static Services open(DataSource ds) {
         ForecastMigrations.run(ds);
         Dialect dialect = Dialect.of(ds);
         ForecastRunner runner = new ForecastRunner(new CapacityRule(40), true);
         DefaultForecastService service = new DefaultForecastService(ds, dialect, runner, new JdbcRunStore(ds, dialect), new RunProgressTracker(), 1, true);
-        return new Services(service, dialect, JdbcClient.create(ds));
+        return new Services(service, dialect, JdbcClient.create(ds), runner);
     }
 
     @Override

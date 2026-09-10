@@ -31,7 +31,11 @@ public final class Backtest {
     public record Champion(String model, double meanMase) {
     }
 
-    public record Result(List<Score> scores, Map<String, Map<Integer, double[]>> residuals, Map<String, String> unavailable,
+    public record Residual(LocalDate origin, double y, double residual) {
+    }
+
+    public record Result(List<Score> scores, Map<String, Map<Integer, double[]>> residuals,
+            Map<String, Map<Integer, List<Residual>>> residualRows, Map<String, String> unavailable,
             Map<String, Double> secondsPerModel) {
 
         public double meanMase(String model) {
@@ -56,14 +60,28 @@ public final class Backtest {
             double[] found = byHorizon.get(h);
             return found == null ? new double[0] : found;
         }
+
+        /** The per-origin residual rows of one model at one horizon, or an empty list when either is unknown. */
+        public List<Residual> residualRows(String model, int h) {
+            Map<Integer, List<Residual>> byHorizon = residualRows.get(model);
+            if (byHorizon == null) {
+                return List.of();
+            }
+            List<Residual> found = byHorizon.get(h);
+            return found == null ? List.of() : found;
+        }
     }
 
     private Backtest() {
     }
 
     public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek) {
+        return origins(lastCompleteWeek, firstWeek, ORIGIN_COUNT);
+    }
+
+    public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek, int count) {
         List<LocalDate> out = new ArrayList<>();
-        for (int k = ORIGIN_COUNT; k >= 1; k--) {
+        for (int k = count; k >= 1; k--) {
             LocalDate origin = lastCompleteWeek.minusWeeks((long) k * ORIGIN_STEP_WEEKS);
             if (ChronoUnit.WEEKS.between(firstWeek, origin) >= MIN_HISTORY_WEEKS) {
                 out.add(origin);
@@ -101,6 +119,7 @@ public final class Backtest {
         int maxH = Arrays.stream(horizons).max().orElse(1);
         List<Score> scores = new ArrayList<>();
         Map<String, Map<Integer, List<Double>>> residuals = new LinkedHashMap<>();
+        Map<String, Map<Integer, List<Residual>>> residualRows = new LinkedHashMap<>();
         Map<String, String> unavailable = new LinkedHashMap<>();
         Map<String, Double> seconds = new LinkedHashMap<>();
         for (LocalDate origin : origins) {
@@ -137,8 +156,10 @@ public final class Backtest {
                     seconds.merge(e.getKey(), (System.nanoTime() - started) / 1e9, Double::sum);
                     scores.add(new Score(e.getKey(), origin, h, mae(y, yHat), mase(y, yHat, yNaive)));
                     List<Double> pool = residuals.computeIfAbsent(e.getKey(), k -> new TreeMap<>()).computeIfAbsent(h, k -> new ArrayList<>());
+                    List<Residual> rowPool = residualRows.computeIfAbsent(e.getKey(), k -> new TreeMap<>()).computeIfAbsent(h, k -> new ArrayList<>());
                     for (int i = 0; i < y.length; i++) {
                         pool.add(y[i] - yHat[i]);
+                        rowPool.add(new Residual(origin, y[i], y[i] - yHat[i]));
                     }
                 }
             }
@@ -154,6 +175,7 @@ public final class Backtest {
         }
         scores.removeIf(s -> unavailable.containsKey(s.model()));
         unavailable.keySet().forEach(residuals::remove);
+        unavailable.keySet().forEach(residualRows::remove);
         unavailable.keySet().forEach(seconds::remove);
         Map<String, Map<Integer, double[]>> pooled = new LinkedHashMap<>();
         residuals.forEach((model, byH) -> {
@@ -161,7 +183,13 @@ public final class Backtest {
             byH.forEach((h, list) -> arrays.put(h, list.stream().mapToDouble(Double::doubleValue).toArray()));
             pooled.put(model, arrays);
         });
-        return new Result(List.copyOf(scores), pooled, unavailable, seconds);
+        Map<String, Map<Integer, List<Residual>>> frozenRows = new LinkedHashMap<>();
+        residualRows.forEach((model, byH) -> {
+            Map<Integer, List<Residual>> byHorizon = new TreeMap<>();
+            byH.forEach((h, list) -> byHorizon.put(h, List.copyOf(list)));
+            frozenRows.put(model, byHorizon);
+        });
+        return new Result(List.copyOf(scores), pooled, frozenRows, unavailable, seconds);
     }
 
     public static Champion selectChampion(List<Score> scores) {
