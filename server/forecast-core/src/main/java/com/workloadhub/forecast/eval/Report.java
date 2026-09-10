@@ -38,9 +38,11 @@ public final class Report {
             scores.append(r.model()).append(',').append(r.horizon()).append(',').append(r.origin()).append(',').append(r.metric()).append(',').append(csv(r.value())).append('\n');
         }
         Files.writeString(outDir.resolve("scores.csv"), scores.toString(), StandardCharsets.UTF_8);
-        StringBuilder demand = new StringBuilder("model,origin,team_id,member_id,week_start,forecast,truth,capacity,open_hours,new_hours,planned_hours\n");
+        StringBuilder demand = new StringBuilder(
+                "model,origin,team_id,member_id,window,window_start,window_end,forecast,truth,capacity,open_hours,new_hours,planned_hours\n");
         for (DemandRow r : result.demand()) {
-            demand.append(r.model()).append(',').append(r.origin()).append(',').append(r.teamId()).append(',').append(r.memberId()).append(',').append(r.weekStart())
+            demand.append(r.model()).append(',').append(r.origin()).append(',').append(r.teamId()).append(',').append(r.memberId()).append(',')
+                    .append(r.windowIndex()).append(',').append(r.windowStart()).append(',').append(r.windowEnd())
                     .append(',').append(csv(r.forecast())).append(',').append(csv(r.truth())).append(',').append(csv(r.capacity())).append(',').append(csv(r.openHours()))
                     .append(',').append(csv(r.newHours())).append(',').append(csv(r.plannedHours())).append('\n');
         }
@@ -64,7 +66,7 @@ public final class Report {
         parts.add(LEVEL_A_CAPTION);
         parts.add("");
         parts.add(levelA(result));
-        parts.add("## Level B: demand accuracy per model (all origins, teams, members, weeks)");
+        parts.add("## Level B: demand accuracy per model, per member-window (all origins, teams, members, windows)");
         parts.add("");
         parts.add(levelB(result));
         parts.add("## Skipped models");

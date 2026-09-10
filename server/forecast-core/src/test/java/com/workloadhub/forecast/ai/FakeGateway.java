@@ -71,7 +71,7 @@ public final class FakeGateway implements CopilotGateway {
             }
             members.append("{\"member_id\": \"").append(m.path("id").asText()).append("\", \"name\": \"").append(m.path("name").asText().replace("\"", ""))
                     .append("\", \"risk_level\": \"low\", \"summary\": \"Demand ").append(row.path("demand").asDouble()).append(" h against ")
-                    .append(row.path("capacity").asDouble()).append(" h capacity in the week of ").append(row.path("week").asText())
+                    .append(row.path("capacity").asDouble()).append(" h capacity in the window starting ").append(row.path("start").asText())
                     .append(".\", \"patterns\": [], \"warnings\": []}");
         }
         return "{\"run_summary\": \"All members within capacity.\", \"members\": [" + members + "], \"team_risks\": [], \"rebalancing\": [],"

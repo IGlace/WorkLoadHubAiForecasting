@@ -67,7 +67,8 @@ class SampleHostIntegrationTest {
         }
         assertEquals("DONE", phase);
         JsonNode result = json(mvc.perform(get("/api/forecast/runs/" + run)).andExpect(status().isOk()).andReturn());
-        assertTrue(result.path("memberWeeks").size() > 0);
+        assertTrue(result.path("memberWindows").size() > 0);
+        assertTrue(result.path("memberDays").size() > 0);
         assertEquals("seasonal_naive", result.path("run").path("championModel").asText());
 
         mvc.perform(get("/api/forecast/copilot/status?userId=" + member)).andExpect(status().isOk()).andExpect(jsonPath("$.hasToken").value(false));

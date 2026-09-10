@@ -125,7 +125,7 @@ class EffortModelTest {
             assertTrue(m.memberCycleDays(member.id(), member.primaryTeamId()) >= 1.0);
         }
         List<TaskFacts> open = lc.all().stream().filter(f -> f.isAssigned() && !f.done()).toList();
-        LocalDate f1 = com.workloadhub.forecast.calendar.Weeks.forecastWeeks(SeededData.asOf())[0];
+        LocalDate f1 = com.workloadhub.forecast.calendar.Horizon.windows(SeededData.asOf()).get(0).start();
         Map<UUID, MemberRow> members = data.memberById();
         SortedMap<MemberWeek, Double> placed = EffortModel.placeOpenTasks(
                 open.stream().filter(f -> members.containsKey(f.assignee())).toList(), m, f1,

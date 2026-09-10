@@ -3,12 +3,13 @@ package com.workloadhub.forecast.planned;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.calendar.ForecastWindow;
+import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
 import com.workloadhub.forecast.model.EffortModel;
@@ -27,7 +28,9 @@ class PlannedWorkTest {
 
     static final WorkingCalendar CAL = WorkingCalendar.fromHolidays(List.of());
     static final LocalDate AS_OF = LocalDate.of(2026, 9, 2);              // a Wednesday
-    static final LocalDate F1 = LocalDate.of(2026, 9, 7);
+    static final List<ForecastWindow> WINDOWS = Horizon.windows(AS_OF);          // Thu 2026-09-03 .. Wed 09-09, Thu 09-10 .. Wed 09-16
+    static final LocalDate F1 = WINDOWS.get(0).start();
+    static final LocalDate WINDOW_END = WINDOWS.get(1).end();
     static final MemberRow ANA = TestData.member("ana", TestData.TEAM);
     static final MemberRow BEN = TestData.member("ben", TestData.TEAM);
     static final MemberRow CID = TestData.member("cid", TestData.TEAM);
@@ -129,25 +132,25 @@ class PlannedWorkTest {
         ForecastData data = world(List.of(soon, overdue, far));
         Lifecycle lc = Lifecycle.derive(data);
         EffortModel effort = EffortModel.fit(lc, data);
-        PlannedWork.Request req = new PlannedWork.Request(TestData.TEAM, List.of(ANA, BEN, CID), AS_OF, new LocalDate[] {F1, F1.plusWeeks(1)});
+        PlannedWork.Request req = new PlannedWork.Request(TestData.TEAM, List.of(ANA, BEN, CID), AS_OF, WINDOWS);
         PlannedWork.Allocation a = PlannedWork.allocate(req, lc, data, effort, CAL, id -> Set.of());
         assertEquals(3, a.candidateCount());
         assertEquals(20.0, a.candidateHours(), 1e-9);
         assertEquals(9, a.pieces().size(), "three candidates × three members");
         for (PlannedWork.Piece p : a.pieces()) {
-            assertTrue(!p.expectedDate().isBefore(F1), "expected dates are floored at the first forecast week");
+            assertTrue(!p.expectedDate().isBefore(F1), "expected dates are floored at the first forecast day");
             assertEquals(p.estimate() * p.share() * effort.estimateRatio(p.member(), p.family(), TestData.TEAM),
                     p.hoursInWindow() + p.hoursAfterWindow(), 1e-9, "hours are conserved");
             if (p.taskId().equals(overdue.id())) {
                 assertEquals(F1, p.expectedDate(), "created + 3 days is in the past: overdue for assignment");
-                assertEquals(F1, p.expectedWeek());
+                assertEquals(1, p.expectedWindow(), "created + 3 days is in the past: expected in window 1");
             }
         }
         double inWindow = a.hours().values().stream().mapToDouble(Double::doubleValue).sum();
         double total = a.pieces().stream().mapToDouble(p -> p.hoursInWindow() + p.hoursAfterWindow()).sum();
         assertEquals(total - a.hoursAfterWindow(), inWindow, 1e-9);
-        assertTrue(a.hours().keySet().stream().allMatch(k -> k.week().equals(F1) || k.week().equals(F1.plusWeeks(1))));
-        assertTrue(a.hours().containsKey(new MemberWeek(ANA.id(), F1)));
+        assertTrue(a.hours().keySet().stream().allMatch(k -> !k.day().isBefore(F1) && !k.day().isAfter(WINDOW_END) && CAL.isWorkingDay(k.day())));
+        assertTrue(a.hours().keySet().stream().anyMatch(k -> k.member().equals(ANA.id())));
     }
 
     @Test
@@ -156,8 +159,8 @@ class PlannedWorkTest {
         ForecastData data = world(List.of(c));
         Lifecycle lc = Lifecycle.derive(data);
         EffortModel effort = EffortModel.fit(lc, data);
-        PlannedWork.Request req = new PlannedWork.Request(TestData.TEAM, List.of(ANA, BEN), AS_OF, new LocalDate[] {F1, F1.plusWeeks(1)});
-        Set<LocalDate> anaOff = Set.copyOf(CAL.workingDays(F1, F1.plusWeeks(1).plusDays(6), Set.of()));
+        PlannedWork.Request req = new PlannedWork.Request(TestData.TEAM, List.of(ANA, BEN), AS_OF, WINDOWS);
+        Set<LocalDate> anaOff = Set.copyOf(CAL.workingDays(F1, WINDOW_END, Set.of()));
         PlannedWork.Allocation a = PlannedWork.allocate(req, lc, data, effort, CAL, id -> id.equals(ANA.id()) ? anaOff : Set.of());
         assertEquals(1, a.pieces().size(), "only Ben is eligible");
         assertEquals(BEN.id(), a.pieces().get(0).member());
@@ -171,7 +174,7 @@ class PlannedWorkTest {
         ForecastData data = world(List.of(c));
         Lifecycle lc = Lifecycle.derive(data);
         MemberRow gone = ANA.withLeft(AS_OF.minusDays(1));
-        PlannedWork.Request req = new PlannedWork.Request(TestData.TEAM, List.of(gone), AS_OF, new LocalDate[] {F1, F1.plusWeeks(1)});
+        PlannedWork.Request req = new PlannedWork.Request(TestData.TEAM, List.of(gone), AS_OF, WINDOWS);
         PlannedWork.Allocation a = PlannedWork.allocate(req, lc, data, EffortModel.fit(lc, data), CAL, id -> Set.of());
         assertTrue(a.pieces().isEmpty());
         assertTrue(a.hours().isEmpty());
@@ -185,14 +188,14 @@ class PlannedWorkTest {
         Lifecycle lc = Lifecycle.derive(data);
         EffortModel effort = EffortModel.fit(lc, data);
         LocalDate asOf = SeededData.asOf();
-        LocalDate[] weeks = com.workloadhub.forecast.calendar.Weeks.forecastWeeks(asOf);
+        List<ForecastWindow> windows = Horizon.windows(asOf);
         int teamsWithBacklog = 0;
         for (com.workloadhub.forecast.data.rows.TeamRow team : data.teams()) {
             List<MemberRow> members = data.membersOfTeam(team.id());
             if (members.isEmpty()) {
                 continue;
             }
-            PlannedWork.Allocation a = PlannedWork.allocate(new PlannedWork.Request(team.id(), members, asOf, weeks), lc, data, effort,
+            PlannedWork.Allocation a = PlannedWork.allocate(new PlannedWork.Request(team.id(), members, asOf, windows), lc, data, effort,
                     WorkingCalendar.fromHolidays(data.holidays()), id -> Set.of());
             if (a.candidateCount() > 0) {
                 teamsWithBacklog++;

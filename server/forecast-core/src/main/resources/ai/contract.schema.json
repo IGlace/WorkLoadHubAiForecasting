@@ -62,11 +62,11 @@
     "move": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["from_member_id", "to_member_id", "week", "hours", "reason", "confidence"],
+      "required": ["from_member_id", "to_member_id", "window", "hours", "reason", "confidence"],
       "properties": {
         "from_member_id": {"type": "string"},
         "to_member_id": {"type": "string"},
-        "week": {"type": "string", "format": "date", "description": "A forecast week's Monday, ISO 8601"},
+        "window": {"type": "string", "format": "date", "description": "A forecast window's first day, ISO 8601"},
         "hours": {"type": "number", "exclusiveMinimum": 0},
         "reason": {"type": "string", "minLength": 1, "maxLength": 600},
         "confidence": {"$ref": "#/$defs/level"},
@@ -76,10 +76,10 @@
     "adjustment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["member_id", "week", "delta_hours", "reason"],
+      "required": ["member_id", "window", "delta_hours", "reason"],
       "properties": {
         "member_id": {"type": "string"},
-        "week": {"type": "string", "format": "date"},
+        "window": {"type": "string", "format": "date"},
         "delta_hours": {"type": "number"},
         "reason": {"type": "string", "minLength": 1, "maxLength": 600}
       }

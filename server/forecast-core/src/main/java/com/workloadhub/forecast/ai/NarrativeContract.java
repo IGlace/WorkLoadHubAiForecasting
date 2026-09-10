@@ -30,8 +30,8 @@ final class NarrativeContract {
             "pattern", new TreeSet<>(Set.of("kind", "statement", "evidence")),
             "likely_work", new TreeSet<>(Set.of("statement", "evidence", "confidence")),
             "team_risk", new TreeSet<>(Set.of("title", "detail", "severity", "member_ids")),
-            "move", new TreeSet<>(Set.of("from_member_id", "to_member_id", "week", "hours", "reason", "confidence", "task_keys")),
-            "adjustment", new TreeSet<>(Set.of("member_id", "week", "delta_hours", "reason")));
+            "move", new TreeSet<>(Set.of("from_member_id", "to_member_id", "window", "hours", "reason", "confidence", "task_keys")),
+            "adjustment", new TreeSet<>(Set.of("member_id", "window", "delta_hours", "reason")));
 
     private static final Pattern FENCE = Pattern.compile("^\\s*```(?:json)?\\s*(.*?)\\s*```\\s*$", Pattern.DOTALL);
 
@@ -56,10 +56,10 @@ final class NarrativeContract {
     record TeamRisk(String title, String detail, String severity, List<String> memberIds) {
     }
 
-    record Move(String fromMemberId, String toMemberId, LocalDate week, double hours, String reason, String confidence, List<String> taskKeys) {
+    record Move(String fromMemberId, String toMemberId, LocalDate window, double hours, String reason, String confidence, List<String> taskKeys) {
     }
 
-    record Adjustment(String memberId, LocalDate week, double deltaHours, String reason) {
+    record Adjustment(String memberId, LocalDate window, double deltaHours, String reason) {
     }
 
     static final class ContractException extends RuntimeException {
@@ -166,7 +166,7 @@ final class NarrativeContract {
             if (!Double.isNaN(hours) && hours <= 0) {
                 problems.add(p + ".hours: must be greater than 0");
             }
-            moves.add(new Move(w.text(vn, p, "from_member_id", 1, 200, true), w.text(vn, p, "to_member_id", 1, 200, true), w.date(vn, p, "week"), hours,
+            moves.add(new Move(w.text(vn, p, "from_member_id", 1, 200, true), w.text(vn, p, "to_member_id", 1, 200, true), w.date(vn, p, "window"), hours,
                     w.text(vn, p, "reason", 1, 600, true), w.oneOf(vn, p, "confidence", LEVELS), w.strings(vn, p, "task_keys")));
         }
         List<Adjustment> adjustments = new ArrayList<>();
@@ -174,7 +174,7 @@ final class NarrativeContract {
         for (JsonNode an : w.array(tree, "", "suggested_adjustments", false)) {
             String p = "suggested_adjustments[" + i++ + "]";
             w.object(an, p, FIELDS.get("adjustment"));
-            adjustments.add(new Adjustment(w.text(an, p, "member_id", 1, 200, true), w.date(an, p, "week"), w.number(an, p, "delta_hours"),
+            adjustments.add(new Adjustment(w.text(an, p, "member_id", 1, 200, true), w.date(an, p, "window"), w.number(an, p, "delta_hours"),
                     w.text(an, p, "reason", 1, 600, true)));
         }
         String notes = tree.has("model_notes") ? w.text(tree, "", "model_notes", 0, 1000, true) : "";
@@ -303,9 +303,9 @@ final class NarrativeContract {
             known.add(m.path("id").asText());
             memberNodes.put(m.path("id").asText(), m);
         }
-        Set<LocalDate> weeks = new HashSet<>();
-        for (JsonNode w : facts.path("run").path("weeks")) {
-            weeks.add(LocalDate.parse(w.asText().substring(0, 10)));
+        Set<LocalDate> windows = new HashSet<>();
+        for (JsonNode w : facts.path("run").path("windows")) {
+            windows.add(LocalDate.parse(w.path("start").asText().substring(0, 10)));
         }
         List<String> seen = new ArrayList<>();
         for (Member m : n.members()) {
@@ -343,8 +343,8 @@ final class NarrativeContract {
                     valid = false;
                 }
             }
-            if (mv.week() == null || !weeks.contains(mv.week())) {
-                problems.add("rebalancing week " + mv.week() + " is not a forecast week");
+            if (mv.window() == null || !windows.contains(mv.window())) {
+                problems.add("rebalancing window " + mv.window() + " is not a forecast window");
                 valid = false;
             }
             if (!valid) {
@@ -359,20 +359,20 @@ final class NarrativeContract {
                     problems.add("rebalancing move names task " + key + ", which is not an open task of member " + mv.fromMemberId());
                 }
             }
-            JsonNode source = forecastRow(memberNodes.get(mv.fromMemberId()), mv.week());
-            JsonNode target = forecastRow(memberNodes.get(mv.toMemberId()), mv.week());
+            JsonNode source = forecastRow(memberNodes.get(mv.fromMemberId()), mv.window());
+            JsonNode target = forecastRow(memberNodes.get(mv.toMemberId()), mv.window());
             if (source == null || target == null) {
                 continue;
             }
             double overload = source.path("overload").asDouble(0);
             if (mv.hours() > overload + TOLERANCE) {
-                problems.add("rebalancing move of " + fmt(mv.hours()) + " h from member " + mv.fromMemberId() + " in the week of " + mv.week()
+                problems.add("rebalancing move of " + fmt(mv.hours()) + " h from member " + mv.fromMemberId() + " in the window starting " + mv.window()
                         + " exceeds their overload of " + fmt(overload) + " h; the source has no such overload to move");
             }
             double demand = target.path("demand").asDouble(0);
             double capacity = target.path("capacity").asDouble(0);
             if (demand + mv.hours() > capacity + TOLERANCE) {
-                problems.add("rebalancing move of " + fmt(mv.hours()) + " h to member " + mv.toMemberId() + " in the week of " + mv.week()
+                problems.add("rebalancing move of " + fmt(mv.hours()) + " h to member " + mv.toMemberId() + " in the window starting " + mv.window()
                         + " would bring their demand to " + fmt(demand + mv.hours()) + " h, above their capacity of " + fmt(capacity) + " h");
             }
         }
@@ -380,24 +380,24 @@ final class NarrativeContract {
             if (!known.contains(a.memberId())) {
                 problems.add("adjustment names unknown member " + a.memberId());
             }
-            if (a.week() == null || !weeks.contains(a.week())) {
-                problems.add("adjustment week " + a.week() + " is not a forecast week");
+            if (a.window() == null || !windows.contains(a.window())) {
+                problems.add("adjustment window " + a.window() + " is not a forecast window");
             }
             if (a.deltaHours() == 0 || !Double.isFinite(a.deltaHours())) {
-                problems.add("suggested adjustment for member " + a.memberId() + " in the week of " + a.week() + " has a delta_hours of " + a.deltaHours()
+                problems.add("suggested adjustment for member " + a.memberId() + " in the window starting " + a.window() + " has a delta_hours of " + a.deltaHours()
                         + ", which is not a usable value");
             }
         }
         return problems;
     }
 
-    private static JsonNode forecastRow(JsonNode member, LocalDate week) {
-        if (member == null || week == null) {
+    private static JsonNode forecastRow(JsonNode member, LocalDate window) {
+        if (member == null || window == null) {
             return null;
         }
         for (JsonNode row : member.path("forecast")) {
-            String w = row.path("week").asText();
-            if (w.length() >= 10 && w.substring(0, 10).equals(week.toString())) {
+            String w = row.path("start").asText();
+            if (w.length() >= 10 && w.substring(0, 10).equals(window.toString())) {
                 return row;
             }
         }

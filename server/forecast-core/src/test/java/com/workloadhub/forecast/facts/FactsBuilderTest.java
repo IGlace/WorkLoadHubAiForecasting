@@ -50,10 +50,15 @@ class FactsBuilderTest {
         Map<?, ?> run = (Map<?, ?>) facts.get("run");
         assertEquals("00000000-0000-0000-0000-000000000001", run.get("id"));
         assertEquals("2026-09-06", run.get("as_of"));
-        assertEquals(List.of("2026-09-07", "2026-09-14"), run.get("weeks"));
+        List<?> windows = (List<?>) run.get("windows");
+        assertEquals(2, windows.size());
+        assertEquals(Map.of("index", 1, "start", "2026-09-07", "end", "2026-09-11", "working_days", ((Map<?, ?>) windows.get(0)).get("working_days")), windows.get(0));
+        assertEquals("2026-09-14", ((Map<?, ?>) windows.get(1)).get("start"));
+        assertEquals(List.of(2, 3), run.get("horizons"));
         Map<?, ?> team = (Map<?, ?>) facts.get("team");
         assertEquals(outcome.teamId().toString(), team.get("id"));
         assertEquals(2, ((List<?>) team.get("totals")).size());
+        assertEquals(1, ((Map<?, ?>) ((List<?>) team.get("totals")).get(0)).get("window"));
         assertNotNull(team.get("planned_backlog"));
         Map<?, ?> model = (Map<?, ?>) facts.get("model");
         assertEquals(outcome.prepared().champion(), model.get("champion"));
@@ -73,13 +78,24 @@ class FactsBuilderTest {
         assertEquals(13, ((List<?>) first.get("history_13w")).size());
         List<?> forecast = (List<?>) first.get("forecast");
         assertEquals(2, forecast.size());
-        Map<?, ?> week = (Map<?, ?>) forecast.get(0);
-        assertEquals(outcome.memberWeeks().get(0).demandHrs(), week.get("demand"));
-        assertTrue(week.containsKey("due_hours") && week.containsKey("planned_hours") && week.containsKey("working_days"));
+        Map<?, ?> window = (Map<?, ?>) forecast.get(0);
+        assertEquals(outcome.memberWindows().get(0).demandHrs(), window.get("demand"));
+        assertTrue(window.containsKey("due_hours") && window.containsKey("planned_hours") && window.containsKey("working_days"));
         Map<?, ?> patterns = (Map<?, ?>) first.get("patterns");
         assertTrue(patterns.containsKey("cluster") && patterns.containsKey("hours_per_week_13w"));
         Map<?, ?> likely = (Map<?, ?>) first.get("likely_work");
         assertEquals(List.of("planned", "project_roles", "recent_mix"), List.copyOf(((Map<String, ?>) likely).keySet()));
+        assertEquals(1, window.get("window"));
+        assertEquals("2026-09-07", window.get("start"));
+        List<?> days = (List<?>) first.get("days");
+        assertEquals(10, days.size());
+        Map<?, ?> day = (Map<?, ?>) days.get(0);
+        assertEquals("2026-09-07", day.get("day"));
+        assertTrue(day.containsKey("demand") && day.containsKey("capacity") && day.containsKey("working_day"));
+        for (Object p : (List<?>) likely.get("planned")) {
+            Object expected = ((Map<?, ?>) p).get("expected_window");
+            assertTrue(expected.equals(1) || expected.equals(2) || expected.equals("after_window"), String.valueOf(expected));
+        }
         assertEquals(4, ((List<?>) first.get("logged_hours_4w")).size());
         assertNotNull(first.get("open_tasks"));
         assertNotNull(first.get("reopened_tasks"));

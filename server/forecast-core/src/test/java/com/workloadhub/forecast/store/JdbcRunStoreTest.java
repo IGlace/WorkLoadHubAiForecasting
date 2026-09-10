@@ -5,12 +5,18 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.workloadhub.forecast.api.MemberWeekForecast;
+import com.workloadhub.forecast.api.CurrentDayForecast;
+import com.workloadhub.forecast.api.MemberDayForecast;
+import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
+import com.workloadhub.forecast.calendar.ForecastWindow;
+import com.workloadhub.forecast.calendar.Horizon;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -30,10 +36,21 @@ class JdbcRunStoreTest {
         return ds;
     }
 
-    static List<MemberWeekForecast> rows() {
+    static List<MemberWindowForecast> windows() {
         return List.of(
-                new MemberWeekForecast(USER, LocalDate.of(2026, 9, 7), 10, 5.5, 2, 17.5, 15, 20, 40, 0, 5, 0),
-                new MemberWeekForecast(USER, LocalDate.of(2026, 9, 14), 4, 6, 0, 10, 10, 12, 32, 0, 4, 8));
+                new MemberWindowForecast(USER, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 10, 5.5, 2, 17.5, 15, 20, 40, 0, 5, 0),
+                new MemberWindowForecast(USER, 2, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 18), 4, 6, 0, 10, 10, 12, 32, 0, 4, 8));
+    }
+
+    /** Ten days of one member for a run made on {@code asOf}, every day carrying {@code demand} so a later run's values are recognisable. */
+    static List<MemberDayForecast> days(LocalDate asOf, double demand) {
+        List<MemberDayForecast> out = new ArrayList<>();
+        for (ForecastWindow w : Horizon.windows(asOf)) {
+            for (LocalDate d : w.weekdays()) {
+                out.add(new MemberDayForecast(USER, d, w.index(), demand, 0, 0, demand, 8, Math.max(0, demand - 8), true));
+            }
+        }
+        return out;
     }
 
     void lifecycle(DataSource ds) {
@@ -46,13 +63,15 @@ class JdbcRunStoreTest {
         assertEquals(T0, queued.createdAt());
         store.markRunning(id);
         assertEquals(RunStatus.RUNNING, store.find(id).orElseThrow().status());
-        store.finish(id, "xgboost", 0.83, "{\"scores\":[]}", rows(), "{\"run\":{}}", T0.plusMinutes(1));
+        store.finish(id, "xgboost", 0.83, "{\"scores\":[]}", windows(), days(LocalDate.of(2026, 9, 6), 3), "{\"run\":{}}", T0.plusMinutes(1));
         RunSummary done = store.find(id).orElseThrow();
         assertEquals(RunStatus.DONE, done.status());
         assertEquals("xgboost", done.championModel());
         assertEquals(0.83, done.championMase(), 1e-9);
         assertEquals(T0.plusMinutes(1), done.finishedAt());
-        assertEquals(rows(), store.memberWeeks(id));
+        assertEquals(windows(), store.memberWindows(id));
+        assertEquals(days(LocalDate.of(2026, 9, 6), 3), store.memberDays(id));
+        assertEquals(10, store.currentDays(TEAM, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)).size());
         assertEquals("{\"run\":{}}", store.facts(id).orElseThrow());
         assertEquals("{\"scores\":[]}", store.backtestJson(id).orElseThrow());
 
@@ -71,23 +90,60 @@ class JdbcRunStoreTest {
         assertTrue(store.list(UUID.randomUUID(), 10).isEmpty());
         assertFalse(store.find(UUID.randomUUID()).isPresent());
         UUID nanRun = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0.plusMinutes(4));
-        store.finish(nanRun, "seasonal_naive", Double.NaN, "{}", List.of(), "{}", T0.plusMinutes(5));
+        store.finish(nanRun, "seasonal_naive", Double.NaN, "{}", List.of(), List.of(), "{}", T0.plusMinutes(5));
         assertNull(store.find(nanRun).orElseThrow().championMase(), "NaN is stored as null");
 
         UUID bigRun = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0.plusMinutes(6));
-        List<MemberWeekForecast> manyRows = manyRows(450);
-        store.finish(bigRun, "xgboost", 0.5, "{}", manyRows, "{}", T0.plusMinutes(7));
-        assertEquals(manyRows, store.memberWeeks(bigRun), "450 rows survive a batched insert, in order");
+        List<MemberWindowForecast> manyRows = manyRows(450);
+        store.finish(bigRun, "xgboost", 0.5, "{}", manyRows, List.of(), "{}", T0.plusMinutes(7));
+        assertEquals(manyRows, store.memberWindows(bigRun), "450 rows survive a batched insert, in order");
     }
 
-    /** {@code count} consecutive Monday weeks for one user, spanning more than one batch of {@link JdbcRunStore#BATCH}. */
-    static List<MemberWeekForecast> manyRows(int count) {
-        LocalDate week = LocalDate.of(2027, 1, 4);
-        List<MemberWeekForecast> out = new java.util.ArrayList<>(count);
+    /** One window of each of {@code count} members, spanning more than one batch of {@link JdbcRunStore#BATCH}, in the store's own order. */
+    static List<MemberWindowForecast> manyRows(int count) {
+        List<MemberWindowForecast> out = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            out.add(new MemberWeekForecast(USER, week.plusWeeks(i), 1, 2, 0, 3, 2, 5, 40, 0, 5, 0));
+            UUID user = UUID.nameUUIDFromBytes(("user-" + i).getBytes(StandardCharsets.UTF_8));
+            out.add(new MemberWindowForecast(user, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 1, 2, 0, 3, 2, 5, 40, 0, 5, 0));
         }
+        out.sort((a, b) -> a.userId().toString().compareTo(b.userId().toString()));
         return out;
+    }
+
+    /** Spec 2026-09-10, section 7: a later run overwrites the days ahead of it and leaves the days only the earlier run covered. */
+    void aLaterRunOverwritesOnlyTheDaysItCovers(DataSource ds) {
+        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        LocalDate wednesday = LocalDate.of(2026, 9, 2);
+        LocalDate monday = LocalDate.of(2026, 9, 7);
+        UUID first = store.create(new RunRequest(TEAM, USER, wednesday, null, null), T0);
+        store.finish(first, "xgboost", 0.8, "{}", List.of(), days(wednesday, 1), "{}", T0.plusMinutes(1));
+        UUID second = store.create(new RunRequest(TEAM, USER, monday, null, null), T0.plusDays(5));
+        store.finish(second, "xgboost", 0.8, "{}", List.of(), days(monday, 2), "{}", T0.plusDays(5).plusMinutes(1));
+        List<CurrentDayForecast> current = store.currentDays(TEAM, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        assertEquals(13, current.size(), "three days only the first run covered, ten the second overwrote");
+        for (CurrentDayForecast c : current) {
+            boolean beforeSecond = c.day().isBefore(LocalDate.of(2026, 9, 8));
+            assertEquals(beforeSecond ? first : second, c.runId(), c.day().toString());
+            assertEquals(beforeSecond ? 1.0 : 2.0, c.demandHrs(), 1e-9, c.day().toString());
+            assertEquals(beforeSecond ? T0.plusMinutes(1) : T0.plusDays(5).plusMinutes(1), c.forecastAt());
+        }
+        assertEquals(LocalDate.of(2026, 9, 3), current.get(0).day());
+        assertEquals(LocalDate.of(2026, 9, 21), current.get(current.size() - 1).day());
+        assertTrue(store.currentDays(UUID.randomUUID(), LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)).isEmpty());
+        assertEquals(2, store.currentDays(TEAM, LocalDate.of(2026, 9, 3), LocalDate.of(2026, 9, 4)).size(), "the range is inclusive");
+    }
+
+    @Test
+    void sqliteOverwrite() {
+        aLaterRunOverwritesOnlyTheDaysItCovers(sqlite());
+    }
+
+    @Test
+    void postgresOverwrite() {
+        DataSource ds = DatabaseTestSupport.postgresOrSkip();
+        WorkloadHubSchema.createPostgresql(ds);
+        ForecastMigrations.run(ds);
+        aLaterRunOverwritesOnlyTheDaysItCovers(ds);
     }
 
     @Test

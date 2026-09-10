@@ -59,7 +59,9 @@ class HarnessTest {
         for (DemandRow r : result.demand()) {
             assertEquals(r.forecast(), ForecastRunner.round2(r.openHours() + r.newHours() + r.plannedHours()), 1e-9);
             assertTrue(r.truth() >= 0 && r.capacity() >= 0);
-            assertTrue(r.weekStart().equals(r.origin().plusWeeks(1)) || r.weekStart().equals(r.origin().plusWeeks(2)), "the Monday after the origin and the next");
+            assertTrue(r.windowStart().equals(r.origin().plusWeeks(1).plusDays(1)) || r.windowStart().equals(r.origin().plusWeeks(2).plusDays(1)),
+                    "the replay runs on the Monday after the origin, so its windows start on Tuesdays");
+            assertTrue(r.windowIndex() == 1 || r.windowIndex() == 2);
         }
         assertTrue(result.skipped().isEmpty());
         assertEquals(Truth.SOURCE, result.truthSource());

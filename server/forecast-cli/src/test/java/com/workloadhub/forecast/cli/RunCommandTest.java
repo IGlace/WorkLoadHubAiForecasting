@@ -48,12 +48,14 @@ class RunCommandTest {
         String run = capture(cli, 0, "run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--model", "seasonal_naive");
         assertTrue(run.contains("champion seasonal_naive"), run);
         assertTrue(run.contains("capacity"), run);
+        assertTrue(run.contains("window 1"), run);
         String runs = capture(cli, 0, "runs", "--db", db.toString(), "--team", team);
         assertTrue(runs.contains("DONE"), runs);
         assertEquals(2, cli.execute("run", "--db", db.toString(), "--team", "no-such-team", "--as-of", "2026-09-06"));
         assertEquals(2, cli.execute("run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--model", "gbm"));
         String json = capture(cli, 0, "run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--json");
-        assertTrue(json.trim().startsWith("{") && json.contains("\"memberWeeks\""), json);
+        assertTrue(json.trim().startsWith("{") && json.contains("\"memberWindows\""), json);
+        assertTrue(json.contains("\"memberDays\""), json);
     }
 
     /**
@@ -71,7 +73,7 @@ class RunCommandTest {
         Map<String, Double> maseByModel = new java.util.HashMap<>();
         maseByModel.put("xgboost", Double.NaN);
         Map<String, String> unavailable = Map.of("xgboost", "xgboost native library unavailable: boom");
-        RunResult r = new RunResult(summary, scores, maseByModel, unavailable, List.of(), "{}");
+        RunResult r = new RunResult(summary, scores, maseByModel, unavailable, List.of(), List.of(), "{}");
         String json = RunCommand.toJson(r);
         assertFalse(json.contains("NaN"), json);
         assertTrue(json.contains("\"mase\" : null") || json.contains("\"mase\":null"), json);

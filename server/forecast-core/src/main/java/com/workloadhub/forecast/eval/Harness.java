@@ -1,8 +1,9 @@
 package com.workloadhub.forecast.eval;
 
 import com.workloadhub.forecast.api.ForecastException;
-import com.workloadhub.forecast.api.MemberWeekForecast;
+import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.backtest.Backtest;
+import com.workloadhub.forecast.calendar.ForecastWindow;
 import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.capacity.CapacityRule;
@@ -10,6 +11,7 @@ import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.features.FeatureBuilder;
 import com.workloadhub.forecast.features.FeatureMatrix;
+import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.Truncation;
@@ -103,7 +105,7 @@ public final class Harness {
 
     private List<DemandRow> demandLevel(ForecastData data, Map<String, Supplier<ArrivalModel>> factories, List<LocalDate> origins, List<UUID> teamsIn,
             Map<String, String> skipped) {
-        SortedMap<MemberWeek, Double> truth = Truth.realisedHours(data);
+        SortedMap<MemberDay, Double> truth = Truth.realisedHoursByDay(data);
         List<DemandRow> rows = new ArrayList<>();
         List<UUID> teams = teamsIn.isEmpty()
                 ? data.teams().stream().map(TeamRow::id).filter(t -> !data.membersOfTeam(t).isEmpty()).sorted((a, b) -> a.toString().compareTo(b.toString())).toList()
@@ -132,9 +134,14 @@ public final class Harness {
                         }
                         throw e;
                     }
-                    for (MemberWeekForecast w : outcome.memberWeeks()) {
-                        rows.add(new DemandRow(model, origin, team, w.userId(), w.weekStart(), w.demandHrs(),
-                                truth.getOrDefault(new MemberWeek(w.userId(), w.weekStart()), 0.0), w.capacityHrs(), w.openHrs(), w.newHrs(), w.plannedHrs()));
+                    for (MemberWindowForecast w : outcome.memberWindows()) {
+                        ForecastWindow window = prepared.windows().get(w.windowIndex() - 1);
+                        double realised = 0;
+                        for (LocalDate d : window.weekdays()) {
+                            realised += truth.getOrDefault(new MemberDay(w.userId(), d), 0.0);
+                        }
+                        rows.add(new DemandRow(model, origin, team, w.userId(), w.windowIndex(), w.windowStart(), w.windowEnd(), w.demandHrs(),
+                                Math.round(realised * 1e6) / 1e6, w.capacityHrs(), w.openHrs(), w.newHrs(), w.plannedHrs()));
                     }
                 }
             }

@@ -18,13 +18,9 @@ class WeeksTest {
     }
 
     @Test
-    void forecastWeeksStartThisWeekOnAMondayElseNextWeek() {
-        LocalDate[] onMonday = Weeks.forecastWeeks(LocalDate.of(2026, 9, 7));
-        assertEquals(LocalDate.of(2026, 9, 7), onMonday[0]);
-        assertEquals(LocalDate.of(2026, 9, 14), onMonday[1]);
-        LocalDate[] onSunday = Weeks.forecastWeeks(LocalDate.of(2026, 9, 6));
-        assertEquals(LocalDate.of(2026, 9, 7), onSunday[0]);
+    void lastCompleteWeekIsTheMondayBeforeTheRunDaysWeek() {
         assertEquals(LocalDate.of(2026, 8, 24), Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 6)));
+        assertEquals(LocalDate.of(2026, 8, 31), Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 7)));
     }
 
     @Test

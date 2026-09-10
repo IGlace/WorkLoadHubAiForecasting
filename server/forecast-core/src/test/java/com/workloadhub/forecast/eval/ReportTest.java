@@ -23,8 +23,8 @@ class ReportTest {
                 List.of(new ScoreRow("xgboost", 1, origin, "mase", 0.8), new ScoreRow("xgboost", 1, origin, "seconds", 1.5),
                         new ScoreRow("xgboost", 2, origin, "mase", 0.9), new ScoreRow("xgboost", 2, origin, "seconds", Double.NaN),
                         new ScoreRow("seasonal_naive", 1, origin, "mase", 1.0)),
-                List.of(new DemandRow("xgboost", origin, team, member, origin.plusWeeks(1), 30, 28, 40, 20, 8, 2),
-                        new DemandRow("xgboost", origin, team, member, origin.plusWeeks(2), 45, 30, 40, 40, 5, 0)),
+                List.of(new DemandRow("xgboost", origin, team, member, 1, origin.plusWeeks(1).plusDays(1), origin.plusWeeks(2), 30, 28, 40, 20, 8, 2),
+                        new DemandRow("xgboost", origin, team, member, 2, origin.plusWeeks(2).plusDays(1), origin.plusWeeks(3), 45, 30, 40, 40, 5, 0)),
                 Map.of(), Truth.SOURCE, 3.2, List.of(origin));
         Report.write(result, new EvalConfig(LocalDate.of(2026, 9, 6), 1, List.of(), List.of()), Map.of("tasks", "2"), Map.of("java", "21"), dir);
         List<String> scores = Files.readAllLines(dir.resolve("scores.csv"));
@@ -32,7 +32,7 @@ class ReportTest {
         assertEquals("xgboost,1,2026-08-17,mase,0.8", scores.get(1));
         assertTrue(scores.stream().anyMatch(l -> l.equals("xgboost,2,2026-08-17,seconds,")), "NaN is an empty cell");
         List<String> demand = Files.readAllLines(dir.resolve("demand.csv"));
-        assertEquals("model,origin,team_id,member_id,week_start,forecast,truth,capacity,open_hours,new_hours,planned_hours", demand.get(0));
+        assertEquals("model,origin,team_id,member_id,window,window_start,window_end,forecast,truth,capacity,open_hours,new_hours,planned_hours", demand.get(0));
         assertEquals(3, demand.size());
         String summary = Files.readString(dir.resolve("summary.md"));
         assertTrue(summary.startsWith("# Forecast evaluation, as of 2026-09-06"));

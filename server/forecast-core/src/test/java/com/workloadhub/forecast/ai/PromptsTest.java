@@ -12,7 +12,9 @@ import tools.jackson.databind.JsonNode;
 class PromptsTest {
 
     static final String FACTS = """
-            {"run": {"id": "11111111-1111-1111-1111-111111111111", "as_of": "2026-09-06", "weeks": ["2026-09-07", "2026-09-14"]},
+            {"run": {"id": "11111111-1111-1111-1111-111111111111", "as_of": "2026-09-06",
+                     "windows": [{"index": 1, "start": "2026-09-07", "end": "2026-09-11"},
+                                 {"index": 2, "start": "2026-09-14", "end": "2026-09-18"}]},
              "team": {"id": "44444444-4444-4444-4444-444444444444", "name": "Mobile Apps"},
              "members": [{"id": "aaaaaaaa-0000-0000-0000-000000000004", "name": "Sara Tazi", "role": "TEAM_LEADER"},
                          {"id": "aaaaaaaa-0000-0000-0000-000000000005", "name": "Omar Benali", "role": "MEMBER"}],
@@ -37,10 +39,11 @@ class PromptsTest {
     }
 
     @Test
-    void theUserPromptNamesRunMembersWeeksLanguageAndContract() {
+    void theUserPromptNamesRunMembersWindowsLanguageAndContract() {
         Prompts p = Prompts.load();
         String en = p.userPrompt(facts(), "en");
-        assertTrue(en.contains("Mobile Apps") && en.contains("2026-09-07") && en.contains("2026-09-14") && en.contains("2026-09-06"));
+        assertTrue(en.contains("Mobile Apps") && en.contains("2026-09-06"));
+        assertTrue(en.contains("forecast windows 2026-09-07..2026-09-11 and 2026-09-14..2026-09-18"), en);
         assertTrue(en.contains("member_id aaaaaaaa-0000-0000-0000-000000000004 (Sara Tazi, TEAM_LEADER)"));
         assertTrue(en.contains("member_id aaaaaaaa-0000-0000-0000-000000000005 (Omar Benali, MEMBER)"));
         JsonNode roleless = ExportFiles.mapper().readTree(FACTS.replace("\"role\": \"MEMBER\"", "\"role\": null"));

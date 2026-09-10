@@ -1,11 +1,12 @@
 package com.workloadhub.forecast.planned;
 
+import com.workloadhub.forecast.calendar.ForecastWindow;
 import com.workloadhub.forecast.calendar.HourPlacement;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.data.rows.MemberRow;
-import com.workloadhub.forecast.features.MemberWeek;
+import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.lifecycle.Family;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
@@ -33,17 +34,17 @@ public final class PlannedWork {
     public static final int MIN_PROJECT_TASKS_FOR_LAG = 5;
 
     public record Piece(UUID taskId, String key, String title, UUID projectId, Family family, double estimate, UUID member, double share,
-            LocalDate expectedDate, LocalDate expectedWeek, double hoursInWindow, double hoursAfterWindow) {
+            LocalDate expectedDate, Integer expectedWindow, double hoursInWindow, double hoursAfterWindow) {
     }
 
-    public record Allocation(SortedMap<MemberWeek, Double> hours, List<Piece> pieces, double hoursAfterWindow, int candidateCount,
+    public record Allocation(SortedMap<MemberDay, Double> hours, List<Piece> pieces, double hoursAfterWindow, int candidateCount,
             double candidateHours) {
         public static Allocation empty() {
             return new Allocation(new TreeMap<>(), List.of(), 0.0, 0, 0.0);
         }
     }
 
-    public record Request(UUID teamId, List<MemberRow> members, LocalDate asOf, LocalDate[] forecastWeeks) {
+    public record Request(UUID teamId, List<MemberRow> members, LocalDate asOf, List<ForecastWindow> windows) {
     }
 
     private PlannedWork() {
@@ -165,8 +166,8 @@ public final class PlannedWork {
         List<TaskFacts> candidates = candidates(lc, data, req.teamId(), req.asOf());
         int count = candidates.size();
         double candidateHours = candidates.stream().mapToDouble(TaskFacts::estimate).sum();
-        LocalDate f1 = req.forecastWeeks()[0];
-        LocalDate windowEnd = req.forecastWeeks()[req.forecastWeeks().length - 1].plusDays(6);
+        LocalDate f1 = req.windows().get(0).start();
+        LocalDate windowEnd = req.windows().get(req.windows().size() - 1).end();
         // design section 5.2: a member present on no working day of the forecast window carries no share.
         List<MemberRow> eligible = req.members().stream()
                 .filter(m -> m.employedOn(req.asOf()))
@@ -178,7 +179,7 @@ public final class PlannedWork {
         Set<UUID> teamMembers = req.members().stream().map(MemberRow::id).collect(Collectors.toSet());
         List<TaskFacts> history = history(lc, eligible, req.asOf());
         LagIndex lagIndex = LagIndex.of(lc, teamMembers);
-        SortedMap<MemberWeek, Double> hours = new TreeMap<>();
+        SortedMap<MemberDay, Double> hours = new TreeMap<>();
         List<Piece> pieces = new ArrayList<>();
         double after = 0.0;
         for (TaskFacts c : candidates) {
@@ -198,20 +199,30 @@ public final class PlannedWork {
                 LocalDate end = expected.plusDays(Math.max(span - 1, 0));
                 double in = 0.0;
                 double out = 0.0;
-                for (Map.Entry<LocalDate, Double> placed : HourPlacement.placeHours(scaled, expected, end, cal, offDaysOf.apply(member)).entrySet()) {
+                for (Map.Entry<LocalDate, Double> placed : HourPlacement.placeHoursByDay(scaled, expected, end, cal, offDaysOf.apply(member)).entrySet()) {
                     if (placed.getKey().isAfter(windowEnd)) {
                         out += placed.getValue();
                     } else {
                         in += placed.getValue();
-                        hours.merge(new MemberWeek(member, placed.getKey()), placed.getValue(), Double::sum);
+                        hours.merge(new MemberDay(member, placed.getKey()), placed.getValue(), Double::sum);
                     }
                 }
                 after += out;
-                LocalDate expectedWeek = expected.isAfter(windowEnd) ? null : com.workloadhub.forecast.calendar.Weeks.mondayOf(expected);
+                Integer expectedWindow = windowOf(req.windows(), expected);
                 pieces.add(new Piece(c.id(), c.task().key(), c.task().title(), c.task().projectId(), c.family(), c.estimate(), member,
-                        e.getValue(), expected, expectedWeek, in, out));
+                        e.getValue(), expected, expectedWindow, in, out));
             }
         }
         return new Allocation(hours, List.copyOf(pieces), after, count, candidateHours);
+    }
+
+    /** The window an expected assignment day falls in (the first window whose last day is not before it), null after the horizon. */
+    static Integer windowOf(List<ForecastWindow> windows, LocalDate day) {
+        for (ForecastWindow w : windows) {
+            if (!day.isAfter(w.end())) {
+                return w.index();
+            }
+        }
+        return null;
     }
 }

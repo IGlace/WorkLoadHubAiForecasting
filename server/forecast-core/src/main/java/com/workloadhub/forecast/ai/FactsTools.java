@@ -106,16 +106,17 @@ final class FactsTools {
         if (m == null) {
             return unknown(id);
         }
-        List<Object> weeks = new ArrayList<>();
+        List<Object> windows = new ArrayList<>();
         for (JsonNode row : m.path("forecast")) {
-            weeks.add(map("week", row.path("week").asText(), "capacity", plain(row.path("capacity")), "demand", plain(row.path("demand")),
-                    "overload", plain(row.path("overload")), "working_days", plain(row.path("working_days")), "absence_hours", plain(row.path("absence_hours"))));
+            windows.add(map("window", plain(row.path("window")), "start", row.path("start").asText(), "end", row.path("end").asText(),
+                    "capacity", plain(row.path("capacity")), "demand", plain(row.path("demand")), "overload", plain(row.path("overload")),
+                    "working_days", plain(row.path("working_days")), "absence_hours", plain(row.path("absence_hours"))));
         }
-        return map("member_id", id, "name", m.path("name").asText(), "weeks", weeks);
+        return map("member_id", id, "name", m.path("name").asText(), "windows", windows, "days", plain(m.path("days")));
     }
 
     Map<String, Object> projectTimelines() {
-        return map("weeks", plain(facts.path("run").path("weeks")), "projects", plain(facts.path("projects")));
+        return map("windows", plain(facts.path("run").path("windows")), "projects", plain(facts.path("projects")));
     }
 
     Map<String, Object> rebalancingCandidates() {

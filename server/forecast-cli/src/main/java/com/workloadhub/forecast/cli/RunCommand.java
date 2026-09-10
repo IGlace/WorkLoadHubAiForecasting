@@ -1,7 +1,7 @@
 package com.workloadhub.forecast.cli;
 
 import com.workloadhub.forecast.api.ForecastException;
-import com.workloadhub.forecast.api.MemberWeekForecast;
+import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.api.ModelScore;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
@@ -25,7 +26,7 @@ import tools.jackson.databind.ValueSerializer;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.module.SimpleModule;
 
-@Command(name = "run", description = "Run a forecast for one team as of a date and print the champion, the scores and the member-week table.")
+@Command(name = "run", description = "Run a forecast for one team and print the champion, the scores and the member-window table.")
 public class RunCommand implements Callable<Integer> {
 
     private static final Set<String> USAGE_CODES = Set.of("TEAM_NOT_FOUND", "INVALID_REQUEST");
@@ -115,10 +116,12 @@ public class RunCommand implements Callable<Integer> {
         s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
                 .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
         String mase = r.run().championMase() == null ? "n/a" : String.format("%.2f", r.run().championMase());
-        long members = r.memberWeeks().stream().map(MemberWeekForecast::userId).distinct().count();
-        System.out.printf("Run %s: champion %s (MASE %s), %d members, weeks %s and %s%n", r.run().id(), r.run().championModel(), mase, members,
-                r.memberWeeks().isEmpty() ? "?" : r.memberWeeks().get(0).weekStart(),
-                r.memberWeeks().isEmpty() ? "?" : r.memberWeeks().get(r.memberWeeks().size() - 1).weekStart());
+        long members = r.memberWindows().stream().map(MemberWindowForecast::userId).distinct().count();
+        StringJoiner windows = new StringJoiner(", ");
+        r.memberWindows().stream().filter(w -> !r.memberWindows().isEmpty() && w.userId().equals(r.memberWindows().get(0).userId()))
+                .forEach(w -> windows.add("window " + w.windowIndex() + " " + w.windowStart() + ".." + w.windowEnd()));
+        System.out.printf("Run %s: champion %s (MASE %s), %d members, %s%n", r.run().id(), r.run().championModel(), mase, members,
+                windows.length() == 0 ? "no windows" : windows);
         System.out.println();
         System.out.printf("%-16s %8s %10s%n", "model", "horizon", "mean MASE");
         r.scores().stream().collect(Collectors.groupingBy(sc -> sc.model() + "|" + sc.horizon(), java.util.TreeMap::new,
@@ -128,10 +131,12 @@ public class RunCommand implements Callable<Integer> {
             r.unavailable().forEach((k, v) -> System.out.println("unavailable: " + k + ": " + v));
         }
         System.out.println();
-        System.out.printf("%-28s %-10s %7s %7s %7s %7s %7s %7s %8s %8s%n", "member", "week", "open", "new", "planned", "demand", "low", "high", "capacity", "overload");
-        for (MemberWeekForecast w : r.memberWeeks()) {
-            System.out.printf("%-28s %-10s %7.1f %7.1f %7.1f %7.1f %7.1f %7.1f %8.1f %8.1f%n", names.getOrDefault(w.userId(), w.userId().toString()),
-                    w.weekStart(), w.openHrs(), w.newHrs(), w.plannedHrs(), w.demandHrs(), w.lowHrs(), w.highHrs(), w.capacityHrs(), w.overloadHrs());
+        System.out.printf("%-28s %-6s %-10s %-10s %7s %7s %7s %7s %7s %7s %8s %8s%n", "member", "window", "start", "end", "open", "new", "planned", "demand",
+                "low", "high", "capacity", "overload");
+        for (MemberWindowForecast w : r.memberWindows()) {
+            System.out.printf("%-28s %-6d %-10s %-10s %7.1f %7.1f %7.1f %7.1f %7.1f %7.1f %8.1f %8.1f%n", names.getOrDefault(w.userId(), w.userId().toString()),
+                    w.windowIndex(), w.windowStart(), w.windowEnd(), w.openHrs(), w.newHrs(), w.plannedHrs(), w.demandHrs(), w.lowHrs(), w.highHrs(),
+                    w.capacityHrs(), w.overloadHrs());
         }
     }
 }

@@ -62,15 +62,15 @@ public final class Prompts {
         for (JsonNode m : facts.path("members")) {
             members.add("member_id " + m.path("id").asText() + " (" + m.path("name").asText() + ", " + m.path("role").asText("member") + ")");
         }
-        StringJoiner weeks = new StringJoiner(", ");
-        for (JsonNode w : run.path("weeks")) {
-            weeks.add(w.asText());
+        StringJoiner windows = new StringJoiner(" and ");
+        for (JsonNode w : run.path("windows")) {
+            windows.add(w.path("start").asText() + ".." + w.path("end").asText());
         }
         String languageLine = language.equals("fr")
                 ? "Language: fr. Rédigez chaque champ narratif en français; gardez les noms des membres et les clés des tâches tels quels."
                 : "Language: en. Write every narrative field in English; keep member names and task keys as given.";
         return "Analyse forecast run " + run.path("id").asText() + " for team '" + team.path("name").asText() + "' (team id " + team.path("id").asText()
-                + "), run date " + run.path("as_of").asText() + ", forecast weeks " + weeks + ".\n" + languageLine + "\n"
+                + "), run date " + run.path("as_of").asText() + ", forecast windows " + windows + ".\n" + languageLine + "\n"
                 + "Members to cover, each exactly once: " + members + ".\n\n"
                 + "Procedure: 1) get_run_overview; 2) for each member: get_member_forecast, get_member_capacity, get_member_patterns, "
                 + "get_member_history, get_member_open_tasks; 3) get_project_timelines; 4) get_planned_work; 5) get_rebalancing_candidates; "

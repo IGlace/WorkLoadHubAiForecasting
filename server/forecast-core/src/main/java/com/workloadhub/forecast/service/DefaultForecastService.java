@@ -135,7 +135,8 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
             progress.update(id, "FACTS", 85, "building the facts");
             String facts = FactsBuilder.toJson(FactsBuilder.build(outcome, id, LocalDateTime.now()));
             progress.update(id, "PERSIST", 95, "storing the run");
-            store.finish(id, prepared.champion(), prepared.championMase(), backtestJson(prepared), outcome.memberWeeks(), facts, LocalDateTime.now());
+            store.finish(id, prepared.champion(), prepared.championMase(), backtestJson(prepared), outcome.memberWindows(), outcome.memberDays(), facts,
+                    LocalDateTime.now());
             progress.done(id);
             return null;
         } catch (ForecastException e) {
@@ -195,7 +196,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         bt.path("mase_by_model").properties().forEach(e -> mase.put(e.getKey(), e.getValue().isNull() ? null : e.getValue().asDouble()));
         Map<String, String> unavailable = new TreeMap<>();
         bt.path("unavailable").properties().forEach(e -> unavailable.put(e.getKey(), e.getValue().asText()));
-        return new RunResult(run, scores, mase, unavailable, store.memberWeeks(runId), store.facts(runId).orElse("{}"));
+        return new RunResult(run, scores, mase, unavailable, store.memberWindows(runId), store.memberDays(runId), store.facts(runId).orElse("{}"));
     }
 
     @Override

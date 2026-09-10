@@ -78,7 +78,7 @@ class ForecastControllerTest {
 
     @Test
     void readsRunsProgressAndLists() throws Exception {
-        when(service.getRun(RUN)).thenReturn(new RunResult(summary(), List.of(), Map.of(), Map.of(), List.of(), "{}"));
+        when(service.getRun(RUN)).thenReturn(new RunResult(summary(), List.of(), Map.of(), Map.of(), List.of(), List.of(), "{}"));
         when(service.progress(RUN)).thenReturn(new RunProgress(RUN, "NARRATING", 40, "tool get_member_forecast", "thinking", "{"));
         when(service.listRuns(TEAM, 5)).thenReturn(List.of(summary()));
         mvc.perform(get("/forecast-api/runs/" + RUN)).andExpect(status().isOk()).andExpect(jsonPath("$.run.championModel").value("xgboost"));

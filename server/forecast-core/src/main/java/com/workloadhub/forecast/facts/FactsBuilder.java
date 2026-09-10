@@ -1,6 +1,9 @@
 package com.workloadhub.forecast.facts;
 
-import com.workloadhub.forecast.api.MemberWeekForecast;
+import com.workloadhub.forecast.api.MemberDayForecast;
+import com.workloadhub.forecast.api.MemberWindowForecast;
+import com.workloadhub.forecast.calendar.ForecastWindow;
+import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
@@ -25,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -36,8 +40,8 @@ public final class FactsBuilder {
     public static final int ROLE_WINDOW_WEEKS = 26;
     public static final double UNDERLOAD_RATIO = 0.7;
     public static final String PLANNED_BASIS = "share weights, 26-week window, shrink k=3";
-    public static final String LIMITATIONS = "arrivals during the current partial week are not modelled; open tasks are placed from the first"
-            + " forecast week; backlog work created and assigned inside the window is missed by both components";
+    public static final String LIMITATIONS = "predicted arrivals are spread evenly over a week's working days and the days already past are not"
+            + " re-forecast; open tasks are placed from the first forecast day; backlog work created and assigned inside the horizon is missed by both components";
 
     private FactsBuilder() {
     }
@@ -50,12 +54,14 @@ public final class FactsBuilder {
         Prepared p = out.prepared();
         ForecastData data = p.data();
         Lifecycle lc = p.lifecycle();
-        LocalDate f1 = p.forecastWeeks()[0];
-        LocalDate f2 = p.forecastWeeks()[1];
         Map<UUID, ProjectRow> projects = data.projectById();
-        Map<UUID, List<MemberWeekForecast>> rowsByMember = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
-        for (MemberWeekForecast r : out.memberWeeks()) {
+        Map<UUID, List<MemberWindowForecast>> rowsByMember = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
+        for (MemberWindowForecast r : out.memberWindows()) {
             rowsByMember.computeIfAbsent(r.userId(), k -> new ArrayList<>()).add(r);
+        }
+        Map<UUID, List<MemberDayForecast>> daysByMember = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
+        for (MemberDayForecast r : out.memberDays()) {
+            daysByMember.computeIfAbsent(r.userId(), k -> new ArrayList<>()).add(r);
         }
         List<MemberPattern> patterns = Patterns.table(out.members(), lc, data, p.asOf());
         Map<UUID, Integer> clusters = Clustering.assign(patterns);
@@ -78,12 +84,27 @@ public final class FactsBuilder {
         }
 
         Map<String, Object> facts = new LinkedHashMap<>();
-        facts.put("run", map("id", str(runId), "as_of", str(p.asOf()), "weeks", List.of(str(f1), str(f2)), "generated_at", generatedAt.toString(),
-                "origin", str(p.origin()), "horizons", List.of(p.horizons()[0], p.horizons()[1])));
-        facts.put("team", team(out, data, f1, f2, projects));
+        List<Object> windows = new ArrayList<>();
+        for (ForecastWindow w : p.windows()) {
+            int working = 0;
+            for (LocalDate d : w.weekdays()) {
+                if (p.calendar().isWorkingDay(d)) {
+                    working++;
+                }
+            }
+            windows.add(map("index", w.index(), "start", str(w.start()), "end", str(w.end()), "working_days", working));
+        }
+        List<Object> horizonList = new ArrayList<>();
+        for (int h : p.horizons()) {
+            horizonList.add(h);
+        }
+        facts.put("run", map("id", str(runId), "as_of", str(p.asOf()), "windows", windows, "generated_at", generatedAt.toString(),
+                "origin", str(p.origin()), "horizons", horizonList));
+        facts.put("team", team(out, data, projects));
         List<Object> members = new ArrayList<>();
         for (MemberRow m : out.members()) {
-            members.add(member(m, out, rowsByMember.getOrDefault(m.id(), List.of()), patternById.get(m.id()), clusters.getOrDefault(m.id(), 0),
+            members.add(member(m, out, rowsByMember.getOrDefault(m.id(), List.of()), daysByMember.getOrDefault(m.id(), List.of()),
+                    patternById.get(m.id()), clusters.getOrDefault(m.id(), 0),
                     series, historyWeeks, projects, liveProjectIds, recentByProject));
         }
         facts.put("members", members);
@@ -107,25 +128,30 @@ public final class FactsBuilder {
         return facts;
     }
 
-    private static Map<String, Object> team(TeamOutcome out, ForecastData data, LocalDate f1, LocalDate f2, Map<UUID, ProjectRow> projects) {
+    private static Map<String, Object> team(TeamOutcome out, ForecastData data, Map<UUID, ProjectRow> projects) {
         TeamRow team = data.teamById().get(out.teamId());
         List<Object> totals = new ArrayList<>();
-        for (LocalDate w : List.of(f1, f2)) {
+        for (ForecastWindow w : out.prepared().windows()) {
             double demand = 0;
             double capacity = 0;
             double planned = 0;
-            for (MemberWeekForecast r : out.memberWeeks()) {
-                if (r.weekStart().equals(w)) {
+            for (MemberWindowForecast r : out.memberWindows()) {
+                if (r.windowIndex() == w.index()) {
                     demand += r.demandHrs();
                     capacity += r.capacityHrs();
                     planned += r.plannedHrs();
                 }
             }
-            totals.add(map("week", str(w), "demand", round1(demand), "capacity", round1(capacity), "planned", round1(planned)));
+            totals.add(map("window", w.index(), "start", str(w.start()), "end", str(w.end()), "demand", round1(demand), "capacity", round1(capacity),
+                    "planned", round1(planned)));
+        }
+        Set<LocalDate> horizonWeeks = new TreeSet<>();
+        for (LocalDate d : Horizon.days(out.prepared().windows())) {
+            horizonWeeks.add(Weeks.mondayOf(d));
         }
         List<Object> teamCapacity = new ArrayList<>();
         for (TeamCapacityRow r : data.teamCapacity()) {
-            if (r.teamId().equals(out.teamId()) && (r.weekStart().equals(f1) || r.weekStart().equals(f2))) {
+            if (r.teamId().equals(out.teamId()) && horizonWeeks.contains(r.weekStart())) {
                 teamCapacity.add(map("week", str(r.weekStart()), "total", round2(r.totalCapacity()), "allocated", round2(r.allocated())));
             }
         }
@@ -150,7 +176,8 @@ public final class FactsBuilder {
                         "projects", backlog));
     }
 
-    private static Map<String, Object> member(MemberRow m, TeamOutcome out, List<MemberWeekForecast> rows, MemberPattern pattern, int cluster,
+    private static Map<String, Object> member(MemberRow m, TeamOutcome out, List<MemberWindowForecast> rows, List<MemberDayForecast> days,
+            MemberPattern pattern, int cluster,
             WeeklySeries series, List<LocalDate> historyWeeks, Map<UUID, ProjectRow> projects, Set<UUID> liveProjectIds,
             Map<UUID, List<TaskFacts>> recentByProject) {
         Prepared p = out.prepared();
@@ -163,18 +190,22 @@ public final class FactsBuilder {
         }
         List<TaskFacts> open = mine.stream().filter(f -> !f.done()).toList();
         List<Object> forecast = new ArrayList<>();
-        for (MemberWeekForecast r : rows) {
-            LocalDate end = r.weekStart().plusDays(6);
+        for (MemberWindowForecast r : rows) {
             double due = 0;
             for (TaskFacts f : open) {
                 LocalDate d = f.task().dueDate();
-                if (d != null && !d.isBefore(r.weekStart()) && !d.isAfter(end)) {
+                if (d != null && !d.isBefore(r.windowStart()) && !d.isAfter(r.windowEnd())) {
                     due += f.remaining() != null ? f.remaining() : f.estimate();
                 }
             }
-            forecast.add(map("week", str(r.weekStart()), "demand", r.demandHrs(), "low", r.lowHrs(), "high", r.highHrs(), "capacity", r.capacityHrs(),
-                    "overload", r.overloadHrs(), "open_hours", r.openHrs(), "new_hours", r.newHrs(), "planned_hours", r.plannedHrs(),
-                    "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", round2(due)));
+            forecast.add(map("window", r.windowIndex(), "start", str(r.windowStart()), "end", str(r.windowEnd()), "demand", r.demandHrs(), "low", r.lowHrs(),
+                    "high", r.highHrs(), "capacity", r.capacityHrs(), "overload", r.overloadHrs(), "open_hours", r.openHrs(), "new_hours", r.newHrs(),
+                    "planned_hours", r.plannedHrs(), "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", round2(due)));
+        }
+        List<Object> dayList = new ArrayList<>();
+        for (MemberDayForecast d : days) {
+            dayList.add(map("day", str(d.day()), "window", d.windowIndex(), "demand", d.demandHrs(), "capacity", d.capacityHrs(), "overload", d.overloadHrs(),
+                    "open_hours", d.openHrs(), "new_hours", d.newHrs(), "planned_hours", d.plannedHrs(), "working_day", d.workingDay()));
         }
         Map<String, Object> patternMap = pattern.toMap();
         patternMap.put("cluster", cluster);
@@ -201,7 +232,7 @@ public final class FactsBuilder {
             if (piece.member().equals(m.id())) {
                 planned.add(map("key", piece.key(), "title", piece.title(), "project_key", key(projects, piece.projectId()), "type", piece.family().label(),
                         "estimated_hours", round2(piece.estimate()), "share", round2(piece.share()), "expected_date", str(piece.expectedDate()),
-                        "expected_week", piece.expectedWeek() == null ? "after_window" : str(piece.expectedWeek()), "hours_in_window", round2(piece.hoursInWindow())));
+                        "expected_window", piece.expectedWindow() == null ? "after_window" : piece.expectedWindow(), "hours_in_window", round2(piece.hoursInWindow())));
             }
         }
         List<Object> roles = new ArrayList<>();
@@ -226,7 +257,7 @@ public final class FactsBuilder {
                 recentMix.merge(f.task().typeName(), 1, Integer::sum);
             }
         }
-        return map("id", str(m.id()), "name", m.fullName(), "role", m.role(), "job_title", m.jobTitle(), "history_13w", history, "forecast", forecast,
+        return map("id", str(m.id()), "name", m.fullName(), "role", m.role(), "job_title", m.jobTitle(), "history_13w", history, "forecast", forecast, "days", dayList,
                 "patterns", patternMap, "open_tasks", openTasks,
                 "reopened_tasks", mine.stream().filter(f -> f.task().reopened()).map(f -> f.task().key()).sorted().toList(),
                 "logged_hours_4w", loggedWeeks,
@@ -272,20 +303,20 @@ public final class FactsBuilder {
         Map<String, Object> mase = new TreeMap<>();
         p.backtest().meanMaseByModel().forEach((k, v) -> mase.put(k, finite(v)));
         return map("champion", p.champion(), "champion_mase", finite(p.championMase()), "forced_model", p.forcedModel(), "mase_by_model", mase,
-                "backtest_origins", p.backtestOrigins().stream().map(FactsBuilder::str).toList(), "horizons", List.of(p.horizons()[0], p.horizons()[1]),
+                "backtest_origins", p.backtestOrigins().stream().map(FactsBuilder::str).toList(), "horizons", java.util.Arrays.stream(p.horizons()).boxed().toList(),
                 "interval", map("basis", "backtest residuals", "horizons", horizons), "unavailable", new TreeMap<>(p.backtest().unavailable()),
                 "planned_basis", out.plannedWorkEnabled() ? PLANNED_BASIS : "disabled", "limitations", LIMITATIONS,
                 "seconds_by_phase", new LinkedHashMap<>(p.secondsByPhase()));
     }
 
-    private static Map<String, Object> rebalancing(TeamOutcome out, Map<UUID, List<MemberWeekForecast>> rowsByMember) {
+    private static Map<String, Object> rebalancing(TeamOutcome out, Map<UUID, List<MemberWindowForecast>> rowsByMember) {
         List<Object> overloaded = new ArrayList<>();
         List<Object> underloaded = new ArrayList<>();
         for (MemberRow m : out.members()) {
             double demand = 0;
             double capacity = 0;
             double overload = 0;
-            for (MemberWeekForecast r : rowsByMember.getOrDefault(m.id(), List.of())) {
+            for (MemberWindowForecast r : rowsByMember.getOrDefault(m.id(), List.of())) {
                 demand += r.demandHrs();
                 capacity += r.capacityHrs();
                 overload += r.overloadHrs();

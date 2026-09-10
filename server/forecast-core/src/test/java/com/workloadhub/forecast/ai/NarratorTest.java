@@ -358,7 +358,7 @@ class NarratorTest {
     @Test
     void aFailureWhileCheckingIsAModelErrorThatStillKeepsTheCost() {
         JsonNode broken = SeededFacts.facts();
-        ((ObjectNode) broken.path("run")).set("weeks", ExportFiles.mapper().createArrayNode().add("2026-09"));
+        ((ObjectNode) broken.path("run")).set("windows", ExportFiles.mapper().createArrayNode().add(ExportFiles.mapper().createObjectNode().put("start", "2026-09")));
         FakeGateway g = new FakeGateway(FakeGateway.goodNarrative(broken));
         NarrationOutcome o = narrator(g).narrate(broken, "en", null, "gho_x", NarrationProgress.none());
         assertEquals(NarrativeStatus.FAILED, o.status(), "a broken fact must not escape narrate: the seat was billed");

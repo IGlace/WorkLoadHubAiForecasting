@@ -44,11 +44,11 @@ class FactsToolsTest {
         assertEquals(Set.of("member_id", "name", "patterns"), TOOLS.memberPatterns(FIRST).keySet());
         assertEquals(Set.of("member_id", "name", "open_tasks"), TOOLS.memberOpenTasks(FIRST).keySet());
         Map<String, Object> capacity = TOOLS.memberCapacity(FIRST);
-        assertEquals(Set.of("member_id", "name", "weeks"), capacity.keySet());
-        List<Map<String, Object>> weeks = (List<Map<String, Object>>) capacity.get("weeks");
-        assertEquals(2, weeks.size());
-        assertEquals(Set.of("week", "capacity", "demand", "overload", "working_days", "absence_hours"), weeks.get(0).keySet());
-        assertEquals(Set.of("weeks", "projects"), TOOLS.projectTimelines().keySet());
+        assertEquals(Set.of("member_id", "name", "windows", "days"), capacity.keySet());
+        List<Map<String, Object>> windows = (List<Map<String, Object>>) capacity.get("windows");
+        assertEquals(2, windows.size());
+        assertEquals(Set.of("window", "start", "end", "capacity", "demand", "overload", "working_days", "absence_hours"), windows.get(0).keySet());
+        assertEquals(Set.of("windows", "projects"), TOOLS.projectTimelines().keySet());
         assertEquals(Set.of("overloaded", "underloaded"), TOOLS.rebalancingCandidates().keySet());
         Map<String, Object> planned = TOOLS.plannedWork();
         assertEquals(Set.of("planned_backlog", "members"), planned.keySet());
@@ -64,7 +64,7 @@ class FactsToolsTest {
         JsonNode factRows = FACTS.path("members").get(0).path("forecast");
         assertEquals(factRows.size(), rows.size());
         assertEquals(factRows.get(0).path("demand").asDouble(), ((Number) rows.get(0).get("demand")).doubleValue(), 0.0);
-        assertEquals(factRows.get(0).path("week").asText(), rows.get(0).get("week"));
+        assertEquals(factRows.get(0).path("start").asText(), rows.get(0).get("start"));
     }
 
     @Test

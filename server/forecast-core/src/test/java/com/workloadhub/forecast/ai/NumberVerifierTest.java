@@ -18,11 +18,11 @@ class NumberVerifierTest {
     static final String B = "aaaaaaaa-0000-0000-0000-000000000005";
 
     static final JsonNode FACTS = ExportFiles.mapper().readTree("""
-            {"run": {"id": "r", "weeks": ["2026-09-07", "2026-09-14"], "generated_at": "2026-09-03T10:00:00", "horizons": [1, 2]},
-             "team": {"id": "t", "totals": [{"week": "2026-09-07", "demand": 72.5, "capacity": 88.0}]},
+            {"run": {"id": "r", "windows": [{"index": 1, "start": "2026-09-07", "end": "2026-09-11"}], "generated_at": "2026-09-03T10:00:00", "horizons": [1, 2]},
+             "team": {"id": "t", "totals": [{"window": 1, "start": "2026-09-07", "demand": 72.5, "capacity": 88.0}]},
              "members": [
-               {"id": "%s", "name": "A", "forecast": [{"week": "2026-09-07", "demand": 52.04, "capacity": 40.0, "overload": 12.04}]},
-               {"id": "%s", "name": "B", "forecast": [{"week": "2026-09-07", "demand": 20.5, "capacity": 40.0, "overload": 0.0}]}],
+               {"id": "%s", "name": "A", "forecast": [{"window": 1, "start": "2026-09-07", "demand": 52.04, "capacity": 40.0, "overload": 12.04}]},
+               {"id": "%s", "name": "B", "forecast": [{"window": 1, "start": "2026-09-07", "demand": 20.5, "capacity": 40.0, "overload": 0.0}]}],
              "model": {"champion": "xgboost", "champion_mase": 0.913},
              "rebalancing_candidates": {
                "overloaded": [{"member_id": "%s", "name": "A", "overload_hours": 12.0}],
@@ -128,7 +128,7 @@ class NumberVerifierTest {
 
     @Test
     void aRebalancingReasonMayCiteTheMovesOwnHours() {
-        String move = "\"rebalancing\": [{\"from_member_id\": \"" + A + "\", \"to_member_id\": \"" + B + "\", \"week\": \"2026-09-07\", \"hours\": 6.5,"
+        String move = "\"rebalancing\": [{\"from_member_id\": \"" + A + "\", \"to_member_id\": \"" + B + "\", \"window\": \"2026-09-07\", \"hours\": 6.5,"
                 + " \"reason\": \"Move 6.5 h of A's 12.0 h overload to B, who has 19.5 h spare.\", \"confidence\": \"high\"}]";
         assertTrue(NumberVerifier.verify(narrative("fine", List.of(), "ok", move), FACTS).ok());
     }
@@ -142,7 +142,7 @@ class NumberVerifierTest {
 
     @Test
     void anAdjustmentReasonMayCiteItsOwnDeltaHours() {
-        String adj = "\"suggested_adjustments\": [{\"member_id\": \"" + A + "\", \"week\": \"2026-09-07\", \"delta_hours\": -2.5,"
+        String adj = "\"suggested_adjustments\": [{\"member_id\": \"" + A + "\", \"window\": \"2026-09-07\", \"delta_hours\": -2.5,"
                 + " \"reason\": \"Trim 2.5 h: the audit day is already counted in capacity.\"}]";
         assertTrue(NumberVerifier.verify(narrative("fine", List.of(), "ok", adj), FACTS).ok());
     }

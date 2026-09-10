@@ -21,12 +21,6 @@ public final class Weeks {
         return mondayOf(asOf).minusWeeks(1);
     }
 
-    /** The two Mondays to forecast: this week when as-of is a Monday, otherwise next week; plus one. */
-    public static LocalDate[] forecastWeeks(LocalDate asOf) {
-        LocalDate first = asOf.getDayOfWeek() == DayOfWeek.MONDAY ? asOf : mondayOf(asOf).plusWeeks(1);
-        return new LocalDate[] {first, first.plusWeeks(1)};
-    }
-
     public static List<LocalDate> between(LocalDate first, LocalDate last) {
         List<LocalDate> out = new ArrayList<>();
         for (LocalDate w = mondayOf(first); !w.isAfter(mondayOf(last)); w = w.plusWeeks(1)) {

@@ -82,12 +82,13 @@ class DefaultForecastServiceTest {
     void runNowPersistsAndReturnsTheWholeResult() {
         RunResult r = service.runNow(new RunRequest(team, null, SeededData.asOf(), null, null));
         assertEquals(RunStatus.DONE, r.run().status());
-        assertFalse(r.memberWeeks().isEmpty());
+        assertFalse(r.memberWindows().isEmpty());
+        assertEquals(r.memberWindows().size() * 5, r.memberDays().size());
         assertTrue(r.factsJson().startsWith("{"));
         assertTrue(r.maseByModel().containsKey("seasonal_naive"));
         assertFalse(r.scores().isEmpty());
         RunResult again = service.getRun(r.run().id());
-        assertEquals(r.memberWeeks(), again.memberWeeks());
+        assertEquals(r.memberWindows(), again.memberWindows());
         assertEquals(r.factsJson(), again.factsJson());
         assertEquals(r.scores(), again.scores());
         assertEquals(100, service.progress(r.run().id()).percent());
@@ -106,7 +107,7 @@ class DefaultForecastServiceTest {
         assertEquals("DONE", service.progress(id).phase());
         RunResult r = service.getRun(id);
         assertEquals("seasonal_naive", r.run().championModel());
-        assertTrue(r.memberWeeks().stream().allMatch(w -> w.plannedHrs() == 0.0));
+        assertTrue(r.memberWindows().stream().allMatch(w -> w.plannedHrs() == 0.0));
     }
 
     @Test
@@ -247,7 +248,7 @@ class DefaultForecastServiceTest {
         UUID id = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
         String backtest = "{\"scores\":[{\"model\":\"xgboost\",\"origin\":\"2026-08-24\",\"horizon\":1,\"mae\":null,\"mase\":null}],"
                 + "\"mase_by_model\":{\"xgboost\":null},\"unavailable\":{}}";
-        raw.finish(id, "seasonal_naive", Double.NaN, backtest, List.of(), "{}", LocalDateTime.now());
+        raw.finish(id, "seasonal_naive", Double.NaN, backtest, List.of(), List.of(), "{}", LocalDateTime.now());
         RunResult r = service.getRun(id);
         assertNull(r.scores().get(0).mase(), "stored null mase stays null, not NaN");
         assertNull(r.scores().get(0).mae());
@@ -263,7 +264,7 @@ class DefaultForecastServiceTest {
         DefaultForecastService svc = build(SeededData.dataSource(), new FakeGateway(), tracker, raw);
         try {
             UUID id = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
-            raw.finish(id, "seasonal_naive", 0.9, "{}", List.of(), "{}", LocalDateTime.now());
+            raw.finish(id, "seasonal_naive", 0.9, "{}", List.of(), List.of(), "{}", LocalDateTime.now());
             tracker.start(id);
             for (int i = 0; i < RunProgressTracker.MAX_TRACKED; i++) {
                 tracker.start(UUID.randomUUID());

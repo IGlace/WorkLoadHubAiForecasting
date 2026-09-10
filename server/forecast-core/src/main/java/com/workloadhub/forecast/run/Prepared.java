@@ -1,6 +1,7 @@
 package com.workloadhub.forecast.run;
 
 import com.workloadhub.forecast.backtest.Backtest;
+import com.workloadhub.forecast.calendar.ForecastWindow;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.features.FeatureMatrix;
@@ -18,7 +19,7 @@ public record Prepared(
         WorkingCalendar calendar,
         LocalDate asOf,
         LocalDate origin,
-        LocalDate[] forecastWeeks,
+        List<ForecastWindow> windows,
         int[] horizons,
         FeatureMatrix features,
         List<LocalDate> backtestOrigins,

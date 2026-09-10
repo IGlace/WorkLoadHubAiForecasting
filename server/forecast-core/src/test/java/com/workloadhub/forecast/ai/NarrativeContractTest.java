@@ -20,15 +20,16 @@ class NarrativeContractTest {
     static final String B = "aaaaaaaa-0000-0000-0000-000000000005";
 
     static final String FACTS = """
-            {"run": {"id": "r", "as_of": "2026-09-03", "weeks": ["2026-09-07", "2026-09-14"]},
+            {"run": {"id": "r", "as_of": "2026-09-03", "windows": [{"index": 1, "start": "2026-09-07", "end": "2026-09-11"},
+                                                                  {"index": 2, "start": "2026-09-14", "end": "2026-09-18"}]},
              "team": {"id": "t", "name": "Web Platform"},
              "members": [
                {"id": "%s", "name": "Sara Tazi", "open_tasks": [{"key": "WEB-1"}, {"key": "WEB-2"}],
-                "forecast": [{"week": "2026-09-07", "demand": 52.0, "capacity": 40.0, "overload": 12.0},
-                             {"week": "2026-09-14", "demand": 40.0, "capacity": 40.0, "overload": 0.0}]},
+                "forecast": [{"window": 1, "start": "2026-09-07", "demand": 52.0, "capacity": 40.0, "overload": 12.0},
+                             {"window": 2, "start": "2026-09-14", "demand": 40.0, "capacity": 40.0, "overload": 0.0}]},
                {"id": "%s", "name": "Omar Benali", "open_tasks": [{"key": "WEB-9"}],
-                "forecast": [{"week": "2026-09-07", "demand": 20.0, "capacity": 40.0, "overload": 0.0},
-                             {"week": "2026-09-14", "demand": 35.0, "capacity": 40.0, "overload": 0.0}]}]}
+                "forecast": [{"window": 1, "start": "2026-09-07", "demand": 20.0, "capacity": 40.0, "overload": 0.0},
+                             {"window": 2, "start": "2026-09-14", "demand": 35.0, "capacity": 40.0, "overload": 0.0}]}]}
             """.formatted(A, B);
 
     static JsonNode facts() {
@@ -37,16 +38,16 @@ class NarrativeContractTest {
 
     static ObjectNode good() {
         String json = """
-                {"run_summary": "Two members, one overloaded in week one.",
+                {"run_summary": "Two members, one overloaded in window one.",
                  "members": [
                    {"member_id": "%s", "name": "Sara Tazi", "risk_level": "high",
-                    "summary": "Sara has 52.0 h of demand against 40.0 h of capacity in the week of 2026-09-07.",
+                    "summary": "Sara has 52.0 h of demand against 40.0 h of capacity in the window starting 2026-09-07.",
                     "patterns": [{"kind": "assignment_style", "statement": "Mostly project-driven work.", "evidence": "share_project 0.6"}],
-                    "warnings": ["Overload of 12.0 h in the week of 2026-09-07."],
+                    "warnings": ["Overload of 12.0 h in the window starting 2026-09-07."],
                     "likely_work": [{"statement": "WEB-3 is likely to land.", "evidence": "planned WEB-3 share 0.7", "confidence": "high"}]},
                    {"member_id": "%s", "name": "Omar Benali", "risk_level": "low", "summary": "Spare capacity.", "patterns": [], "warnings": []}],
-                 "team_risks": [{"title": "Week one overload", "detail": "One member above capacity.", "severity": "medium", "member_ids": ["%s"]}],
-                 "rebalancing": [{"from_member_id": "%s", "to_member_id": "%s", "week": "2026-09-07", "hours": 8.0,
+                 "team_risks": [{"title": "Window one overload", "detail": "One member above capacity.", "severity": "medium", "member_ids": ["%s"]}],
+                 "rebalancing": [{"from_member_id": "%s", "to_member_id": "%s", "window": "2026-09-07", "hours": 8.0,
                                   "reason": "Omar has 20.0 h spare.", "confidence": "medium", "task_keys": ["WEB-1"]}],
                  "suggested_adjustments": [],
                  "model_notes": "Champion xgboost, MASE 0.9."}
@@ -62,7 +63,7 @@ class NarrativeContractTest {
     void parsesPlainAndFencedJson() {
         Narrative n = NarrativeContract.parse(text(good()));
         assertEquals("high", n.members().get(0).riskLevel());
-        assertEquals(LocalDate.of(2026, 9, 7), n.rebalancing().get(0).week());
+        assertEquals(LocalDate.of(2026, 9, 7), n.rebalancing().get(0).window());
         assertEquals(List.of("WEB-1"), n.rebalancing().get(0).taskKeys());
         assertEquals("high", n.members().get(0).likelyWork().get(0).confidence());
         assertEquals(List.of(), n.members().get(1).likelyWork(), "absent optional lists are empty");
@@ -93,8 +94,8 @@ class NarrativeContractTest {
         ((ObjectNode) zeroHours.path("rebalancing").get(0)).put("hours", 0);
         assertTrue(problems(zeroHours).stream().anyMatch(p -> p.startsWith("rebalancing[0].hours")));
         ObjectNode badDate = good();
-        ((ObjectNode) badDate.path("rebalancing").get(0)).put("week", "next monday");
-        assertTrue(problems(badDate).stream().anyMatch(p -> p.startsWith("rebalancing[0].week")));
+        ((ObjectNode) badDate.path("rebalancing").get(0)).put("window", "next monday");
+        assertTrue(problems(badDate).stream().anyMatch(p -> p.startsWith("rebalancing[0].window")));
         ObjectNode fiveLikely = good();
         var list = ((ObjectNode) fiveLikely.path("members").get(0)).putArray("likely_work");
         for (int i = 0; i < 5; i++) {
@@ -111,12 +112,12 @@ class NarrativeContractTest {
     }
 
     @Test
-    void crossChecksMembersWeeksAndMoves() {
+    void crossChecksMembersWindowsAndMoves() {
         assertEquals(List.of(), NarrativeContract.validateAgainstFacts(NarrativeContract.parse(text(good())), facts()));
 
         ObjectNode unknown = good();
         ((ObjectNode) unknown.path("members").get(1)).put("member_id", "nobody");
-        ((ObjectNode) unknown.path("rebalancing").get(0)).put("week", "2026-09-28");
+        ((ObjectNode) unknown.path("rebalancing").get(0)).put("window", "2026-09-28");
         List<String> p1 = NarrativeContract.validateAgainstFacts(NarrativeContract.parse(text(unknown)), facts());
         assertTrue(p1.stream().anyMatch(s -> s.contains("nobody")) && p1.stream().anyMatch(s -> s.contains("2026-09-28")), p1.toString());
         assertTrue(p1.stream().anyMatch(s -> s.contains("missing") && s.contains(B)), "the replaced member is now missing");
@@ -154,7 +155,7 @@ class NarrativeContractTest {
         assertTrue(p7.stream().anyMatch(s -> s.contains("WEB-9")) && p7.stream().anyMatch(s -> s.contains("WEB-404")), p7.toString());
 
         ObjectNode zeroDelta = good();
-        zeroDelta.putArray("suggested_adjustments").addObject().put("member_id", A).put("week", "2026-09-07").put("delta_hours", 0).put("reason", "rest week");
+        zeroDelta.putArray("suggested_adjustments").addObject().put("member_id", A).put("window", "2026-09-07").put("delta_hours", 0).put("reason", "rest week");
         List<String> p8 = NarrativeContract.validateAgainstFacts(NarrativeContract.parse(text(zeroDelta)), facts());
         assertTrue(p8.stream().anyMatch(s -> s.contains("delta_hours")), p8.toString());
 

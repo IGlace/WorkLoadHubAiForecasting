@@ -1,15 +1,20 @@
 package com.workloadhub.forecast.run;
 
 import com.workloadhub.forecast.api.ForecastException;
-import com.workloadhub.forecast.api.MemberWeekForecast;
+import com.workloadhub.forecast.api.MemberDayForecast;
+import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.backtest.Backtest;
+import com.workloadhub.forecast.calendar.ForecastWindow;
+import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.features.FeatureBuilder;
 import com.workloadhub.forecast.features.FeatureMatrix;
+import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
@@ -19,6 +24,7 @@ import com.workloadhub.forecast.model.ModelUnavailable;
 import com.workloadhub.forecast.planned.PlannedWork;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +46,7 @@ public final class ForecastRunner {
         };
     }
 
-    /** The demand arithmetic of one member-week, isolated so a property test can pin it. */
+    /** The demand arithmetic of one member-window, isolated so a property test can pin it. */
     public record Band(double open, double fresh, double planned, double demand, double low, double high, double overload) {
     }
 
@@ -74,9 +80,8 @@ public final class ForecastRunner {
         Lifecycle lc = Lifecycle.derive(data);
         WorkingCalendar cal = WorkingCalendar.fromHolidays(data.holidays());
         LocalDate origin = Weeks.lastCompleteWeek(asOf);
-        LocalDate[] weeks = Weeks.forecastWeeks(asOf);
-        int h1 = (int) Weeks.weeksBetween(origin, weeks[0]);
-        int[] horizons = {h1, h1 + 1};
+        List<ForecastWindow> windows = Horizon.windows(asOf);
+        int[] horizons = Horizon.horizons(origin, windows);
         FeatureMatrix features = new FeatureBuilder(data, lc, cal, capacityRule).build(data.members(), origin);
         LocalDate firstWeek = features.rowCount() == 0 ? origin : features.keys().stream().map(MemberWeek::week).min(LocalDate::compareTo).orElse(origin);
         int historyWeeks = features.rowCount() == 0 ? 0 : (int) Weeks.weeksBetween(firstWeek, origin) + 1;
@@ -118,7 +123,7 @@ public final class ForecastRunner {
                 for (int i = 0; i < horizons.length; i++) {
                     double[] pred = model.predict(atOrigin, horizons[i]);
                     for (int r = 0; r < atOrigin.rowCount(); r++) {
-                        predicted.put(new MemberWeek(atOrigin.key(r).member(), weeks[i]), Math.max(0.0, pred[r]));
+                        predicted.put(new MemberWeek(atOrigin.key(r).member(), origin.plusWeeks(horizons[i])), Math.max(0.0, pred[r]));
                     }
                 }
             } finally {
@@ -133,7 +138,7 @@ public final class ForecastRunner {
         }
         EffortModel effort = EffortModel.fit(lc, data);
         seconds.put("forecast", elapsed(t2));
-        return new Prepared(data, lc, cal, asOf, origin, weeks, horizons, features, origins, backtest, champion, championMase,
+        return new Prepared(data, lc, cal, asOf, origin, windows, horizons, features, origins, backtest, champion, championMase,
                 forcedModel, offsets, predicted, effort, historyWeeks, seconds);
     }
 
@@ -152,35 +157,77 @@ public final class ForecastRunner {
         List<TaskFacts> open = p.lifecycle().all().stream()
                 .filter(f -> f.isAssigned() && !f.done() && byId.containsKey(f.assignee()))
                 .toList();
-        LocalDate f1 = p.forecastWeeks()[0];
-        SortedMap<MemberWeek, Double> openHours = EffortModel.placeOpenTasks(open, p.effort(), f1, teamOf, offDaysOf, p.calendar());
-        Map<MemberWeek, Double> teamPredicted = new TreeMap<>();
+        List<ForecastWindow> windows = p.windows();
+        LocalDate first = windows.get(0).start();
+        LocalDate last = windows.get(windows.size() - 1).end();
+        SortedMap<MemberDay, Double> openHours = EffortModel.placeOpenTasksByDay(open, p.effort(), first, teamOf, offDaysOf, p.calendar());
+        // A predicted week's fresh hours land evenly on that week's working days inside the horizon (design 2026-09-10, section 4).
+        SortedMap<MemberDay, Double> arrivals = new TreeMap<>();
         p.predictedEst().forEach((k, v) -> {
-            if (byId.containsKey(k.member())) {
-                teamPredicted.put(k, v);
+            if (!byId.containsKey(k.member())) {
+                return;
+            }
+            LocalDate monday = k.week();
+            int working = p.calendar().workingDaysInWeek(monday);
+            if (working == 0) {
+                return;
+            }
+            for (LocalDate d = monday; !d.isAfter(monday.plusDays(6)); d = d.plusDays(1)) {
+                if (p.calendar().isWorkingDay(d) && !d.isBefore(first) && !d.isAfter(last)) {
+                    arrivals.merge(new MemberDay(k.member(), d), v / working, Double::sum);
+                }
             }
         });
-        SortedMap<MemberWeek, Double> newHours = EffortModel.placeNewArrivals(teamPredicted, p.effort(), teamOf, offDaysOf, p.calendar());
+        SortedMap<MemberDay, Double> newHours = EffortModel.placeNewArrivalsByDay(arrivals, p.effort(), teamOf, offDaysOf, p.calendar());
         PlannedWork.Allocation planned = planEnabled
-                ? PlannedWork.allocate(new PlannedWork.Request(teamId, members, p.asOf(), p.forecastWeeks()), p.lifecycle(), data, p.effort(),
-                        p.calendar(), offDaysOf)
+                ? PlannedWork.allocate(new PlannedWork.Request(teamId, members, p.asOf(), windows), p.lifecycle(), data, p.effort(), p.calendar(), offDaysOf)
                 : PlannedWork.Allocation.empty();
-        List<MemberWeekForecast> rows = new ArrayList<>();
+        List<MemberWindowForecast> windowRows = new ArrayList<>();
+        List<MemberDayForecast> dayRows = new ArrayList<>();
         for (MemberRow m : members) {
             double ratio = p.effort().estimateRatio(m.id(), null, m.primaryTeamId());
-            for (int i = 0; i < p.forecastWeeks().length; i++) {
-                LocalDate week = p.forecastWeeks()[i];
-                MemberWeek key = new MemberWeek(m.id(), week);
-                double[] q = p.bandOffsets().get(p.horizons()[i]);
-                double capacity = capacityRule.capacity(m, week, data, p.calendar());
-                Band b = band(openHours.getOrDefault(key, 0.0), newHours.getOrDefault(key, 0.0), planned.hours().getOrDefault(key, 0.0),
-                        q[0], q[1], ratio, capacity);
-                rows.add(new MemberWeekForecast(m.id(), week, b.open(), b.fresh(), b.planned(), b.demand(), b.low(), b.high(), capacity,
-                        b.overload(), p.calendar().workingDaysInWeek(week), capacityRule.absenceHours(m.id(), week, data, p.calendar())));
+            for (ForecastWindow w : windows) {
+                double openSum = 0;
+                double freshSum = 0;
+                double plannedSum = 0;
+                double capacity = 0;
+                double absence = 0;
+                int workingDays = 0;
+                double q10 = 0;
+                double q90 = 0;
+                for (LocalDate d : w.weekdays()) {
+                    MemberDay key = new MemberDay(m.id(), d);
+                    double o = openHours.getOrDefault(key, 0.0);
+                    double n = newHours.getOrDefault(key, 0.0);
+                    double pl = planned.hours().getOrDefault(key, 0.0);
+                    double cap = capacityRule.dayCapacity(m, d, data, p.calendar());
+                    boolean workingDay = p.calendar().isWorkingDay(d);
+                    double demand = round2(round2(o) + round2(n) + round2(pl));
+                    dayRows.add(new MemberDayForecast(m.id(), d, w.index(), round2(o), round2(n), round2(pl), demand, cap,
+                            round2(Math.max(0.0, demand - cap)), workingDay));
+                    openSum += o;
+                    freshSum += n;
+                    plannedSum += pl;
+                    capacity += cap;
+                    absence += capacityRule.dayAbsenceHours(m.id(), d, data);
+                    if (workingDay) {
+                        workingDays++;
+                    }
+                    // The band offsets of the horizon week this day belongs to, weighted by the day's share of the window.
+                    double[] q = p.bandOffsets().get((int) Weeks.weeksBetween(p.origin(), d));
+                    if (q != null) {
+                        q10 += q[0] / w.weekdays().size();
+                        q90 += q[1] / w.weekdays().size();
+                    }
+                }
+                Band b = band(openSum, freshSum, plannedSum, q10, q90, ratio, round2(capacity));
+                windowRows.add(new MemberWindowForecast(m.id(), w.index(), w.start(), w.end(), b.open(), b.fresh(), b.planned(), b.demand(), b.low(),
+                        b.high(), round2(capacity), b.overload(), workingDays, round2(absence)));
             }
         }
-        rows.sort((a, b) -> new MemberWeek(a.userId(), a.weekStart()).compareTo(new MemberWeek(b.userId(), b.weekStart())));
-        return new TeamOutcome(p, teamId, members, planEnabled, openHours, newHours, planned, List.copyOf(rows));
+        windowRows.sort(Comparator.comparing(MemberWindowForecast::userId, Ids.UUID_ORDER).thenComparingInt(MemberWindowForecast::windowIndex));
+        dayRows.sort(Comparator.comparing(MemberDayForecast::userId, Ids.UUID_ORDER).thenComparing(MemberDayForecast::day));
+        return new TeamOutcome(p, teamId, members, planEnabled, openHours, newHours, planned, List.copyOf(windowRows), List.copyOf(dayRows));
     }
 
     private static double elapsed(long since) {
