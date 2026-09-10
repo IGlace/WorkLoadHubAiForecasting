@@ -6,6 +6,7 @@ import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.data.rows.TeamCapacityRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
@@ -120,7 +121,12 @@ public final class ForecastRepository {
             holidays.add(new HolidayRow(date(r, "start_date"), date(r, "end_date"), "CONFIRMED".equals(str(r, "status")),
                     dialect.asBoolean(r.get("active")), str(r, "title")));
         }
-        return new ForecastData(members, teams, projects, tasks, transitions, logs, capacity, absences, holidays, users, categoryByName);
+        List<TeamCapacityRow> teamCapacity = new ArrayList<>();
+        for (Map<String, Object> r : rows("SELECT team_id, week_start, total_capacity_hrs, allocated_hrs FROM team_capacity")) {
+            teamCapacity.add(new TeamCapacityRow(uuid(r, "team_id"), date(r, "week_start"), dbl(r, "total_capacity_hrs"), dbl(r, "allocated_hrs")));
+        }
+        return new ForecastData(members, teams, projects, tasks, transitions, logs, capacity, absences, holidays, users, categoryByName)
+                .withTeamCapacity(teamCapacity);
     }
 
     private List<Map<String, Object>> rows(String sql) {

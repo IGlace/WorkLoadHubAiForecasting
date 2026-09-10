@@ -6,6 +6,7 @@ import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.data.rows.TeamCapacityRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
@@ -44,6 +45,7 @@ public final class ForecastData {
     private final List<HolidayRow> holidays;
     private final List<UserRef> users;
     private final Map<String, String> statusCategoryByName;
+    private List<TeamCapacityRow> teamCapacity;
 
     private final Map<UUID, MemberRow> memberById;
     private final Map<UUID, TaskRow> taskById;
@@ -80,6 +82,7 @@ public final class ForecastData {
                 .toList());
         this.users = sortedBy(users, UserRef::id);
         this.statusCategoryByName = Map.copyOf(statusCategoryByName);
+        this.teamCapacity = List.of();
 
         this.memberById = index(this.members, MemberRow::id);
         this.taskById = index(this.tasks, TaskRow::id);
@@ -115,7 +118,16 @@ public final class ForecastData {
 
     public ForecastData withProjects(List<ProjectRow> projects) {
         return new ForecastData(members, teams, projects, tasks, transitions, timeLogs, capacity, absences, holidays, users,
+                statusCategoryByName).withTeamCapacity(teamCapacity);
+    }
+
+    public ForecastData withTeamCapacity(List<TeamCapacityRow> rows) {
+        ForecastData copy = new ForecastData(members, teams, projects, tasks, transitions, timeLogs, capacity, absences, holidays, users,
                 statusCategoryByName);
+        copy.teamCapacity = rows.stream()
+                .sorted(Comparator.comparing((TeamCapacityRow r) -> r.teamId().toString()).thenComparing(TeamCapacityRow::weekStart))
+                .toList();
+        return copy;
     }
 
     public List<MemberRow> members() {
@@ -160,6 +172,10 @@ public final class ForecastData {
 
     public Map<String, String> statusCategoryByName() {
         return statusCategoryByName;
+    }
+
+    public List<TeamCapacityRow> teamCapacity() {
+        return teamCapacity;
     }
 
     public Map<UUID, MemberRow> memberById() {

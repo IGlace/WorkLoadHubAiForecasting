@@ -69,6 +69,7 @@ class ForecastRepositoryTest {
         MemberRow m = data.members().get(0);
         assertFalse(data.projectIdsOfTeamAndParent(m.primaryTeamId()).isEmpty());
         assertEquals(SeededData.envelope().rows("users").size(), data.users().size());
+        assertEquals(SeededData.envelope().rows("team_capacity").size(), data.teamCapacity().size());
         for (int i = 1; i < data.capacity().size(); i++) {
             var prev = data.capacity().get(i - 1);
             var cur = data.capacity().get(i);

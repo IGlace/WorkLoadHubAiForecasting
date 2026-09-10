@@ -48,7 +48,8 @@ public final class Truncation {
                     status, t.priority(), t.estimate(), remaining, t.createdDate(), started, finished, t.dueDate(), t.reopened(), t.archived()));
         }
         return new ForecastData(data.members(), data.teams(), data.projects(), tasks, keptTransitions, keptLogs, data.capacity(),
-                data.absences(), data.holidays(), data.users(), data.statusCategoryByName());
+                data.absences(), data.holidays(), data.users(), data.statusCategoryByName())
+                .withTeamCapacity(data.teamCapacity());
     }
 
     private static boolean after(LocalDateTime t, LocalDate cutoff) {
