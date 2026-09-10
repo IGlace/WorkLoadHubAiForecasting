@@ -3,6 +3,9 @@
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
 version 1. Dated 2026-09-04, last updated 2026-09-07; update this file when an item lands.
 
+Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
+the archive branch only.
+
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
@@ -23,8 +26,7 @@ first install straight away; the installer now seeds the data itself, see "Lande
   Python and desktop skills and agents; `dev` and `main` carry the Java module and the documentation. The parity
   procedure runs the Python side from a checkout of the archive (`server/tools/parity.sh ... ARCHIVE_DIR`), and
   the parity gate's test is the one Python test left. Spec
-  `docs/superpowers/specs/2026-09-10-python-desktop-archival-design.md`. Items above that name the desktop app,
-  the installer or Windows verification now apply to the archive branch only.
+  `docs/superpowers/specs/2026-09-10-python-desktop-archival-design.md`.
 
 - **Planned work and likely work, designed and locked, waiting for the real export** (2026-09-07): the owner
   asked whether Copilot could predict the tasks a member will be assigned. Decided: no language model will
@@ -278,12 +280,11 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   reopened and unlogged tasks, and whether department teams (people without a manager) should run their own
   forecast.
 - Java module residuals parked at the close of the foundation-and-seed plan (2026-09-09): synthetic mode does
-  not scrub `projects.key` (keys are department codes by construction); `scripts/check.sh` runs only the Java
-  slice and CI's Maven call lacks `-q`; `check.ps1` prints its skip line during step collection; the seed's log
-  rows use quarter-hour slices (spec says 1 to 8 h); `Reference.covers` replaces rather than completes
-  reference rows; the importer leaves autocommit off before close; CLI errors fall to picocli's default
-  handler; `.gitignore` lists `server/**/target/` twice. The CLAUDE.md hard rule "no WSL" predates the
-  server direction and is rewritten by the migration plan.
+  not scrub `projects.key` (keys are department codes by construction); CI's Maven call lacks `-q`;
+  `check.ps1` prints its skip line during step collection; the seed's log rows use quarter-hour slices (spec
+  says 1 to 8 h); `Reference.covers` replaces rather than completes reference rows; the importer leaves
+  autocommit off before close; CLI errors fall to picocli's default handler. The CLAUDE.md hard rule "no WSL"
+  predated the server direction and was dropped on 2026-09-10 with the archival.
 - Java module residuals parked at the close of the pipeline-core final review (2026-09-09):
   - The Python effort model's cycle-time regressor was not ported; `EffortModel.familyCycleDays` uses the
     hierarchy fallback only (member, then team × family, then team, then a global median), with no learned

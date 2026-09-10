@@ -14,6 +14,8 @@ try {
     $branch = (git rev-parse --abbrev-ref HEAD).Trim()
     if ($branch -ne $From) { throw "expected to be on '$From' but the current branch is '$branch'" }
 
+    if (-not (Get-Command mvn -ErrorAction SilentlyContinue) -or -not (Get-Command uv -ErrorAction SilentlyContinue)) { throw "release needs mvn and uv on PATH so that the whole gate runs" }
+
     & pwsh -NoProfile -File (Join-Path $PSScriptRoot "check.ps1")
     if ($LASTEXITCODE -ne 0) { throw "the gate failed; '$To' was not moved" }
 

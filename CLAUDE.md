@@ -49,7 +49,7 @@ fix wave, CI green on `dev`, then fast-forward `main`.
 - The GitHub remote (`IGlace/WorkLoadHubAiForecasting`) is the shared copy: `dev` and `main` are pushed there
   and CI runs on both. Push `dev` when a batch is reviewed.
 - English and French are both fully supported in the narrative; a user may switch freely. No third language.
-  The CLI is English only.
+  The CLI's own messages and help are English only; its narratives are `--lang en` or `fr`.
 - The real export and any real-mode seed output stay outside the repository.
 
 ## Layout
@@ -72,7 +72,8 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.ps1` (gate, then fast
   `pwsh scripts/check.ps1` run both; `.github/workflows/ci.yml` runs the same on pushes to `dev` and `main`.
   Keep the three in step.
 - `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to `dev`; it is the only thing that can
-  refuse a bad release, because git has no pre-merge hook for a fast-forward.
+  refuse a bad release, because git has no pre-merge hook for a fast-forward. It refuses to run unless both
+  mvn and uv are on PATH, so the whole gate runs.
 - Copilot: the SDK runs an in-process runtime, unpacked once to `~/.copilot/runtime-cache`; tokens need
   `whf.token-key` (server) or `WHF_TOKEN_KEY` (CLI). The live path is checked by hand (`server/README.md`).
 

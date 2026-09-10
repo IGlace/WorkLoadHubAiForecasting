@@ -8,6 +8,9 @@
 # OS / editor
 .DS_Store
 
+# Rendered reports (regenerate from the HTML)
+docs/reports/**/*.pdf
+
 # Java module: build output, jqwik state, local databases, real-mode seed output (personal data)
 server/**/target/
 server/**/.jqwik-database

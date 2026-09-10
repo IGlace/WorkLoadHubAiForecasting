@@ -1,5 +1,7 @@
 # The local gate, the same steps as CI (.github/workflows/ci.yml) and scripts/check.sh: the Java module's
 # `mvn verify` and the parity gate's test. A step whose tool is missing is skipped with a message.
+# Unlike check.sh, which runs every step and reports each failure, this script stops at the first
+# failing step; both exit non-zero on any failure.
 #
 # Usage: pwsh scripts/check.ps1            run the gate
 #        pwsh scripts/check.ps1 -DryRun    print the steps without running them
@@ -28,6 +30,11 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Add-Step "tools (parity gate test)" $root "uv" @("run", "--python", "3.11", "--with", "pytest", "pytest", "server/tools/tests", "-q")
 } else {
     Write-Host "SKIP tools (parity gate test): uv not found on PATH" -ForegroundColor Yellow
+}
+
+if ($steps.Count -eq 0) {
+    Write-Host "gate ran nothing: install mvn and uv" -ForegroundColor Red
+    exit 1
 }
 
 Write-Host "gate: $($steps.Count) steps" -ForegroundColor Cyan

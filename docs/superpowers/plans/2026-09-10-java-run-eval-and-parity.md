@@ -4487,3 +4487,5 @@ booster's mean MASE and the champion decision within the design's tolerance."
 **Docs step:** part of Task 10 (README, backlog, the synthetic parity result). `CLAUDE.md` is left for the migration plan, which rewrites it for the Java-only repository.
 
 **What the next plan takes from here:** `ForecastService` and `JdbcRunStore` (`forecast_narratives` is still empty), the facts JSON as the tool payload for Copilot, `RunProgressTracker` with its `thinking`/`answer` fields for streaming, `GitHubTokenStore` from the foundation plan, and the CLI `Services` factory for `narrate` and `copilot status`.
+
+Since 2026-09-10 parity.sh takes the archive checkout as a third argument (ARCHIVE_DIR); see server/README.md, "Parity check".

@@ -14,8 +14,8 @@ and the forecasting logic underneath.
 
 ## Rebuilding the PDF
 
-The rendered PDF is deliberately not committed — it is a build artifact, and the pre-commit
-hook blocks binaries. Regenerate it with Edge, which is already on every Windows machine:
+The rendered PDF is deliberately not committed — it is a build artifact, and it is git-ignored.
+Regenerate it with Edge, which is already on every Windows machine:
 
 ```powershell
 $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"

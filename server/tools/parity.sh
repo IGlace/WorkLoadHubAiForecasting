@@ -5,7 +5,10 @@
 # Usage: server/tools/parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
-export_json="$1"; out="$2"; archive="$3"; as_of="${4:-}"
+export_json="${1:?usage: parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]}"
+out="${2:?usage: parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]}"
+archive="${3:?usage: parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]}"
+as_of="${4:-}"
 if [ ! -d "$archive/service" ]; then
   echo "error: $archive is not a checkout of archive/python-desktop-v1 (no service/ directory)" >&2
   exit 2

@@ -218,7 +218,7 @@ alongside both harnesses' `summary.md`. It was produced with:
 ```bash
 java -jar forecast-cli/target/workloadhub-forecast-cli-0.1.0-SNAPSHOT.jar \
   seed --synthetic --users 36 --weeks 52 --seed 11 --end 2026-09-06 --out <file>
-tools/parity.sh <file> <out> ../whf-archive 2026-09-06
+tools/parity.sh <file> <out> ../../whf-archive 2026-09-06
 ```
 
 Never run the procedure on the real export inside the repository: point `OUT_DIR` outside git and keep the
