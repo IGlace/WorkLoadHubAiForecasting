@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "server" / "tools" / "parity_compare.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "parity_compare.py"
 HEADER = "model,horizon,origin,metric,value\n"
 
 

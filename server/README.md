@@ -191,9 +191,11 @@ Sessions never resume; each narration is one client and one session, closed at t
 
 ## Parity check
 
-`server/tools/parity.sh EXPORT_JSON OUT_DIR [AS_OF]` runs the Java and Python harnesses on the same
-WorkloadHub export and compares them: `forecast init-db`, `import` and `eval --models xgboost,seasonal_naive`
-into `OUT_DIR/java`, then, from `service/`, `uv run whf import-workloadhub` and
+`server/tools/parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]` runs the Java and Python harnesses on the same
+WorkloadHub export and compares them, where `ARCHIVE_DIR` is a checkout of the branch
+`archive/python-desktop-v1` (`git worktree add ../whf-archive archive/python-desktop-v1`), which holds the
+Python service: `forecast init-db`, `import` and `eval --models xgboost,seasonal_naive`
+into `OUT_DIR/java`, then, from `ARCHIVE_DIR/service`, `uv run whf import-workloadhub` and
 `uv run whf eval --models gbm,seasonal_naive` into `OUT_DIR/python`, then
 `server/tools/parity_compare.py` on the two `scores.csv` files. When `AS_OF` is omitted, it is read back from
 the Java summary's first line (`forecast eval` computes it as the latest task date), so both harnesses score
@@ -216,15 +218,14 @@ alongside both harnesses' `summary.md`. It was produced with:
 ```bash
 java -jar forecast-cli/target/workloadhub-forecast-cli-0.1.0-SNAPSHOT.jar \
   seed --synthetic --users 36 --weeks 52 --seed 11 --end 2026-09-06 --out <file>
-tools/parity.sh <file> <out> 2026-09-06
+tools/parity.sh <file> <out> ../whf-archive 2026-09-06
 ```
 
 Never run the procedure on the real export inside the repository: point `OUT_DIR` outside git and keep the
 real-mode result in the owner's own folder.
 
-The gate's own test, `service/tests/test_parity_compare.py`, runs `parity_compare.py` as a subprocess against
+The gate's own test, `server/tools/tests/test_parity_compare.py`, runs `parity_compare.py` as a subprocess against
 hand-built `scores.csv` fixtures (pass, tolerance-exceeded, champions-differ, no-booster-rows and
-exactly-at-the-tolerance-boundary); it moved under `service/tests` so `uv run pytest` picks it up with the rest
-of the Python suite. `parity_compare.py` and `translate-schema.py` stay standalone scripts under `server/tools/`
-(no Python package there to import), so `ruff check`/`ruff format` run on them explicitly from `service/`:
-`uv run ruff check . ../server/tools` and `uv run ruff format --check . ../server/tools`.
+exactly-at-the-tolerance-boundary). It is the one Python test left in the repository and runs from the root with
+`uv run --python 3.11 --with pytest pytest server/tools/tests`, in `scripts/check.ps1`, `scripts/check.sh` and CI.
+`parity_compare.py` and `translate-schema.py` stay standalone, standard-library scripts.
