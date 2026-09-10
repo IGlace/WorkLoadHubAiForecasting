@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import net.jqwik.api.ForAll;
@@ -39,5 +40,22 @@ class HourPlacementTest {
         assertEquals(8.0, HourPlacement.placeHours(8, LocalDate.of(2026, 3, 6), LocalDate.of(2026, 3, 2), CAL, Set.of()).get(LocalDate.of(2026, 3, 2)), 1e-9);
         SortedMap<LocalDate, Double> weekend = HourPlacement.placeHours(3, LocalDate.of(2026, 3, 7), LocalDate.of(2026, 3, 8), CAL, Set.of());
         assertEquals(3.0, weekend.get(LocalDate.of(2026, 3, 2)), 1e-9);
+    }
+
+    @Property
+    boolean dayPlacementConservesHoursOnWorkingDaysFromStart(@ForAll @DoubleRange(min = 0, max = 200) double hours,
+            @ForAll @IntRange(min = 0, max = 40) int span) {
+        LocalDate start = LocalDate.of(2026, 3, 4);
+        LocalDate off = LocalDate.of(2026, 3, 6);
+        SortedMap<LocalDate, Double> out = HourPlacement.placeHoursByDay(hours, start, start.plusDays(span), CAL, Set.of(off));
+        double sum = out.values().stream().mapToDouble(Double::doubleValue).sum();
+        boolean working = out.keySet().stream().allMatch(d -> CAL.isWorkingDay(d) && !d.equals(off) && !d.isBefore(start));
+        return Math.abs(sum - hours) < 1e-6 && working;
+    }
+
+    @Test
+    void dayPlacementIsEvenAndFallsBackToTheStartDayWhenNoDayWorks() {
+        assertEquals(2.5, HourPlacement.placeHoursByDay(10, LocalDate.of(2026, 3, 5), LocalDate.of(2026, 3, 10), CAL, Set.of()).get(LocalDate.of(2026, 3, 9)), 1e-9);
+        assertEquals(Map.of(LocalDate.of(2026, 3, 7), 3.0), HourPlacement.placeHoursByDay(3, LocalDate.of(2026, 3, 7), LocalDate.of(2026, 3, 8), CAL, Set.of()));
     }
 }

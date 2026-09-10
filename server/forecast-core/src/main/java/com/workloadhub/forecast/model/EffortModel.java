@@ -1,9 +1,11 @@
 package com.workloadhub.forecast.model;
 
 import com.workloadhub.forecast.calendar.HourPlacement;
+import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
+import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Family;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
@@ -160,48 +162,76 @@ public final class EffortModel {
         return latenessMember.getOrDefault(member, latenessTeam.getOrDefault(team, latenessGlobal));
     }
 
+    private record OpenSpan(double hours, LocalDate start, LocalDate end) {
+    }
+
+    private static OpenSpan openSpan(TaskFacts t, EffortModel model, LocalDate placementStart, UUID team) {
+        UUID member = t.assignee();
+        double hours = t.remaining() != null ? t.remaining()
+                : Math.max(0.0, t.estimate() * model.estimateRatio(member, t.family(), team) - t.actualHours());
+        LocalDate assigned = t.assignedDay();
+        LocalDate start = assigned.isAfter(placementStart) ? assigned : placementStart;
+        int cycle = (int) Math.round(model.familyCycleDays(member, t.family(), team));
+        LocalDate minEnd = start.plusDays(Math.max(cycle - 1, 0));
+        LocalDate end;
+        if (t.task().dueDate() != null) {
+            LocalDate late = t.task().dueDate().plusDays(Math.round(model.memberLatenessDays(member, team)));
+            end = late.isAfter(minEnd) ? late : minEnd;
+        } else {
+            LocalDate byCycle = assigned.plusDays(cycle);
+            end = byCycle.isAfter(minEnd) ? byCycle : minEnd;
+        }
+        return new OpenSpan(hours, start, end);
+    }
+
+    /** Remaining hours of each open task spread over working days from the placement start (or the assignment day) to its expected end. */
+    public static SortedMap<MemberDay, Double> placeOpenTasksByDay(List<TaskFacts> open, EffortModel model, LocalDate placementStart,
+            Function<UUID, UUID> teamOf, Function<UUID, Set<LocalDate>> offDaysOf, WorkingCalendar cal) {
+        SortedMap<MemberDay, Double> out = new TreeMap<>();
+        for (TaskFacts t : open) {
+            UUID member = t.assignee();
+            OpenSpan span = openSpan(t, model, placementStart, teamOf.apply(member));
+            if (span.hours() <= 0) {
+                continue;
+            }
+            HourPlacement.placeHoursByDay(span.hours(), span.start(), span.end(), cal, offDaysOf.apply(member))
+                    .forEach((day, h) -> out.merge(new MemberDay(member, day), h, Double::sum));
+        }
+        return out;
+    }
+
     public static SortedMap<MemberWeek, Double> placeOpenTasks(List<TaskFacts> open, EffortModel model, LocalDate placementStart,
             Function<UUID, UUID> teamOf, Function<UUID, Set<LocalDate>> offDaysOf, WorkingCalendar cal) {
         SortedMap<MemberWeek, Double> out = new TreeMap<>();
-        for (TaskFacts t : open) {
-            UUID member = t.assignee();
+        placeOpenTasksByDay(open, model, placementStart, teamOf, offDaysOf, cal)
+                .forEach((k, h) -> out.merge(new MemberWeek(k.member(), Weeks.mondayOf(k.day())), h, Double::sum));
+        return out;
+    }
+
+    /** Arrival hours of one day, scaled by the member's estimate ratio and spread over the cycle days from that day on. */
+    public static SortedMap<MemberDay, Double> placeNewArrivalsByDay(Map<MemberDay, Double> arrivals, EffortModel model,
+            Function<UUID, UUID> teamOf, Function<UUID, Set<LocalDate>> offDaysOf, WorkingCalendar cal) {
+        SortedMap<MemberDay, Double> out = new TreeMap<>();
+        for (Map.Entry<MemberDay, Double> e : new TreeMap<>(arrivals).entrySet()) {
+            UUID member = e.getKey().member();
             UUID team = teamOf.apply(member);
-            double hours = t.remaining() != null ? t.remaining()
-                    : Math.max(0.0, t.estimate() * model.estimateRatio(member, t.family(), team) - t.actualHours());
-            if (hours <= 0) {
-                continue;
-            }
-            LocalDate assigned = t.assignedDay();
-            LocalDate start = assigned.isAfter(placementStart) ? assigned : placementStart;
-            int cycle = (int) Math.round(model.familyCycleDays(member, t.family(), team));
-            LocalDate minEnd = start.plusDays(Math.max(cycle - 1, 0));
-            LocalDate end;
-            if (t.task().dueDate() != null) {
-                LocalDate late = t.task().dueDate().plusDays(Math.round(model.memberLatenessDays(member, team)));
-                end = late.isAfter(minEnd) ? late : minEnd;
-            } else {
-                LocalDate byCycle = assigned.plusDays(cycle);
-                end = byCycle.isAfter(minEnd) ? byCycle : minEnd;
-            }
-            HourPlacement.placeHours(hours, start, end, cal, offDaysOf.apply(member))
-                    .forEach((week, h) -> out.merge(new MemberWeek(member, week), h, Double::sum));
+            double hours = e.getValue() * model.estimateRatio(member, null, team);
+            int span = (int) Math.round(model.memberCycleDays(member, team));
+            LocalDate start = e.getKey().day();
+            LocalDate end = start.plusDays(Math.max(span - 1, 0));
+            HourPlacement.placeHoursByDay(hours, start, end, cal, offDaysOf.apply(member))
+                    .forEach((day, h) -> out.merge(new MemberDay(member, day), h, Double::sum));
         }
         return out;
     }
 
     public static SortedMap<MemberWeek, Double> placeNewArrivals(Map<MemberWeek, Double> predictedEst, EffortModel model,
             Function<UUID, UUID> teamOf, Function<UUID, Set<LocalDate>> offDaysOf, WorkingCalendar cal) {
+        Map<MemberDay, Double> arrivals = new TreeMap<>();
+        predictedEst.forEach((k, v) -> arrivals.merge(new MemberDay(k.member(), k.week()), v, Double::sum));
         SortedMap<MemberWeek, Double> out = new TreeMap<>();
-        for (Map.Entry<MemberWeek, Double> e : new TreeMap<>(predictedEst).entrySet()) {
-            UUID member = e.getKey().member();
-            UUID team = teamOf.apply(member);
-            double hours = e.getValue() * model.estimateRatio(member, null, team);
-            int span = (int) Math.round(model.memberCycleDays(member, team));
-            LocalDate start = e.getKey().week();
-            LocalDate end = start.plusDays(Math.max(span - 1, 0));
-            HourPlacement.placeHours(hours, start, end, cal, offDaysOf.apply(member))
-                    .forEach((week, h) -> out.merge(new MemberWeek(member, week), h, Double::sum));
-        }
+        placeNewArrivalsByDay(arrivals, model, teamOf, offDaysOf, cal)
+                .forEach((k, h) -> out.merge(new MemberWeek(k.member(), Weeks.mondayOf(k.day())), h, Double::sum));
         return out;
     }
 }

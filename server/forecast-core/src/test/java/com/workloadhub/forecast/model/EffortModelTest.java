@@ -7,6 +7,8 @@ import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.calendar.Weeks;
+import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Family;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -131,5 +134,34 @@ class EffortModelTest {
                 .mapToDouble(f -> f.remaining() != null ? f.remaining() : Math.max(0, f.estimate() * m.estimateRatio(f.assignee(), f.family(), members.get(f.assignee()).primaryTeamId()) - f.actualHours()))
                 .sum();
         assertEquals(expected, placed.values().stream().mapToDouble(Double::doubleValue).sum(), 1e-6, "hours are moved, never lost");
+    }
+
+    @Test
+    void dayPlacementOfOpenTasksSumsToTheWeeklyPlacementAndLandsOnWorkingDays() {
+        ForecastData data = history();
+        EffortModel m = EffortModel.fit(Lifecycle.derive(data), data);
+        TaskRow open = TestData.task("o", ANA.id(), MON.minusDays(3).atTime(9, 0), 10).withRemaining(6.0).withDue(MON.plusDays(8));
+        ForecastData withOpen = TestData.data(List.of(ANA, BEN), List.of(open), List.of(), List.of());
+        Lifecycle lc = Lifecycle.derive(withOpen);
+        List<TaskFacts> openFacts = List.of(lc.of(open.id()));
+        SortedMap<MemberDay, Double> byDay = EffortModel.placeOpenTasksByDay(openFacts, m, MON, id -> TestData.TEAM, id -> Set.of(), CAL);
+        SortedMap<MemberWeek, Double> byWeek = EffortModel.placeOpenTasks(openFacts, m, MON, id -> TestData.TEAM, id -> Set.of(), CAL);
+        Map<MemberWeek, Double> summed = new TreeMap<>();
+        byDay.forEach((k, h) -> summed.merge(new MemberWeek(k.member(), Weeks.mondayOf(k.day())), h, Double::sum));
+        assertEquals(byWeek.keySet(), summed.keySet());
+        byWeek.forEach((k, h) -> assertEquals(h, summed.get(k), 1e-9));
+        assertTrue(byDay.keySet().stream().allMatch(k -> CAL.isWorkingDay(k.day()) && !k.day().isBefore(MON)));
+        assertEquals(6.0, byDay.values().stream().mapToDouble(Double::doubleValue).sum(), 1e-9);
+    }
+
+    @Test
+    void newArrivalsOnADayAreScaledAndSpreadForwardFromThatDay() {
+        EffortModel m = model();
+        LocalDate thursday = MON.plusDays(3);
+        SortedMap<MemberDay, Double> placed = EffortModel.placeNewArrivalsByDay(Map.of(new MemberDay(BEN.id(), thursday), 10.0), m,
+                id -> TestData.TEAM, id -> Set.of(), CAL);
+        assertEquals(10.0 * m.estimateRatio(BEN.id(), null, TestData.TEAM), placed.values().stream().mapToDouble(Double::doubleValue).sum(), 1e-9);
+        assertTrue(placed.keySet().stream().allMatch(k -> !k.day().isBefore(thursday) && CAL.isWorkingDay(k.day())));
+        assertEquals(thursday, placed.firstKey().day());
     }
 }

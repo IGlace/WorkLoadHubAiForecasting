@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.capacity;
 
+import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.AbsenceRow;
@@ -97,6 +98,31 @@ public final class CapacityRule {
         double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
         double hours = base * cal.workingDaysInWeek(monday) / WORKING_DAYS_PER_WEEK - absenceHours(member.id(), monday, data, cal);
         return round2(Math.max(0.0, hours));
+    }
+
+    /**
+     * Hours a member can work on one day (design 2026-09-10, section 5): nothing on a weekend or holiday; the
+     * application's own week row spread evenly over that week's working days; else the latest base (or the
+     * default) over five days minus that day's absence hours, never below zero.
+     */
+    public double dayCapacity(MemberRow member, LocalDate day, ForecastData data, WorkingCalendar cal) {
+        if (!cal.isWorkingDay(day)) {
+            return 0.0;
+        }
+        LocalDate monday = Weeks.mondayOf(day);
+        Optional<CapacityRow> row = rowFor(member.id(), monday, data);
+        if (row.isPresent()) {
+            int working = cal.workingDaysInWeek(monday);
+            return working == 0 ? 0.0 : round2(Math.max(0.0, row.get().available() / working));
+        }
+        double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
+        return round2(Math.max(0.0, base / WORKING_DAYS_PER_WEEK - dayAbsenceHours(member.id(), day, data)));
+    }
+
+    /** The member's absence hours recorded on that day. */
+    public double dayAbsenceHours(UUID member, LocalDate day, ForecastData data) {
+        NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
+        return byDay == null ? 0.0 : round2(byDay.getOrDefault(day, 0.0));
     }
 
     /** Days a member is away for the whole day: absences of at least a full day's hours. */

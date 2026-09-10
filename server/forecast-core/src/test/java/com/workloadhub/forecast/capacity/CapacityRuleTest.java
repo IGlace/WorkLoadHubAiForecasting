@@ -16,6 +16,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import net.jqwik.api.ForAll;
+import net.jqwik.api.Property;
+import net.jqwik.api.constraints.DoubleRange;
+import net.jqwik.api.constraints.IntRange;
 import org.junit.jupiter.api.Test;
 
 class CapacityRuleTest {
@@ -74,5 +78,41 @@ class CapacityRuleTest {
             checked++;
         }
         assertTrue(checked > 100);
+    }
+
+    @Test
+    void dayCapacityIsZeroOffWorkingDaysAndBaseOverFiveMinusTheDaysAbsence() {
+        ForecastData d = data(List.of(new CapacityRow(M, LocalDate.of(2026, 3, 2), 36, 0, 36)),
+                List.of(new AbsenceRow(M, LocalDate.of(2026, 4, 28), 4), new AbsenceRow(M, LocalDate.of(2026, 4, 29), 20)));
+        WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
+        CapacityRule rule = new CapacityRule(40);
+        MemberRow m = d.members().get(0);
+        assertEquals(7.2, rule.dayCapacity(m, LocalDate.of(2026, 4, 27), d, cal), 1e-9, "the latest base, 36 h, over five days");
+        assertEquals(3.2, rule.dayCapacity(m, LocalDate.of(2026, 4, 28), d, cal), 1e-9, "minus the 4 h absence of that day");
+        assertEquals(0.0, rule.dayCapacity(m, LocalDate.of(2026, 4, 29), d, cal), 1e-9, "an absence longer than the day floors at zero");
+        assertEquals(0.0, rule.dayCapacity(m, LocalDate.of(2026, 5, 1), d, cal), 1e-9, "Labour Day");
+        assertEquals(0.0, rule.dayCapacity(m, LocalDate.of(2026, 5, 2), d, cal), 1e-9, "Saturday");
+        assertEquals(4.0, rule.dayAbsenceHours(M, LocalDate.of(2026, 4, 28), d), 1e-9);
+        assertEquals(0.0, rule.dayAbsenceHours(M, LocalDate.of(2026, 4, 27), d), 1e-9);
+        ForecastData none = data(List.of(), List.of());
+        assertEquals(8.0, rule.dayCapacity(none.members().get(0), LocalDate.of(2026, 3, 16), none, cal), 1e-9, "the default 40 h over five days");
+    }
+
+    @Test
+    void theApplicationsOwnWeekRowIsSpreadOverTheWeeksWorkingDays() {
+        ForecastData d = data(List.of(new CapacityRow(M, LocalDate.of(2026, 4, 27), 40, 8, 24)), List.of());
+        WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
+        // the week of 27 April has four working days (Labour Day on the Friday): 24 h available over four days
+        assertEquals(6.0, new CapacityRule(40).dayCapacity(d.members().get(0), LocalDate.of(2026, 4, 28), d, cal), 1e-9);
+        assertEquals(0.0, new CapacityRule(40).dayCapacity(d.members().get(0), LocalDate.of(2026, 5, 1), d, cal), 1e-9);
+    }
+
+    @Property
+    boolean dayCapacityStaysBetweenZeroAndBaseOverFive(@ForAll @DoubleRange(min = 0, max = 24) double absence, @ForAll @IntRange(min = 0, max = 13) int offset) {
+        LocalDate day = LocalDate.of(2026, 4, 20).plusDays(offset);
+        ForecastData d = data(List.of(), List.of(new AbsenceRow(M, day, absence)));
+        WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
+        double c = new CapacityRule(40).dayCapacity(d.members().get(0), day, d, cal);
+        return c >= 0 && c <= 8.0 + 1e-9 && (cal.isWorkingDay(day) || c == 0.0);
     }
 }
