@@ -1,11 +1,21 @@
 package com.workloadhub.forecast.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.api.ModelScore;
+import com.workloadhub.forecast.api.RunResult;
+import com.workloadhub.forecast.api.RunStatus;
+import com.workloadhub.forecast.api.RunSummary;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
@@ -44,6 +54,27 @@ class RunCommandTest {
         assertEquals(2, cli.execute("run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--model", "gbm"));
         String json = capture(cli, 0, "run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--json");
         assertTrue(json.trim().startsWith("{") && json.contains("\"memberWeeks\""), json);
+    }
+
+    /**
+     * A stored score row can still hand back a non-finite double (a defensive guard against any future
+     * regression upstream of the mapper, not just the null path {@code getRun} now takes for an unavailable
+     * model). The {@code --json} mapper must turn it into JSON {@code null}, never the bare word {@code NaN}.
+     */
+    @Test
+    void jsonOutputNeverContainsTheLiteralNaNForAnUnavailableModel() {
+        UUID id = UUID.randomUUID();
+        UUID team = UUID.randomUUID();
+        RunSummary summary = new RunSummary(id, team, null, LocalDate.of(2026, 9, 6), RunStatus.DONE, null, "seasonal_naive", 1.0, null,
+                LocalDateTime.of(2026, 9, 6, 10, 0), LocalDateTime.of(2026, 9, 6, 10, 1));
+        List<ModelScore> scores = List.of(new ModelScore("xgboost", LocalDate.of(2026, 8, 24), 1, Double.NaN, Double.NaN));
+        Map<String, Double> maseByModel = new java.util.HashMap<>();
+        maseByModel.put("xgboost", Double.NaN);
+        Map<String, String> unavailable = Map.of("xgboost", "xgboost native library unavailable: boom");
+        RunResult r = new RunResult(summary, scores, maseByModel, unavailable, List.of(), "{}");
+        String json = RunCommand.toJson(r);
+        assertFalse(json.contains("NaN"), json);
+        assertTrue(json.contains("\"mase\" : null") || json.contains("\"mase\":null"), json);
     }
 
     @Test

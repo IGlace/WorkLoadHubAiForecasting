@@ -6,6 +6,7 @@ import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,7 @@ public final class JdbcRunStore {
     }
 
     private static String ts(LocalDateTime t) {
-        return t == null ? null : t.withNano(0).toString();
+        return t == null ? null : t.truncatedTo(ChronoUnit.MICROS).toString();
     }
 
     public UUID create(RunRequest request, LocalDateTime createdAt) {
@@ -104,7 +105,7 @@ public final class JdbcRunStore {
 
     public List<RunSummary> list(UUID teamId, int limit) {
         return jdbc.sql("SELECT id, team_id, requested_by, as_of, status, forced_model, champion_model, champion_mase, error, created_at, finished_at"
-                + " FROM forecast_runs WHERE team_id = " + ph("uuid") + " ORDER BY created_at DESC, id LIMIT " + Math.max(1, limit))
+                + " FROM forecast_runs WHERE team_id = " + ph("uuid") + " ORDER BY created_at DESC, id DESC LIMIT " + Math.max(1, limit))
                 .param(teamId.toString()).query().listOfRows().stream().map(JdbcRunStore::summary).toList();
     }
 

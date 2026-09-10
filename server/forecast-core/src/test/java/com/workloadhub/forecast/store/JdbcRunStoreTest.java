@@ -20,7 +20,8 @@ class JdbcRunStoreTest {
 
     static final UUID TEAM = UUID.fromString("40000000-0000-0000-0000-000000000001");
     static final UUID USER = UUID.fromString("30000000-0000-0000-0000-000000000001");
-    static final LocalDateTime T0 = LocalDateTime.of(2026, 9, 6, 10, 0);
+    /** Sub-second precision on purpose: {@code ts()} must keep microseconds, not truncate to the second. */
+    static final LocalDateTime T0 = LocalDateTime.of(2026, 9, 6, 10, 0, 0, 123456000);
 
     static DataSource sqlite() {
         DataSource ds = DatabaseTestSupport.sqliteInMemory();
@@ -100,5 +101,27 @@ class JdbcRunStoreTest {
         WorkloadHubSchema.createPostgresql(ds);
         ForecastMigrations.run(ds);
         lifecycle(ds);
+    }
+
+    void tiedCreatedAtOrdersByIdDescending(DataSource ds) {
+        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        UUID a = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0);
+        UUID b = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0);
+        List<UUID> ordered = store.list(TEAM, 10).stream().map(RunSummary::id).toList();
+        List<UUID> expected = a.toString().compareTo(b.toString()) > 0 ? List.of(a, b) : List.of(b, a);
+        assertEquals(expected, ordered, "same created_at: newest (highest) id first");
+    }
+
+    @Test
+    void sqliteTiedCreatedAtOrdersByIdDescending() {
+        tiedCreatedAtOrdersByIdDescending(sqlite());
+    }
+
+    @Test
+    void postgresTiedCreatedAtOrdersByIdDescending() {
+        DataSource ds = DatabaseTestSupport.postgresOrSkip();
+        WorkloadHubSchema.createPostgresql(ds);
+        ForecastMigrations.run(ds);
+        tiedCreatedAtOrdersByIdDescending(ds);
     }
 }

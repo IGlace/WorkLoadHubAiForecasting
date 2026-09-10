@@ -103,7 +103,13 @@ class ForecastRunnerTest {
         assertTrue(p.backtestOrigins().isEmpty(), "under 13 weeks before every origin");
         assertEquals(Backtest.FLOOR, p.champion());
         assertTrue(Double.isNaN(p.championMase()));
-        assertNotNull(runner.forTeam(p, team, null).memberWeeks());
+        List<MemberWeekForecast> weeks = runner.forTeam(p, team, null).memberWeeks();
+        assertNotNull(weeks);
+        assertFalse(weeks.isEmpty());
+        for (MemberWeekForecast w : weeks) {
+            assertTrue(w.lowHrs() <= w.demandHrs(), () -> "low " + w.lowHrs() + " > demand " + w.demandHrs() + " for " + w);
+            assertTrue(w.demandHrs() <= w.highHrs(), () -> "demand " + w.demandHrs() + " > high " + w.highHrs() + " for " + w);
+        }
     }
 
     @Test

@@ -11,6 +11,7 @@ import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -18,11 +19,40 @@ import java.util.stream.Collectors;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.ValueSerializer;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.module.SimpleModule;
 
 @Command(name = "run", description = "Run a forecast for one team as of a date and print the champion, the scores and the member-week table.")
 public class RunCommand implements Callable<Integer> {
 
     private static final Set<String> USAGE_CODES = Set.of("TEAM_NOT_FOUND", "INVALID_REQUEST");
+
+    /**
+     * {@code ExportFiles.mapper()} plus one override: a non-finite double (NaN or infinite, as an unscorable
+     * MASE or MAE can still be, in principle, upstream of this mapper) serialises as JSON {@code null} rather
+     * than Jackson's default of a quoted {@code "NaN"} string, which is not the shape any consumer of
+     * {@code --json} expects.
+     */
+    private static final JsonMapper JSON_MAPPER = ExportFiles.mapper().rebuild()
+            .addModule(new SimpleModule().addSerializer(Double.class, new ValueSerializer<Double>() {
+                @Override
+                public void serialize(Double value, JsonGenerator gen, SerializationContext ctxt) {
+                    if (value == null || value.isNaN() || value.isInfinite()) {
+                        gen.writeNull();
+                    } else {
+                        gen.writeNumber(value);
+                    }
+                }
+            }))
+            .build();
+
+    /** Package-private for direct testing without a full CLI run. */
+    static String toJson(RunResult result) {
+        return JSON_MAPPER.writeValueAsString(result);
+    }
 
     @Mixin DbOptions db;
 
@@ -66,7 +96,7 @@ public class RunCommand implements Callable<Integer> {
                 return USAGE_CODES.contains(e.code()) ? 2 : 1;
             }
             if (json) {
-                System.out.println(ExportFiles.mapper().writeValueAsString(result));
+                System.out.println(toJson(result));
                 return 0;
             }
             print(result, s);
@@ -74,9 +104,9 @@ public class RunCommand implements Callable<Integer> {
         }
     }
 
-    /** Same convention as {@code DefaultForecastService}'s {@code finite}: NaN scores are excluded, not zeroed. */
+    /** Same convention as {@code DefaultForecastService}'s {@code finite}: null (unscorable) rows are excluded, not zeroed. */
     private static String meanMase(List<Double> mases) {
-        double[] finite = mases.stream().mapToDouble(Double::doubleValue).filter(m -> !Double.isNaN(m)).toArray();
+        double[] finite = mases.stream().filter(Objects::nonNull).mapToDouble(Double::doubleValue).filter(m -> !Double.isNaN(m)).toArray();
         return finite.length == 0 ? "n/a" : String.format("%.3f", java.util.stream.DoubleStream.of(finite).average().orElseThrow());
     }
 

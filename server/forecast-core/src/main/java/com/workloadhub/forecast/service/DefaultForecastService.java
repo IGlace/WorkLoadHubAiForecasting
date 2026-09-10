@@ -165,10 +165,10 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         List<ModelScore> scores = new ArrayList<>();
         for (JsonNode s : bt.path("scores")) {
             scores.add(new ModelScore(s.path("model").asText(), LocalDate.parse(s.path("origin").asText()), s.path("horizon").asInt(),
-                    s.path("mae").isNull() ? Double.NaN : s.path("mae").asDouble(), s.path("mase").isNull() ? Double.NaN : s.path("mase").asDouble()));
+                    s.path("mae").isNull() ? null : s.path("mae").asDouble(), s.path("mase").isNull() ? null : s.path("mase").asDouble()));
         }
         Map<String, Double> mase = new TreeMap<>();
-        bt.path("mase_by_model").properties().forEach(e -> mase.put(e.getKey(), e.getValue().isNull() ? Double.NaN : e.getValue().asDouble()));
+        bt.path("mase_by_model").properties().forEach(e -> mase.put(e.getKey(), e.getValue().isNull() ? null : e.getValue().asDouble()));
         Map<String, String> unavailable = new TreeMap<>();
         bt.path("unavailable").properties().forEach(e -> unavailable.put(e.getKey(), e.getValue().asText()));
         return new RunResult(run, scores, mase, unavailable, store.memberWeeks(runId), store.facts(runId).orElse("{}"));

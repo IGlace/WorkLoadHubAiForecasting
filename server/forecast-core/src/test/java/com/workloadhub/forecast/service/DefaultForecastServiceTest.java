@@ -2,6 +2,7 @@ package com.workloadhub.forecast.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -88,6 +89,21 @@ class DefaultForecastServiceTest {
         assertEquals("RUN_NOT_FOUND", assertThrows(ForecastException.class, () -> service.progress(UUID.randomUUID())).code());
         assertEquals("COPILOT_UNAVAILABLE", assertThrows(ForecastException.class, () -> service.copilotStatus(UUID.randomUUID())).code());
         assertEquals("COPILOT_UNAVAILABLE", assertThrows(ForecastException.class, () -> service.narrative(UUID.randomUUID(), "en")).code());
+    }
+
+    @Test
+    void getRunPreservesAStoredNullMaseAsNullNotNaN() {
+        Dialect dialect = Dialect.of(SeededData.dataSource());
+        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource(), dialect);
+        UUID id = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
+        String backtest = "{\"scores\":[{\"model\":\"xgboost\",\"origin\":\"2026-08-24\",\"horizon\":1,\"mae\":null,\"mase\":null}],"
+                + "\"mase_by_model\":{\"xgboost\":null},\"unavailable\":{}}";
+        raw.finish(id, "seasonal_naive", Double.NaN, backtest, List.of(), "{}", LocalDateTime.now());
+        RunResult r = service.getRun(id);
+        assertNull(r.scores().get(0).mase(), "stored null mase stays null, not NaN");
+        assertNull(r.scores().get(0).mae());
+        assertTrue(r.maseByModel().containsKey("xgboost"));
+        assertNull(r.maseByModel().get("xgboost"), "stored null mase_by_model entry stays null, not NaN");
     }
 
     @Test
