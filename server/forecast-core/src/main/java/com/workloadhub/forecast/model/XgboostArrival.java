@@ -152,7 +152,12 @@ public final class XgboostArrival implements ArrivalModel, AutoCloseable {
             for (int i = 0; i < types.length; i++) {
                 types[i] = Features.isCategorical(cols.get(i)) ? "c" : "q";
             }
-            dm.setFeatureTypes(types);
+            try {
+                dm.setFeatureTypes(types);
+            } catch (XGBoostError e) {
+                dm.dispose();
+                throw e;
+            }
         }
         return dm;
     }
