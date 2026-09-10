@@ -7,11 +7,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.rows.MemberRow;
+import com.workloadhub.forecast.data.rows.ProjectRow;
+import com.workloadhub.forecast.data.rows.TaskRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
 import com.workloadhub.forecast.testing.SeededData;
+import com.workloadhub.forecast.testing.TestData;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -91,5 +96,37 @@ class FactsBuilderTest {
             assertTrue(task.has("key") && !task.has("id"));
         }
         assertTrue(root.at("/run/generated_at").asText().startsWith("2026-09-06T12:00"));
+    }
+
+    @Test
+    void projectRolesListsOnlyTheLiveProjectForASingleMemberTeam() {
+        LocalDate asOf = LocalDate.of(2026, 9, 6);
+        MemberRow ana = TestData.member("ana", TestData.TEAM);
+        UUID liveProjectId = TestData.id("proj-live");
+        UUID doneProjectId = TestData.id("proj-done");
+        TaskRow openTask = TestData.task("open", ana.id(), asOf.minusWeeks(2).atTime(9, 0), 5.0).withProject(liveProjectId);
+        TaskRow doneTask = TestData.task("done", ana.id(), asOf.minusWeeks(3).atTime(9, 0), 4.0).withProject(doneProjectId).withStatus("DONE");
+        ProjectRow liveProject = new ProjectRow(liveProjectId, "LIVE", "Live Project", "ACTIVE", TestData.TEAM);
+        ProjectRow doneProject = new ProjectRow(doneProjectId, "DONE", "Done Project", "ACTIVE", TestData.TEAM);
+        ForecastData data = TestData.data(List.of(ana), List.of(openTask, doneTask), List.of(), List.of())
+                .withProjects(List.of(liveProject, doneProject));
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(40), true);
+        Prepared prepared = runner.prepare(data, asOf, null, ForecastRunner.ProgressListener.NONE);
+        TeamOutcome outcome = runner.forTeam(prepared, TestData.TEAM, null);
+        Map<String, Object> facts = FactsBuilder.build(outcome, UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                LocalDateTime.of(2026, 9, 6, 12, 0));
+
+        List<?> members = (List<?>) facts.get("members");
+        assertEquals(1, members.size());
+        Map<?, ?> likely = (Map<?, ?>) ((Map<?, ?>) members.get(0)).get("likely_work");
+        List<?> roles = (List<?>) likely.get("project_roles");
+        assertEquals(1, roles.size(), "only the live project should appear: " + roles);
+        Map<?, ?> role = (Map<?, ?>) roles.get(0);
+        assertEquals("LIVE", role.get("project_key"));
+        assertEquals(1.0, role.get("share"));
+        assertEquals("active", role.get("phase"));
+        List<?> dominant = (List<?>) role.get("dominant_types");
+        assertEquals(1, dominant.size());
+        assertEquals(Map.of("type", "Task", "count", 1), dominant.get(0));
     }
 }

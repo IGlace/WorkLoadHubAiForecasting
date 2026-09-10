@@ -63,6 +63,19 @@ public final class FactsBuilder {
         List<LocalDate> historyWeeks = Weeks.between(p.origin().minusWeeks(HISTORY_WEEKS - 1), p.origin());
         WeeklySeries series = WeeklySeries.build(lc, out.members(), historyWeeks);
         Set<UUID> teamProjects = data.projectIdsOfTeamAndParent(out.teamId());
+        Set<UUID> liveProjectIds = new java.util.HashSet<>();
+        for (TaskFacts f : lc.all()) {
+            if (f.task().projectId() != null && !f.done()) {
+                liveProjectIds.add(f.task().projectId());
+            }
+        }
+        LocalDate roleStart = p.asOf().minusWeeks(ROLE_WINDOW_WEEKS);
+        Map<UUID, List<TaskFacts>> recentByProject = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
+        for (TaskFacts f : lc.all()) {
+            if (f.isAssigned() && f.task().projectId() != null && teamProjects.contains(f.task().projectId()) && f.assignedDay().isAfter(roleStart)) {
+                recentByProject.computeIfAbsent(f.task().projectId(), k -> new ArrayList<>()).add(f);
+            }
+        }
 
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("run", map("id", str(runId), "as_of", str(p.asOf()), "weeks", List.of(str(f1), str(f2)), "generated_at", generatedAt.toString(),
@@ -71,7 +84,7 @@ public final class FactsBuilder {
         List<Object> members = new ArrayList<>();
         for (MemberRow m : out.members()) {
             members.add(member(m, out, rowsByMember.getOrDefault(m.id(), List.of()), patternById.get(m.id()), clusters.getOrDefault(m.id(), 0),
-                    series, historyWeeks, projects, teamProjects));
+                    series, historyWeeks, projects, liveProjectIds, recentByProject));
         }
         facts.put("members", members);
         facts.put("projects", projectFacts(out, teamProjects, projects));
@@ -138,7 +151,8 @@ public final class FactsBuilder {
     }
 
     private static Map<String, Object> member(MemberRow m, TeamOutcome out, List<MemberWeekForecast> rows, MemberPattern pattern, int cluster,
-            WeeklySeries series, List<LocalDate> historyWeeks, Map<UUID, ProjectRow> projects, Set<UUID> teamProjects) {
+            WeeklySeries series, List<LocalDate> historyWeeks, Map<UUID, ProjectRow> projects, Set<UUID> liveProjectIds,
+            Map<UUID, List<TaskFacts>> recentByProject) {
         Prepared p = out.prepared();
         Lifecycle lc = p.lifecycle();
         List<TaskFacts> mine = lc.assignedTo(m.id());
@@ -167,7 +181,8 @@ public final class FactsBuilder {
         List<Object> openTasks = new ArrayList<>();
         for (TaskFacts f : open) {
             openTasks.add(map("key", f.task().key(), "title", f.task().title(), "type", f.task().typeName(), "family", f.family().label(),
-                    "priority", f.task().priority(), "estimated_hours", f.estimate(), "remaining_hours", f.remaining(), "due_date", str(f.task().dueDate()),
+                    "priority", f.task().priority(), "estimated_hours", round2(f.estimate()),
+                    "remaining_hours", f.remaining() == null ? null : round2(f.remaining()), "due_date", str(f.task().dueDate()),
                     "overdue", f.task().dueDate() != null && f.task().dueDate().isBefore(p.asOf()),
                     "project_key", key(projects, f.task().projectId()), "in_progress", f.inProgress()));
         }
@@ -185,21 +200,13 @@ public final class FactsBuilder {
         for (PlannedWork.Piece piece : out.planned().pieces()) {
             if (piece.member().equals(m.id())) {
                 planned.add(map("key", piece.key(), "title", piece.title(), "project_key", key(projects, piece.projectId()), "type", piece.family().label(),
-                        "estimated_hours", piece.estimate(), "share", round2(piece.share()), "expected_date", str(piece.expectedDate()),
+                        "estimated_hours", round2(piece.estimate()), "share", round2(piece.share()), "expected_date", str(piece.expectedDate()),
                         "expected_week", piece.expectedWeek() == null ? "after_window" : str(piece.expectedWeek()), "hours_in_window", round2(piece.hoursInWindow())));
             }
         }
         List<Object> roles = new ArrayList<>();
-        LocalDate roleStart = p.asOf().minusWeeks(ROLE_WINDOW_WEEKS);
-        Map<UUID, List<TaskFacts>> recentByProject = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
-        for (TaskFacts f : lc.all()) {
-            if (f.isAssigned() && f.task().projectId() != null && teamProjects.contains(f.task().projectId()) && f.assignedDay().isAfter(roleStart)) {
-                recentByProject.computeIfAbsent(f.task().projectId(), k -> new ArrayList<>()).add(f);
-            }
-        }
         for (Map.Entry<UUID, List<TaskFacts>> e : recentByProject.entrySet()) {
-            boolean live = lc.all().stream().anyMatch(f -> e.getKey().equals(f.task().projectId()) && !f.done());
-            if (!live) {
+            if (!liveProjectIds.contains(e.getKey())) {
                 continue;
             }
             List<TaskFacts> own = e.getValue().stream().filter(f -> m.id().equals(f.assignee())).toList();
