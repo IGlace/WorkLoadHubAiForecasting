@@ -1,0 +1,16 @@
+<!--
+  Tests build commands with `new CommandLine(new ForecastCli.Root())` directly, so Spring Boot
+  never bootstraps and application.yml's `logging.level` is never read; mirror its policy here so
+  Flyway's and Spring JDBC's INFO chatter does not land in a command's captured stdout.
+-->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="WARN">
+        <appender-ref ref="CONSOLE" />
+    </root>
+    <logger name="com.workloadhub.forecast" level="INFO" />
+</configuration>

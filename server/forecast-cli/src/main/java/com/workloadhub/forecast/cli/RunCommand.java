@@ -1,0 +1,99 @@
+package com.workloadhub.forecast.cli;
+
+import com.workloadhub.forecast.api.ForecastException;
+import com.workloadhub.forecast.api.MemberWeekForecast;
+import com.workloadhub.forecast.api.RunRequest;
+import com.workloadhub.forecast.api.RunResult;
+import com.workloadhub.forecast.data.ExportFiles;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
+import picocli.CommandLine.Option;
+
+@Command(name = "run", description = "Run a forecast for one team as of a date and print the champion, the scores and the member-week table.")
+public class RunCommand implements Callable<Integer> {
+
+    private static final Set<String> USAGE_CODES = Set.of("TEAM_NOT_FOUND", "INVALID_REQUEST");
+
+    @Mixin DbOptions db;
+
+    @Option(names = "--team", required = true, description = "Team name or id")
+    String team;
+
+    @Option(names = "--as-of", description = "As-of date, ISO (default: today)")
+    String asOf;
+
+    @Option(names = "--model", description = "Force a model: xgboost or seasonal_naive")
+    String model;
+
+    @Option(names = "--user", description = "Requesting user, name or id (optional)")
+    String user;
+
+    @Option(names = "--no-planned", description = "Switch the planned-work allocation off for this run")
+    boolean noPlanned;
+
+    @Option(names = "--json", description = "Print the result as JSON")
+    boolean json;
+
+    @Override
+    public Integer call() throws Exception {
+        try (Services s = Services.open(db.dataSource())) {
+            UUID teamId;
+            UUID userId;
+            LocalDate date;
+            try {
+                teamId = TeamArg.resolve(s.jdbc(), s.dialect(), team);
+                userId = TeamArg.resolveUser(s.jdbc(), s.dialect(), user);
+                date = asOf == null ? LocalDate.now() : LocalDate.parse(asOf);
+            } catch (IllegalArgumentException | DateTimeParseException e) {
+                System.err.println("error: " + e.getMessage());
+                return 2;
+            }
+            RunResult result;
+            try {
+                result = s.service().runNow(new RunRequest(teamId, userId, date, model, noPlanned ? Boolean.FALSE : null));
+            } catch (ForecastException e) {
+                System.err.println("error: " + e.code() + ": " + e.getMessage());
+                return USAGE_CODES.contains(e.code()) ? 2 : 1;
+            }
+            if (json) {
+                System.out.println(ExportFiles.mapper().writeValueAsString(result));
+                return 0;
+            }
+            print(result, s);
+            return 0;
+        }
+    }
+
+    private void print(RunResult r, Services s) {
+        Map<UUID, String> names = new HashMap<>();
+        s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
+                .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
+        String mase = r.run().championMase() == null ? "n/a" : String.format("%.2f", r.run().championMase());
+        long members = r.memberWeeks().stream().map(MemberWeekForecast::userId).distinct().count();
+        System.out.printf("Run %s: champion %s (MASE %s), %d members, weeks %s and %s%n", r.run().id(), r.run().championModel(), mase, members,
+                r.memberWeeks().isEmpty() ? "?" : r.memberWeeks().get(0).weekStart(),
+                r.memberWeeks().isEmpty() ? "?" : r.memberWeeks().get(r.memberWeeks().size() - 1).weekStart());
+        System.out.println();
+        System.out.printf("%-16s %8s %10s%n", "model", "horizon", "mean MASE");
+        r.scores().stream().collect(Collectors.groupingBy(sc -> sc.model() + "|" + sc.horizon(), java.util.TreeMap::new,
+                Collectors.averagingDouble(sc -> Double.isNaN(sc.mase()) ? 0 : sc.mase())))
+                .forEach((key, v) -> System.out.printf("%-16s %8s %10.3f%n", key.split("\\|")[0], key.split("\\|")[1], v));
+        if (!r.unavailable().isEmpty()) {
+            r.unavailable().forEach((k, v) -> System.out.println("unavailable: " + k + ": " + v));
+        }
+        System.out.println();
+        System.out.printf("%-28s %-10s %7s %7s %7s %7s %7s %7s %8s %8s%n", "member", "week", "open", "new", "planned", "demand", "low", "high", "capacity", "overload");
+        for (MemberWeekForecast w : r.memberWeeks()) {
+            System.out.printf("%-28s %-10s %7.1f %7.1f %7.1f %7.1f %7.1f %7.1f %8.1f %8.1f%n", names.getOrDefault(w.userId(), w.userId().toString()),
+                    w.weekStart(), w.openHrs(), w.newHrs(), w.plannedHrs(), w.demandHrs(), w.lowHrs(), w.highHrs(), w.capacityHrs(), w.overloadHrs());
+        }
+    }
+}
