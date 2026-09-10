@@ -135,6 +135,9 @@ public final class RunProgressTracker {
     }
 
     private static void append(StringBuilder sb, String text) {
+        if (text == null || text.isEmpty()) {
+            return; // a null chunk would land in the tail as the four letters "null"
+        }
         sb.append(text);
         if (sb.length() > TAIL_CHARS) {
             sb.delete(0, sb.length() - TAIL_CHARS);

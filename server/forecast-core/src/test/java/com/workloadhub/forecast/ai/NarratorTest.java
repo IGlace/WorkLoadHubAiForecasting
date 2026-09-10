@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 class NarratorTest {
 
@@ -352,5 +353,30 @@ class NarratorTest {
         JsonNode u = usage(o);
         assertEquals("none", u.path("source").asText());
         assertTrue(u.path("input_tokens").isNull());
+    }
+
+    @Test
+    void aFailureWhileCheckingIsAModelErrorThatStillKeepsTheCost() {
+        JsonNode broken = SeededFacts.facts();
+        ((ObjectNode) broken.path("run")).set("weeks", ExportFiles.mapper().createArrayNode().add("2026-09"));
+        FakeGateway g = new FakeGateway(FakeGateway.goodNarrative(broken));
+        NarrationOutcome o = narrator(g).narrate(broken, "en", null, "gho_x", NarrationProgress.none());
+        assertEquals(NarrativeStatus.FAILED, o.status(), "a broken fact must not escape narrate: the seat was billed");
+        assertEquals("model_error", o.reason());
+        assertTrue(o.error().startsWith("model_error: StringIndexOutOfBoundsException"), o.error());
+        assertEquals(1, o.attempts());
+        assertEquals("metrics", usage(o).path("source").asText(), "the cost is read before closing");
+        assertNotNull(o.rawText(), "the answer that was paid for is kept");
+        assertTrue(g.session.closed && g.closed);
+    }
+
+    @Test
+    void aNullOrEmptyAnswerDeltaIsIgnoredRatherThanStreamedAsTheWordNull() {
+        FakeGateway g = new FakeGateway(GOOD);
+        g.messageDeltas = java.util.Arrays.asList(null, "");
+        Recorder r = new Recorder();
+        NarrationOutcome o = narrator(g).narrate(FACTS, "en", null, "gho_x", r);
+        assertEquals(NarrativeStatus.OK, o.status());
+        assertEquals(List.of("reset"), r.answer, "nothing was streamed: neither null nor an empty chunk");
     }
 }

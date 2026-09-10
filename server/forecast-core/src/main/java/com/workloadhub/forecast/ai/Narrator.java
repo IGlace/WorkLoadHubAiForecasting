@@ -137,6 +137,11 @@ public final class Narrator {
                 }
             } catch (NarrativeContract.ContractException e) {
                 problems = e.problems();
+            } catch (RuntimeException e) {
+                // The seat is already billed: a bug in the checking phase (a malformed fact, a serialisation
+                // failure) ends the narration as a stored failure instead of escaping as COPILOT_UNAVAILABLE.
+                LOG.warn("narration check failed on attempt {}", attempt, e);
+                return failed(session, state, attempt, "model_error", e.getClass().getSimpleName() + ": " + e.getMessage(), raw);
             }
             LOG.info("narrative rejected on attempt {}: {}", attempt, problems);
             prompt = prompts.retryPrompt(problems);
@@ -195,8 +200,10 @@ public final class Narrator {
                 }
             }
             case ANSWER_DELTA -> {
-                state.deltas.append(e.text());
-                progress.answer(e.text());
+                if (e.text() != null && !e.text().isEmpty()) {
+                    state.deltas.append(e.text());
+                    progress.answer(e.text());
+                }
             }
             case INTENT -> progress.thinking(e.text() + "\n");
             case THINKING_DELTA -> {

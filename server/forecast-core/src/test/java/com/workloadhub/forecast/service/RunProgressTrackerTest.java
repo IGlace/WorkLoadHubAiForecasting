@@ -68,8 +68,11 @@ class RunProgressTrackerTest {
         p.step(com.workloadhub.forecast.ai.NarrationProgress.Step.TOOL_DONE, "get_member_forecast");
         assertEquals("tool get_member_forecast done", t.get(id).orElseThrow().message());
         p.thinking("Reading ");
+        p.thinking(null);
+        p.thinking("");
         p.thinking("the facts");
         p.answer("{\"run_summary\"");
+        p.answer(null);
         assertEquals("Reading the facts", t.get(id).orElseThrow().thinking());
         assertEquals("{\"run_summary\"", t.get(id).orElseThrow().answer());
         p.resetAnswer();

@@ -43,6 +43,8 @@ class PromptsTest {
         assertTrue(en.contains("Mobile Apps") && en.contains("2026-09-07") && en.contains("2026-09-14") && en.contains("2026-09-06"));
         assertTrue(en.contains("member_id aaaaaaaa-0000-0000-0000-000000000004 (Sara Tazi, TEAM_LEADER)"));
         assertTrue(en.contains("member_id aaaaaaaa-0000-0000-0000-000000000005 (Omar Benali, MEMBER)"));
+        JsonNode roleless = ExportFiles.mapper().readTree(FACTS.replace("\"role\": \"MEMBER\"", "\"role\": null"));
+        assertTrue(p.userPrompt(roleless, "en").contains("(Omar Benali, member)"), "a null role is the default, never the word null");
         assertTrue(en.contains("get_run_overview") && en.contains("get_planned_work") && en.contains("get_rebalancing_candidates"));
         assertTrue(en.contains(p.contractSchema()));
         assertTrue(en.contains("Language: en") && en.contains("in English"));
