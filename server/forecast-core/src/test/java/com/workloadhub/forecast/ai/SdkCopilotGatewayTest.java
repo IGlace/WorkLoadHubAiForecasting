@@ -4,8 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.copilot.SystemMessageMode;
 import com.github.copilot.generated.AssistantIntentEvent;
 import com.github.copilot.generated.AssistantMessageDeltaEvent;
@@ -17,6 +20,8 @@ import com.github.copilot.rpc.PermissionRequest;
 import com.github.copilot.rpc.PermissionRequestResultKind;
 import com.github.copilot.rpc.SessionConfig;
 import com.github.copilot.rpc.ToolDefinition;
+import com.github.copilot.rpc.ToolInvocation;
+import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.testing.SeededFacts;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -82,6 +87,16 @@ class SdkCopilotGatewayTest {
         assertTrue(defs.get(0).skipPermission());
         assertNotNull(defs.get(1).parameters(), "the member tool declares its member_id parameter");
         assertTrue(defs.get(1).parameters().toString().contains("member_id"));
+
+        // ToolDefinition.from wraps the Function's return value by serializing it to a JSON string for the
+        // LLM (verified by running the SDK's ToolHandler directly) rather than handing the Map straight back,
+        // so the wiring is checked against that shape.
+        JsonNode memberArgs = new ObjectMapper().readTree("{\"member_id\":\"abc\"}");
+        Object memberResult = defs.get(1).handler().invoke(new ToolInvocation().setArguments(memberArgs)).get();
+        assertEquals("{\"got\":\"abc\"}", memberResult, "the handler received member_id from the tool invocation's arguments");
+
+        Object overviewResult = defs.get(0).handler().invoke(new ToolInvocation()).get();
+        assertEquals("{\"got\":\"null\"}", overviewResult, "the plain tool's handler received null, not an argument");
     }
 
     @Test
@@ -130,5 +145,15 @@ class SdkCopilotGatewayTest {
         assertFalse(missing.available());
         assertTrue(missing.message().contains("nope"));
         assertEquals("1.0.13-preview.6", SdkCopilotGateway.sdkVersion());
+    }
+
+    @Test
+    void openWrapsAClientConstructionFailureAsCopilotUnavailable(@TempDir Path dir) {
+        SdkCopilotGateway gateway = new SdkCopilotGateway(dir.resolve("home"), "", options -> {
+            throw new IllegalArgumentException("boom");
+        });
+        ForecastException e = assertThrows(ForecastException.class, () -> gateway.open("gho_x"));
+        assertEquals("COPILOT_UNAVAILABLE", e.code());
+        assertTrue(e.getMessage().contains("boom"));
     }
 }

@@ -48,6 +48,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,10 +68,17 @@ public final class SdkCopilotGateway implements CopilotGateway {
 
     private final Path copilotHome;
     private final String cliPath;
+    private final Function<CopilotClientOptions, CopilotClient> clientFactory;
 
     public SdkCopilotGateway(Path copilotHome, String cliPath) {
+        this(copilotHome, cliPath, CopilotClient::new);
+    }
+
+    /** Test-only seam: lets a test fail client construction without touching the runtime. */
+    SdkCopilotGateway(Path copilotHome, String cliPath, Function<CopilotClientOptions, CopilotClient> clientFactory) {
         this.copilotHome = copilotHome;
         this.cliPath = cliPath == null ? "" : cliPath.trim();
+        this.clientFactory = clientFactory;
     }
 
     // ----- pure mappings ----------------------------------------------------------------------
@@ -244,7 +252,12 @@ public final class SdkCopilotGateway implements CopilotGateway {
         } catch (IOException e) {
             throw ForecastException.of("COPILOT_UNAVAILABLE", "cannot create the Copilot home " + copilotHome + ": " + e.getMessage());
         }
-        CopilotClient client = new CopilotClient(options(token, copilotHome, cliPath));
+        CopilotClient client;
+        try {
+            client = clientFactory.apply(options(token, copilotHome, cliPath));
+        } catch (RuntimeException | LinkageError e) {
+            throw ForecastException.of("COPILOT_UNAVAILABLE", "Copilot client could not be created: " + rootMessage(e));
+        }
         try {
             client.start().get(START_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
