@@ -16,6 +16,7 @@ import com.workloadhub.forecast.store.ForecastMigrations;
 import com.workloadhub.forecast.store.JdbcGitHubTokenStore;
 import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
+import com.workloadhub.forecast.web.ForecastWebConfiguration;
 import java.nio.file.Path;
 import java.time.Duration;
 import javax.sql.DataSource;
@@ -25,12 +26,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /** Registers the module's beans on top of the host's DataSource; nothing else is required of the host. */
 @AutoConfiguration(after = DataSourceAutoConfiguration.class)
 @ConditionalOnBean(DataSource.class)
 @EnableConfigurationProperties(ForecastProperties.class)
+@Import(ForecastWebConfiguration.class)
 public class ForecastAutoConfiguration {
 
     @Bean
