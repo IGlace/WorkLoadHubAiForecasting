@@ -35,6 +35,9 @@ class ForecastMigrationsTest {
                 "forecast_runs", "forecast_schema_history")), tables(ds));
         assertTrue(hasColumn(ds, "users", "github_token"));
         assertTrue(hasColumn(ds, "users", "github_token_updated_at"));
+        assertTrue(hasColumn(ds, "forecast_narratives", "status"), "V2 recreated the narratives table");
+        assertTrue(hasColumn(ds, "forecast_narratives", "raw_text"));
+        assertTrue(hasColumn(ds, "forecast_narratives", "tool_calls"));
     }
 
     @Test

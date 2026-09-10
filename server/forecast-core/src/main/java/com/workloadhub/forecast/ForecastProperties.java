@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ForecastProperties {
 
     private String tokenKey;
+    private String workDir = System.getProperty("user.home") + "/.workloadhub-forecast";
     private double defaultWeeklyHours = 40.0;
     private int runThreads = 2;
     private final PlannedWork plannedWork = new PlannedWork();
@@ -16,6 +17,8 @@ public class ForecastProperties {
 
     public String getTokenKey() { return tokenKey; }
     public void setTokenKey(String tokenKey) { this.tokenKey = tokenKey; }
+    public String getWorkDir() { return workDir; }
+    public void setWorkDir(String workDir) { this.workDir = workDir; }
     public double getDefaultWeeklyHours() { return defaultWeeklyHours; }
     public void setDefaultWeeklyHours(double v) { this.defaultWeeklyHours = v; }
     public int getRunThreads() { return runThreads; }

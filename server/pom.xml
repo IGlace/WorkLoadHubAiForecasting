@@ -26,6 +26,7 @@
     <testcontainers.version>1.21.4</testcontainers.version>
     <xgboost.version>3.4.0</xgboost.version>
     <copilot.version>1.0.13-preview.6</copilot.version>
+    <jna.version>5.19.1</jna.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -37,6 +38,7 @@
       <dependency><groupId>ml.dmlc</groupId><artifactId>xgboost4j_2.12</artifactId><version>${xgboost.version}</version></dependency>
       <dependency><groupId>com.github</groupId><artifactId>copilot-sdk-java</artifactId><version>${copilot.version}</version></dependency>
       <dependency><groupId>com.github</groupId><artifactId>copilot-sdk-java-runtime</artifactId><version>${copilot.version}</version><classifier>linux-x64</classifier></dependency>
+      <dependency><groupId>net.java.dev.jna</groupId><artifactId>jna</artifactId><version>${jna.version}</version></dependency>
     </dependencies>
   </dependencyManagement>
   <build>
