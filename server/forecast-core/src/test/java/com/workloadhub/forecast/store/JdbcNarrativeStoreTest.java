@@ -41,7 +41,7 @@ class JdbcNarrativeStoreTest {
     void lifecycle(DataSource ds) {
         Dialect dialect = Dialect.of(ds);
         JdbcRunStore runs = new JdbcRunStore(ds, dialect);
-        UUID run = runs.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0);
+        UUID run = runs.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
         JdbcNarrativeStore store = new JdbcNarrativeStore(ds, dialect);
 
         NarrativeResult first = store.save(run, "en", ok(), T0.plusMinutes(1));

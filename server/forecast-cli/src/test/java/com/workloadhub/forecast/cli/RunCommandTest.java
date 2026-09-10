@@ -56,6 +56,11 @@ class RunCommandTest {
         String json = capture(cli, 0, "run", "--db", db.toString(), "--team", team, "--as-of", "2026-09-06", "--json");
         assertTrue(json.trim().startsWith("{") && json.contains("\"memberWindows\""), json);
         assertTrue(json.contains("\"memberDays\""), json);
+        String current = capture(cli, 0, "current", "--db", db.toString(), "--team", team, "--from", "2026-09-07", "--to", "2026-09-18");
+        assertTrue(current.contains("2026-09-07") && current.contains("demand"), current);
+        String currentJson = capture(cli, 0, "current", "--db", db.toString(), "--team", team, "--from", "2026-09-07", "--to", "2026-09-18", "--json");
+        assertTrue(currentJson.trim().startsWith("[") && currentJson.contains("\"demandHrs\""), currentJson);
+        assertEquals(2, cli.execute("current", "--db", db.toString(), "--team", team, "--from", "2026-09-18", "--to", "2026-09-07"));
     }
 
     /**

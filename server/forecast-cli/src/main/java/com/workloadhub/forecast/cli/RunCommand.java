@@ -60,7 +60,7 @@ public class RunCommand implements Callable<Integer> {
     @Option(names = "--team", required = true, description = "Team name or id")
     String team;
 
-    @Option(names = "--as-of", description = "As-of date, ISO (default: today)")
+    @Option(names = "--as-of", description = "Run day, ISO (default: today; an experiment override, the server always uses today)")
     String asOf;
 
     @Option(names = "--model", description = "Force a model: xgboost or seasonal_naive")
@@ -91,7 +91,7 @@ public class RunCommand implements Callable<Integer> {
             }
             RunResult result;
             try {
-                result = s.service().runNow(new RunRequest(teamId, userId, date, model, noPlanned ? Boolean.FALSE : null));
+                result = s.service().runNow(new RunRequest(teamId, userId, model, noPlanned ? Boolean.FALSE : null), date);
             } catch (ForecastException e) {
                 System.err.println("error: " + e.code() + ": " + e.getMessage());
                 return USAGE_CODES.contains(e.code()) ? 2 : 1;

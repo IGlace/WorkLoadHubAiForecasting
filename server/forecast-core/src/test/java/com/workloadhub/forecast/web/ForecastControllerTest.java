@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.workloadhub.forecast.api.CopilotStatus;
+import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
@@ -23,8 +24,10 @@ import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,6 +47,12 @@ class ForecastControllerTest {
     /** The scan root: this package only, so the controller and the advice are found and nothing else. */
     @SpringBootApplication
     static class Boot {
+
+        /** The host's clock, pinned: the controller's default from and to are read from it. */
+        @Bean
+        Clock clock() {
+            return Clock.fixed(LocalDate.of(2026, 9, 9).atTime(12, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        }
     }
 
     static final UUID RUN = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -71,9 +81,30 @@ class ForecastControllerTest {
     void startsARunAndAnswers202WithItsId() throws Exception {
         when(service.startRun(any(RunRequest.class))).thenReturn(RUN);
         mvc.perform(post("/forecast-api/runs").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"teamId\": \"" + TEAM + "\", \"requestedBy\": \"" + USER + "\", \"asOf\": \"2026-09-06\", \"forcedModel\": \"xgboost\"}"))
+                .content("{\"teamId\": \"" + TEAM + "\", \"requestedBy\": \"" + USER + "\", \"forcedModel\": \"xgboost\"}"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.id").value(RUN.toString()));
+        verify(service).startRun(new RunRequest(TEAM, USER, "xgboost", null));
+    }
+
+    @Test
+    void aRunDayInTheBodyIsRefused() throws Exception {
+        mvc.perform(post("/forecast-api/runs").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"teamId\": \"" + TEAM + "\", \"requestedBy\": \"" + USER + "\", \"asOf\": \"2026-09-06\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").value("asOf is not accepted: a run always starts from today"));
+    }
+
+    @Test
+    void readsTheCurrentForecastWithDefaultsFromTheClock() throws Exception {
+        CurrentDayForecast row = new CurrentDayForecast(TEAM, USER, LocalDate.of(2026, 9, 10), RUN, 4, 2, 0, 6, 8, 0, LocalDateTime.of(2026, 9, 9, 10, 0));
+        when(service.currentForecast(TEAM, LocalDate.of(2026, 9, 10), LocalDate.of(2026, 9, 16))).thenReturn(List.of(row));
+        when(service.currentForecast(TEAM, LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 29))).thenReturn(List.of(row, row));
+        mvc.perform(get("/forecast-api/teams/" + TEAM + "/current?from=2026-09-10&to=2026-09-16")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].demandHrs").value(6.0)).andExpect(jsonPath("$[0].day").value("2026-09-10"));
+        mvc.perform(get("/forecast-api/teams/" + TEAM + "/current")).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(get("/forecast-api/teams/" + TEAM + "/current?from=not-a-date")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @Test
@@ -126,8 +157,11 @@ class ForecastControllerTest {
                 .andExpect(jsonPath("$.code").value("TOKEN_MISSING"));
         mvc.perform(get("/forecast-api/copilot/status?userId=" + USER)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         mvc.perform(get("/forecast-api/runs/not-a-uuid")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
-        mvc.perform(post("/forecast-api/runs").contentType(MediaType.APPLICATION_JSON).content("{\"teamId\": \"" + TEAM + "\"}"))
+        mvc.perform(post("/forecast-api/runs").contentType(MediaType.APPLICATION_JSON).content("{\"teamId\": \"not-a-uuid\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        mvc.perform(post("/forecast-api/runs").contentType(MediaType.APPLICATION_JSON).content("{\"requestedBy\": \"" + USER + "\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").value("teamId is required"));
         mvc.perform(get("/forecast-api/copilot/status")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("userId")));

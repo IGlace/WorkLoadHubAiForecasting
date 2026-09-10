@@ -47,13 +47,13 @@ public final class JdbcRunStore {
         return t == null ? null : t.truncatedTo(ChronoUnit.MICROS).toString();
     }
 
-    public UUID create(RunRequest request, LocalDateTime createdAt) {
+    public UUID create(RunRequest request, LocalDate asOf, LocalDateTime createdAt) {
         UUID id = UUID.randomUUID();
         jdbc.sql("INSERT INTO forecast_runs (id, team_id, requested_by, as_of, status, forced_model, created_at) VALUES ("
                 + ph("uuid") + ", " + ph("uuid") + ", " + ph("uuid") + ", " + ph("date") + ", ?, ?, " + ph("timestamp") + ")")
                 .param(id.toString()).param(request.teamId().toString())
                 .param((request.requestedBy() == null ? NIL : request.requestedBy()).toString())
-                .param(request.asOf().toString()).param(RunStatus.QUEUED.name()).param(request.forcedModel()).param(ts(createdAt))
+                .param(asOf.toString()).param(RunStatus.QUEUED.name()).param(request.forcedModel()).param(ts(createdAt))
                 .update();
         return id;
     }

@@ -11,6 +11,7 @@ import com.workloadhub.forecast.ai.FakeGateway;
 import com.workloadhub.forecast.ai.Narrator;
 import com.workloadhub.forecast.ai.Prompts;
 import com.workloadhub.forecast.api.CopilotStatus;
+import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.NarrativeRequest;
 import com.workloadhub.forecast.api.NarrativeResult;
@@ -31,9 +32,11 @@ import com.workloadhub.forecast.store.JdbcGitHubTokenStore;
 import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
 import com.workloadhub.forecast.testing.SeededData;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +60,8 @@ class DefaultForecastServiceTest {
         Dialect dialect = Dialect.of(ds);
         JdbcGitHubTokenStore t = new JdbcGitHubTokenStore(JdbcClient.create(ds), dialect, AesGcmCipher.fromBase64Key(KEY));
         return new DefaultForecastService(ds, dialect, new ForecastRunner(new CapacityRule(40), true), runs, tracker, 1, true, t,
-                new JdbcNarrativeStore(ds, dialect), new Narrator(g, Prompts.load(), Duration.ofSeconds(5), ""), g);
+                new JdbcNarrativeStore(ds, dialect), new Narrator(g, Prompts.load(), Duration.ofSeconds(5), ""), g,
+                Clock.fixed(SeededData.asOf().atTime(12, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
     }
 
     @BeforeAll
@@ -80,7 +84,7 @@ class DefaultForecastServiceTest {
 
     @Test
     void runNowPersistsAndReturnsTheWholeResult() {
-        RunResult r = service.runNow(new RunRequest(team, null, SeededData.asOf(), null, null));
+        RunResult r = service.runNow(new RunRequest(team, null, null, null));
         assertEquals(RunStatus.DONE, r.run().status());
         assertFalse(r.memberWindows().isEmpty());
         assertEquals(r.memberWindows().size() * 5, r.memberDays().size());
@@ -96,8 +100,30 @@ class DefaultForecastServiceTest {
     }
 
     @Test
+    void theRunDayComesFromTheClockUnlessAnExperimentOverridesIt() {
+        RunResult r = service.runNow(new RunRequest(team, null, "seasonal_naive", null));
+        assertEquals(SeededData.asOf(), r.run().asOf(), "the fixed clock's day");
+        assertEquals(LocalDate.of(2026, 9, 7), r.memberWindows().get(0).windowStart());
+        RunResult wednesday = service.runNow(new RunRequest(team, null, "seasonal_naive", null), LocalDate.of(2026, 9, 2));
+        assertEquals(LocalDate.of(2026, 9, 2), wednesday.run().asOf());
+        assertEquals(LocalDate.of(2026, 9, 3), wednesday.memberWindows().get(0).windowStart());
+    }
+
+    @Test
+    void theCurrentForecastIsTheLatestRunsDays() {
+        RunResult r = service.runNow(new RunRequest(team, null, "seasonal_naive", null));
+        List<CurrentDayForecast> current = service.currentForecast(team, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 18));
+        assertEquals(r.memberDays().size(), current.size());
+        assertTrue(current.stream().allMatch(c -> c.runId().equals(r.run().id())), "the newest run wins every day it covers");
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class,
+                () -> service.currentForecast(team, LocalDate.of(2026, 9, 18), LocalDate.of(2026, 9, 7))).code());
+        assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class,
+                () -> service.currentForecast(UUID.randomUUID(), LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 18))).code());
+    }
+
+    @Test
     void startRunReturnsImmediatelyAndFinishesInTheBackground() throws Exception {
-        UUID id = service.startRun(new RunRequest(team, null, SeededData.asOf(), "seasonal_naive", false));
+        UUID id = service.startRun(new RunRequest(team, null, "seasonal_naive", false));
         RunProgress first = service.progress(id);
         assertTrue(List.of("QUEUED", "LOADING", "FEATURES", "BACKTEST", "FORECAST", "FACTS", "PERSIST", "DONE").contains(first.phase()));
         long deadline = System.currentTimeMillis() + 120_000;
@@ -113,7 +139,7 @@ class DefaultForecastServiceTest {
     @Test
     void errorsCarryTheSpecCodes() {
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class,
-                () -> service.startRun(new RunRequest(UUID.randomUUID(), null, SeededData.asOf(), null, null))).code());
+                () -> service.startRun(new RunRequest(UUID.randomUUID(), null, null, null))).code());
         assertEquals("RUN_NOT_FOUND", assertThrows(ForecastException.class, () -> service.getRun(UUID.randomUUID())).code());
         assertEquals("RUN_NOT_FOUND", assertThrows(ForecastException.class, () -> service.progress(UUID.randomUUID())).code());
         assertEquals("RUN_NOT_FOUND", assertThrows(ForecastException.class, () -> service.narrative(UUID.randomUUID(), "en")).code());
@@ -128,7 +154,7 @@ class DefaultForecastServiceTest {
 
     @Test
     void narrateStoresAndReturnsTheOutcomeAndTracksProgress() {
-        RunResult r = service.runNow(new RunRequest(team, member, SeededData.asOf(), "seasonal_naive", null));
+        RunResult r = service.runNow(new RunRequest(team, member, "seasonal_naive", null));
         tokens.save(member, "gho_test_token");
         gateway.replies.clear();
         gateway.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(r.factsJson())));
@@ -149,7 +175,7 @@ class DefaultForecastServiceTest {
 
     @Test
     void aFailedNarrationIsStoredAndReturnedNotThrown() {
-        RunResult r = service.runNow(new RunRequest(team, member, SeededData.asOf(), "seasonal_naive", null));
+        RunResult r = service.runNow(new RunRequest(team, member, "seasonal_naive", null));
         tokens.save(member, "gho_test_token");
         gateway.replies.clear();
         gateway.replies.addAll(List.of("nope", "still nope"));
@@ -165,7 +191,7 @@ class DefaultForecastServiceTest {
 
     @Test
     void narrateWithoutATokenThrowsTokenMissingAndStoresNothing() {
-        RunResult r = service.runNow(new RunRequest(team, member, SeededData.asOf(), "seasonal_naive", null));
+        RunResult r = service.runNow(new RunRequest(team, member, "seasonal_naive", null));
         tokens.clear(member);
         gateway.replies.clear();
         ForecastException e = assertThrows(ForecastException.class, () -> service.narrate(new NarrativeRequest(r.run().id(), member, "en", null)));
@@ -178,14 +204,14 @@ class DefaultForecastServiceTest {
     void narrateRefusesARunThatIsNotDone() {
         DataSource ds = SeededData.dataSource();
         JdbcRunStore raw = new JdbcRunStore(ds, Dialect.of(ds));
-        UUID queued = raw.create(new RunRequest(team, member, SeededData.asOf(), null, null), LocalDateTime.now());
+        UUID queued = raw.create(new RunRequest(team, member, null, null), SeededData.asOf(), LocalDateTime.now());
         tokens.save(member, "gho_test_token");
         assertEquals("RUN_NOT_DONE", assertThrows(ForecastException.class, () -> service.narrate(new NarrativeRequest(queued, member, "en", null))).code());
     }
 
     @Test
     void aRejectedTokenIsThrownAndProgressSaysSo() {
-        RunResult r = service.runNow(new RunRequest(team, member, SeededData.asOf(), "seasonal_naive", null));
+        RunResult r = service.runNow(new RunRequest(team, member, "seasonal_naive", null));
         tokens.save(member, "gho_test_token");
         FakeGateway g = new FakeGateway();
         g.authenticated = false;
@@ -245,7 +271,7 @@ class DefaultForecastServiceTest {
     void getRunPreservesAStoredNullMaseAsNullNotNaN() {
         Dialect dialect = Dialect.of(SeededData.dataSource());
         JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource(), dialect);
-        UUID id = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
+        UUID id = raw.create(new RunRequest(team, null, null, null), SeededData.asOf(), LocalDateTime.now());
         String backtest = "{\"scores\":[{\"model\":\"xgboost\",\"origin\":\"2026-08-24\",\"horizon\":1,\"mae\":null,\"mase\":null}],"
                 + "\"mase_by_model\":{\"xgboost\":null},\"unavailable\":{}}";
         raw.finish(id, "seasonal_naive", Double.NaN, backtest, List.of(), List.of(), "{}", LocalDateTime.now());
@@ -263,7 +289,7 @@ class DefaultForecastServiceTest {
         RunProgressTracker tracker = new RunProgressTracker();
         DefaultForecastService svc = build(SeededData.dataSource(), new FakeGateway(), tracker, raw);
         try {
-            UUID id = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
+            UUID id = raw.create(new RunRequest(team, null, null, null), SeededData.asOf(), LocalDateTime.now());
             raw.finish(id, "seasonal_naive", 0.9, "{}", List.of(), List.of(), "{}", LocalDateTime.now());
             tracker.start(id);
             for (int i = 0; i < RunProgressTracker.MAX_TRACKED; i++) {
@@ -274,7 +300,7 @@ class DefaultForecastServiceTest {
             assertEquals("DONE", progress.phase());
             assertEquals(100, progress.percent());
 
-            UUID failedId = raw.create(new RunRequest(team, null, SeededData.asOf(), null, null), LocalDateTime.now());
+            UUID failedId = raw.create(new RunRequest(team, null, null, null), SeededData.asOf(), LocalDateTime.now());
             raw.fail(failedId, "boom", LocalDateTime.now());
             tracker.start(failedId);
             for (int i = 0; i < RunProgressTracker.MAX_TRACKED; i++) {
@@ -295,7 +321,7 @@ class DefaultForecastServiceTest {
         UUID emptyTeam = SeededData.data().teams().stream().filter(t -> SeededData.data().membersOfTeam(t.id()).isEmpty()).map(TeamRow::id)
                 .findFirst().orElseGet(DefaultForecastServiceTest::insertEmptyTeam);
         ForecastException ex = assertThrows(ForecastException.class,
-                () -> service.runNow(new RunRequest(emptyTeam, null, LocalDate.of(2026, 9, 6), null, null)));
+                () -> service.runNow(new RunRequest(emptyTeam, null, null, null)));
         assertEquals("TEAM_NOT_FOUND", ex.code());
         assertEquals(RunStatus.FAILED, service.listRuns(emptyTeam, 1).get(0).status());
         assertEquals("RUN_NOT_DONE", assertThrows(ForecastException.class, () -> service.getRun(service.listRuns(emptyTeam, 1).get(0).id())).code());

@@ -15,6 +15,7 @@ import com.workloadhub.forecast.store.JdbcGitHubTokenStore;
 import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -55,7 +56,7 @@ record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc
         Narrator narrator = new Narrator(gateway, Prompts.load(), NARRATION_TIMEOUT, System.getenv(MODEL_ENV));
         RunProgressTracker progress = new RunProgressTracker();
         DefaultForecastService service = new DefaultForecastService(ds, dialect, runner, new JdbcRunStore(ds, dialect), progress, 1, true, tokens,
-                new JdbcNarrativeStore(ds, dialect), narrator, gateway);
+                new JdbcNarrativeStore(ds, dialect), narrator, gateway, Clock.systemDefaultZone());
         return new Services(service, dialect, jdbc, runner, tokens, progress);
     }
 

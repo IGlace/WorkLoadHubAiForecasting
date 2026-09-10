@@ -6,6 +6,8 @@ import com.workloadhub.forecast.data.ExportImporter;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.WorkloadHubSchema;
 import com.workloadhub.forecast.testing.SeededData;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -23,6 +25,12 @@ public class SampleHostApplication {
         WorkloadHubSchema.createSqlite(ds);
         new ExportImporter(ds).importAll(SeededData.envelope(), true);
         return ds;
+    }
+
+    /** The host pins the run day to the seed's end so the horizon lands where the data is; a real host has none of this. */
+    @Bean
+    Clock clock() {
+        return Clock.fixed(SeededData.asOf().atTime(12, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
     }
 
     @Bean

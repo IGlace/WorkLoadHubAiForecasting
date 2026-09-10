@@ -55,7 +55,7 @@ class JdbcRunStoreTest {
 
     void lifecycle(DataSource ds) {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
-        UUID id = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0);
+        UUID id = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
         RunSummary queued = store.find(id).orElseThrow();
         assertEquals(RunStatus.QUEUED, queued.status());
         assertEquals(TEAM, queued.teamId());
@@ -75,7 +75,7 @@ class JdbcRunStoreTest {
         assertEquals("{\"run\":{}}", store.facts(id).orElseThrow());
         assertEquals("{\"scores\":[]}", store.backtestJson(id).orElseThrow());
 
-        UUID failed = store.create(new RunRequest(TEAM, null, LocalDate.of(2026, 9, 6), "xgboost", false), T0.plusMinutes(2));
+        UUID failed = store.create(new RunRequest(TEAM, null, "xgboost", false), LocalDate.of(2026, 9, 6), T0.plusMinutes(2));
         store.fail(failed, "boom\nstack line 2", T0.plusMinutes(3));
         RunSummary f = store.find(failed).orElseThrow();
         assertEquals(RunStatus.FAILED, f.status());
@@ -89,11 +89,11 @@ class JdbcRunStoreTest {
         assertEquals(1, store.list(TEAM, 1).size());
         assertTrue(store.list(UUID.randomUUID(), 10).isEmpty());
         assertFalse(store.find(UUID.randomUUID()).isPresent());
-        UUID nanRun = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0.plusMinutes(4));
+        UUID nanRun = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0.plusMinutes(4));
         store.finish(nanRun, "seasonal_naive", Double.NaN, "{}", List.of(), List.of(), "{}", T0.plusMinutes(5));
         assertNull(store.find(nanRun).orElseThrow().championMase(), "NaN is stored as null");
 
-        UUID bigRun = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0.plusMinutes(6));
+        UUID bigRun = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0.plusMinutes(6));
         List<MemberWindowForecast> manyRows = manyRows(450);
         store.finish(bigRun, "xgboost", 0.5, "{}", manyRows, List.of(), "{}", T0.plusMinutes(7));
         assertEquals(manyRows, store.memberWindows(bigRun), "450 rows survive a batched insert, in order");
@@ -115,9 +115,9 @@ class JdbcRunStoreTest {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
         LocalDate wednesday = LocalDate.of(2026, 9, 2);
         LocalDate monday = LocalDate.of(2026, 9, 7);
-        UUID first = store.create(new RunRequest(TEAM, USER, wednesday, null, null), T0);
+        UUID first = store.create(new RunRequest(TEAM, USER, null, null), wednesday, T0);
         store.finish(first, "xgboost", 0.8, "{}", List.of(), days(wednesday, 1), "{}", T0.plusMinutes(1));
-        UUID second = store.create(new RunRequest(TEAM, USER, monday, null, null), T0.plusDays(5));
+        UUID second = store.create(new RunRequest(TEAM, USER, null, null), monday, T0.plusDays(5));
         store.finish(second, "xgboost", 0.8, "{}", List.of(), days(monday, 2), "{}", T0.plusDays(5).plusMinutes(1));
         List<CurrentDayForecast> current = store.currentDays(TEAM, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
         assertEquals(13, current.size(), "three days only the first run covered, ten the second overwrote");
@@ -161,8 +161,8 @@ class JdbcRunStoreTest {
 
     void tiedCreatedAtOrdersByIdDescending(DataSource ds) {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
-        UUID a = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0);
-        UUID b = store.create(new RunRequest(TEAM, USER, LocalDate.of(2026, 9, 6), null, null), T0);
+        UUID a = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        UUID b = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
         List<UUID> ordered = store.list(TEAM, 10).stream().map(RunSummary::id).toList();
         List<UUID> expected = a.toString().compareTo(b.toString()) > 0 ? List.of(a, b) : List.of(b, a);
         assertEquals(expected, ordered, "same created_at: newest (highest) id first");

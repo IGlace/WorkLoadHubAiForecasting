@@ -56,7 +56,7 @@ class SampleHostIntegrationTest {
         FakeGateway fake = (FakeGateway) gateway;
 
         MvcResult started = mvc.perform(post("/api/forecast/runs").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"teamId\": \"" + team + "\", \"requestedBy\": \"" + member + "\", \"asOf\": \"" + SeededData.asOf() + "\", \"forcedModel\": \"seasonal_naive\"}"))
+                .content("{\"teamId\": \"" + team + "\", \"requestedBy\": \"" + member + "\", \"forcedModel\": \"seasonal_naive\"}"))
                 .andExpect(status().isAccepted()).andReturn();
         UUID run = UUID.fromString(json(started).path("id").asText());
         long deadline = System.currentTimeMillis() + 120_000;
@@ -70,6 +70,10 @@ class SampleHostIntegrationTest {
         assertTrue(result.path("memberWindows").size() > 0);
         assertTrue(result.path("memberDays").size() > 0);
         assertEquals("seasonal_naive", result.path("run").path("championModel").asText());
+        assertEquals(SeededData.asOf().toString(), result.path("run").path("asOf").asText(), "the host's clock");
+        JsonNode current = json(mvc.perform(get("/api/forecast/teams/" + team + "/current?from=2026-09-07&to=2026-09-18")).andExpect(status().isOk()).andReturn());
+        assertEquals(result.path("memberDays").size(), current.size());
+        assertEquals(run.toString(), current.get(0).path("runId").asText());
 
         mvc.perform(get("/api/forecast/copilot/status?userId=" + member)).andExpect(status().isOk()).andExpect(jsonPath("$.hasToken").value(false));
         mvc.perform(put("/api/forecast/users/" + member + "/github-token").contentType(MediaType.APPLICATION_JSON).content("{\"token\": \"gho_sample\"}"))

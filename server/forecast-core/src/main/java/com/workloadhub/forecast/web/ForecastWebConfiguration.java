@@ -2,6 +2,7 @@ package com.workloadhub.forecast.web;
 
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
+import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,8 +19,8 @@ public class ForecastWebConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    ForecastController forecastController(ForecastService service, GitHubTokenStore tokens) {
-        return new ForecastController(service, tokens);
+    ForecastController forecastController(ForecastService service, GitHubTokenStore tokens, Clock clock) {
+        return new ForecastController(service, tokens, clock);
     }
 
     @Bean

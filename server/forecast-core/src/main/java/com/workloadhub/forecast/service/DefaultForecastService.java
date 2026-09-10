@@ -9,6 +9,7 @@ import com.workloadhub.forecast.ai.Narrator;
 import com.workloadhub.forecast.ai.Prompts;
 import com.workloadhub.forecast.ai.RuntimeInfo;
 import com.workloadhub.forecast.api.CopilotStatus;
+import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
@@ -33,6 +34,7 @@ import com.workloadhub.forecast.run.TeamOutcome;
 import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -65,6 +67,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     private final JdbcRunStore store;
     private final RunProgressTracker progress;
     private final ExecutorService executor;
+    private final Clock clock;
 
     public static final Duration QUOTA_TIMEOUT = Duration.ofSeconds(10);
 
@@ -74,7 +77,8 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     private final CopilotGateway gateway;
 
     public DefaultForecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
-            int threads, boolean plannedWorkDefault, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway) {
+            int threads, boolean plannedWorkDefault, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway,
+            Clock clock) {
         this.dataSource = dataSource;
         this.dialect = dialect;
         this.runner = runner;
@@ -84,6 +88,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         this.narratives = narratives;
         this.narrator = narrator;
         this.gateway = gateway;
+        this.clock = clock;
         this.executor = Executors.newFixedThreadPool(Math.max(1, threads), r -> {
             Thread t = new Thread(r, "forecast-run");
             t.setDaemon(true);
@@ -93,24 +98,30 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
 
     @Override
     public UUID startRun(RunRequest request) {
-        UUID id = enqueue(request);
-        executor.submit(() -> execute(id, request));
+        LocalDate asOf = LocalDate.now(clock);
+        UUID id = enqueue(request, asOf);
+        executor.submit(() -> execute(id, request, asOf));
         return id;
     }
 
     /** The same run, synchronously, for the CLI and the tests; throws when the run fails. */
     public RunResult runNow(RunRequest request) {
-        UUID id = enqueue(request);
-        RuntimeException failure = execute(id, request);
+        return runNow(request, LocalDate.now(clock));
+    }
+
+    /** The synchronous run with an explicit run day: an experiment entry for seeded databases, never used by the server. */
+    public RunResult runNow(RunRequest request, LocalDate asOf) {
+        UUID id = enqueue(request, asOf);
+        RuntimeException failure = execute(id, request, asOf);
         if (failure != null) {
             throw failure;
         }
         return getRun(id);
     }
 
-    private UUID enqueue(RunRequest request) {
+    private UUID enqueue(RunRequest request, LocalDate asOf) {
         requireTeam(request.teamId());
-        UUID id = store.create(request, LocalDateTime.now());
+        UUID id = store.create(request, asOf, LocalDateTime.now());
         progress.start(id);
         return id;
     }
@@ -124,12 +135,12 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     }
 
     /** Returns the failure instead of throwing so the executor path and the synchronous path share it. */
-    private RuntimeException execute(UUID id, RunRequest request) {
+    private RuntimeException execute(UUID id, RunRequest request, LocalDate asOf) {
         try {
             store.markRunning(id);
             progress.update(id, "LOADING", 2, "reading the WorkloadHub tables");
             ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
-            Prepared prepared = runner.prepare(data, request.asOf(), request.forcedModel(),
+            Prepared prepared = runner.prepare(data, asOf, request.forcedModel(),
                     (phase, percent, message) -> progress.update(id, phase, percent, message));
             TeamOutcome outcome = runner.forTeam(prepared, request.teamId(), request.plannedWork());
             progress.update(id, "FACTS", 85, "building the facts");
@@ -202,6 +213,18 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     @Override
     public List<RunSummary> listRuns(UUID teamId, int limit) {
         return store.list(teamId, Math.min(MAX_LIST, Math.max(1, limit)));
+    }
+
+    @Override
+    public List<CurrentDayForecast> currentForecast(UUID teamId, LocalDate from, LocalDate to) {
+        if (teamId == null || from == null || to == null) {
+            throw ForecastException.invalidRequest("teamId, from and to are required");
+        }
+        if (from.isAfter(to)) {
+            throw ForecastException.invalidRequest("from " + from + " is after to " + to);
+        }
+        requireTeam(teamId);
+        return store.currentDays(teamId, from, to);
     }
 
     @Override

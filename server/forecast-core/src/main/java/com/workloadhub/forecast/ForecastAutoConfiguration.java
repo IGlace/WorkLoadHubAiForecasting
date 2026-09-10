@@ -18,6 +18,7 @@ import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
 import com.workloadhub.forecast.web.ForecastWebConfiguration;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -108,12 +109,19 @@ public class ForecastAutoConfiguration {
         return new Narrator(gateway, Prompts.load(), Duration.ofSeconds(properties.getCopilot().getTimeoutSeconds()), properties.getCopilot().getModel());
     }
 
+    /** The run day is today by this clock; a host that keeps its own time zone or pins time in tests provides its own bean. */
+    @Bean
+    @ConditionalOnMissingBean
+    Clock forecastClock() {
+        return Clock.systemDefaultZone();
+    }
+
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
     ForecastService forecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
-            ForecastProperties properties, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway) {
+            ForecastProperties properties, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway, Clock clock) {
         return new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
-                properties.getPlannedWork().isEnabled(), tokens, narratives, narrator, gateway);
+                properties.getPlannedWork().isEnabled(), tokens, narratives, narrator, gateway, clock);
     }
 
     /** Marker bean so that beans needing the tables can depend on the migrations having run. */
