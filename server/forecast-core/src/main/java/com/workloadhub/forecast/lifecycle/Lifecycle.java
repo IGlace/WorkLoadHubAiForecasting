@@ -8,6 +8,7 @@ import com.workloadhub.forecast.data.rows.TransitionRow;
 import com.workloadhub.forecast.data.rows.UserRef;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -26,7 +28,9 @@ public record Lifecycle(Map<UUID, TaskFacts> facts, List<String> unresolvedAssig
     private static final Comparator<UUID> BY_ID = Comparator.comparing(UUID::toString);
 
     public Lifecycle {
-        facts = Map.copyOf(facts);
+        SortedMap<UUID, TaskFacts> sorted = new TreeMap<>(BY_ID);
+        sorted.putAll(facts);
+        facts = Collections.unmodifiableSortedMap(sorted);
         unresolvedAssignments = List.copyOf(unresolvedAssignments);
         unloggedTasks = List.copyOf(unloggedTasks);
     }
@@ -48,13 +52,15 @@ public record Lifecycle(Map<UUID, TaskFacts> facts, List<String> unresolvedAssig
                 finished = t.finishedDate() != null ? t.finishedDate() : firstEntry(history, data, "DONE");
             }
             double actual = 0.0;
+            boolean hasAssigneeLog = false;
             for (TimeLogRow l : logs.getOrDefault(t.id(), List.of())) {
                 if (t.assigneeId() != null && t.assigneeId().equals(l.userId())) {
                     actual += l.hours();
+                    hasAssigneeLog = true;
                 }
             }
             boolean isUnlogged = false;
-            if (actual == 0.0 && finished != null && t.assigneeId() != null && t.estimate() != null) {
+            if (!hasAssigneeLog && finished != null && t.assigneeId() != null && t.estimate() != null) {
                 actual = Math.max(0.0, t.estimate() - (t.remaining() == null ? 0.0 : t.remaining()));
                 isUnlogged = true;
                 unlogged.add(t.key());

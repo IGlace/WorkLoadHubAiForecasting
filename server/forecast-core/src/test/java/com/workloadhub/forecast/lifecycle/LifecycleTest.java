@@ -12,6 +12,7 @@ import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecast.testing.TestData;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -125,6 +126,16 @@ class LifecycleTest {
     }
 
     @Test
+    void aFinishedTaskWithAZeroHourAssigneeLogIsNotTreatedAsUnlogged() {
+        TaskRow t = TestData.task("1", ANA.id(), CREATED, 8).withStatus("DONE").withFinished(CREATED.plusDays(3));
+        ForecastData data = TestData.data(List.of(ANA), List.of(t), List.of(),
+                List.of(TestData.log(t.id(), ANA.id(), CREATED.toLocalDate(), 0.0)));
+        TaskFacts f = Lifecycle.derive(data).of(t.id());
+        assertEquals(0.0, f.actualHours(), 1e-9, "a real zero-hour log is not the same as no log at all");
+        assertFalse(f.unlogged());
+    }
+
+    @Test
     void familyAndModeFollowTheTables() {
         TaskRow epic = TestData.task("1", ANA.id(), CREATED, 40).withType("Epic");
         TaskRow sub = TestData.task("2", ANA.id(), CREATED, 4).withType("Sub-task").withParent(epic.id());
@@ -145,6 +156,9 @@ class LifecycleTest {
     @Test
     void seededDataResolvesEveryAssignmentAndSplitsFreshFromBacklog() {
         Lifecycle lc = Lifecycle.derive(SeededData.data());
+        List<UUID> ids = lc.facts().keySet().stream().toList();
+        List<UUID> sortedIds = ids.stream().sorted(Comparator.comparing(UUID::toString)).toList();
+        assertEquals(sortedIds, ids, "facts() must iterate in id-string order for deterministic downstream reads");
         assertTrue(lc.unresolvedAssignments().isEmpty(), "seed writes assignee names the rule resolves: " + lc.unresolvedAssignments());
         long assigned = lc.all().stream().filter(TaskFacts::isAssigned).count();
         long fresh = lc.all().stream().filter(f -> f.isAssigned() && f.fresh()).count();
