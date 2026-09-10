@@ -1,28 +1,36 @@
 #!/usr/bin/env bash
-# The Java module's slice of the local gate, for Linux/WSL where pwsh (and therefore
-# scripts/check.ps1) may not be available. Mirrors scripts/check.ps1's "server (mvn verify)"
-# step: same command, same skip behaviour when mvn is absent, same timing output. Keep the two in
-# step when either changes.
+# The local gate, the same steps as CI (.github/workflows/ci.yml) and scripts/check.ps1: the Java module's
+# `mvn verify` and the parity gate's test. A step whose tool is missing is skipped with a message.
 #
 # Usage: bash scripts/check.sh
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-server="$root/server"
+failed=0
 
-if ! command -v mvn >/dev/null 2>&1; then
-    echo "SKIP server (mvn verify): mvn not found on PATH"
-    exit 0
-fi
+run_step() {
+    local name="$1"; shift
+    echo "==> $name"
+    local start; start=$(date +%s)
+    if "$@"; then
+        echo "OK   $name in $(( $(date +%s) - start ))s"
+    else
+        local code=$?
+        echo "FAIL $name after $(( $(date +%s) - start ))s (exit $code)"
+        failed=1
+    fi
+}
 
-echo "==> server (mvn verify)"
-start=$(date +%s)
-if (cd "$server" && mvn -B -q verify); then
-    elapsed=$(( $(date +%s) - start ))
-    echo "OK   server (mvn verify) in ${elapsed}s"
+if command -v mvn >/dev/null 2>&1; then
+    run_step "server (mvn verify)" bash -c "cd '$root/server' && mvn -B -q verify"
 else
-    code=$?
-    elapsed=$(( $(date +%s) - start ))
-    echo "FAIL server (mvn verify) after ${elapsed}s (exit $code)"
-    exit "$code"
+    echo "SKIP server (mvn verify): mvn not found on PATH"
 fi
+
+if command -v uv >/dev/null 2>&1; then
+    run_step "tools (parity gate test)" bash -c "cd '$root' && uv run --python 3.11 --with pytest pytest server/tools/tests -q"
+else
+    echo "SKIP tools (parity gate test): uv not found on PATH"
+fi
+
+exit $failed
