@@ -1,5 +1,7 @@
 # WorkloadHub AI Forecasting: version 1 design
 
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+
 Date: 2026-09-03. Status: approved in brainstorming, pending owner review of this
 document. Inputs: `docs/requirements/2026-09-03-discovery-qa.md`,
 `docs/requirements/requirements-v1.md`, `docs/research/2026-09-03-research-notes.md`.

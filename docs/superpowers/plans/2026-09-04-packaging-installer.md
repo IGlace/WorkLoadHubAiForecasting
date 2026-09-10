@@ -1,5 +1,7 @@
 # Packaging and Installer Implementation Plan
 
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Produce one shareable Windows installer that contains the Electron app, the frozen Python service and the pinned Copilot CLI, installs per user without administrator rights, keeps data and logs under `%LOCALAPPDATA%\WorkloadHubForecast`, and is built and smoke-tested by CI.

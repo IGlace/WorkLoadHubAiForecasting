@@ -1,5 +1,7 @@
 # Forecast Evaluation Harness and Chronos-2 Implementation Plan
 
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A `whf eval` command that measures arrival-model accuracy and demand-forecast accuracy on any database and writes committable result files, plus Chronos-2 as a fourth arrival-model candidate with its own quantile bands, bundled offline in the installer.

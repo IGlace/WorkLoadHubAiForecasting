@@ -1,5 +1,7 @@
 # Copilot Integration and Product Skills Implementation Plan
 
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give a stored forecast run an AI narrative from the user's own GitHub Copilot seat: discovered patterns, per-member summaries, risks, overload warnings and rebalancing suggestions, produced through the Copilot SDK with read-only tools over the run's facts, validated as strict JSON, cross-checked so no number is invented, persisted with the run, and exposed through the CLI and the local API.

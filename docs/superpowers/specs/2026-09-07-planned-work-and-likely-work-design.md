@@ -1,5 +1,7 @@
 # Planned work in the forecast, and "what is likely to land" in the narrative: design
 
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`. The Java module implements its allocation rule and the likely-work narrative section; the rebalancing fit table of section 6.5 is not built.
+
 Date: 2026-09-07. Status: decisions locked by the owner in conversation on 2026-09-07; this document
 and its plan are written now and **implemented only once the real WorkloadHub export has arrived**
 and passed the data gates in section 8. Inputs: the owner's decisions below, the approved design

@@ -18,6 +18,14 @@ first install straight away; the installer now seeds the data itself, see "Lande
 
 ## Landed
 
+- **The Python service and the desktop app archived** (2026-09-10): `archive/python-desktop-v1` (at `5c69bf6`,
+  plan 4 included) holds `service/`, `app/`, `installer/`, the notebook, the desktop scripts and hooks, and the
+  Python and desktop skills and agents; `dev` and `main` carry the Java module and the documentation. The parity
+  procedure runs the Python side from a checkout of the archive (`server/tools/parity.sh ... ARCHIVE_DIR`), and
+  the parity gate's test is the one Python test left. Spec
+  `docs/superpowers/specs/2026-09-10-python-desktop-archival-design.md`. Items above that name the desktop app,
+  the installer or Windows verification now apply to the archive branch only.
+
 - **Planned work and likely work, designed and locked, waiting for the real export** (2026-09-07): the owner
   asked whether Copilot could predict the tasks a member will be assigned. Decided: no language model will
   ever produce a forecast number (closed for good); instead, tasks that exist before they are assigned are

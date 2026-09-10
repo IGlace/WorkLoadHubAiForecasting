@@ -1,5 +1,7 @@
 # Copilot live view, run cost, and "run again" wording
 
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+
 Owner request (2026-09-07): the Run page does not show what Copilot is thinking while the narrative
 is written, every run should show what it cost, and after a run it is not clear whether one may
 run again. Design approved in chat the same day (bounded change; recommended options chosen: the

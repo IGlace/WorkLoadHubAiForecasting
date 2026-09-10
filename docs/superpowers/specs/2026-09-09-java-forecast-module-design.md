@@ -646,6 +646,9 @@ never touches PostgreSQL: production access goes through the host.
 
 In this order, each step a reviewed commit on `dev`:
 
+Status: steps 1 to 5 done on 2026-09-10 (`archive/python-desktop-v1` at `5c69bf6`; the removal in
+`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`).
+
 1. Branch `archive/python-desktop-v1` from the current `main` and push it. It is the frozen
    reference and the parity oracle; no new features.
 2. Create `server/` with the Maven skeleton, CI for Java, and this spec's tables, alongside the old
