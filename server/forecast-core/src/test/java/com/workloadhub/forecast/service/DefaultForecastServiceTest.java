@@ -221,19 +221,23 @@ class DefaultForecastServiceTest {
     void copilotStatusWithATokenReportsTheLoginAndTheQuota() {
         tokens.save(member, "gho_test_token");
         gateway.quota = Map.of("premium_interactions", Map.of("used", 12, "entitlement", 300));
-        CopilotStatus s = service.copilotStatus(member);
-        assertTrue(s.hasToken() && s.runtimeAvailable());
-        assertEquals(Boolean.TRUE, s.authenticated());
-        assertEquals("sara", s.login());
-        assertTrue(s.quotaJson().contains("premium_interactions"));
-        assertTrue(s.message().contains("sara"));
-        assertTrue(gateway.closed);
-        gateway.authenticated = false;
-        CopilotStatus rejected = service.copilotStatus(member);
-        assertEquals(Boolean.FALSE, rejected.authenticated());
-        assertNull(rejected.quotaJson());
-        gateway.authenticated = true;
-        gateway.quota = null;
+        try {
+            CopilotStatus s = service.copilotStatus(member);
+            assertTrue(s.hasToken() && s.runtimeAvailable());
+            assertEquals(Boolean.TRUE, s.authenticated());
+            assertEquals("sara", s.login());
+            assertTrue(s.quotaJson().contains("premium_interactions"));
+            assertTrue(s.message().contains("sara"));
+            assertTrue(gateway.closed);
+            gateway.authenticated = false;
+            CopilotStatus rejected = service.copilotStatus(member);
+            assertEquals(Boolean.FALSE, rejected.authenticated());
+            assertNull(rejected.quotaJson());
+        } finally {
+            // the gateway is shared with every other case in this class: restore it even when an assertion fails
+            gateway.authenticated = true;
+            gateway.quota = null;
+        }
     }
 
     @Test

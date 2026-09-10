@@ -6,7 +6,7 @@ CREATE TABLE forecast_narratives (
   run_id            uuid NOT NULL REFERENCES forecast_runs(id),
   language          varchar(2) NOT NULL,
   status            varchar(16) NOT NULL,
-  model             varchar(64),
+  model             text,
   narrative_json    text,
   raw_text          text,
   verification_json text NOT NULL,

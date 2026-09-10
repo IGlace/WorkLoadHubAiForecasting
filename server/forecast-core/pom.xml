@@ -23,6 +23,8 @@
     <dependency><groupId>net.java.dev.jna</groupId><artifactId>jna</artifactId></dependency>
     <!-- The REST controller compiles against Spring MVC and only activates when the host has it. -->
     <dependency><groupId>org.springframework</groupId><artifactId>spring-webmvc</artifactId><optional>true</optional></dependency>
+    <!-- Compile-only: Spring MVC's binding exceptions extend ServletException. Provided scope adds nothing to the host. -->
+    <dependency><groupId>jakarta.servlet</groupId><artifactId>jakarta.servlet-api</artifactId><scope>provided</scope></dependency>
     <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><scope>runtime</scope><optional>true</optional></dependency>
     <dependency><groupId>org.xerial</groupId><artifactId>sqlite-jdbc</artifactId><scope>runtime</scope><optional>true</optional></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-configuration-processor</artifactId><optional>true</optional></dependency>

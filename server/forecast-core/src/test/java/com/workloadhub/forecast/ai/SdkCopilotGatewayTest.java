@@ -44,6 +44,9 @@ class SdkCopilotGatewayTest {
         assertEquals("error", o.getLogLevel());
         assertNull(o.getCliPath(), "blank cli-path means the in-process runtime");
         assertEquals("workloadhub-forecast", o.getClientInfo().getApplicationName());
+        assertTrue(o.getClientInfo().getApplicationVersion().matches("dev|\\d+\\.\\d+\\.\\d+.*"),
+                "the module's own version, or 'dev' outside a jar: " + o.getClientInfo().getApplicationVersion());
+        assertEquals(SdkCopilotGateway.sdkVersion(), o.getClientInfo().getIntegrationVersion(), "the SDK's version stays reported as the integration");
         CopilotClientOptions sub = SdkCopilotGateway.options("gho_abc", dir, " /opt/copilot/copilot ");
         assertEquals("/opt/copilot/copilot", sub.getCliPath());
     }

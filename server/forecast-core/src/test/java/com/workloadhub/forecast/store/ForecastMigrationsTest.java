@@ -1,6 +1,7 @@
 package com.workloadhub.forecast.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -38,6 +39,31 @@ class ForecastMigrationsTest {
         assertTrue(hasColumn(ds, "forecast_narratives", "status"), "V2 recreated the narratives table");
         assertTrue(hasColumn(ds, "forecast_narratives", "raw_text"));
         assertTrue(hasColumn(ds, "forecast_narratives", "tool_calls"));
+    }
+
+    /** V1 alone first, then the whole set: the upgrade path a database that ran before narration existed takes. */
+    static void checkStepwise(DataSource ds) throws Exception {
+        ForecastMigrations.run(ds, "1");
+        assertTrue(hasColumn(ds, "forecast_narratives", "narrative_json"), "V1 created the narratives table");
+        assertFalse(hasColumn(ds, "forecast_narratives", "status"), "V1 knows no status column");
+        ForecastMigrations.run(ds);
+        assertTrue(hasColumn(ds, "forecast_narratives", "status"), "V2 applies on a database that already ran V1");
+        assertTrue(hasColumn(ds, "forecast_narratives", "tool_calls"));
+        assertTrue(hasColumn(ds, "forecast_narratives", "raw_text"));
+    }
+
+    @Test
+    void v2AppliesOnADatabaseThatAlreadyRanV1Sqlite() throws Exception {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        checkStepwise(ds);
+    }
+
+    @Test
+    void v2AppliesOnADatabaseThatAlreadyRanV1Postgresql() throws Exception {
+        DataSource ds = DatabaseTestSupport.postgresOrSkip();
+        WorkloadHubSchema.createPostgresql(ds);
+        checkStepwise(ds);
     }
 
     @Test

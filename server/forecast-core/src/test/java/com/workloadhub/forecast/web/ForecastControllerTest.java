@@ -128,5 +128,8 @@ class ForecastControllerTest {
         mvc.perform(get("/forecast-api/runs/not-a-uuid")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         mvc.perform(post("/forecast-api/runs").contentType(MediaType.APPLICATION_JSON).content("{\"teamId\": \"" + TEAM + "\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        mvc.perform(get("/forecast-api/copilot/status")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("userId")));
     }
 }

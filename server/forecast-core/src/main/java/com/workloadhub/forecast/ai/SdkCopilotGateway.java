@@ -34,6 +34,8 @@ import com.github.copilot.rpc.ToolSet;
 import com.github.copilot.tool.Param;
 import com.workloadhub.forecast.api.ForecastException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -89,7 +91,7 @@ public final class SdkCopilotGateway implements CopilotGateway {
         o.setUseLoggedInUser(false);
         o.setCopilotHome(copilotHome.toAbsolutePath().toString());
         o.setLogLevel("error");
-        o.setClientInfo(new ClientInfo().setApplicationName(APPLICATION).setApplicationVersion(sdkVersion()));
+        o.setClientInfo(new ClientInfo().setApplicationName(APPLICATION).setApplicationVersion(moduleVersion()).setIntegrationVersion(sdkVersion()));
         if (cliPath != null && !cliPath.isBlank()) {
             o.setCliPath(cliPath.trim());
         }
@@ -170,6 +172,23 @@ public final class SdkCopilotGateway implements CopilotGateway {
             return NarrationEvent.error(e.getData().message());
         }
         return null;
+    }
+
+    /** The module's own version, read from the jar's Maven descriptor; "dev" when it runs from a class directory. */
+    static String moduleVersion() {
+        try (InputStream in = SdkCopilotGateway.class.getClassLoader()
+                .getResourceAsStream("META-INF/maven/com.workloadhub/workloadhub-forecast-core/pom.properties")) {
+            if (in != null) {
+                for (String line : new String(in.readAllBytes(), StandardCharsets.UTF_8).lines().toList()) {
+                    if (line.startsWith("version=")) {
+                        return line.substring("version=".length()).trim();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOG.debug("module version unreadable: {}", e.getMessage());
+        }
+        return "dev";
     }
 
     static String sdkVersion() {
