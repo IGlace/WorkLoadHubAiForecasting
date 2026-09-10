@@ -23,6 +23,31 @@ and suggest rebalancing. Version 1 runs on generated dummy data.
   The export it was written from holds credentials and personal data and is never committed.
 - `docs/superpowers/plans/`: implementation plans, when present.
 - `docs/backlog.md`: open items after version 1 (polish, Windows verification, design decisions, future topics).
+- `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`: the current direction, a Java 21 module
+  for the WorkloadHub Spring Boot server that replaces the Python service and the desktop app. Section 14 is
+  the migration and archival procedure, section 16 the order of work.
+
+## Where the Java migration stands (2026-09-10)
+
+Done, each as a reviewed plan landed on `dev` and fast-forwarded to `main`:
+`docs/superpowers/plans/2026-09-09-java-foundation-and-seed.md` (skeleton, database, import, token store,
+seed generator), `2026-09-09-java-pipeline-core.md` (lifecycle, calendar, capacity, feature matrix, models,
+backtest, effort, planned work) and `2026-09-10-java-run-eval-and-parity.md` (run pipeline, facts JSON, run
+store, service, CLI `run`/`runs`/`teams`/`eval`, evaluation harness, Python import for parity, parity gate;
+synthetic result in `docs/eval/2026-09-10-java-parity-synthetic/`). Rulings taken on the way are in each
+plan's closing notes and under "Java migration" in `docs/backlog.md`.
+
+Next, in this order, each with the standing workflow (`brainstorming`, `writing-plans`, subagent-driven
+execution with a review per task, a final whole-branch review, one fix wave, CI green on `dev`, then
+fast-forward `main`):
+
+1. Plan 4: Copilot narration through the Copilot SDK from Java (spec sections 10 and 11), the REST
+   controller, the auto-configuration test in a sample host, CLI `narrate` and `copilot status`. Narration
+   currently throws `COPILOT_UNAVAILABLE`.
+2. The migration plan: spec section 14 steps 1, 4 and 5 (branch `archive/python-desktop-v1` from `main`,
+   remove `service/`, `app/`, `installer/` and the desktop-only scripts and skills, rewrite this file, the
+   README, `scripts/` and CI for Java only, including dropping the "no WSL" hard rule below). Until then the
+   Python service stays as the parity oracle and the desktop app is untouched.
 
 ## Hard rules
 
