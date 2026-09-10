@@ -388,7 +388,7 @@ section 3, restated here where the module decides:
 
 One row per counted member per Monday week from the member's first assignment or join date to the
 origin; horizons 1, 2, 3. The columns are those of the schema mapping document, section 5, minus
-`planned_hrs_h{h}`, `planned_remaining_h{h}` and `team_planned_hrs_h{h}`: **42 columns per horizon**.
+`planned_hrs_h{h}`, `planned_remaining_h{h}` and `team_planned_hrs_h{h}`: **46 columns per horizon**.
 
 | Group | Columns |
 |---|---|
@@ -410,7 +410,8 @@ the as-of week and checking no column is entirely NaN except `lag13` on short hi
 `ArrivalModel` has `fit(FeatureMatrix, horizons)` and `predict(FeatureMatrix, h)` returning hours
 per row, clipped at 0, plus `name()`. Two implementations:
 
-- **SeasonalNaive** (the floor): `lag13` when present, else `roll_mean_4`, else 0. Deterministic, no
+- **SeasonalNaive** (the floor): the member's `fresh_hours` of the same week one year earlier (52 weeks)
+  when present in the training rows, else the row's `roll_mean_4`, floored at 0. Deterministic, no
   training.
 - **XgboostArrival**: one booster per horizon trained on rows with a known `target_h{h}` over
   `featureColumns(h)` minus all-NaN columns. Parameters, chosen to mirror the Python

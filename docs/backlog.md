@@ -276,3 +276,18 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   reference rows; the importer leaves autocommit off before close; CLI errors fall to picocli's default
   handler; `.gitignore` lists `server/**/target/` twice. The CLAUDE.md hard rule "no WSL" predates the
   server direction and is rewritten by the migration plan.
+- Java module residuals parked at the close of the pipeline-core final review (2026-09-09):
+  - The Python effort model's cycle-time regressor was not ported; `EffortModel.familyCycleDays` uses the
+    hierarchy fallback only (member, then team × family, then team, then a global median), with no learned
+    regression on top of it.
+  - Two approximations the review accepted rather than fixed: `Truncation.at` carries a task's present-day
+    `reopened_from_done` flag and its project's current `status` forward into every replayed origin week
+    instead of rewinding them (alongside the due date and original estimate already read as of today; see
+    `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md` section 5's closing paragraph).
+  - Planned-work's open- and new-hour placement falls back to the start week when a member has no present
+    working day in the placement span, matching the Python `place_hours`. Whether that fallback (rather than,
+    say, dropping the hours or pushing them past the absence) is the right behaviour is a design decision for
+    the owner, not something the port should have silently inherited.
+  - The Python parity check compares apples to oranges as it stands: the Python harness still forecasts
+    `est_hours`, while the Java pipeline's target is `fresh_hours`. Either switch the Python harness to
+    `fresh_hours` first, or compare `est_hours`-driven runs on both sides, before trusting a parity number.

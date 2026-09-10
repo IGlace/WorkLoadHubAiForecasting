@@ -168,9 +168,17 @@ weeks ahead; a model that sees them predicts arrivals far better than history al
 | `tenure_weeks` | weeks since `team_members.joined_at`: newcomers ramp up. |
 | `week_of_year` | seasonality. |
 
-That is 45 columns per horizon, against 25 today. The booster handles the width; what matters is that
-every column is available at prediction time from the database alone, which section 8 states as a
-test.
+That is 46 columns per horizon after dropping the three planned-week columns, against 25 today. The
+booster handles the width; what matters is that every column is available at prediction time from the
+database alone, which section 8 states as a test.
+
+Truncation (section 3) replays the task and transition history as of the origin week, which is what
+keeps the own-history and throughput columns leak-free. It does not rewind everything: a task's
+present-day `reopened_from_done` flag, its project's current `status`, its current `due_date`, and its
+`original_estimate_hrs` are all read as they stand today, not as they stood at the origin (only
+`remaining_estimate_hrs` is recomputed from the hours logged by the cutoff). The leakage guarantee
+(section 8) holds only up to that list — a column built from one of those four fields carries a small
+amount of hindsight the replay does not remove.
 
 ## 6. Demand, bands and the narrative facts on this schema
 
