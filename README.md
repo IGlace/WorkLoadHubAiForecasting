@@ -17,6 +17,6 @@ The first version, a Windows desktop application with a Python service, is archi
 `archive/python-desktop-v1` and receives no new features.
 
 ```bash
-cd server && mvn -B verify      # the gate: about three minutes without Docker
+cd server && mvn -B verify      # the gate: about six minutes without Docker
 bash scripts/check.sh           # the same gate plus the parity tool's test
 ```

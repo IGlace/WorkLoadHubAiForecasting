@@ -76,7 +76,7 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 ## Toolchain
 
 - Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, picocli, Flyway, XGBoost4J, copilot-sdk-java.
-- The gate: `cd server && mvn -B -q verify` (under three minutes without Docker; PostgreSQL tests run through
+- The gate: `cd server && mvn -B -q verify` (about six minutes without Docker; PostgreSQL tests run through
   Testcontainers when Docker is present, else skip with a message) plus the parity tool's test,
   `uv run --python 3.11 --with pytest pytest server/tools/tests`. `bash scripts/check.sh` and
   `pwsh scripts/check.ps1` run both; `.github/workflows/ci.yml` runs the same on pushes to `dev` and `main`.
