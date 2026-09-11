@@ -140,7 +140,7 @@ class AccuracyTest {
     }
 
     @Test
-    void aHolidayOrFullAbsenceIsNotScoredAndIsCounted() {
+    void aPublicHolidayIsNotScoredAndIsCounted() {
         // Tuesday is a public holiday for A: the runner wrote the day with workingDay false, capacity 0 and no demand.
         // Scoring it would count a perfect row for a day nobody was meant to work.
         List<CurrentDayForecast> current = List.of(current(A, MON, RUN2, 8, 8), current(A, TUE, RUN2, 0, 0));

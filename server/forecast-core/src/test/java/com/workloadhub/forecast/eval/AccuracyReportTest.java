@@ -42,7 +42,7 @@ class AccuracyReportTest {
         assertTrue(summary.contains("| lead | 1 | 1 | 2.000 | 2.000 | 0.400 | 1 | nan | nan |"), summary);
         int lag = summary.indexOf("Hours are often logged days late");
         int mase = summary.indexOf("MASE here is daily");
-        int holidays = summary.indexOf("3 weekdays were holidays or full absences and are not scored");
+        int holidays = summary.indexOf("3 weekdays were public holidays and are not scored");
         int scopes = summary.indexOf("The team and member rows read the current forecast");
         assertTrue(lag > 0 && lag < mase && mase < holidays && holidays < scopes,
                 () -> "the caveats come in order: log lag, MASE, non-working days, scopes\n" + summary);

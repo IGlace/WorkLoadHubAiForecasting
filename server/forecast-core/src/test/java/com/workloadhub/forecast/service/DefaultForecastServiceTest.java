@@ -400,9 +400,9 @@ class DefaultForecastServiceTest {
         assertTrue(future.current().isEmpty(), "nothing has passed yet");
         assertEquals(0, future.scores().get(0).n());
         int members = (int) r.memberDays().stream().map(d -> d.userId()).distinct().count();
-        assertTrue(acc.nonWorkingDays() > 0, "the seed puts a public holiday or a full absence in those two weeks");
+        assertTrue(acc.nonWorkingDays() > 0, "the seed puts a public holiday in those two weeks");
         assertEquals(members * 10, acc.current().size() + acc.nonWorkingDays(),
-                "ten weekdays per member, 2026-08-20 to 2026-09-02, all in the past; the holidays and full absences are counted, not scored");
+                "ten weekdays per member, 2026-08-20 to 2026-09-02, all in the past; the public holidays are counted, not scored");
         assertTrue(acc.current().stream().allMatch(row -> row.runId().equals(r.run().id())));
         assertTrue(acc.current().stream().allMatch(row -> row.lead() >= 1 && row.lead() <= 10));
         assertTrue(acc.current().stream().anyMatch(row -> row.loggedHrs() > 0), "the seed logged hours in those weeks");
@@ -418,7 +418,7 @@ class DefaultForecastServiceTest {
         assertEquals(8, leads.size(),
                 () -> "two of the ten weekdays are non-working for every member: " + acc.nonWorkingDays() + " skipped rows over " + members + " members");
         assertEquals(acc.nonWorkingDays(), members * 2, "both holidays fall on all three members");
-        assertTrue(leads.stream().allMatch(s -> s.n() >= 1), "every lead of the run in the range has at least one working day scored");
+        assertTrue(leads.stream().allMatch(s -> s.n() >= members), "every lead of the run in the range has every member scored");
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 8, 20))).code());
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, null, LocalDate.of(2026, 8, 20))).code());
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> service.accuracy(UUID.randomUUID(), LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2))).code());

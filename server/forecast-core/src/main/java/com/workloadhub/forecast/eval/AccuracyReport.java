@@ -43,7 +43,7 @@ public final class AccuracyReport {
                 .append(" Hours are often logged days late: the most recent days read low and the bias there is the logs', not the forecast's.")
                 .append(" MASE here is daily, each day against the same weekday one week earlier, scored over the `mase_n` rows that have such a log;")
                 .append(" it is not the weekly arrival MASE the run and the backtest report. ").append(result.nonWorkingDays())
-                .append(" weekdays were holidays or full absences and are not scored. The team and member rows read the current forecast while the")
+                .append(" weekdays were public holidays and are not scored (a personal absence keeps its day: it only zeroes the capacity). The team and member rows read the current forecast while the")
                 .append(" lead rows pool every finished run's day rows, so a day counts once per run there; `accuracy.csv` holds the current rows only.")
                 .append("\n\n");
         md.append(TABLE_HEADER).append('\n').append("|---|---|---|---|---|---|---|---|---|\n");

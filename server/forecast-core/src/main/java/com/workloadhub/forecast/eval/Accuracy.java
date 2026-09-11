@@ -40,7 +40,7 @@ public final class Accuracy {
     }
 
     /**
-     * A public holiday or a full absence is written as a day row with {@code workingDay} false and no capacity; scoring it would count a perfect
+     * A public holiday (company-wide: personal absences only zero the capacity) is written as a day row with {@code workingDay} false and no capacity; scoring it would count a perfect
      * row for a day nobody was meant to work, so those days are left out of every scope and counted in {@code nonWorkingDays} instead.
      */
     public static AccuracyResult evaluate(UUID teamId, LocalDate from, LocalDate to, LocalDate evaluatedAt, List<CurrentDayForecast> current,
