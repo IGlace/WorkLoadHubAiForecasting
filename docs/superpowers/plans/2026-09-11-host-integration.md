@@ -1107,4 +1107,24 @@ the rulings."
 4. `TOOL_DONE` restarts the asking rotation from its first phrase (a new step start) rather than resuming where the rotation was.
 5. The sample host's tests treat a second department as optional (`Optional` team and outsider) so the plan does not pin the seed's department count.
 
+**Rulings taken during execution and the final review (2026-09-11):**
+
+6. The seed provides every role but `VIEWER`; the sample host's viewer is the `CENTER_MANAGER`, which has the
+   same rights (spec section 4.3 corrected). The CLI's tests run no narration, so the `narrate` printer is
+   covered by reading, not by a test (spec section 6 corrected).
+7. The one-at-a-time rule looks at the run's own phase (`runInProgress`): a run whose narration is in flight
+   is over, so the leader may start the next team.
+8. Start-up reconciliation runs once after all singletons are instantiated (`SmartInitializingSingleton`), so
+   a host-owned Flyway has run first; a database that cannot answer is logged and never stops the host. In the
+   CLI only `run` reconciles, so read-only commands in a second process never fail a live run (spec 4.2).
+9. The host's narration pre-check is `GitHubTokenStore.has(userId)`; `copilotStatus` opens a session and is
+   for the settings page (spec 3.4). The host persists `(runId, teamId, requestedBy)` in its own table; the
+   sample's in-memory map is a test convenience (spec 3.6). A run lookup by id on `ForecastService` stays out
+   of scope.
+10. The CLI progress printer prints a line per step (phase or message change), not per rotated phrase; the
+    rotation is for polling hosts. The rotation index carries a jqwik property.
+11. Parked: the service test's reconciliation sweeps the shared seeded database (sequential tests, safe
+    today); the tracker rotates on the host's business clock (the system clock in production); the sample
+    facade's guards are check-then-act on in-memory maps, disclosed in the README.
+
 **What comes next:** the live Copilot check on a seeded database, the real export through the seed and the parity procedure, the server's own integration code in the WorkloadHub repository, and the accuracy evaluation reading `forecast_current_days`.
