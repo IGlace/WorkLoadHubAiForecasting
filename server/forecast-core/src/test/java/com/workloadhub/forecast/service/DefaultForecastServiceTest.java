@@ -2,6 +2,7 @@ package com.workloadhub.forecast.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,6 +26,7 @@ import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.features.MemberDay;
@@ -37,6 +39,7 @@ import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
 import com.workloadhub.forecast.testing.SeededData;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -360,23 +363,47 @@ class DefaultForecastServiceTest {
         return id;
     }
 
+    /** The first team (in {@code data.teams()} order) with a member who logged hours on a weekday in the range: not necessarily the shared
+     * {@code team}, whose members happen to have stopped logging before the range; every other test in the class runs the shared {@code team}
+     * on different days, so any team works here without colliding with them. */
+    private static UUID teamWithLoggedHoursBetween(LocalDate from, LocalDate to) {
+        ForecastData data = SeededData.data();
+        SortedMap<MemberDay, Double> logged = Truth.realisedHoursByDay(data);
+        for (TeamRow t : data.teams()) {
+            for (MemberRow m : data.membersOfTeam(t.id())) {
+                for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+                    if (d.getDayOfWeek() != DayOfWeek.SATURDAY && d.getDayOfWeek() != DayOfWeek.SUNDAY
+                            && logged.getOrDefault(new MemberDay(m.id(), d), 0.0) > 0) {
+                        return t.id();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     @Test
     void accuracyComparesTheForecastsMadeBeforeEachWeekdayWithTheLoggedHours() {
+        LocalDate from = LocalDate.of(2026, 8, 20);
+        LocalDate to = LocalDate.of(2026, 9, 2);
+        UUID activeTeam = teamWithLoggedHoursBetween(from, to);
+        assertNotNull(activeTeam, "a team in the seed logged hours on a weekday between " + from + " and " + to);
         LocalDate wednesday = LocalDate.of(2026, 8, 19);
-        RunResult r = service.runNow(new RunRequest(team, null, "seasonal_naive", null), wednesday);
+        RunResult r = service.runNow(new RunRequest(activeTeam, null, "seasonal_naive", null), wednesday);
         assertEquals(LocalDate.of(2026, 8, 20), r.memberDays().get(0).day());
-        AccuracyResult acc = service.accuracy(team, LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2));
+        AccuracyResult acc = service.accuracy(activeTeam, from, to);
         assertEquals(SeededData.asOf(), acc.evaluatedAt(), "the clock's day");
-        assertEquals(LocalDate.of(2026, 9, 2), acc.to());
-        assertEquals(LocalDate.of(2026, 8, 20), acc.from());
-        assertEquals(LocalDate.of(2026, 9, 5), service.accuracy(team, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)).to(), "clamped to yesterday");
-        AccuracyResult future = service.accuracy(team, LocalDate.of(2026, 9, 6), LocalDate.of(2026, 9, 30));
+        assertEquals(to, acc.to());
+        assertEquals(from, acc.from());
+        assertEquals(LocalDate.of(2026, 9, 5), service.accuracy(activeTeam, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)).to(), "clamped to yesterday");
+        AccuracyResult future = service.accuracy(activeTeam, LocalDate.of(2026, 9, 6), LocalDate.of(2026, 9, 30));
         assertTrue(future.current().isEmpty(), "nothing has passed yet");
         assertEquals(0, future.scores().get(0).n());
         int members = (int) r.memberDays().stream().map(d -> d.userId()).distinct().count();
         assertEquals(members * 10, acc.current().size(), "ten weekdays per member, 2026-08-20 to 2026-09-02, all in the past");
         assertTrue(acc.current().stream().allMatch(row -> row.runId().equals(r.run().id())));
         assertTrue(acc.current().stream().allMatch(row -> row.lead() >= 1 && row.lead() <= 10));
+        assertTrue(acc.current().stream().anyMatch(row -> row.loggedHrs() > 0), "the seed logged hours in those weeks");
         SortedMap<MemberDay, Double> logged = Truth.realisedHoursByDay(SeededData.data());
         assertTrue(acc.current().stream().allMatch(row -> row.loggedHrs() == logged.getOrDefault(new MemberDay(row.userId(), row.day()), 0.0)),
                 "each row's logged hours match the truth computed directly from the seed's time logs");
@@ -388,8 +415,8 @@ class DefaultForecastServiceTest {
         List<AccuracyScore> leads = acc.scores().stream().filter(s -> s.scope().equals("lead")).toList();
         assertEquals(10, leads.size());
         assertTrue(leads.stream().allMatch(s -> s.n() >= members), "every run in the range contributes to each lead");
-        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(team, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 8, 20))).code());
-        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(team, null, LocalDate.of(2026, 8, 20))).code());
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 8, 20))).code());
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, null, LocalDate.of(2026, 8, 20))).code());
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> service.accuracy(UUID.randomUUID(), LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2))).code());
     }
 }
