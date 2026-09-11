@@ -351,6 +351,9 @@ The web starter is a test-scoped dependency of `forecast-core` only.
   status, model, attempts, cost line, the verification problems if any, and the narrative JSON on
   stdout (`--json` prints the whole `NarrativeResult`). Exit 0 for `OK`, 3 for `UNVERIFIED`, 1 for
   `FAILED` or a thrown error, 2 for a usage error.
+
+  > Amended on 2026-09-11: the thinking and the answer are no longer streamed or capped; `narrate` prints the
+  > label and the message of each step. See the host integration design, section 4.1.
 - `copilot status --user <name or id> [--db f]`: prints the `CopilotStatus` fields as lines.
 - Both need the token key: the CLI reads `WHF_TOKEN_KEY` (base64, 32 bytes; `openssl rand -base64 32`
   makes one) and fails with a clear message when it is unset. `Services.open` builds the token store
@@ -387,6 +390,10 @@ call extracts, how to point at an installed CLI instead).
   deltas-only turn, retry resetting the answer, tool steps, metrics read before close, events fallback,
   close failure not masking the outcome) as they apply to the Java shape.
 - `RunProgressTrackerTest`: narration steps, percent, tails capped, reset keeps thinking.
+
+  > Amended on 2026-09-11: no tails are kept; the tracker's tests cover the bilingual label table and the
+  > four-second rotation (a property over the elapsed seconds included). See the host integration design,
+  > section 4.1.
 - `JdbcNarrativeStoreTest`: save and read back each status on SQLite; PostgreSQL through Testcontainers
   when Docker is present, like the other store tests; V2 applies on a database that already ran V1.
 - `DefaultForecastServiceTest`: `narrate` with a fake gateway bean (OK, UNVERIFIED, FAILED stored and

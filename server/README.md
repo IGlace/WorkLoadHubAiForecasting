@@ -61,6 +61,8 @@ $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal
 | `narrate` | `--run <id> --user <name or id> [--lang en\|fr] [--model m] [--token-env GITHUB_TOKEN] [--db] [--json]` | Stores the user's GitHub token, narrates a finished run through their Copilot seat, prints the progress labels and steps to stderr, and prints the stored result. Exits 0 OK, 3 UNVERIFIED, 1 FAILED or error, 2 usage. |
 | `copilot status` | `--user <name or id> [--db]` | Reports whether this user can narrate: token presence, runtime availability, sign-in and quota. |
 
+`run` first fails any run left `QUEUED` or `RUNNING` by an earlier crash; the other commands leave them alone.
+
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
 `psql -d avl_workloadhub -f ~/whf/seeded.sql` (it runs inside one transaction and sets
@@ -135,20 +137,26 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
 
 - **A run**: check the role, `startRun(new RunRequest(teamId, userId, null, null))`, let the page poll
   `progress(runId)` and show `label` in the user's language until `DONE` or `FAILED`, then read `getRun(runId)`
-  and `currentForecast(teamId, from, to)` (per member and day, two windows of five weekdays).
-- **A narration**: check the role, `copilotStatus(userId).hasToken()` and that the run is `DONE`, then submit
-  `narrate(new NarrativeRequest(runId, userId, language, null))` to your own bounded executor and return; the
-  page polls `progress(runId)` (`NARRATING` with a label that rotates through "collecting data", "consulting
-  Copilot", "thinking"; then `NARRATED` or `NARRATION_FAILED`) and reads `narrative(runId, language)`. Refuse a
-  second narration of the same run and language while one is in flight. The sample facade's one-at-a-time and
-  in-flight guards are check-then-act on in-memory maps, enough for one instance and sequential requests; a
-  host serving concurrent requests for the same user should synchronise them.
+  and `currentForecast(teamId, from, to)` (per member and day, two windows of five weekdays). Persist
+  `(runId, teamId, requestedBy)` in your own table when you start a run: `getRun` answers only for `DONE` runs
+  and `listRuns` needs the team, so after a restart that row is what lets you authorize a poll of the
+  interrupted run (the sample facade's in-memory map is a test convenience).
+- **A narration**: check the role, `GitHubTokenStore.has(userId)` (one query) and that the run is `DONE`, then
+  submit `narrate(new NarrativeRequest(runId, userId, language, null))` to your own bounded executor and
+  return; the page polls `progress(runId)` (`NARRATING` with a label that rotates through "collecting data",
+  "consulting Copilot", "thinking"; then `NARRATED` or `NARRATION_FAILED`) and reads `narrative(runId,
+  language)`. Refuse a second narration of the same run and language while one is in flight. The sample
+  facade's one-at-a-time and in-flight guards are check-then-act on in-memory maps, enough for one instance
+  and sequential requests; a host serving concurrent requests for the same user should synchronise them.
 - **Tokens**: your settings page calls `GitHubTokenStore.save(userId, token)` and `clear`, and shows
-  `copilotStatus(userId)`. The module reads a token in one place, at narration, and never returns it.
+  `copilotStatus(userId)`, which opens a Copilot session and reports authentication and quota — that is the
+  settings page's job, not a pre-check. The module reads a token in one place, at narration, and never returns
+  it.
 - **Errors**: `ForecastException.code()`: `*_NOT_FOUND` → 404, `INVALID_REQUEST` → 400, everything else → 409; a
   refused role check is your 403.
-- **One instance**: progress and the run executor live in the JVM. At start-up the module marks runs left
-  `QUEUED` or `RUNNING` by the previous process as `FAILED` (`interrupted by a restart`).
+- **One instance**: progress and the run executor live in the JVM. Once every bean is up (after your own
+  Flyway, whichever owns the module's tables) the module marks runs left `QUEUED` or `RUNNING` by the previous
+  process as `FAILED` (`interrupted by a restart`); a database that cannot answer is logged, never fatal.
 
 ### The REST surface (`whf.web.enabled=true`)
 
@@ -224,12 +232,13 @@ status, so a failed one keeps its cost.
 
 No automated test talks to Copilot. The live check is manual: run the two commands above on a seeded database
 with a real token, and read `copilot status` first (it starts the runtime with the token and reports the login
-and the quota). In the printed steps (the message names each tool), confirm that the nine tools were called (`get_run_overview` first, then
-the five member tools for every member, then `get_project_timelines`, `get_planned_work` and
-`get_rebalancing_candidates`) and that no permission prompt was needed: the tools are marked
-`skipPermission(true)`, and the handler behind them approves only a request whose `kind` is `custom-tool` and
-whose `toolName` is one of the nine. A prompt of another `kind` would still let the narration through — the
-tools skip permission — but it means the handler's assumption about the runtime is wrong: report it.
+and the quota). In the printed steps (the message names each tool), confirm that the nine tools were called
+(`get_run_overview` first, then the five member tools for every member, then `get_project_timelines`,
+`get_planned_work` and `get_rebalancing_candidates`) and that no permission prompt was needed: the tools are
+marked `skipPermission(true)`, and the handler behind them approves only a request whose `kind` is
+`custom-tool` and whose `toolName` is one of the nine. A prompt of another `kind` would still let the
+narration through — the tools skip permission — but it means the handler's assumption about the runtime is
+wrong: report it.
 Sessions never resume; each narration is one client and one session, closed at the end.
 
 ## Parity check

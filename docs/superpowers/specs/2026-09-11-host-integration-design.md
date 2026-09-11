@@ -84,7 +84,9 @@ language, null))` to its own bounded executor (two threads, daemon, named `forec
 and language while one is in flight is refused (409). Errors of the submitted call end up in the progress
 phase `NARRATION_FAILED` and in the stored narrative row when the narration itself failed; a `ForecastException`
 thrown before the narration started (`TOKEN_MISSING`, `RUN_NOT_DONE`) is reported by the host's route
-synchronously, so the host calls `service.copilotStatus(userId)` and checks the run status before submitting.
+synchronously, so the host checks `GitHubTokenStore.has(userId)` and the run status before submitting. That
+pre-check is one query; `copilotStatus` is for the settings page, where opening a Copilot session to report
+authentication and quota is the point.
 
 ### 3.5 Tokens
 
@@ -97,8 +99,10 @@ narration, and never returned.
 
 Progress and the run executor live in the JVM. When the server restarts, runs that were `QUEUED` or `RUNNING`
 are marked `FAILED` with the error `interrupted by a restart` when the module starts (section 4.2), so a page
-polling them sees `FAILED` and can offer to run again. A second instance would need persisted progress and a
-claim scheme for runs, out of scope.
+polling them sees `FAILED` and can offer to run again. The host persists `(runId, teamId, requestedBy)` in its
+own table when it starts a run, because the module's `getRun` answers only for `DONE` runs and `listRuns` needs
+the team; the sample facade's in-memory map is a test convenience. A second instance would need persisted
+progress and a claim scheme for runs, out of scope.
 
 ## 4. What the module changes
 
@@ -143,9 +147,12 @@ narration from the stored row, as today); the narration spec's section 10 gets a
 `JdbcRunStore.failInterrupted(LocalDateTime now)` sets `status = FAILED`, `error = 'interrupted by a restart'`
 and `finished_at = now` on every `forecast_runs` row whose status is `QUEUED` or `RUNNING`, and returns the
 count. `DefaultForecastService.recoverInterruptedRuns()` calls it and logs the count when it is not zero. The
-auto-configuration calls it right after constructing the service bean; the CLI's `Services.open` calls it too
-(a CLI run killed mid-way is reconciled by the next command). A run that is legitimately running in another
-process cannot exist under decision 3, so nothing is lost.
+auto-configuration runs it once after all the singletons are instantiated (a `SmartInitializingSingleton` bean,
+`ForecastStartupReconciliation`), so a host that owns the module's tables (`whf.flyway.enabled=false`) has run
+its own Flyway first; a failure there is logged and never stops the host from starting. In the CLI it is the
+`run` command only, right after `Services.open` and before it starts its own run, so that read-only commands in
+a second process never fail a run the first is executing (a CLI run killed mid-way is reconciled by the next
+`run`). A run that is legitimately running in another process cannot exist under decision 3, so nothing is lost.
 
 ### 4.3 The sample host, Java interface
 

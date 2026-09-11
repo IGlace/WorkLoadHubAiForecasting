@@ -484,6 +484,10 @@ thinking and answer text) and read through `ForecastService.progress(runId)`. It
 that runs the run; a host with several instances routes progress reads to the same instance or
 accepts that only the persisted state is visible.
 
+> Amended on 2026-09-11: progress no longer carries the thinking and answer text; it carries a bilingual
+> `ProgressLabel` that rotates through a few phrases every four seconds while a step lasts. See the host
+> integration design, section 4.1.
+
 ## 10. Copilot narration
 
 ### 10.1 Facts
@@ -631,6 +635,9 @@ Runs in WSL with `java -jar workloadhub-forecast-cli.jar <command>`; the SQLite 
 | `narrate --run <id> --lang en|fr --token-env GITHUB_TOKEN` | stores the token for the user, narrates, prints the streamed thinking and answer, then the verified narrative |
 | `copilot status` | token presence, runtime, quota |
 | `runs --team <name>` | lists runs |
+
+> Amended on 2026-09-11: `narrate` prints the label and the message of each step, not Copilot's thinking and
+> answer. See the host integration design, section 4.1.
 
 Output tables are plain text in English; the CLI is a developer tool and is not localised. The CLI
 never touches PostgreSQL: production access goes through the host.
