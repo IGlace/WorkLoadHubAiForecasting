@@ -62,7 +62,8 @@ server/    Java 21 module: `forecast-core` (the library the host adds) and `fore
            init-db, import, export, seed, run, runs, current, teams, eval, narrate, copilot status);
            `server/tools/` holds the parity scripts and their one Python test
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
-scripts/   `check.ps1` and `check.sh` (the gate), `release.ps1` (gate, then fast-forward main to dev)
+scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
+           dev), `test-release.sh` (the release script's self-test)
 .claude/   skills, agents, hooks, settings
 ```
 
@@ -74,9 +75,10 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.ps1` (gate, then fast
   `uv run --python 3.11 --with pytest pytest server/tools/tests`. `bash scripts/check.sh` and
   `pwsh scripts/check.ps1` run both; `.github/workflows/ci.yml` runs the same on pushes to `dev` and `main`.
   Keep the three in step.
-- `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to `dev`; it is the only thing that can
-  refuse a bad release, because git has no pre-merge hook for a fast-forward. It refuses to run unless both
-  mvn and uv are on PATH, so the whole gate runs.
+- `bash scripts/release.sh` (Linux, WSL) or `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to
+  `dev`; either is the only thing that can refuse a bad release, because git has no pre-merge hook for a
+  fast-forward. Both refuse to run unless mvn and uv are on PATH, so the whole gate runs; neither pushes.
+  `bash scripts/test-release.sh` checks the bash one on a throwaway repository (CI runs it too).
 - Copilot: the SDK runs an in-process runtime, unpacked once to `~/.copilot/runtime-cache`; tokens need
   `whf.token-key` (server) or `WHF_TOKEN_KEY` (CLI). The live path is checked by hand (`server/README.md`).
 
