@@ -8,7 +8,6 @@ import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.data.ExportFiles;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -120,9 +119,7 @@ public class RunCommand implements Callable<Integer> {
     }
 
     private void print(RunResult r, Services s) {
-        Map<UUID, String> names = new HashMap<>();
-        s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
-                .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
+        Map<UUID, String> names = Names.of(s.jdbc());
         String mase = r.run().championMase() == null ? "n/a" : String.format("%.2f", r.run().championMase());
         long members = r.memberWindows().stream().map(MemberWindowForecast::userId).distinct().count();
         StringJoiner windows = new StringJoiner(", ");

@@ -5,7 +5,6 @@ import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.data.ExportFiles;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -58,9 +57,7 @@ public class CurrentCommand implements Callable<Integer> {
                 System.out.println(ExportFiles.mapper().writeValueAsString(rows));
                 return 0;
             }
-            Map<UUID, String> names = new HashMap<>();
-            s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
-                    .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
+            Map<UUID, String> names = Names.of(s.jdbc());
             System.out.printf("%-28s %-10s %-36s %7s %7s %7s %7s %8s %8s%n", "member", "day", "run", "open", "new", "planned", "demand", "capacity", "overload");
             for (CurrentDayForecast c : rows) {
                 System.out.printf("%-28s %-10s %-36s %7.1f %7.1f %7.1f %7.1f %8.1f %8.1f%n", names.getOrDefault(c.userId(), c.userId().toString()), c.day(),

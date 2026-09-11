@@ -9,7 +9,6 @@ import com.workloadhub.forecast.ai.Narrator;
 import com.workloadhub.forecast.ai.Prompts;
 import com.workloadhub.forecast.ai.RuntimeInfo;
 import com.workloadhub.forecast.api.AccuracyResult;
-import com.workloadhub.forecast.api.AccuracyScore;
 import com.workloadhub.forecast.api.CopilotStatus;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
@@ -240,6 +239,10 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         return store.currentDays(teamId, from, to);
     }
 
+    /**
+     * {@code to} is clamped to yesterday, so a range that only covers today and later comes back empty: the clamped {@code to} is then before
+     * {@code from}, which is what the result reports.
+     */
     @Override
     public AccuracyResult accuracy(UUID teamId, LocalDate from, LocalDate to) {
         if (teamId == null || from == null || to == null) {
@@ -252,8 +255,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         LocalDate today = LocalDate.now(clock);
         LocalDate last = to.isBefore(today) ? to : today.minusDays(1);
         if (from.isAfter(last)) {
-            return new AccuracyResult(teamId, from, last, today, List.of(), List.of(new AccuracyScore(Accuracy.TEAM, teamId.toString(), 0,
-                    Double.NaN, Double.NaN, Double.NaN, 0, Double.NaN, Double.NaN)), 0);
+            return Accuracy.evaluate(teamId, from, last, today, List.of(), List.of(), new TreeMap<>());
         }
         ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
         return Accuracy.evaluate(teamId, from, last, today, store.currentDays(teamId, from, last), store.runDays(teamId, from, last),

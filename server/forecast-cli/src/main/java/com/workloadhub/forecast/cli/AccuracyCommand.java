@@ -7,7 +7,6 @@ import com.workloadhub.forecast.eval.AccuracyReport;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -20,6 +19,7 @@ public class AccuracyCommand implements Callable<Integer> {
 
     /** The default range is this many days ending yesterday, both ends included. */
     static final int DEFAULT_DAYS = 20;
+    static final int KEY_WIDTH = 36;
 
     @Mixin DbOptions db;
 
@@ -68,19 +68,22 @@ public class AccuracyCommand implements Callable<Integer> {
                 System.out.println(RunCommand.JSON_MAPPER.writeValueAsString(result));
                 return 0;
             }
-            Map<UUID, String> names = new HashMap<>();
-            s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
-                    .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
+            Map<UUID, String> names = Names.of(s.jdbc());
             System.out.println("accuracy of team " + team + ", " + result.from() + " to " + result.to() + ", " + result.current().size() + " member-days");
             System.out.println("mase: daily hours against the same weekday a week earlier (not the run's weekly MASE); lead rows pool every finished run");
             System.out.printf("%-7s %-36s %5s %7s %7s %7s %7s %10s %10s%n", "scope", "key", "n", "mae", "bias", "mase", "mase_n", "over_prec", "over_rec");
             for (AccuracyScore sc : result.scores()) {
-                String key = sc.scope().equals("member") ? names.getOrDefault(UUID.fromString(sc.key()), sc.key()) : sc.key();
+                String key = column(sc.scope().equals("member") ? names.getOrDefault(UUID.fromString(sc.key()), sc.key()) : sc.key());
                 System.out.printf("%-7s %-36s %5d %7s %7s %7s %7d %10s %10s%n", sc.scope(), key, sc.n(), cell(sc.mae()), cell(sc.bias()), cell(sc.mase()),
                         sc.maseN(), cell(sc.overloadPrecision()), cell(sc.overloadRecall()));
             }
             return 0;
         }
+    }
+
+    /** The key column is 36 characters wide: a longer name is cut so the columns stay in line. */
+    static String column(String key) {
+        return key.length() <= KEY_WIDTH ? key : key.substring(0, KEY_WIDTH - 1) + "\u2026";
     }
 
     static String cell(double v) {

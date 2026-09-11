@@ -6,9 +6,9 @@ import com.workloadhub.forecast.api.AccuracyScore;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.MemberDayForecast;
 import com.workloadhub.forecast.backtest.Backtest;
+import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.features.MemberDay;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,15 +32,11 @@ public final class Accuracy {
     public static int lead(LocalDate asOf, LocalDate day) {
         int lead = 0;
         for (LocalDate d = asOf.plusDays(1); !d.isAfter(day); d = d.plusDays(1)) {
-            if (isWeekday(d)) {
+            if (Horizon.isWeekday(d)) {
                 lead++;
             }
         }
         return lead;
-    }
-
-    static boolean isWeekday(LocalDate d) {
-        return d.getDayOfWeek() != DayOfWeek.SATURDAY && d.getDayOfWeek() != DayOfWeek.SUNDAY;
     }
 
     /**
@@ -95,7 +91,7 @@ public final class Accuracy {
     }
 
     private static boolean inRange(LocalDate day, LocalDate from, LocalDate to) {
-        return isWeekday(day) && !day.isBefore(from) && !day.isAfter(to);
+        return Horizon.isWeekday(day) && !day.isBefore(from) && !day.isAfter(to);
     }
 
     private static AccuracyRow row(UUID user, LocalDate day, UUID runId, int lead, double forecast, double capacity, double overload,

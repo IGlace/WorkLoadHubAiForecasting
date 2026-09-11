@@ -60,6 +60,9 @@ Read from the WorkloadHub tables `users.role`, `teams.manager_id`, `teams.parent
 | `MEMBER` | none | the teams they belong to |
 | `VIEWER`, `CENTER_MANAGER` | none | any team (read only) |
 
+> Amended on 2026-09-11: `accuracy(teamId, from, to)` is shown to the roles that can view the team (accuracy
+> evaluation design).
+
 "One at a time" for a skill team leader: a second start while a run they requested is `QUEUED` or `RUNNING`
 is refused (`FORBIDDEN` in the host's vocabulary, HTTP 403). A team leader is not limited this way. Every
 call passes the signed-in user's id as `requestedBy`; the module never re-checks.

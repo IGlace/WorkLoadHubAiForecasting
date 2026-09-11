@@ -37,9 +37,9 @@ class AccuracyReportTest {
         assertTrue(summary.startsWith("# Forecast accuracy, team " + team + ", 2026-08-20 to 2026-09-02, evaluated 2026-09-06"));
         assertTrue(summary.contains("Truth: " + Truth.SOURCE));
         assertTrue(summary.contains("| scope | key | n | mae | bias | mase | mase_n | overload_precision | overload_recall |"));
-        assertTrue(summary.contains("| team | " + team + " | 2 | 1.25 | 1.25 | 0.5 | 2 | 1 | 1 |"));
-        assertTrue(summary.contains("| member | " + user + " | 2 | 1.25 | 1.25 |  | 0 | 1 | 1 |"), "NaN is an empty cell");
-        assertTrue(summary.contains("| lead | 1 | 1 | 2 | 2 | 0.4 | 1 |  |  |"));
+        assertTrue(summary.contains("| team | " + team + " | 2 | 1.250 | 1.250 | 0.500 | 2 | 1.000 | 1.000 |"), summary);
+        assertTrue(summary.contains("| member | " + user + " | 2 | 1.250 | 1.250 | nan | 0 | 1.000 | 1.000 |"), "the table prints NaN as nan");
+        assertTrue(summary.contains("| lead | 1 | 1 | 2.000 | 2.000 | 0.400 | 1 | nan | nan |"), summary);
         int lag = summary.indexOf("Hours are often logged days late");
         int mase = summary.indexOf("MASE here is daily");
         int holidays = summary.indexOf("3 weekdays were holidays or full absences and are not scored");

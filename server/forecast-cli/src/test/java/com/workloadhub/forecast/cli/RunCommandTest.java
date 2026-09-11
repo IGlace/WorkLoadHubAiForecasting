@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.api.AccuracyScore;
 import com.workloadhub.forecast.api.ModelScore;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
@@ -102,6 +103,24 @@ class RunCommandTest {
         Map<String, String> unavailable = Map.of("xgboost", "xgboost native library unavailable: boom");
         RunResult r = new RunResult(summary, scores, maseByModel, unavailable, List.of(), List.of(), "{}");
         String json = RunCommand.toJson(r);
+        assertFalse(json.contains("NaN"), json);
+        assertTrue(json.contains("\"mase\" : null") || json.contains("\"mase\":null"), json);
+    }
+
+    @Test
+    void aLongMemberNameIsCutToTheKeyColumn() {
+        String short36 = "a".repeat(36);
+        assertEquals(short36, AccuracyCommand.column(short36), "36 characters still fit");
+        String cut = AccuracyCommand.column("b".repeat(37));
+        assertEquals(36, cut.length());
+        assertEquals("b".repeat(35) + "\u2026", cut);
+    }
+
+    /** The accuracy result travels through the same mapper, and an empty scope hands it four NaN doubles. */
+    @Test
+    void accuracyJsonTurnsEveryNonFiniteScoreIntoNull() {
+        String json = RunCommand.JSON_MAPPER.writeValueAsString(
+                new AccuracyScore("team", "k", 0, Double.NaN, Double.NaN, Double.NaN, 0, Double.NaN, Double.NaN));
         assertFalse(json.contains("NaN"), json);
         assertTrue(json.contains("\"mase\" : null") || json.contains("\"mase\":null"), json);
     }

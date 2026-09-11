@@ -62,4 +62,9 @@ public final class Horizon {
         DayOfWeek dow = d.getDayOfWeek();
         return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
     }
+
+    /** Monday to Friday: the single definition of a working weekday in the module. */
+    public static boolean isWeekday(LocalDate d) {
+        return !isWeekend(d);
+    }
 }

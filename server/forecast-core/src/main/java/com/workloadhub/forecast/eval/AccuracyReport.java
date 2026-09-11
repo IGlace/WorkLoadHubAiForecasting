@@ -8,7 +8,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** accuracy.csv (one row per member and day) and summary.md (the scores by scope). */
+/**
+ * accuracy.csv (one row per member and day) and summary.md (the scores by scope). The CSV prints numbers with {@code Report.csv}, so a reader
+ * loads them as they are; the markdown table prints them with {@code Report.fmt}, three decimals and {@code nan}, so the columns line up.
+ */
 public final class AccuracyReport {
 
     static final String CSV_HEADER = "member_id,day,run_id,lead,forecast,truth,capacity,forecast_overload,actual_overload";
@@ -45,9 +48,9 @@ public final class AccuracyReport {
                 .append("\n\n");
         md.append(TABLE_HEADER).append('\n').append("|---|---|---|---|---|---|---|---|---|\n");
         for (AccuracyScore s : result.scores()) {
-            md.append("| ").append(s.scope()).append(" | ").append(s.key()).append(" | ").append(s.n()).append(" | ").append(Report.csv(s.mae()))
-                    .append(" | ").append(Report.csv(s.bias())).append(" | ").append(Report.csv(s.mase())).append(" | ").append(s.maseN())
-                    .append(" | ").append(Report.csv(s.overloadPrecision())).append(" | ").append(Report.csv(s.overloadRecall())).append(" |\n");
+            md.append("| ").append(s.scope()).append(" | ").append(s.key()).append(" | ").append(s.n()).append(" | ").append(Report.fmt(s.mae()))
+                    .append(" | ").append(Report.fmt(s.bias())).append(" | ").append(Report.fmt(s.mase())).append(" | ").append(s.maseN())
+                    .append(" | ").append(Report.fmt(s.overloadPrecision())).append(" | ").append(Report.fmt(s.overloadRecall())).append(" |\n");
         }
         return md.toString();
     }

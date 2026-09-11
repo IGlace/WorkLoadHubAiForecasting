@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 class JdbcRunStoreTest {
 
@@ -229,9 +230,17 @@ class JdbcRunStoreTest {
         UUID failed = store.create(new RunRequest(TEAM, USER, null, null), friday, T0.plusHours(3));
         store.markRunning(failed);
         store.fail(failed, "boom", T0.plusHours(4));
+        // A third run finished, so it has day rows in the range, and is then put back to RUNNING: only the status filter can keep it out.
+        UUID reopened = store.create(new RunRequest(TEAM, USER, null, null), friday, T0.plusHours(5));
+        store.markRunning(reopened);
+        store.finish(reopened, "seasonal_naive", 1.0, "{}", windows(), days(friday, 9), "{}", T0.plusHours(6));
+        Dialect dialect = Dialect.of(ds);
+        assertEquals(1, JdbcClient.create(ds).sql("UPDATE forecast_runs SET status = ? WHERE id = " + dialect.placeholder("uuid"))
+                .param(RunStatus.RUNNING.name()).param(reopened.toString()).update());
 
         List<RunDayForecast> rows = store.runDays(TEAM, LocalDate.of(2026, 8, 24), LocalDate.of(2026, 8, 25));
-        assertEquals(4, rows.size(), "two runs, Monday and Tuesday each; the failed run has no day rows");
+        assertEquals(4, rows.size(), "two DONE runs, Monday and Tuesday each; the failed run wrote no day rows and the third run is no longer DONE");
+        assertTrue(rows.stream().noneMatch(r -> r.runId().equals(reopened)), "the day rows of a run that is not DONE are filtered out");
         assertTrue(rows.stream().anyMatch(r -> r.runId().equals(first) && r.asOf().equals(wednesday) && r.day().demandHrs() == 7));
         assertTrue(rows.stream().anyMatch(r -> r.runId().equals(second) && r.asOf().equals(friday) && r.day().demandHrs() == 8));
         assertTrue(rows.stream().allMatch(r -> !r.day().day().isBefore(LocalDate.of(2026, 8, 24)) && !r.day().day().isAfter(LocalDate.of(2026, 8, 25))));

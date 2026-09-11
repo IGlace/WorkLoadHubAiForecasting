@@ -8,6 +8,7 @@ import com.workloadhub.forecast.api.AccuracyRow;
 import com.workloadhub.forecast.api.AccuracyScore;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.MemberDayForecast;
+import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.features.MemberDay;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -26,9 +27,10 @@ class AccuracyProperties {
 
     static final UUID TEAM = UUID.fromString("40000000-0000-0000-0000-000000000001");
     static final UUID RUN = UUID.fromString("50000000-0000-0000-0000-000000000001");
-    /** The Friday before the range: the ten weekdays of the range are leads 1 to 10 of that run. */
-    static final LocalDate AS_OF = LocalDate.of(2026, 8, 14);
-    static final LocalDate FROM = LocalDate.of(2026, 8, 17);
+    /** The Friday before the range: the five weekdays of the range are leads 1 to 5 of that run. */
+    static final LocalDate AS_OF = LocalDate.of(2026, 8, 21);
+    /** One week, so the same weekday seven days earlier always falls outside the range and the prior-week logs are free to choose. */
+    static final LocalDate FROM = LocalDate.of(2026, 8, 24);
     static final LocalDate TO = LocalDate.of(2026, 8, 28);
     static final LocalDate TODAY = LocalDate.of(2026, 9, 6);
 
@@ -38,8 +40,8 @@ class AccuracyProperties {
 
     /**
      * {@code members} members, each with one current row per weekday of the range and the matching day row of one run made on {@link #AS_OF},
-     * forecast and logged from the arrays (cycled). With {@code priorWeek}, the weekday a week before each row of the first week is logged one
-     * hour away from the row's own truth, so every row has a seasonal-naive value and the naive floor is never zero.
+     * forecast and logged from the arrays (cycled). With {@code priorWeek}, the weekday a week before every row is logged one hour away from
+     * that row's own truth, so every row has a seasonal-naive value and the naive floor is exactly one hour per row, never zero.
      */
     static AccuracyResult build(int members, List<Double> forecast, List<Double> logged, boolean priorWeek) {
         List<CurrentDayForecast> current = new ArrayList<>();
@@ -49,13 +51,13 @@ class AccuracyProperties {
         for (int m = 1; m <= members; m++) {
             UUID user = UUID.fromString(String.format("30000000-0000-0000-0000-%012d", m));
             for (LocalDate d = FROM; !d.isAfter(TO); d = d.plusDays(1)) {
-                if (Accuracy.isWeekday(d)) {
+                if (Horizon.isWeekday(d)) {
                     double f = forecast.get(i % forecast.size());
                     double t = logged.get(i % logged.size());
                     current.add(new CurrentDayForecast(TEAM, user, d, RUN, f, 0, 0, f, 8, Math.max(0, f - 8), LocalDateTime.of(2026, 8, 1, 9, 0)));
                     runDays.add(new RunDayForecast(RUN, AS_OF, new MemberDayForecast(user, d, 1, f, 0, 0, f, 8, Math.max(0, f - 8), true)));
                     truth.put(new MemberDay(user, d), t);
-                    if (priorWeek && d.isBefore(FROM.plusDays(7))) {
+                    if (priorWeek) {
                         truth.put(new MemberDay(user, d.minusDays(7)), t + 1);
                     }
                     i++;
@@ -87,6 +89,33 @@ class AccuracyProperties {
     }
 
     @Property
+    void maseIsNaNWithoutNaiveRowsAndZeroWhenTheForecastIsPerfect(@ForAll @IntRange(min = 1, max = 3) int members,
+            @ForAll @Size(min = 1, max = 8) List<@DoubleRange(min = 0, max = 16) Double> hours) {
+        for (AccuracyScore s : build(members, hours, hours).scores()) {
+            assertEquals(0, s.maseN(), s.scope() + " " + s.key() + ": nothing was logged a week earlier");
+            assertTrue(Double.isNaN(s.mase()), "no row with a naive means no MASE");
+        }
+        // Every row now has a naive one hour away from its truth, so the naive floor is one hour per row and a perfect forecast scores exactly 0.
+        for (AccuracyScore s : build(members, hours, hours, true).scores()) {
+            assertEquals(s.n(), s.maseN(), s.scope() + " " + s.key());
+            assertEquals(0.0, s.mase(), 1e-9, s.scope() + " " + s.key());
+        }
+    }
+
+    @Property
+    void everyRowIsScoredByExactlyOneLeadBetweenOneAndTen(@ForAll @IntRange(min = 1, max = 4) int members,
+            @ForAll @Size(min = 1, max = 6) List<@DoubleRange(min = 0, max = 16) Double> hours) {
+        AccuracyResult r = build(members, hours, hours);
+        List<AccuracyScore> leads = r.scores().stream().filter(s -> s.scope().equals(Accuracy.LEAD)).toList();
+        assertEquals(r.current().size(), leads.stream().mapToInt(AccuracyScore::n).sum(), "one run, so each current row has one day row");
+        for (AccuracyScore s : leads) {
+            int lead = Integer.parseInt(s.key());
+            assertTrue(lead >= 1 && lead <= 10, "lead " + lead + " is outside the ten weekdays a run covers");
+            assertEquals(members, s.n(), "lead " + lead + " is one day of every member");
+        }
+    }
+
+    @Property
     void theTeamCountIsTheSumOfTheMemberCountsAndEveryRowIsAWeekdayInRange(@ForAll @IntRange(min = 1, max = 5) int members,
             @ForAll @Size(min = 1, max = 6) List<@DoubleRange(min = 0, max = 16) Double> hours) {
         AccuracyResult r = build(members, hours, hours);
@@ -94,7 +123,7 @@ class AccuracyProperties {
         assertEquals(r.scores().get(0).n(), memberSum);
         assertEquals(r.current().size(), memberSum);
         for (AccuracyRow row : r.current()) {
-            assertTrue(Accuracy.isWeekday(row.day()) && !row.day().isBefore(FROM) && !row.day().isAfter(TO));
+            assertTrue(Horizon.isWeekday(row.day()) && !row.day().isBefore(FROM) && !row.day().isAfter(TO));
             assertTrue(row.day().isBefore(r.evaluatedAt()));
         }
     }

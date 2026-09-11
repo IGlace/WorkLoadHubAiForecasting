@@ -917,9 +917,9 @@ git commit -m "feat(cli): an accuracy command and report, with the documents" -m
 **Rulings this plan takes, to report to the owner at the end:**
 
 1. A current row's lead is found through its run's day rows (loaded for the same range), not through a new column; a run whose days are all outside the range cannot be current inside it.
-2. MASE's naive value is the same member's logged hours seven days earlier, zero when there is no log; rows in the first week of history are still scored.
+2. MASE's naive value is the same member's logged hours seven days earlier. Corrected in the final fix wave: a row whose member has no log that day is left out of MASE alone, and the number of rows MASE was scored on is reported as `maseN`; the first implementation substituted zero hours, which made MASE depend on how sparse the logs are.
 3. The `team` and `member` scores read the current forecast; the `lead` scores read every finished run's day rows, so a day counts once per run there.
 4. The CLI's today is the system clock (`LocalDate.now()`), the service's today is its `Clock`; the CLI does not pass a clock, it passes the dates.
-5. `Report.csv` is reused for number formatting so both reports print numbers the same way.
+5. Corrected in the final fix wave: `accuracy.csv` prints numbers with `Report.csv` (a reader loads them as they are) and the markdown table with `Report.fmt` (three decimals and `nan`, so the columns line up).
 
 **What comes next:** the live Copilot check on a seeded database, the real export through the seed and the parity procedure, and the server's own integration code in the WorkloadHub repository.
