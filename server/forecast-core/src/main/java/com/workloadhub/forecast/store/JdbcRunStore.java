@@ -24,6 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public final class JdbcRunStore {
 
     public static final UUID NIL = new UUID(0L, 0L);
+    /** The error a run left behind by a restart carries (design 2026-09-11, section 4.2). */
+    public static final String INTERRUPTED = "interrupted by a restart";
     static final int BATCH = 200;
     static final int ERROR_MAX = 500;
 
@@ -70,8 +72,6 @@ public final class JdbcRunStore {
         jdbc.sql("UPDATE forecast_runs SET status = ?, error = ?, finished_at = " + ph("timestamp") + " WHERE id = " + ph("uuid"))
                 .param(RunStatus.FAILED.name()).param(line).param(ts(finishedAt)).param(runId.toString()).update();
     }
-
-    public static final String INTERRUPTED = "interrupted by a restart";
 
     /** After a restart nothing can still be running a QUEUED or RUNNING row (design 2026-09-11, section 4.2): fail them all, return how many. */
     public int failInterrupted(LocalDateTime now) {

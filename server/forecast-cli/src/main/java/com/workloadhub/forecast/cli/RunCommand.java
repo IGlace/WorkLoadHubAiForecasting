@@ -78,6 +78,9 @@ public class RunCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         try (Services s = Services.open(db.dataSource())) {
+            // This command owns the runs: a run left QUEUED or RUNNING by an earlier crash cannot still be alive
+            // (design 2026-09-11, section 4.2). The read-only commands leave such rows alone.
+            s.service().recoverInterruptedRuns();
             UUID teamId;
             UUID userId;
             LocalDate date;

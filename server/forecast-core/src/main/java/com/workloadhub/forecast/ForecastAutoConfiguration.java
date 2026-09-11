@@ -21,6 +21,9 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -120,13 +123,45 @@ public class ForecastAutoConfiguration {
     @ConditionalOnMissingBean
     ForecastService forecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
             ForecastProperties properties, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway, Clock clock) {
-        DefaultForecastService service = new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
+        return new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
                 properties.getPlannedWork().isEnabled(), tokens, narratives, narrator, gateway, clock);
-        service.recoverInterruptedRuns();
-        return service;
+    }
+
+    /** Reconciles the interrupted runs once every singleton exists, so a host that owns the tables has migrated them first. */
+    @Bean
+    ForecastStartupReconciliation forecastStartupReconciliation(ForecastService forecastService) {
+        return new ForecastStartupReconciliation(forecastService);
     }
 
     /** Marker bean so that beans needing the tables can depend on the migrations having run. */
     public static final class ForecastMigrationsRunner {
+    }
+
+    /**
+     * Fails the runs the previous process left {@code QUEUED} or {@code RUNNING} (design 2026-09-11, section 4.2),
+     * once the whole context is up: with {@code whf.flyway.enabled=false} the host's own migrations run first, and a
+     * database that cannot answer is logged and never stops the host from starting.
+     */
+    public static final class ForecastStartupReconciliation implements SmartInitializingSingleton {
+
+        private static final Logger LOG = LoggerFactory.getLogger(ForecastStartupReconciliation.class);
+
+        private final ForecastService service;
+
+        ForecastStartupReconciliation(ForecastService service) {
+            this.service = service;
+        }
+
+        @Override
+        public void afterSingletonsInstantiated() {
+            if (!(service instanceof DefaultForecastService defaultService)) {
+                return; // the host replaced the bean: reconciliation is then its own business
+            }
+            try {
+                defaultService.recoverInterruptedRuns();
+            } catch (RuntimeException e) {
+                LOG.warn("could not reconcile interrupted forecast runs at start-up: {}", e.toString());
+            }
+        }
     }
 }

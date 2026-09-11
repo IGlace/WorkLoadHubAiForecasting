@@ -21,9 +21,12 @@ import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * The module's services on a CLI-owned SQLite file: one thread, planned work on, default capacity 40. Narration
- * reads its settings from the environment: WHF_TOKEN_KEY (base64, 32 bytes; required to store or read a token),
- * WHF_COPILOT_CLI_PATH (blank: the in-process runtime) and WHF_COPILOT_MODEL (blank: the account default).
+ * The module's services on a CLI-owned SQLite file: one thread, planned work on, default capacity 40. Opening the
+ * services reconciles nothing: only {@code run}, the command that owns runs, fails what an earlier crash left
+ * behind (design 2026-09-11, section 4.2), so a read-only command in a second process never fails a live run.
+ * Narration reads its settings from the environment: WHF_TOKEN_KEY (base64, 32 bytes; required to store or read
+ * a token), WHF_COPILOT_CLI_PATH (blank: the in-process runtime) and WHF_COPILOT_MODEL (blank: the account
+ * default).
  */
 record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc, ForecastRunner runner, GitHubTokenStore tokens, RunProgressTracker progress)
         implements AutoCloseable {
@@ -57,7 +60,6 @@ record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc
         RunProgressTracker progress = new RunProgressTracker(Clock.systemDefaultZone());
         DefaultForecastService service = new DefaultForecastService(ds, dialect, runner, new JdbcRunStore(ds, dialect), progress, 1, true, tokens,
                 new JdbcNarrativeStore(ds, dialect), narrator, gateway, Clock.systemDefaultZone());
-        service.recoverInterruptedRuns();
         return new Services(service, dialect, jdbc, runner, tokens, progress);
     }
 

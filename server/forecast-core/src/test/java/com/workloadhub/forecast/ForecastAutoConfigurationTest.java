@@ -2,14 +2,23 @@ package com.workloadhub.forecast;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
+import com.workloadhub.forecast.api.RunRequest;
+import com.workloadhub.forecast.api.RunStatus;
+import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.Dialect;
+import com.workloadhub.forecast.store.ForecastMigrations;
+import com.workloadhub.forecast.store.JdbcRunStore;
 import com.workloadhub.forecast.store.WorkloadHubSchema;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -76,5 +85,42 @@ class ForecastAutoConfigurationTest {
                 .withBean(DataSource.class, () -> ds)
                 .withBean(com.workloadhub.forecast.ai.CopilotGateway.class, () -> fake)
                 .run(context -> assertTrue(context.getBean(com.workloadhub.forecast.ai.CopilotGateway.class) == fake));
+    }
+
+    /** Reconciliation happens once the context is up, not inside the service's factory method (design 2026-09-11, section 4.2). */
+    @Test
+    void interruptedRunsAreFailedOnceTheContextIsUp() {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        ForecastMigrations.run(ds);
+        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        UUID run = store.create(new RunRequest(UUID.randomUUID(), null, null, null), LocalDate.of(2026, 9, 7), LocalDateTime.of(2026, 9, 7, 9, 0));
+        store.markRunning(run);
+        assertEquals(RunStatus.RUNNING, store.find(run).orElseThrow().status());
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
+                .withBean(DataSource.class, () -> ds)
+                .withPropertyValues("whf.run-threads=1")
+                .run(context -> {
+                    assertNull(context.getStartupFailure());
+                    RunSummary after = store.find(run).orElseThrow();
+                    assertEquals(RunStatus.FAILED, after.status());
+                    assertEquals(JdbcRunStore.INTERRUPTED, after.error());
+                    assertNotNull(after.finishedAt());
+                });
+    }
+
+    /** A database the module's tables are missing from is the host's business, not a reason to refuse to start. */
+    @Test
+    void startUpSurvivesAMissingTable() {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
+                .withBean(DataSource.class, () -> ds)
+                .withPropertyValues("whf.flyway.enabled=false", "whf.run-threads=1")
+                .run(context -> {
+                    assertNull(context.getStartupFailure(), "a failed reconciliation is logged, never fatal");
+                    assertNotNull(context.getBean(ForecastService.class));
+                });
     }
 }

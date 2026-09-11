@@ -5,9 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.api.ModelScore;
+import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
+import com.workloadhub.forecast.store.Dialect;
+import com.workloadhub.forecast.store.JdbcRunStore;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
@@ -16,8 +19,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.sqlite.SQLiteDataSource;
 import picocli.CommandLine;
 
 class RunCommandTest {
@@ -98,5 +104,39 @@ class RunCommandTest {
         assertTrue(java.nio.file.Files.exists(out.resolve("scores.csv")) && java.nio.file.Files.exists(out.resolve("demand.csv"))
                 && java.nio.file.Files.exists(out.resolve("summary.md")));
         assertEquals(2, cli.execute("eval", "--db", db.toString(), "--models", "gbm", "--out", out.toString()));
+    }
+
+    static DataSource dataSource(Path db) {
+        SQLiteDataSource ds = new SQLiteDataSource();
+        ds.setUrl("jdbc:sqlite:" + db.toAbsolutePath());
+        return ds;
+    }
+
+    /**
+     * Only the command that owns runs reconciles (design 2026-09-11, section 4.2): {@code runs} in a second
+     * terminal must leave the run {@code run} is executing in the first alone.
+     */
+    @Test
+    void onlyRunFailsTheRunsAnEarlierProcessLeftBehind(@TempDir Path dir) {
+        Path db = dir.resolve("i.db");
+        Path seeded = dir.resolve("seeded.json");
+        CommandLine cli = new CommandLine(new ForecastCli.Root());
+        assertEquals(0, cli.execute("seed", "--synthetic", "--users", "14", "--weeks", "20", "--seed", "3", "--end", "2026-09-06", "--out", seeded.toString()));
+        assertEquals(0, cli.execute("init-db", "--db", db.toString()));
+        assertEquals(0, cli.execute("import", "--db", db.toString(), seeded.toString()));
+        DataSource ds = dataSource(db);
+        UUID team = UUID.fromString(JdbcClient.create(ds).sql("SELECT team_id AS id FROM team_members GROUP BY team_id ORDER BY team_id")
+                .query().listOfRows().get(0).get("id").toString());
+        JdbcRunStore store = new JdbcRunStore(ds, Dialect.SQLITE);
+        UUID live = store.create(new RunRequest(team, null, null, null), LocalDate.of(2026, 9, 6), LocalDateTime.of(2026, 9, 6, 9, 0));
+        store.markRunning(live);
+
+        capture(cli, 0, "runs", "--db", db.toString(), "--team", team.toString());
+        assertEquals(RunStatus.RUNNING, store.find(live).orElseThrow().status(), "a read-only command never fails a run another process is executing");
+
+        capture(cli, 0, "run", "--db", db.toString(), "--team", team.toString(), "--as-of", "2026-09-06", "--model", "seasonal_naive");
+        RunSummary reconciled = store.find(live).orElseThrow();
+        assertEquals(RunStatus.FAILED, reconciled.status(), "run reconciles what an earlier crash left behind");
+        assertEquals(JdbcRunStore.INTERRUPTED, reconciled.error());
     }
 }
