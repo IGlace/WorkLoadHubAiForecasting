@@ -3,12 +3,14 @@ package com.workloadhub.forecast.samplehost;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.ForecastService;
+import com.workloadhub.forecast.api.GitHubTokenStore;
 import com.workloadhub.forecast.api.NarrativeRequest;
 import com.workloadhub.forecast.api.NarrativeResult;
 import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,18 +31,21 @@ public final class HostForecastFacade implements AutoCloseable {
 
     private final ForecastService service;
     private final ForecastAccess access;
+    private final GitHubTokenStore tokens;
     private final ExecutorService narrations = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "forecast-narration");
         t.setDaemon(true);
         return t;
     });
+    /** A test convenience: a real host persists (runId, teamId, requestedBy) in its own table, so a restart can still authorize a poll. */
     private final Map<UUID, UUID> teamOfRun = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> latestRunOfUser = new ConcurrentHashMap<>();
     private final Set<String> narrationsInFlight = ConcurrentHashMap.newKeySet();
 
-    public HostForecastFacade(ForecastService service, ForecastAccess access) {
+    public HostForecastFacade(ForecastService service, ForecastAccess access, GitHubTokenStore tokens) {
         this.service = service;
         this.access = access;
+        this.tokens = tokens;
     }
 
     /**
@@ -87,10 +92,14 @@ public final class HostForecastFacade implements AutoCloseable {
         return service.currentForecast(teamId, from, to);
     }
 
-    /** Refuses before submitting when the caller cannot narrate (no token, run not done, one already in flight). */
+    /**
+     * Refuses before submitting when the caller cannot narrate (no token, run not done, one already in flight).
+     * The token check is {@code GitHubTokenStore.has}, one query: {@code copilotStatus} opens a Copilot session,
+     * which is what the settings page wants and far too much for this (design 2026-09-11, section 3.4).
+     */
     public Future<NarrativeResult> narrate(UUID userId, UUID runId, String language) {
         requireView(userId, teamOf(runId));
-        if (!service.copilotStatus(userId).hasToken()) {
+        if (!tokens.has(userId)) {
             throw ForecastException.of("TOKEN_MISSING", "no GitHub token stored for user " + userId);
         }
         service.getRun(runId); // RUN_NOT_FOUND or RUN_NOT_DONE before anything is queued
@@ -114,7 +123,7 @@ public final class HostForecastFacade implements AutoCloseable {
 
     /** What a page does: poll until the phase is one of {@code phases}, collecting the labels it showed. */
     public List<RunProgress> waitFor(UUID userId, UUID runId, Set<String> phases, Duration timeout) throws InterruptedException {
-        List<RunProgress> seen = new java.util.ArrayList<>();
+        List<RunProgress> seen = new ArrayList<>();
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             RunProgress p = progress(userId, runId);

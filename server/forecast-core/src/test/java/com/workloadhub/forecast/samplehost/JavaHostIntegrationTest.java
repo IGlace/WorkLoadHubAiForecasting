@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -64,7 +66,7 @@ class JavaHostIntegrationTest {
     void boot() {
         jdbc = JdbcClient.create(dataSource);
         access = new ForecastAccess(jdbc, Dialect.of(dataSource));
-        host = new HostForecastFacade(service, access);
+        host = new HostForecastFacade(service, access, tokens);
         List<Map<String, Object>> teams = jdbc.sql("SELECT t.id AS id, t.manager_id AS leader, t.parent_team_id AS parent, p.manager_id AS head"
                 + " FROM teams t JOIN teams p ON p.id = t.parent_team_id"
                 + " JOIN users lu ON lu.id = t.manager_id JOIN users hu ON hu.id = p.manager_id"
@@ -184,8 +186,38 @@ class JavaHostIntegrationTest {
         outsider.ifPresent(u -> assertThrows(HostForbidden.class, () -> host.narrative(u, run, "fr")));
         assertTrue(host.narrative(leader, run, "en").isEmpty());
         UUID queued = host.startRun(leader, team); // the run status is checked before anything is submitted (section 3.4)
+        fake.opened = false;
         assertEquals("RUN_NOT_DONE", assertThrows(ForecastException.class, () -> host.narrate(leader, queued, "fr")).code());
+        assertFalse(fake.opened, "the token pre-check is GitHubTokenStore.has; it never opens a Copilot session (section 3.4)");
         host.waitFor(leader, queued, Set.of("DONE", "FAILED"), Duration.ofMinutes(2));
         tokens.clear(leader);
+    }
+
+    /** The in-flight guard (section 3.4): the second call is refused while the first narration of the same run and language is still running. */
+    @Test
+    void aSecondNarrationOfTheSameRunAndLanguageWhileOneIsInFlightIsRefused() throws Exception {
+        UUID run = host.startRun(leader, team);
+        host.waitFor(leader, run, Set.of("DONE", "FAILED"), Duration.ofMinutes(2));
+        tokens.save(leader, "gho_host_sample");
+        FakeGateway fake = (FakeGateway) gateway;
+        fake.replies.clear();
+        fake.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(service.getRun(run).factsJson())));
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch gate = new CountDownLatch(1);
+        fake.askStarted = started;
+        fake.askGate = gate;
+        try {
+            Future<NarrativeResult> first = host.narrate(leader, run, "en");
+            assertTrue(started.await(2, TimeUnit.MINUTES), "the first narration reached Copilot");
+            assertEquals("NARRATION_IN_PROGRESS", assertThrows(ForecastException.class, () -> host.narrate(leader, run, "en")).code(),
+                    "a second narration of the same run and language is refused while the first is in flight");
+            gate.countDown();
+            assertEquals(NarrativeStatus.OK, first.get(2, TimeUnit.MINUTES).status());
+        } finally {
+            gate.countDown();
+            fake.askStarted = null;
+            fake.askGate = null;
+            tokens.clear(leader);
+        }
     }
 }

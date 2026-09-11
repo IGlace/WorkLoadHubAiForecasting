@@ -7,10 +7,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import tools.jackson.databind.JsonNode;
@@ -44,6 +46,11 @@ public final class FakeGateway implements CopilotGateway {
     public String unmatchedToolDoneId;
     public Map<String, Object> quota;
     public RuntimeInfo runtimeInfo = new RuntimeInfo(true, "/tmp/runtime.node", "1.0.13-preview.6", "in-process runtime");
+
+    /** Counted down as each {@code ask} begins, so a test can wait until a narration is really under way. */
+    public CountDownLatch askStarted;
+    /** When set, {@code ask} waits for it before answering, so a test can hold a narration in flight. */
+    public CountDownLatch askGate;
 
     public boolean opened;
     public boolean closed;
@@ -135,6 +142,19 @@ public final class FakeGateway implements CopilotGateway {
 
         @Override
         public String ask(String prompt, Duration timeout) throws TimeoutException {
+            if (askStarted != null) {
+                askStarted.countDown();
+            }
+            if (askGate != null) {
+                try {
+                    if (!askGate.await(2, TimeUnit.MINUTES)) {
+                        throw new IllegalStateException("the test never opened the ask gate");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+            }
             prompts.add(prompt);
             int attemptIndex = prompts.size() - 1;
             List<ToolSpec> tools = spec.tools();
