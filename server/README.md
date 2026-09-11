@@ -58,7 +58,7 @@ $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal
 | `runs` | `--team <name or id> [--db] [--limit 20]` | Lists the runs of a team, newest first. |
 | `current` | `--team <name or id> [--from] [--to] [--db] [--json]` | Prints the team's current forecast per member and day (the latest run that covered each day) between `--from` (default: today) and `--to` (default: today + 20 days). Exits 2 on a usage error, 1 on a failed call. |
 | `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
-| `narrate` | `--run <id> --user <name or id> [--lang en\|fr] [--model m] [--token-env GITHUB_TOKEN] [--db] [--json]` | Stores the user's GitHub token, narrates a finished run through their Copilot seat, streams progress to stderr, and prints the stored result. Exits 0 OK, 3 UNVERIFIED, 1 FAILED or error, 2 usage. |
+| `narrate` | `--run <id> --user <name or id> [--lang en\|fr] [--model m] [--token-env GITHUB_TOKEN] [--db] [--json]` | Stores the user's GitHub token, narrates a finished run through their Copilot seat, prints the progress labels and steps to stderr, and prints the stored result. Exits 0 OK, 3 UNVERIFIED, 1 FAILED or error, 2 usage. |
 | `copilot status` | `--user <name or id> [--db]` | Reports whether this user can narrate: token presence, runtime availability, sign-in and quota. |
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
@@ -124,7 +124,7 @@ Paths are relative to `whf.web.base-path`. Authorisation is the host's: `request
 | `GET /runs/{id}` | | 200, `RunResult` (the run, its member windows and days, scores and facts) |
 | `GET /teams/{teamId}/runs?limit=20` | | 200, `RunSummary[]`, newest first |
 | `GET /teams/{teamId}/current?from=YYYY-MM-DD&to=YYYY-MM-DD` | | 200, `CurrentDayForecast[]` per member and day (defaults: today and today + 20 days) |
-| `GET /runs/{id}/progress` | | 200, `RunProgress` (`phase`, `percent`, `message`, `thinking`, `answer`) |
+| `GET /runs/{id}/progress` | | 200, `RunProgress` (`phase`, `percent`, `message` for logs, `label` `{en, fr}` for people; the label rotates through a few phrases every four seconds while Copilot works) |
 | `POST /runs/{id}/narratives` | `{"requestedBy", "language", "model"}` | 200, `NarrativeResult` whatever its status |
 | `GET /runs/{id}/narratives/{lang}` | | 200, the latest `NarrativeResult` of that language; 404 `NARRATIVE_NOT_FOUND` when there is none |
 | `GET /copilot/status?userId=` | | 200, `CopilotStatus` |
@@ -140,8 +140,8 @@ every other code (`RUN_NOT_DONE`, `TOKEN_MISSING`, `TOKEN_KEY_MISSING`, `TOKEN_R
 `POST /runs/{id}/narratives` **blocks for the whole narration** (a minute or more), as `ForecastService.narrate`
 does: the module has no queue and no executor of its own. A host that wants it asynchronous runs the call on
 its own executor and lets the browser poll `GET /runs/{id}/progress`, whose narration phases are `NARRATING`
-(with the `thinking` and `answer` tails, the last 16 000 characters of each), then `NARRATED` or
-`NARRATION_FAILED`.
+(with a rotating label such as "collecting data", "consulting Copilot", "thinking"), then `NARRATED` or
+`NARRATION_FAILED`; Copilot's streamed text is not exposed, the stored narrative holds the answer.
 
 A host can replace the `CopilotGateway` bean — to script it in tests, to route it through its own
 credentials — by declaring one of its own; the sample host does exactly that
@@ -180,7 +180,7 @@ $CLI copilot status --db ~/whf/workloadhub.db --user "Sara Tazi"
 $CLI narrate --db ~/whf/workloadhub.db --run <run id> --user "Sara Tazi" --lang fr
 ```
 
-`narrate` stores the token for the user, narrates, streams the steps, the thinking and the answer to stderr, and
+`narrate` stores the token for the user, narrates, prints the progress steps and labels to stderr, and
 prints the stored result on stdout: status (`OK`, `UNVERIFIED` with the numbers it could not find in the facts,
 `FAILED` with the reason and the last answer), model, attempts, cost, then the narrative JSON. Exit codes: 0 OK,
 3 UNVERIFIED, 1 FAILED or error, 2 usage. Every narration is a row in `forecast_narratives`, whatever its
@@ -188,7 +188,7 @@ status, so a failed one keeps its cost.
 
 No automated test talks to Copilot. The live check is manual: run the two commands above on a seeded database
 with a real token, and read `copilot status` first (it starts the runtime with the token and reports the login
-and the quota). In the streamed steps, confirm that the nine tools were called (`get_run_overview` first, then
+and the quota). In the printed steps (the message names each tool), confirm that the nine tools were called (`get_run_overview` first, then
 the five member tools for every member, then `get_project_timelines`, `get_planned_work` and
 `get_rebalancing_candidates`) and that no permission prompt was needed: the tools are marked
 `skipPermission(true)`, and the handler behind them approves only a request whose `kind` is `custom-tool` and

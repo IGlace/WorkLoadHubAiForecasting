@@ -2,7 +2,6 @@ package com.workloadhub.forecast.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -170,7 +169,8 @@ class DefaultForecastServiceTest {
         RunProgress p = service.progress(r.run().id());
         assertEquals("NARRATED", p.phase());
         assertEquals(100, p.percent());
-        assertNotNull(p.answer());
+        assertEquals("report ready", p.label().en());
+        assertEquals("rapport prêt", p.label().fr());
     }
 
     @Test

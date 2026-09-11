@@ -54,7 +54,7 @@ record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc
         Path home = Path.of(System.getProperty("user.home"), ".workloadhub-forecast", "copilot");
         SdkCopilotGateway gateway = new SdkCopilotGateway(home, cliPath());
         Narrator narrator = new Narrator(gateway, Prompts.load(), NARRATION_TIMEOUT, System.getenv(MODEL_ENV));
-        RunProgressTracker progress = new RunProgressTracker();
+        RunProgressTracker progress = new RunProgressTracker(Clock.systemDefaultZone());
         DefaultForecastService service = new DefaultForecastService(ds, dialect, runner, new JdbcRunStore(ds, dialect), progress, 1, true, tokens,
                 new JdbcNarrativeStore(ds, dialect), narrator, gateway, Clock.systemDefaultZone());
         return new Services(service, dialect, jdbc, runner, tokens, progress);

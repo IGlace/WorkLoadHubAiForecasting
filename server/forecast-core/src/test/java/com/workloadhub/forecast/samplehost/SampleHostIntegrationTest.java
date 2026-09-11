@@ -88,7 +88,8 @@ class SampleHostIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OK")).andExpect(jsonPath("$.language").value("en"));
         mvc.perform(get("/api/forecast/runs/" + run + "/narratives/en")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OK"));
         mvc.perform(get("/api/forecast/runs/" + run + "/narratives/fr")).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NARRATIVE_NOT_FOUND"));
-        mvc.perform(get("/api/forecast/runs/" + run + "/progress")).andExpect(status().isOk()).andExpect(jsonPath("$.phase").value("NARRATED"));
+        mvc.perform(get("/api/forecast/runs/" + run + "/progress")).andExpect(status().isOk()).andExpect(jsonPath("$.phase").value("NARRATED"))
+                .andExpect(jsonPath("$.label.en").value("report ready"));
         mvc.perform(get("/api/forecast/runs/" + UUID.randomUUID())).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RUN_NOT_FOUND"));
         mvc.perform(delete("/api/forecast/users/" + member + "/github-token")).andExpect(status().isNoContent());
         mvc.perform(get("/api/forecast/copilot/status?userId=" + member)).andExpect(status().isOk()).andExpect(jsonPath("$.hasToken").value(false));

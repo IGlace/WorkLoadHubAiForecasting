@@ -235,10 +235,10 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         }
         RunSummary run = store.find(runId).orElseThrow(() -> ForecastException.of("RUN_NOT_FOUND", "run " + runId + " not found"));
         return switch (run.status()) {
-            case QUEUED -> new RunProgress(runId, "QUEUED", 0, "queued", null, null);
-            case RUNNING -> new RunProgress(runId, "RUNNING", 50, "running in another instance", null, null);
-            case DONE -> new RunProgress(runId, "DONE", 100, "done", null, null);
-            case FAILED -> new RunProgress(runId, "FAILED", 100, run.error(), null, null);
+            case QUEUED -> new RunProgress(runId, "QUEUED", 0, "queued", RunProgressTracker.phaseLabel("QUEUED"));
+            case RUNNING -> new RunProgress(runId, "RUNNING", 50, "running in another instance", RunProgressTracker.phaseLabel("RUNNING"));
+            case DONE -> new RunProgress(runId, "DONE", 100, "done", RunProgressTracker.phaseLabel("DONE"));
+            case FAILED -> new RunProgress(runId, "FAILED", 100, run.error(), RunProgressTracker.phaseLabel("FAILED"));
         };
     }
 

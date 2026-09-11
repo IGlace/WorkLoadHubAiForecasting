@@ -103,23 +103,20 @@ public class NarrateCommand implements Callable<Integer> {
         }
     }
 
-    /** Polls the tracker and writes new steps, thinking and answer text to stderr as they arrive. */
+    /** Polls the tracker and prints each new step's label and message to stderr as they arrive. */
     private static Thread progressPrinter(Services s, UUID runId) {
         Thread t = new Thread(() -> {
-            String lastMessage = "";
-            int thinkingShown = 0;
-            int answerShown = 0;
+            String last = "";
             try {
                 while (!Thread.currentThread().isInterrupted()) {
                     Optional<RunProgress> p = s.progress().get(runId);
                     if (p.isPresent() && p.get().phase().startsWith("NARRAT")) {
                         RunProgress rp = p.get();
-                        if (!rp.message().equals(lastMessage)) {
-                            System.err.println("[" + rp.percent() + "%] " + rp.message());
-                            lastMessage = rp.message();
+                        String line = "[" + rp.percent() + "%] " + rp.label().en() + " (" + rp.message() + ")";
+                        if (!line.equals(last)) {
+                            System.err.println(line);
+                            last = line;
                         }
-                        thinkingShown = tail("thinking", rp.thinking(), thinkingShown);
-                        answerShown = tail("answer", rp.answer(), answerShown);
                     }
                     Thread.sleep(POLL_MILLIS);
                 }
@@ -129,22 +126,6 @@ public class NarrateCommand implements Callable<Integer> {
         }, "narrate-progress");
         t.setDaemon(true);
         return t;
-    }
-
-    private static int tail(String label, String text, int shown) {
-        if (text == null) {
-            return shown;
-        }
-        if (text.length() < shown) {
-            shown = 0; // the answer was reset for a new attempt
-            System.err.println();
-            System.err.println("[" + label + " restarts]");
-        }
-        if (text.length() > shown) {
-            System.err.print(text.substring(shown));
-            System.err.flush();
-        }
-        return text.length();
     }
 
     private static void print(NarrativeResult r) {

@@ -87,8 +87,8 @@ public class ForecastAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    RunProgressTracker runProgressTracker() {
-        return new RunProgressTracker();
+    RunProgressTracker runProgressTracker(Clock clock) {
+        return new RunProgressTracker(clock);
     }
 
     @Bean
