@@ -26,7 +26,7 @@ class AccuracyReportTest {
                         new AccuracyRow(user, LocalDate.of(2026, 8, 21), run, 2, 10, 9, 8, true, true)),
                 List.of(new AccuracyScore("team", team.toString(), 2, 1.25, 1.25, 0.5, 2, 1.0, 1.0),
                         new AccuracyScore("member", user.toString(), 2, 1.25, 1.25, Double.NaN, 0, 1.0, 1.0),
-                        new AccuracyScore("lead", "1", 1, 2.0, 2.0, 0.4, 1, Double.NaN, Double.NaN)));
+                        new AccuracyScore("lead", "1", 1, 2.0, 2.0, 0.4, 1, Double.NaN, Double.NaN)), 3);
         AccuracyReport.write(result, dir);
         List<String> csv = Files.readAllLines(dir.resolve("accuracy.csv"));
         assertEquals("member_id,day,run_id,lead,forecast,truth,capacity,forecast_overload,actual_overload", csv.get(0));
@@ -41,5 +41,6 @@ class AccuracyReportTest {
         assertTrue(summary.contains("| member | " + user + " | 2 | 1.25 | 1.25 |  | 0 | 1 | 1 |"), "NaN is an empty cell");
         assertTrue(summary.contains("| lead | 1 | 1 | 2 | 2 | 0.4 | 1 |  |  |"));
         assertTrue(summary.contains("MASE compares each day with the same weekday one week earlier"), "the MASE caption");
+        assertTrue(summary.contains("3 weekdays were holidays or full absences and are not scored"), "the non-working count");
     }
 }

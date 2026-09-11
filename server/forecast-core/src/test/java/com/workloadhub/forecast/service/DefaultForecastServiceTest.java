@@ -400,7 +400,9 @@ class DefaultForecastServiceTest {
         assertTrue(future.current().isEmpty(), "nothing has passed yet");
         assertEquals(0, future.scores().get(0).n());
         int members = (int) r.memberDays().stream().map(d -> d.userId()).distinct().count();
-        assertEquals(members * 10, acc.current().size(), "ten weekdays per member, 2026-08-20 to 2026-09-02, all in the past");
+        assertTrue(acc.nonWorkingDays() > 0, "the seed puts a public holiday or a full absence in those two weeks");
+        assertEquals(members * 10, acc.current().size() + acc.nonWorkingDays(),
+                "ten weekdays per member, 2026-08-20 to 2026-09-02, all in the past; the holidays and full absences are counted, not scored");
         assertTrue(acc.current().stream().allMatch(row -> row.runId().equals(r.run().id())));
         assertTrue(acc.current().stream().allMatch(row -> row.lead() >= 1 && row.lead() <= 10));
         assertTrue(acc.current().stream().anyMatch(row -> row.loggedHrs() > 0), "the seed logged hours in those weeks");
@@ -409,12 +411,14 @@ class DefaultForecastServiceTest {
                 "each row's logged hours match the truth computed directly from the seed's time logs");
         AccuracyScore teamScore = acc.scores().get(0);
         assertEquals("team", teamScore.scope());
-        assertEquals(members * 10, teamScore.n());
+        assertEquals(acc.current().size(), teamScore.n());
         assertTrue(teamScore.mae() >= 0);
         assertEquals(members, acc.scores().stream().filter(s -> s.scope().equals("member")).count());
         List<AccuracyScore> leads = acc.scores().stream().filter(s -> s.scope().equals("lead")).toList();
-        assertEquals(10, leads.size());
-        assertTrue(leads.stream().allMatch(s -> s.n() >= members), "every run in the range contributes to each lead");
+        assertEquals(8, leads.size(),
+                () -> "two of the ten weekdays are non-working for every member: " + acc.nonWorkingDays() + " skipped rows over " + members + " members");
+        assertEquals(acc.nonWorkingDays(), members * 2, "both holidays fall on all three members");
+        assertTrue(leads.stream().allMatch(s -> s.n() >= 1), "every lead of the run in the range has at least one working day scored");
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 8, 20))).code());
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, null, LocalDate.of(2026, 8, 20))).code());
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> service.accuracy(UUID.randomUUID(), LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2))).code());

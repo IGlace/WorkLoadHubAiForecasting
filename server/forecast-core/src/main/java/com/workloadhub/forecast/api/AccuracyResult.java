@@ -4,6 +4,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-/** The accuracy of a team's forecasts between two days: the current-forecast rows compared and the scores by team, member and lead. */
-public record AccuracyResult(UUID teamId, LocalDate from, LocalDate to, LocalDate evaluatedAt, List<AccuracyRow> current, List<AccuracyScore> scores) {
+/**
+ * The accuracy of a team's forecasts between two days: the current-forecast rows compared and the scores by team, member and lead.
+ * {@code nonWorkingDays} is how many weekdays in the range were public holidays or full absences and so were not scored.
+ */
+public record AccuracyResult(UUID teamId, LocalDate from, LocalDate to, LocalDate evaluatedAt, List<AccuracyRow> current, List<AccuracyScore> scores,
+        int nonWorkingDays) {
 }

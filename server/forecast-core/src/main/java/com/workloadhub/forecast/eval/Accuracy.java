@@ -11,7 +11,9 @@ import com.workloadhub.forecast.features.MemberDay;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -41,13 +43,31 @@ public final class Accuracy {
         return d.getDayOfWeek() != DayOfWeek.SATURDAY && d.getDayOfWeek() != DayOfWeek.SUNDAY;
     }
 
+    /**
+     * A public holiday or a full absence is written as a day row with {@code workingDay} false and no capacity; scoring it would count a perfect
+     * row for a day nobody was meant to work, so those days are left out of every scope and counted in {@code nonWorkingDays} instead.
+     */
     public static AccuracyResult evaluate(UUID teamId, LocalDate from, LocalDate to, LocalDate evaluatedAt, List<CurrentDayForecast> current,
             List<RunDayForecast> runDays, SortedMap<MemberDay, Double> logged) {
+        Map<DayKey, RunDayForecast> byKey = new HashMap<>();
+        for (RunDayForecast rd : runDays) {
+            byKey.putIfAbsent(new DayKey(rd.runId(), rd.day().userId(), rd.day().day()), rd);
+        }
         List<AccuracyRow> rows = new ArrayList<>();
+        int nonWorkingDays = 0;
         for (CurrentDayForecast c : current) {
-            if (inRange(c.day(), from, to)) {
-                rows.add(row(c.userId(), c.day(), c.runId(), lead(asOfOf(c, runDays), c.day()), c.demandHrs(), c.capacityHrs(), c.overloadHrs(), logged));
+            if (!inRange(c.day(), from, to)) {
+                continue;
             }
+            RunDayForecast rd = byKey.get(new DayKey(c.runId(), c.userId(), c.day()));
+            if (rd == null) {
+                continue; // no run-day row: the row cannot be placed by lead. A finished run writes both tables in one transaction, so this is defensive.
+            }
+            if (!rd.day().workingDay()) {
+                nonWorkingDays++;
+                continue;
+            }
+            rows.add(row(c.userId(), c.day(), c.runId(), lead(rd.asOf(), c.day()), c.demandHrs(), c.capacityHrs(), c.overloadHrs(), logged));
         }
         rows.sort((a, b) -> a.userId().equals(b.userId()) ? a.day().compareTo(b.day()) : Ids.UUID_ORDER.compare(a.userId(), b.userId()));
         List<AccuracyScore> scores = new ArrayList<>();
@@ -60,28 +80,22 @@ public final class Accuracy {
         SortedMap<Integer, List<AccuracyRow>> byLead = new TreeMap<>();
         for (RunDayForecast rd : runDays) {
             MemberDayForecast d = rd.day();
-            if (inRange(d.day(), from, to)) {
+            if (d.workingDay() && inRange(d.day(), from, to)) {
                 int lead = lead(rd.asOf(), d.day());
                 byLead.computeIfAbsent(lead, k -> new ArrayList<>())
                         .add(row(d.userId(), d.day(), rd.runId(), lead, d.demandHrs(), d.capacityHrs(), d.overloadHrs(), logged));
             }
         }
         byLead.forEach((lead, rs) -> scores.add(score(LEAD, Integer.toString(lead), rs, logged)));
-        return new AccuracyResult(teamId, from, to, evaluatedAt, List.copyOf(rows), List.copyOf(scores));
+        return new AccuracyResult(teamId, from, to, evaluatedAt, List.copyOf(rows), List.copyOf(scores), nonWorkingDays);
+    }
+
+    /** One day row of one run of one member: the key a current row is matched on. */
+    private record DayKey(UUID runId, UUID userId, LocalDate day) {
     }
 
     private static boolean inRange(LocalDate day, LocalDate from, LocalDate to) {
         return isWeekday(day) && !day.isBefore(from) && !day.isAfter(to);
-    }
-
-    /** The run day of the current row's run; the current row carries only the run id, so it is looked up among the run days (else lead 0). */
-    private static LocalDate asOfOf(CurrentDayForecast c, List<RunDayForecast> runDays) {
-        for (RunDayForecast rd : runDays) {
-            if (rd.runId().equals(c.runId())) {
-                return rd.asOf();
-            }
-        }
-        return c.day();
     }
 
     private static AccuracyRow row(UUID user, LocalDate day, UUID runId, int lead, double forecast, double capacity, double overload,

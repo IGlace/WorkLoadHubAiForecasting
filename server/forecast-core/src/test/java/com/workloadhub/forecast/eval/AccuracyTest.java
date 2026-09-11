@@ -34,7 +34,12 @@ class AccuracyTest {
     }
 
     static RunDayForecast runDay(UUID run, LocalDate asOf, UUID user, LocalDate day, double demand, double capacity) {
-        return new RunDayForecast(run, asOf, new MemberDayForecast(user, day, 1, demand, 0, 0, demand, capacity, Math.max(0, demand - capacity), true));
+        return runDay(run, asOf, user, day, demand, capacity, true);
+    }
+
+    static RunDayForecast runDay(UUID run, LocalDate asOf, UUID user, LocalDate day, double demand, double capacity, boolean workingDay) {
+        return new RunDayForecast(run, asOf,
+                new MemberDayForecast(user, day, 1, demand, 0, 0, demand, capacity, Math.max(0, demand - capacity), workingDay));
     }
 
     @Test
@@ -131,6 +136,41 @@ class AccuracyTest {
         assertTrue(Double.isNaN(r.scores().get(0).mae()));
         assertEquals(0, r.scores().get(0).maseN());
         assertTrue(Double.isNaN(r.scores().get(0).mase()));
+        assertEquals(0, r.nonWorkingDays());
+    }
+
+    @Test
+    void aHolidayOrFullAbsenceIsNotScoredAndIsCounted() {
+        // Tuesday is a public holiday for A: the runner wrote the day with workingDay false, capacity 0 and no demand.
+        // Scoring it would count a perfect row for a day nobody was meant to work.
+        List<CurrentDayForecast> current = List.of(current(A, MON, RUN2, 8, 8), current(A, TUE, RUN2, 0, 0));
+        List<RunDayForecast> runDays = List.of(
+                runDay(RUN2, LocalDate.of(2026, 8, 21), A, MON, 8, 8),
+                runDay(RUN2, LocalDate.of(2026, 8, 21), A, TUE, 0, 0, false));
+        SortedMap<MemberDay, Double> logged = new TreeMap<>();
+        logged.put(new MemberDay(A, MON), 6.0);
+        AccuracyResult r = Accuracy.evaluate(TEAM, MON, TUE, SAT, current, runDays, logged);
+
+        assertEquals(List.of(MON), r.current().stream().map(AccuracyRow::day).toList(), "the holiday is not a row");
+        assertEquals(1, r.nonWorkingDays());
+        assertEquals(1, r.scores().get(0).n(), "the holiday does not count in n");
+        assertEquals(Math.abs(6 - 8) / 1.0, r.scores().get(0).mae(), 1e-9);
+        List<AccuracyScore> leads = r.scores().stream().filter(s -> s.scope().equals("lead")).toList();
+        assertEquals(List.of("1"), leads.stream().map(AccuracyScore::key).toList(), "the holiday's run-day row is not scored by lead either");
+        assertEquals(1, leads.get(0).n());
+    }
+
+    @Test
+    void aCurrentRowWithoutARunDayRowIsSkippedAndIsNotCountedAsNonWorking() {
+        List<CurrentDayForecast> current = List.of(current(A, MON, RUN2, 8, 8), current(A, TUE, RUN1, 8, 8));
+        List<RunDayForecast> runDays = List.of(runDay(RUN2, LocalDate.of(2026, 8, 21), A, MON, 8, 8));
+        SortedMap<MemberDay, Double> logged = new TreeMap<>();
+        logged.put(new MemberDay(A, MON), 6.0);
+        AccuracyResult r = Accuracy.evaluate(TEAM, MON, TUE, SAT, current, runDays, logged);
+
+        assertEquals(List.of(MON), r.current().stream().map(AccuracyRow::day).toList(), "run 1 wrote no day row for Tuesday: it cannot be placed by lead");
+        assertEquals(0, r.nonWorkingDays(), "a missing run-day row is not a holiday");
+        assertEquals(1, r.scores().get(0).n());
     }
 
     @Test

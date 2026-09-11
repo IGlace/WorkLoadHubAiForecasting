@@ -30,6 +30,13 @@ actually logged. Deterministic code computes everything; Copilot plays no part.
 against zero hours (the member logged nothing), the convention the harness uses for level B. A member who
 left the team keeps their rows. The default range in the CLI is the last 20 days ending yesterday.
 
+> Amended on 2026-09-11 (final review): a weekday whose stored day row has `working_day` false (a public
+> holiday or a full absence, written with no capacity) is not scored in any scope. Counting it scored a
+> perfect row for a day nobody was meant to work. Those days are counted instead and reported as
+> `AccuracyResult.nonWorkingDays`. A current row is matched to its run's day row on (run, member, day); a
+> current row with no such row is skipped altogether, because its lead cannot be computed (a finished run
+> writes both tables in one transaction, so this is defensive).
+
 ## 4. Metrics
 
 All from `eval.Metrics` and `backtest.Backtest`, unchanged:
@@ -57,7 +64,7 @@ public record AccuracyRow(UUID userId, LocalDate day, UUID runId, int lead, doub
 public record AccuracyScore(String scope, String key, int n, double mae, double bias, double mase, int maseN,
         double overloadPrecision, double overloadRecall) {}   // scope: "team" | "member" | "lead"
 public record AccuracyResult(UUID teamId, LocalDate from, LocalDate to, LocalDate evaluatedAt,
-        List<AccuracyRow> current, List<AccuracyScore> scores) {}
+        List<AccuracyRow> current, List<AccuracyScore> scores, int nonWorkingDays) {}
 
 // ForecastService
 AccuracyResult accuracy(UUID teamId, LocalDate from, LocalDate to);

@@ -38,7 +38,8 @@ public final class AccuracyReport {
                 .append(" current forecast made before each day (team and member rows) and every finished run's day rows (lead rows; lead 1 is the")
                 .append(" first weekday after the run day). MASE compares each day with the same weekday one week earlier and is scored on the")
                 .append(" `mase_n` rows that have such a log, so log sparsity cannot move it. Overload precision and recall compare")
-                .append(" forecast overload with logged hours above capacity.\n\n");
+                .append(" forecast overload with logged hours above capacity. ").append(result.nonWorkingDays())
+                .append(" weekdays were holidays or full absences and are not scored.\n\n");
         md.append(TABLE_HEADER).append('\n').append("|---|---|---|---|---|---|---|---|---|\n");
         for (AccuracyScore s : result.scores()) {
             md.append("| ").append(s.scope()).append(" | ").append(s.key()).append(" | ").append(s.n()).append(" | ").append(Report.csv(s.mae()))
