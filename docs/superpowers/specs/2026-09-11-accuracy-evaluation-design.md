@@ -65,8 +65,8 @@ the three tables.
 
 - `eval/Accuracy.java`: the pure computation over `List<CurrentDayForecast>`, the per-run day rows with
   their `as_of`, and the truth map; returns `AccuracyResult`. No JDBC.
-- `store/JdbcRunStore`: one new query, `memberDaysWithRuns(teamId, from, to)` returning
-  `forecast_member_days` rows of the team's `DONE` runs joined with `forecast_runs.as_of`.
+- `store/JdbcRunStore`: one new query, `runDays(teamId, from, to)` returning `forecast_member_days` rows
+  of the team's `DONE` runs in the range joined with `forecast_runs.as_of` (`eval.RunDayForecast`).
 - `service/DefaultForecastService.accuracy`: validation, loads truth through `ForecastRepository` (the
   same load a run does), calls `Accuracy`.
 - `eval/AccuracyReport.java`: `accuracy.csv` (one row per member and day:
@@ -88,7 +88,7 @@ the three tables.
   `accuracy(team, 2026-08-20, 2026-09-02)` with the clock on 2026-09-06: ten rows per member, `n` equal to
   the number of weekdays with a forecast, validation errors, unknown team. PostgreSQL through Testcontainers
   for the new query, like the other store tests.
-- `AccuracyReportTest`: the two files and their columns. CLI: one smoke test through `CliSmokeTest`.
+- `AccuracyReportTest`: the two files and their columns. CLI: assertions in `RunCommandTest`'s seeded scenario.
 
 ## 8. Documents
 
