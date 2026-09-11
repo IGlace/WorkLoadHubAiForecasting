@@ -17,6 +17,9 @@ public interface ForecastService {
     /** The team's current forecast per member and day between two days inclusive: the latest run that covered each day. */
     List<CurrentDayForecast> currentForecast(UUID teamId, LocalDate from, LocalDate to);
 
+    /** How the forecasts made before each weekday between two days compared with the hours logged on it (design 2026-09-11). */
+    AccuracyResult accuracy(UUID teamId, LocalDate from, LocalDate to);
+
     RunProgress progress(UUID runId);
 
     NarrativeResult narrate(NarrativeRequest request);

@@ -6,6 +6,7 @@ import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
+import com.workloadhub.forecast.eval.RunDayForecast;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -196,6 +197,22 @@ public final class JdbcRunStore {
         }
         out.sort((a, b) -> a.userId().toString().equals(b.userId().toString()) ? a.day().compareTo(b.day())
                 : a.userId().toString().compareTo(b.userId().toString()));
+        return out;
+    }
+
+    /** Every day row of the team's DONE runs between two days inclusive, with the run day it was made on; by run, member, day. */
+    public List<RunDayForecast> runDays(UUID teamId, LocalDate from, LocalDate to) {
+        List<RunDayForecast> out = new ArrayList<>();
+        for (Map<String, Object> r : jdbc.sql("SELECT d.run_id, r.as_of, d.user_id, d.day, d.window_index, d.open_hrs, d.new_hrs, d.planned_hrs, d.demand_hrs,"
+                + " d.capacity_hrs, d.overload_hrs, d.working_day FROM forecast_member_days d JOIN forecast_runs r ON r.id = d.run_id"
+                + " WHERE r.team_id = " + ph("uuid") + " AND r.status = ? AND d.day >= " + ph("date") + " AND d.day <= " + ph("date")
+                + " ORDER BY d.run_id, d.user_id, d.day")
+                .param(teamId.toString()).param(RunStatus.DONE.name()).param(from.toString()).param(to.toString()).query().listOfRows()) {
+            out.add(new RunDayForecast(UUID.fromString(str(r, "run_id")), date(r, "as_of"),
+                    new MemberDayForecast(UUID.fromString(str(r, "user_id")), date(r, "day"), (int) num(r, "window_index"), num(r, "open_hrs"),
+                            num(r, "new_hrs"), num(r, "planned_hrs"), num(r, "demand_hrs"), num(r, "capacity_hrs"), num(r, "overload_hrs"),
+                            dialect.asBoolean(r.get("working_day")))));
+        }
         return out;
     }
 

@@ -13,6 +13,7 @@ import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.calendar.ForecastWindow;
 import com.workloadhub.forecast.calendar.Horizon;
+import com.workloadhub.forecast.eval.RunDayForecast;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -213,5 +214,40 @@ class JdbcRunStoreTest {
         WorkloadHubSchema.createPostgresql(ds);
         ForecastMigrations.run(ds);
         failInterruptedMarksQueuedAndRunningRowsOnly(ds);
+    }
+
+    void runDaysJoinTheRunDayOfEveryDoneRunInTheRange(DataSource ds) {
+        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        LocalDate wednesday = LocalDate.of(2026, 8, 19);
+        UUID first = store.create(new RunRequest(TEAM, USER, null, null), wednesday, T0);
+        store.markRunning(first);
+        store.finish(first, "seasonal_naive", 1.0, "{}", windows(), days(wednesday, 7), "{}", T0.plusMinutes(1));
+        LocalDate friday = LocalDate.of(2026, 8, 21);
+        UUID second = store.create(new RunRequest(TEAM, USER, null, null), friday, T0.plusHours(1));
+        store.markRunning(second);
+        store.finish(second, "seasonal_naive", 1.0, "{}", windows(), days(friday, 8), "{}", T0.plusHours(2));
+        UUID failed = store.create(new RunRequest(TEAM, USER, null, null), friday, T0.plusHours(3));
+        store.markRunning(failed);
+        store.fail(failed, "boom", T0.plusHours(4));
+
+        List<RunDayForecast> rows = store.runDays(TEAM, LocalDate.of(2026, 8, 24), LocalDate.of(2026, 8, 25));
+        assertEquals(4, rows.size(), "two runs, Monday and Tuesday each; the failed run has no day rows");
+        assertTrue(rows.stream().anyMatch(r -> r.runId().equals(first) && r.asOf().equals(wednesday) && r.day().demandHrs() == 7));
+        assertTrue(rows.stream().anyMatch(r -> r.runId().equals(second) && r.asOf().equals(friday) && r.day().demandHrs() == 8));
+        assertTrue(rows.stream().allMatch(r -> !r.day().day().isBefore(LocalDate.of(2026, 8, 24)) && !r.day().day().isAfter(LocalDate.of(2026, 8, 25))));
+        assertTrue(store.runDays(UUID.randomUUID(), LocalDate.of(2026, 8, 24), LocalDate.of(2026, 8, 25)).isEmpty());
+    }
+
+    @Test
+    void sqliteRunDays() {
+        runDaysJoinTheRunDayOfEveryDoneRunInTheRange(sqlite());
+    }
+
+    @Test
+    void postgresRunDays() {
+        DataSource ds = DatabaseTestSupport.postgresOrSkip();
+        WorkloadHubSchema.createPostgresql(ds);
+        ForecastMigrations.run(ds);
+        runDaysJoinTheRunDayOfEveryDoneRunInTheRange(ds);
     }
 }

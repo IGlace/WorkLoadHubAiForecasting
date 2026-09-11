@@ -8,6 +8,8 @@ import com.workloadhub.forecast.ai.NarrationProgress;
 import com.workloadhub.forecast.ai.Narrator;
 import com.workloadhub.forecast.ai.Prompts;
 import com.workloadhub.forecast.ai.RuntimeInfo;
+import com.workloadhub.forecast.api.AccuracyResult;
+import com.workloadhub.forecast.api.AccuracyScore;
 import com.workloadhub.forecast.api.CopilotStatus;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
@@ -26,6 +28,8 @@ import com.workloadhub.forecast.backtest.Backtest;
 import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.ForecastRepository;
+import com.workloadhub.forecast.eval.Accuracy;
+import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.facts.FactsBuilder;
 import com.workloadhub.forecast.model.ModelUnavailable;
 import com.workloadhub.forecast.run.ForecastRunner;
@@ -234,6 +238,26 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         }
         requireTeam(teamId);
         return store.currentDays(teamId, from, to);
+    }
+
+    @Override
+    public AccuracyResult accuracy(UUID teamId, LocalDate from, LocalDate to) {
+        if (teamId == null || from == null || to == null) {
+            throw ForecastException.invalidRequest("teamId, from and to are required");
+        }
+        if (from.isAfter(to)) {
+            throw ForecastException.invalidRequest("from " + from + " is after to " + to);
+        }
+        requireTeam(teamId);
+        LocalDate today = LocalDate.now(clock);
+        LocalDate last = to.isBefore(today) ? to : today.minusDays(1);
+        if (from.isAfter(last)) {
+            return new AccuracyResult(teamId, from, last, today, List.of(), List.of(new AccuracyScore(Accuracy.TEAM, teamId.toString(), 0,
+                    Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)));
+        }
+        ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
+        return Accuracy.evaluate(teamId, from, last, today, store.currentDays(teamId, from, last), store.runDays(teamId, from, last),
+                Truth.realisedHoursByDay(data));
     }
 
     @Override

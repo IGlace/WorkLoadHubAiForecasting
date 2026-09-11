@@ -9,6 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.workloadhub.forecast.ai.FakeGateway;
 import com.workloadhub.forecast.ai.Narrator;
 import com.workloadhub.forecast.ai.Prompts;
+import com.workloadhub.forecast.api.AccuracyResult;
+import com.workloadhub.forecast.api.AccuracyScore;
 import com.workloadhub.forecast.api.CopilotStatus;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
@@ -24,6 +26,8 @@ import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
+import com.workloadhub.forecast.eval.Truth;
+import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.store.AesGcmCipher;
 import com.workloadhub.forecast.store.Dialect;
@@ -40,6 +44,7 @@ import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -353,5 +358,38 @@ class DefaultForecastServiceTest {
                 .param(now).param(now).param(id.toString()).param("Empty Team " + id)
                 .update();
         return id;
+    }
+
+    @Test
+    void accuracyComparesTheForecastsMadeBeforeEachWeekdayWithTheLoggedHours() {
+        LocalDate wednesday = LocalDate.of(2026, 8, 19);
+        RunResult r = service.runNow(new RunRequest(team, null, "seasonal_naive", null), wednesday);
+        assertEquals(LocalDate.of(2026, 8, 20), r.memberDays().get(0).day());
+        AccuracyResult acc = service.accuracy(team, LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2));
+        assertEquals(SeededData.asOf(), acc.evaluatedAt(), "the clock's day");
+        assertEquals(LocalDate.of(2026, 9, 2), acc.to());
+        assertEquals(LocalDate.of(2026, 8, 20), acc.from());
+        assertEquals(LocalDate.of(2026, 9, 5), service.accuracy(team, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)).to(), "clamped to yesterday");
+        AccuracyResult future = service.accuracy(team, LocalDate.of(2026, 9, 6), LocalDate.of(2026, 9, 30));
+        assertTrue(future.current().isEmpty(), "nothing has passed yet");
+        assertEquals(0, future.scores().get(0).n());
+        int members = (int) r.memberDays().stream().map(d -> d.userId()).distinct().count();
+        assertEquals(members * 10, acc.current().size(), "ten weekdays per member, 2026-08-20 to 2026-09-02, all in the past");
+        assertTrue(acc.current().stream().allMatch(row -> row.runId().equals(r.run().id())));
+        assertTrue(acc.current().stream().allMatch(row -> row.lead() >= 1 && row.lead() <= 10));
+        SortedMap<MemberDay, Double> logged = Truth.realisedHoursByDay(SeededData.data());
+        assertTrue(acc.current().stream().allMatch(row -> row.loggedHrs() == logged.getOrDefault(new MemberDay(row.userId(), row.day()), 0.0)),
+                "each row's logged hours match the truth computed directly from the seed's time logs");
+        AccuracyScore teamScore = acc.scores().get(0);
+        assertEquals("team", teamScore.scope());
+        assertEquals(members * 10, teamScore.n());
+        assertTrue(teamScore.mae() >= 0);
+        assertEquals(members, acc.scores().stream().filter(s -> s.scope().equals("member")).count());
+        List<AccuracyScore> leads = acc.scores().stream().filter(s -> s.scope().equals("lead")).toList();
+        assertEquals(10, leads.size());
+        assertTrue(leads.stream().allMatch(s -> s.n() >= members), "every run in the range contributes to each lead");
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(team, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 8, 20))).code());
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(team, null, LocalDate.of(2026, 8, 20))).code());
+        assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> service.accuracy(UUID.randomUUID(), LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2))).code());
     }
 }
