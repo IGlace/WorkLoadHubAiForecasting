@@ -922,4 +922,25 @@ git commit -m "feat(cli): an accuracy command and report, with the documents" -m
 4. The CLI's today is the system clock (`LocalDate.now()`), the service's today is its `Clock`; the CLI does not pass a clock, it passes the dates.
 5. Corrected in the final fix wave: `accuracy.csv` prints numbers with `Report.csv` (a reader loads them as they are) and the markdown table with `Report.fmt` (three decimals and `nan`, so the columns line up).
 
+**Rulings taken during execution and the final review (2026-09-11):**
+
+6. MASE is scored over the rows whose member has a log entry on the same weekday one week earlier, and each
+   score reports that count (`maseN`); a zero substitute for a missing prior-week log made MASE depend on how
+   sparse the logs were (this reverses ruling 2). MASE here is daily and is named apart from the run's
+   weekly MASE in the CLI, the summary and the README.
+7. Public holidays (the working calendar is company-wide; a personal absence only zeroes the capacity and
+   stays scored) are not scored in any scope and are counted in `AccuracyResult.nonWorkingDays`; a current
+   row's run day and working-day flag come from its run's day row through a `(runId, userId, day)` map, and a
+   current row without one is skipped.
+8. The default range stays the last 20 days ending yesterday; the summary and the README say that the most
+   recent days read low until hours are logged, that lead rows pool every finished run while team and
+   member rows read the current forecast, and that `accuracy.csv` holds the current rows only.
+9. The service test picks a team that logged hours in the range rather than the class's shared team, whose
+   members had stopped logging before it.
+10. The markdown summary formats with `Report.fmt`, the CSV with `Report.csv`; `RunCommand.JSON_MAPPER` also
+    maps a primitive `double` NaN to JSON null; `Horizon.isWeekday` is the one definition of a weekday;
+    the CLI's user-name lookup lives in `cli/Names`.
+11. Follow-ups left in the backlog: the number of distinct runs behind the lead rows (a weekly run cadence
+    confounds lead with weekday); a narrower truth load than `loadAll()` if the call ever shows in a profile.
+
 **What comes next:** the live Copilot check on a seeded database, the real export through the seed and the parity procedure, and the server's own integration code in the WorkloadHub repository.

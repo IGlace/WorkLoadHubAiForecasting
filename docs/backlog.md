@@ -278,7 +278,7 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
-- **Accuracy evaluation (2026-09-11).** Rulings: no REST endpoint (the server calls the Java method); nothing
+- **Accuracy evaluation (2026-09-11).** Rulings: MASE over the rows with a prior-week log (count `maseN`); public holidays not scored, counted; the summary carries the log-lag and lead-pooling caveats. Follow-ups: report the number of distinct runs behind the lead rows (a weekly cadence confounds lead with weekday); a narrower truth load than `loadAll()` if profiling asks. no REST endpoint (the server calls the Java method); nothing
   stored; a weekday without a log counts as zero hours; MASE against the same weekday one week earlier; lead
   counts weekdays after the run day.
 - **Host integration through the Java interface** (2026-09-11): the host enforces the v1 roles, narration runs
