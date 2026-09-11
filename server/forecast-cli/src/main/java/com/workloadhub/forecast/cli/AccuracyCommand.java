@@ -18,6 +18,7 @@ import picocli.CommandLine.Option;
 @Command(name = "accuracy", description = "Compare the forecasts made before each past weekday with the logged hours: scores per team, member and lead.")
 public class AccuracyCommand implements Callable<Integer> {
 
+    /** The default range is this many days ending yesterday, both ends included. */
     static final int DEFAULT_DAYS = 20;
 
     @Mixin DbOptions db;
@@ -25,7 +26,7 @@ public class AccuracyCommand implements Callable<Integer> {
     @Option(names = "--team", required = true, description = "Team name or id")
     String team;
 
-    @Option(names = "--from", description = "First day, ISO (default: yesterday - 20 days)")
+    @Option(names = "--from", description = "First day, ISO (default: the last 20 days ending yesterday)")
     String from;
 
     @Option(names = "--to", description = "Last day, ISO (default: yesterday)")
@@ -47,7 +48,7 @@ public class AccuracyCommand implements Callable<Integer> {
                 teamId = TeamArg.resolve(s.jdbc(), s.dialect(), team);
                 LocalDate yesterday = LocalDate.now().minusDays(1);
                 last = to == null ? yesterday : LocalDate.parse(to);
-                first = from == null ? last.minusDays(DEFAULT_DAYS) : LocalDate.parse(from);
+                first = from == null ? last.minusDays(DEFAULT_DAYS - 1) : LocalDate.parse(from);
             } catch (IllegalArgumentException | DateTimeParseException e) {
                 System.err.println("error: " + e.getMessage());
                 return 2;
@@ -71,6 +72,7 @@ public class AccuracyCommand implements Callable<Integer> {
             s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
                     .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
             System.out.println("accuracy of team " + team + ", " + result.from() + " to " + result.to() + ", " + result.current().size() + " member-days");
+            System.out.println("mase: daily hours against the same weekday a week earlier (not the run's weekly MASE); lead rows pool every finished run");
             System.out.printf("%-7s %-36s %5s %7s %7s %7s %7s %10s %10s%n", "scope", "key", "n", "mae", "bias", "mase", "mase_n", "over_prec", "over_rec");
             for (AccuracyScore sc : result.scores()) {
                 String key = sc.scope().equals("member") ? names.getOrDefault(UUID.fromString(sc.key()), sc.key()) : sc.key();

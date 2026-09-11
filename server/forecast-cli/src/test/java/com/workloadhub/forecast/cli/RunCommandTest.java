@@ -71,6 +71,9 @@ class RunCommandTest {
         assertEquals(0, cli.execute("run", "--db", db.toString(), "--team", team, "--as-of", "2026-08-19", "--model", "seasonal_naive"));
         String accuracy = capture(cli, 0, "accuracy", "--db", db.toString(), "--team", team, "--from", "2026-08-20", "--to", "2026-09-02");
         assertTrue(accuracy.contains("team") && accuracy.contains("mae") && accuracy.contains("lead"), accuracy);
+        assertTrue(accuracy.contains("mase_n"), accuracy);
+        assertTrue(accuracy.contains("mase: daily hours against the same weekday a week earlier (not the run's weekly MASE);"
+                + " lead rows pool every finished run"), accuracy);
         Path out = dir.resolve("accuracy");
         assertEquals(0, cli.execute("accuracy", "--db", db.toString(), "--team", team, "--from", "2026-08-20", "--to", "2026-09-02", "--out", out.toString()));
         assertTrue(Files.readString(out.resolve("accuracy.csv")).startsWith("member_id,day,run_id,lead,forecast,truth"));

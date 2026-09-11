@@ -40,7 +40,13 @@ class AccuracyReportTest {
         assertTrue(summary.contains("| team | " + team + " | 2 | 1.25 | 1.25 | 0.5 | 2 | 1 | 1 |"));
         assertTrue(summary.contains("| member | " + user + " | 2 | 1.25 | 1.25 |  | 0 | 1 | 1 |"), "NaN is an empty cell");
         assertTrue(summary.contains("| lead | 1 | 1 | 2 | 2 | 0.4 | 1 |  |  |"));
-        assertTrue(summary.contains("MASE compares each day with the same weekday one week earlier"), "the MASE caption");
-        assertTrue(summary.contains("3 weekdays were holidays or full absences and are not scored"), "the non-working count");
+        int lag = summary.indexOf("Hours are often logged days late");
+        int mase = summary.indexOf("MASE here is daily");
+        int holidays = summary.indexOf("3 weekdays were holidays or full absences and are not scored");
+        int scopes = summary.indexOf("The team and member rows read the current forecast");
+        assertTrue(lag > 0 && lag < mase && mase < holidays && holidays < scopes,
+                () -> "the caveats come in order: log lag, MASE, non-working days, scopes\n" + summary);
+        assertTrue(summary.contains("not the weekly arrival MASE the run and the backtest report"), "MASE here is not the run's MASE");
+        assertTrue(summary.contains("`accuracy.csv` holds the current rows only"), "what the CSV holds");
     }
 }

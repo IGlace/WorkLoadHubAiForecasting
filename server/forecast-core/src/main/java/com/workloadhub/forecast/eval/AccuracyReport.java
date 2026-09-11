@@ -36,10 +36,13 @@ public final class AccuracyReport {
                 .append(", evaluated ").append(result.evaluatedAt()).append("\n\n");
         md.append("Truth: ").append(Truth.SOURCE).append(", summed per member and weekday; a weekday without a log counts as zero hours. Forecast: the")
                 .append(" current forecast made before each day (team and member rows) and every finished run's day rows (lead rows; lead 1 is the")
-                .append(" first weekday after the run day). MASE compares each day with the same weekday one week earlier and is scored on the")
-                .append(" `mase_n` rows that have such a log, so log sparsity cannot move it. Overload precision and recall compare")
-                .append(" forecast overload with logged hours above capacity. ").append(result.nonWorkingDays())
-                .append(" weekdays were holidays or full absences and are not scored.\n\n");
+                .append(" first weekday after the run day). Overload precision and recall compare forecast overload with logged hours above capacity.")
+                .append(" Hours are often logged days late: the most recent days read low and the bias there is the logs', not the forecast's.")
+                .append(" MASE here is daily, each day against the same weekday one week earlier, scored over the `mase_n` rows that have such a log;")
+                .append(" it is not the weekly arrival MASE the run and the backtest report. ").append(result.nonWorkingDays())
+                .append(" weekdays were holidays or full absences and are not scored. The team and member rows read the current forecast while the")
+                .append(" lead rows pool every finished run's day rows, so a day counts once per run there; `accuracy.csv` holds the current rows only.")
+                .append("\n\n");
         md.append(TABLE_HEADER).append('\n').append("|---|---|---|---|---|---|---|---|---|\n");
         for (AccuracyScore s : result.scores()) {
             md.append("| ").append(s.scope()).append(" | ").append(s.key()).append(" | ").append(s.n()).append(" | ").append(Report.csv(s.mae()))
