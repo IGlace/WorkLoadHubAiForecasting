@@ -27,8 +27,6 @@ import java.util.concurrent.TimeUnit;
  */
 public final class HostForecastFacade implements AutoCloseable {
 
-    static final Set<String> FINISHED = Set.of("DONE", "FAILED", "NARRATED", "NARRATION_FAILED");
-
     private final ForecastService service;
     private final ForecastAccess access;
     private final ExecutorService narrations = Executors.newFixedThreadPool(2, r -> {
@@ -45,13 +43,23 @@ public final class HostForecastFacade implements AutoCloseable {
         this.access = access;
     }
 
+    /**
+     * Whether the forecast itself is still being computed, the only thing the one-at-a-time rule looks at (design
+     * 2026-09-11, section 3.2): {@code DONE} and {@code FAILED} end a run, and every narration phase (the tracker
+     * reuses the run's entry for {@code NARRATING}, {@code NARRATED} and {@code NARRATION_FAILED}) implies the run
+     * is done; narration has its own guard (section 3.4). Any other phase is a step of the run.
+     */
+    static boolean runInProgress(String phase) {
+        return phase != null && !phase.equals("DONE") && !phase.equals("FAILED") && !phase.startsWith("NARRAT");
+    }
+
     public UUID startRun(UUID userId, UUID teamId) {
         if (!access.canRun(userId, teamId)) {
             throw new HostForbidden("user " + userId + " may not run a forecast for team " + teamId);
         }
         if (access.roleOf(userId).equals("SKILL_TEAM_LEADER")) {
             UUID latest = latestRunOfUser.get(userId);
-            if (latest != null && !FINISHED.contains(service.progress(latest).phase())) {
+            if (latest != null && runInProgress(service.progress(latest).phase())) {
                 throw new HostForbidden("one team at a time: run " + latest + " is still in progress");
             }
         }

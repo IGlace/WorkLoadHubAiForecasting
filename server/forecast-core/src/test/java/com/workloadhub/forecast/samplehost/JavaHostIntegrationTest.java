@@ -56,6 +56,7 @@ class JavaHostIntegrationTest {
     UUID member;        // a MEMBER of team
     UUID viewer;        // a user who may read every team and run none: a VIEWER, or the CENTER_MANAGER when the seed has no VIEWER
     Optional<UUID> admin;       // any ADMIN, when the seed has one
+    UUID teamUnderSameHead;     // another team with members under head's department, or team when the seed has only one
     Optional<UUID> otherTeam;   // a team with members under a different parent, when the seed has one
     Optional<UUID> outsider;    // a MEMBER of otherTeam
 
@@ -79,6 +80,9 @@ class JavaHostIntegrationTest {
         member = SeededData.data().membersOfTeam(team).stream().map(m -> m.id()).filter(id -> role(id).equals("MEMBER")).findFirst().orElseThrow();
         viewer = userWithRole("VIEWER").or(() -> userWithRole("CENTER_MANAGER")).orElseThrow();
         admin = userWithRole("ADMIN");
+        teamUnderSameHead = jdbc.sql("SELECT t.id AS id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE p.manager_id = ? AND t.id <> ?"
+                + " AND EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id) ORDER BY t.id").param(head.toString()).param(team.toString())
+                .query().listOfRows().stream().findFirst().map(r -> UUID.fromString(r.get("id").toString())).orElse(team);
         otherTeam = teams.stream().filter(t -> !t.get("head").toString().equals(head.toString())).findFirst().map(t -> UUID.fromString(t.get("id").toString()));
         outsider = otherTeam.flatMap(t -> SeededData.data().membersOfTeam(t).stream().map(m -> m.id()).filter(id -> role(id).equals("MEMBER")).findFirst());
     }
@@ -129,6 +133,16 @@ class JavaHostIntegrationTest {
     }
 
     @Test
+    void theOneAtATimeRuleLooksAtTheRunNotAtItsNarration() {
+        for (String phase : List.of("QUEUED", "RUNNING", "LOADING", "FEATURES", "BACKTEST", "FORECAST", "FACTS", "PERSIST")) {
+            assertTrue(HostForecastFacade.runInProgress(phase), phase + " is a step of the run");
+        }
+        for (String phase : List.of("DONE", "FAILED", "NARRATING", "NARRATED", "NARRATION_FAILED")) {
+            assertFalse(HostForecastFacade.runInProgress(phase), phase + " means the run itself is over");
+        }
+    }
+
+    @Test
     void aSkillTeamLeaderRunsOneTeamAtATime() throws Exception {
         UUID first = host.startRun(head, team);
         assertThrows(HostForbidden.class, () -> host.startRun(head, team), "a second start while the first is in progress");
@@ -138,6 +152,17 @@ class JavaHostIntegrationTest {
         UUID second = host.startRun(head, team);
         host.waitFor(head, second, Set.of("DONE", "FAILED"), Duration.ofMinutes(2));
         assertEquals("DONE", host.progress(head, second).phase());
+
+        // narrating a finished run does not hold the next one back: that guard is narration's own (section 3.4)
+        tokens.save(head, "gho_host_sample");
+        FakeGateway fake = (FakeGateway) gateway;
+        fake.replies.clear();
+        fake.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(service.getRun(second).factsJson())));
+        host.narrate(head, second, "en").get(2, TimeUnit.MINUTES);
+        assertEquals("NARRATED", host.progress(head, second).phase());
+        UUID third = assertDoesNotThrow(() -> host.startRun(head, teamUnderSameHead), "the narration of a done run is not a run in progress");
+        host.waitFor(head, third, Set.of("DONE", "FAILED"), Duration.ofMinutes(2));
+        tokens.clear(head);
     }
 
     @Test
