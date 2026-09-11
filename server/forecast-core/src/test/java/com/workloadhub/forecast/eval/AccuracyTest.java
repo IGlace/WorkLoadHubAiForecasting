@@ -81,8 +81,10 @@ class AccuracyTest {
         assertEquals(4, team.n());
         assertEquals((2 + 2 + 6 + 8) / 4.0, team.mae(), 1e-9);
         assertEquals((2 - 2 + 6 + 8) / 4.0, team.bias(), 1e-9);
-        // naive: A Monday -> 5 (logged a week earlier); every other row -> 0 (no log a week earlier)
-        assertEquals((2 + 2 + 6 + 8) / (double) (Math.abs(6 - 5) + 10 + 4 + 0), team.mase(), 1e-9);
+        // MASE is scored on the rows whose member has a log the same weekday a week earlier: only A/Monday
+        // has one (5 h), so the sum of |truth - forecast| over those rows is |6 - 8| and the naive floor |6 - 5|.
+        assertEquals(1, team.maseN(), "only A/Monday has a prior-week log");
+        assertEquals(Math.abs(6 - 8) / (double) Math.abs(6 - 5), team.mase(), 1e-9);
         assertEquals(0.0, team.overloadPrecision(), 1e-9, "one forecast overload (B Monday), not actual");
         assertEquals(0.0, team.overloadRecall(), 1e-9, "one actual overload (A Tuesday), not forecast");
 
@@ -92,21 +94,31 @@ class AccuracyTest {
         assertEquals(2, a.n());
         assertEquals(2.0, a.mae(), 1e-9);
         assertEquals(0.0, a.bias(), 1e-9);
+        assertEquals(1, a.maseN(), "A/Monday has a prior-week log, A/Tuesday has none");
+        assertEquals(Math.abs(6 - 8) / (double) Math.abs(6 - 5), a.mase(), 1e-9);
         assertTrue(Double.isNaN(a.overloadPrecision()), "A never had a forecast overload");
         assertEquals(0.0, a.overloadRecall(), 1e-9);
         AccuracyScore b = r.scores().get(2);
         assertEquals(B.toString(), b.key());
         assertEquals(7.0, b.mae(), 1e-9);
+        assertEquals(0, b.maseN(), "B logged nothing a week earlier");
+        assertTrue(Double.isNaN(b.mase()), "no row with a naive means no MASE");
         assertTrue(Double.isNaN(b.overloadRecall()), "B never had an actual overload");
 
         List<AccuracyScore> leads = r.scores().stream().filter(s -> s.scope().equals("lead")).toList();
         assertEquals(List.of("1", "2", "3"), leads.stream().map(AccuracyScore::key).toList());
         assertEquals(2, leads.get(0).n(), "lead 1: run 2's Monday rows for A and B");
         assertEquals((2 + 6) / 2.0, leads.get(0).mae(), 1e-9);
+        assertEquals(1, leads.get(0).maseN(), "of the two, only A/Monday has a prior-week log");
+        assertEquals(Math.abs(6 - 8) / (double) Math.abs(6 - 5), leads.get(0).mase(), 1e-9);
         assertEquals(3, leads.get(1).n(), "lead 2: run 1's Monday row for A, run 2's Tuesday rows for A and B");
         assertEquals((Math.abs(7 - 6) + 2 + 8) / 3.0, leads.get(1).mae(), 1e-9);
+        assertEquals(1, leads.get(1).maseN(), "of the three, only run 1's A/Monday has a prior-week log");
+        assertEquals(Math.abs(6 - 7) / (double) Math.abs(6 - 5), leads.get(1).mase(), 1e-9);
         assertEquals(1, leads.get(2).n(), "lead 3: run 1's Tuesday row for A");
         assertEquals(3.0, leads.get(2).mae(), 1e-9);
+        assertEquals(0, leads.get(2).maseN(), "A logged nothing the Tuesday a week earlier");
+        assertTrue(Double.isNaN(leads.get(2).mase()));
         assertEquals(SAT, r.evaluatedAt());
     }
 
@@ -117,6 +129,8 @@ class AccuracyTest {
         assertEquals(1, r.scores().size(), "the team score is always there");
         assertEquals(0, r.scores().get(0).n());
         assertTrue(Double.isNaN(r.scores().get(0).mae()));
+        assertEquals(0, r.scores().get(0).maseN());
+        assertTrue(Double.isNaN(r.scores().get(0).mase()));
     }
 
     @Test

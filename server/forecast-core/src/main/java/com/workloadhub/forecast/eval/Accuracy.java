@@ -90,22 +90,40 @@ public final class Accuracy {
         return new AccuracyRow(user, day, runId, lead, forecast, actual, capacity, overload > 0, actual > capacity);
     }
 
+    /**
+     * MASE is scored on the rows whose member has a log on the same weekday seven days earlier; a row without one is left out of MASE alone and
+     * still counts in {@code n}, {@code mae}, {@code bias} and the overload rates. Substituting zero for a missing log made MASE depend on how
+     * sparse the logs are, which is not what the metric is for.
+     */
     static AccuracyScore score(String scope, String key, List<AccuracyRow> rows, SortedMap<MemberDay, Double> logged) {
         int n = rows.size();
         double[] y = new double[n];
         double[] p = new double[n];
-        double[] naive = new double[n];
         boolean[] actualOver = new boolean[n];
         boolean[] forecastOver = new boolean[n];
+        List<double[]> scorable = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             AccuracyRow r = rows.get(i);
             y[i] = r.loggedHrs();
             p[i] = r.forecastHrs();
-            naive[i] = logged.getOrDefault(new MemberDay(r.userId(), r.day().minusDays(7)), 0.0);
             actualOver[i] = r.actualOverload();
             forecastOver[i] = r.forecastOverload();
+            Double naive = logged.get(new MemberDay(r.userId(), r.day().minusDays(7)));
+            if (naive != null) {
+                scorable.add(new double[] {y[i], p[i], naive});
+            }
+        }
+        int maseN = scorable.size();
+        double[] my = new double[maseN];
+        double[] mp = new double[maseN];
+        double[] mNaive = new double[maseN];
+        for (int i = 0; i < maseN; i++) {
+            my[i] = scorable.get(i)[0];
+            mp[i] = scorable.get(i)[1];
+            mNaive[i] = scorable.get(i)[2];
         }
         double[] pr = Metrics.overloadPrecisionRecall(actualOver, forecastOver);
-        return new AccuracyScore(scope, key, n, Metrics.mae(y, p), Metrics.bias(y, p), n == 0 ? Double.NaN : Backtest.mase(y, p, naive), pr[0], pr[1]);
+        double mase = maseN == 0 ? Double.NaN : Backtest.mase(my, mp, mNaive);
+        return new AccuracyScore(scope, key, n, Metrics.mae(y, p), Metrics.bias(y, p), mase, maseN, pr[0], pr[1]);
     }
 }

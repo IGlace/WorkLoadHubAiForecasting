@@ -71,11 +71,11 @@ public class AccuracyCommand implements Callable<Integer> {
             s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
                     .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
             System.out.println("accuracy of team " + team + ", " + result.from() + " to " + result.to() + ", " + result.current().size() + " member-days");
-            System.out.printf("%-7s %-36s %5s %7s %7s %7s %10s %10s%n", "scope", "key", "n", "mae", "bias", "mase", "over_prec", "over_rec");
+            System.out.printf("%-7s %-36s %5s %7s %7s %7s %7s %10s %10s%n", "scope", "key", "n", "mae", "bias", "mase", "mase_n", "over_prec", "over_rec");
             for (AccuracyScore sc : result.scores()) {
                 String key = sc.scope().equals("member") ? names.getOrDefault(UUID.fromString(sc.key()), sc.key()) : sc.key();
-                System.out.printf("%-7s %-36s %5d %7s %7s %7s %10s %10s%n", sc.scope(), key, sc.n(), cell(sc.mae()), cell(sc.bias()), cell(sc.mase()),
-                        cell(sc.overloadPrecision()), cell(sc.overloadRecall()));
+                System.out.printf("%-7s %-36s %5d %7s %7s %7s %7d %10s %10s%n", sc.scope(), key, sc.n(), cell(sc.mae()), cell(sc.bias()), cell(sc.mase()),
+                        sc.maseN(), cell(sc.overloadPrecision()), cell(sc.overloadRecall()));
             }
             return 0;
         }

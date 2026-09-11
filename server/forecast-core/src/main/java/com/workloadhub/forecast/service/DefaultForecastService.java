@@ -253,7 +253,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         LocalDate last = to.isBefore(today) ? to : today.minusDays(1);
         if (from.isAfter(last)) {
             return new AccuracyResult(teamId, from, last, today, List.of(), List.of(new AccuracyScore(Accuracy.TEAM, teamId.toString(), 0,
-                    Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)));
+                    Double.NaN, Double.NaN, Double.NaN, 0, Double.NaN, Double.NaN)));
         }
         ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
         return Accuracy.evaluate(teamId, from, last, today, store.currentDays(teamId, from, last), store.runDays(teamId, from, last),

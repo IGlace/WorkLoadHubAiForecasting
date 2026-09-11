@@ -41,13 +41,20 @@ All from `eval.Metrics` and `backtest.Backtest`, unchanged:
 
 `NaN` where the input is empty, as the harness does.
 
+> Amended on 2026-09-11 (final review): MASE is scored over the rows whose member has a log entry on the same
+> weekday seven days earlier (a zero entry that exists counts), and the number of those rows is reported next
+> to it as `maseN` (`mase_n` in the reports). A row without such a log is left out of MASE alone: it still
+> counts in `n`, `mae`, `bias` and the overload rates. `mase` is `NaN` when `maseN` is 0. The first
+> implementation substituted zero hours for a missing prior-week log, which the section never said and which
+> made MASE depend on how sparse the logs are rather than on the forecast.
+
 ## 5. Public API (Java interface only)
 
 ```java
 // api
 public record AccuracyRow(UUID userId, LocalDate day, UUID runId, int lead, double forecastHrs, double loggedHrs,
         double capacityHrs, boolean forecastOverload, boolean actualOverload) {}
-public record AccuracyScore(String scope, String key, int n, double mae, double bias, double mase,
+public record AccuracyScore(String scope, String key, int n, double mae, double bias, double mase, int maseN,
         double overloadPrecision, double overloadRecall) {}   // scope: "team" | "member" | "lead"
 public record AccuracyResult(UUID teamId, LocalDate from, LocalDate to, LocalDate evaluatedAt,
         List<AccuracyRow> current, List<AccuracyScore> scores) {}
