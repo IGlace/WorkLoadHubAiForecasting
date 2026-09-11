@@ -1,10 +1,12 @@
 # WorkloadHub forecast: the Java module
 
 Two Maven modules: `forecast-core` (the library the WorkloadHub Spring Boot application adds as a
-dependency) and `forecast-cli` (a runnable jar for experiments in WSL). Design:
+dependency) and `forecast-cli` (a runnable jar for experiments). Design:
 `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
 
-## Prerequisites (WSL, Ubuntu)
+## Prerequisites
+
+A JDK 21 and Maven on the machine, which is what CI uses:
 
 ```bash
 sudo apt update && sudo apt install -y openjdk-21-jdk maven
@@ -12,8 +14,12 @@ java -version   # 21
 mvn -version    # 3.8 or newer
 ```
 
-Docker Desktop with WSL integration is optional; when it is present the PostgreSQL tests run in a
-container, otherwise they are skipped with a message.
+Or, on a machine that has neither and cannot easily be given them, the development container:
+`bash scripts/devbox.sh shell` opens a shell in an Ubuntu box that already has the whole toolchain,
+with this repository mounted. See "The development container" below.
+
+A container engine is optional for the build itself. When the tests can reach one the PostgreSQL
+tests run against a real database; otherwise they skip themselves with a message.
 
 ## Build and test
 
@@ -22,6 +28,51 @@ cd server
 mvn -B verify                 # compiles, runs every test, builds forecast-cli/target/workloadhub-forecast-cli-0.1.0-SNAPSHOT.jar
 mvn -B verify -Dseed.full=true   # also times the 264-user, 52-week seed
 ```
+
+## The development container
+
+`scripts/devbox.sh` keeps an Ubuntu container running with Java 21, Maven and uv already in it, so
+work that needs Linux can be done by hand inside it. It is how this project is built on a Windows
+machine with no JDK and a WSL distro whose DNS does not work, so nothing can be installed there
+either.
+
+```bash
+bash scripts/devbox.sh up        # build the image if needed and start the box; it stays up
+bash scripts/devbox.sh shell     # a shell inside it, starting it first if it is down
+bash scripts/devbox.sh exec mvn -v        # one command, without opening a shell
+bash scripts/devbox.sh status    # what is mounted, and whether Testcontainers has an engine
+bash scripts/devbox.sh stop      # `up` brings it back with everything intact
+bash scripts/devbox.sh rebuild   # after editing scripts/container/Containerfile
+```
+
+Inside the box, `/work` is this repository **bind-mounted, not copied**: an edit made in the box is
+an edit on Windows and the other way round, so an editor on the host and a shell in the box work on
+the same files. `/data` is `~/whf` on the host, for the databases, seeds and exports that must stay
+out of the repository. `~/.m2` and `~/.cache` are named volumes, so resolved dependencies and uv's
+Pythons survive a `rm` or a rebuild — worth keeping, since a full re-resolve took 9:45 against 5:47
+warm. The script's header documents every variable that overrides a default.
+
+The image is `maven:3.9-eclipse-temurin-21` — Ubuntu 24.04 with Java 21 and Maven 3.9 — plus
+`libgomp1`, git, less, psql, sqlite3 and uv. `libgomp1` is not optional: XGBoost4J loads a native
+library that needs the OpenMP runtime, and without it sixteen tests fail, four of them as two-minute
+`JavaHostIntegrationTest` timeouts that blame a run for not finishing rather than the library for not
+loading.
+
+The box mounts the engine's own socket, so Testcontainers starts PostgreSQL as a sibling container
+and the database tests **run** rather than skip. `devbox.sh` checks that mount from inside and warns
+if it is not a socket, because a wrong path is created as an empty directory and the only symptom
+would be tests quietly skipping. Testcontainers' reaper is switched off — rootless podman does not
+grant it the privileges it asks for — so a run killed part way can leave a `postgres` container
+behind: `podman ps`.
+
+Two things to know about sharing one worktree with Windows. Shell scripts must keep LF endings, which
+`.gitattributes` now pins: Linux bash stops on the first CRLF line with `set: pipefail: invalid
+option name`, a message that names nothing it is about. And using git from both the host and the box
+makes each one re-stat the whole index the first time it runs, which is slow once and harmless.
+
+The container's clock is UTC, and that decides what "today" means to a forecast run: set `WHF_TZ` on
+the host if you run without `--as-of`. Only podman on Windows is exercised; the script prefers podman
+and falls back to docker.
 
 ## The command line
 

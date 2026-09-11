@@ -19,4 +19,5 @@ The first version, a Windows desktop application with a Python service, is archi
 ```bash
 cd server && mvn -B verify      # the gate: about six minutes without Docker
 bash scripts/check.sh           # the same gate plus the parity tool's test
+bash scripts/devbox.sh shell    # ... or work inside the development container, if the machine has no JDK
 ```

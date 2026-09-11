@@ -1,0 +1,50 @@
+# The development container: an Ubuntu box with the whole toolchain already in it, which
+# scripts/devbox.sh keeps running so you can work inside it by hand.
+#
+# The base is Ubuntu 24.04 with Java 21 and Maven 3.9 already installed (maven:3.9-eclipse-temurin-21
+# is built on eclipse-temurin, which is built on ubuntu). It saves installing a JDK into a WSL distro
+# whose DNS does not work.
+#
+# Built by scripts/devbox.sh. By hand:
+#   podman build -t whf-dev:21 -f scripts/container/Containerfile scripts/container
+#
+# This directory is the whole build context on purpose: the image needs no file from the repository,
+# and a context of the repository root would ship every `target/` to the engine on each build.
+FROM docker.io/library/maven:3.9-eclipse-temurin-21
+
+# libgomp1 is not optional. XGBoost4J loads a native library that needs the OpenMP runtime, and
+# without it the loader fails with `UnsatisfiedLinkError: libgomp.so.1`, which takes every model,
+# backtest, facts and runner test with it and leaves JavaHostIntegrationTest waiting two minutes for
+# runs that can never finish: sixteen failures with one cause, and not one of them naming it.
+#
+# The rest is what working inside a shell needs: git and less to read the repository, procps for ps
+# and kill, sqlite3 and psql to look into a forecast database by hand, tzdata so WHF_TZ can set the
+# clock, and python3 for the parity tool.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      libgomp1 \
+      ca-certificates curl \
+      git less procps vim-tiny \
+      sqlite3 postgresql-client \
+      tzdata \
+      python3 python3-venv \
+ && rm -rf /var/lib/apt/lists/*
+
+# uv runs the parity tool's test (`server/tools/tests`), the half of the gate that is not Java. The
+# standalone installer is used rather than pip so that uv brings its own Python versions.
+RUN curl -LsSf https://astral.sh/uv/install.sh \
+    | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
+ && uv --version
+
+# A prompt that says where you are, so a shell in here is never mistaken for one on Windows.
+RUN printf '%s\n' 'PS1="\[\e[1;32m\]whf-dev\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ "' >> /root/.bashrc
+
+# Shown by `devbox.sh shell`, which starts a login shell. Kept to the things that are easy to get
+# wrong from inside: where the repository is, and that data must stay out of it.
+COPY motd.sh /etc/profile.d/whf-devbox.sh
+
+# The base image's entrypoint prepares a Maven settings file and then execs its arguments; this
+# container's argument is a command that must not be wrapped, so it is cleared. `sleep infinity` is
+# what keeps the box up with no process of its own to babysit.
+ENTRYPOINT []
+CMD ["sleep", "infinity"]

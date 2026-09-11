@@ -1,0 +1,11 @@
+# Shell scripts and the Containerfile must keep LF endings in the worktree, not only in the index.
+# Windows checkouts here run with core.autocrlf=true, which gave every .sh a CRLF worktree copy.
+# Git Bash's own bash tolerates that, so nothing complained — but the development container
+# (scripts/devbox.sh) mounts this worktree and runs Linux bash over the same files, and that bash
+# stops on the first line: `set: pipefail: invalid option name`, because the option it read was
+# `pipefail\r`. A message that names nothing it is about.
+#
+# Adding the attribute is not enough on its own: a worktree that already holds CRLF copies keeps
+# them until the files are checked out again (`git add --renormalize . && git checkout -- .`).
+*.sh text eol=lf
+Containerfile text eol=lf

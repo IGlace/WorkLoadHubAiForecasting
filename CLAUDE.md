@@ -1,6 +1,7 @@
 # WorkloadHub AI Forecasting
 
-A Java 21 module for the WorkloadHub Spring Boot server (Linux; development on Windows through WSL) that
+A Java 21 module for the WorkloadHub Spring Boot server (Linux; development on Windows, in the container
+`scripts/devbox.sh` keeps running) that
 forecasts each team member's work hours for the next two weeks from the team's task history in the
 application's own PostgreSQL database, compares them with capacity (40 h/week default over the working days,
 holidays, absences and the team's capacity plan), and uses each user's own GitHub Copilot seat to explain
@@ -69,7 +70,8 @@ server/    Java 21 module: `forecast-core` (the library the host adds) and `fore
            `server/tools/` holds the parity scripts and their one Python test
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
-           dev), `test-release.sh` (the release script's self-test)
+           dev), `test-release.sh` (the release script's self-test), `devbox.sh` (the development
+           container, built from `scripts/container/Containerfile`)
 .claude/   skills, agents, hooks, settings
 ```
 
@@ -81,6 +83,11 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
   `uv run --python 3.11 --with pytest pytest server/tools/tests`. `bash scripts/check.sh` and
   `pwsh scripts/check.ps1` run both; `.github/workflows/ci.yml` runs the same on pushes to `dev` and `main`.
   Keep the three in step.
+- With no JDK on the machine, work inside the development container: `bash scripts/devbox.sh shell`. It
+  keeps an Ubuntu box running with the toolchain and this repository bind-mounted at `/work`, so the gate
+  and the CLI run there exactly as on Linux, with the engine's socket mounted so the PostgreSQL tests
+  still run. Details in `server/README.md`, "The development container". Shell scripts must stay LF
+  (`.gitattributes`); Linux bash rejects a CRLF script with a message that names nothing it is about.
 - `bash scripts/release.sh` (Linux, WSL) or `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to
   `dev`; either is the only thing that can refuse a bad release, because git has no pre-merge hook for a
   fast-forward. Both refuse to run unless mvn and uv are on PATH, so the whole gate runs; neither pushes.
