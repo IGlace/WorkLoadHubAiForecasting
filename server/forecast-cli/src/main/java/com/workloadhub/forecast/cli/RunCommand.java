@@ -31,23 +31,28 @@ public class RunCommand implements Callable<Integer> {
 
     private static final Set<String> USAGE_CODES = Set.of("TEAM_NOT_FOUND", "INVALID_REQUEST");
 
+    private static final ValueSerializer<Double> NON_FINITE_AS_NULL = new ValueSerializer<Double>() {
+        @Override
+        public void serialize(Double value, JsonGenerator gen, SerializationContext ctxt) {
+            if (value == null || value.isNaN() || value.isInfinite()) {
+                gen.writeNull();
+            } else {
+                gen.writeNumber(value);
+            }
+        }
+    };
+
     /**
      * {@code ExportFiles.mapper()} plus one override: a non-finite double (NaN or infinite, as an unscorable
      * MASE or MAE can still be, in principle, upstream of this mapper) serialises as JSON {@code null} rather
      * than Jackson's default of a quoted {@code "NaN"} string, which is not the shape any consumer of
-     * {@code --json} expects.
+     * {@code --json} expects. Registered for both the boxed type ({@code Double.class}, used by fields that
+     * are unscorable rather than merely non-finite) and the primitive one ({@code Double.TYPE}, i.e.
+     * {@code double.class}, since Jackson looks up a property's serializer by its declared type and a record
+     * accessor returning {@code double} never goes through the boxed lookup).
      */
-    private static final JsonMapper JSON_MAPPER = ExportFiles.mapper().rebuild()
-            .addModule(new SimpleModule().addSerializer(Double.class, new ValueSerializer<Double>() {
-                @Override
-                public void serialize(Double value, JsonGenerator gen, SerializationContext ctxt) {
-                    if (value == null || value.isNaN() || value.isInfinite()) {
-                        gen.writeNull();
-                    } else {
-                        gen.writeNumber(value);
-                    }
-                }
-            }))
+    static final JsonMapper JSON_MAPPER = ExportFiles.mapper().rebuild()
+            .addModule(new SimpleModule().addSerializer(Double.class, NON_FINITE_AS_NULL).addSerializer(Double.TYPE, NON_FINITE_AS_NULL))
             .build();
 
     /** Package-private for direct testing without a full CLI run. */

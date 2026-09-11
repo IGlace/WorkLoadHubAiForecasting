@@ -1,0 +1,87 @@
+package com.workloadhub.forecast.cli;
+
+import com.workloadhub.forecast.api.AccuracyResult;
+import com.workloadhub.forecast.api.AccuracyScore;
+import com.workloadhub.forecast.api.ForecastException;
+import com.workloadhub.forecast.eval.AccuracyReport;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
+import picocli.CommandLine.Option;
+
+@Command(name = "accuracy", description = "Compare the forecasts made before each past weekday with the logged hours: scores per team, member and lead.")
+public class AccuracyCommand implements Callable<Integer> {
+
+    static final int DEFAULT_DAYS = 20;
+
+    @Mixin DbOptions db;
+
+    @Option(names = "--team", required = true, description = "Team name or id")
+    String team;
+
+    @Option(names = "--from", description = "First day, ISO (default: yesterday - 20 days)")
+    String from;
+
+    @Option(names = "--to", description = "Last day, ISO (default: yesterday)")
+    String to;
+
+    @Option(names = "--out", description = "Write accuracy.csv and summary.md into this folder")
+    Path out;
+
+    @Option(names = "--json", description = "Print the result as JSON")
+    boolean json;
+
+    @Override
+    public Integer call() throws Exception {
+        try (Services s = Services.open(db.dataSource())) {
+            UUID teamId;
+            LocalDate first;
+            LocalDate last;
+            try {
+                teamId = TeamArg.resolve(s.jdbc(), s.dialect(), team);
+                LocalDate yesterday = LocalDate.now().minusDays(1);
+                last = to == null ? yesterday : LocalDate.parse(to);
+                first = from == null ? last.minusDays(DEFAULT_DAYS) : LocalDate.parse(from);
+            } catch (IllegalArgumentException | DateTimeParseException e) {
+                System.err.println("error: " + e.getMessage());
+                return 2;
+            }
+            AccuracyResult result;
+            try {
+                result = s.service().accuracy(teamId, first, last);
+            } catch (ForecastException e) {
+                System.err.println("error: " + e.code() + ": " + e.getMessage());
+                return "INVALID_REQUEST".equals(e.code()) || "TEAM_NOT_FOUND".equals(e.code()) ? 2 : 1;
+            }
+            if (out != null) {
+                AccuracyReport.write(result, out);
+                System.err.println("wrote " + out.resolve("accuracy.csv") + " and " + out.resolve("summary.md"));
+            }
+            if (json) {
+                System.out.println(RunCommand.JSON_MAPPER.writeValueAsString(result));
+                return 0;
+            }
+            Map<UUID, String> names = new HashMap<>();
+            s.jdbc().sql("SELECT id, full_name FROM users").query().listOfRows()
+                    .forEach(row -> names.put(UUID.fromString(row.get("id").toString()), String.valueOf(row.get("full_name"))));
+            System.out.println("accuracy of team " + team + ", " + result.from() + " to " + result.to() + ", " + result.current().size() + " member-days");
+            System.out.printf("%-7s %-36s %5s %7s %7s %7s %10s %10s%n", "scope", "key", "n", "mae", "bias", "mase", "over_prec", "over_rec");
+            for (AccuracyScore sc : result.scores()) {
+                String key = sc.scope().equals("member") ? names.getOrDefault(UUID.fromString(sc.key()), sc.key()) : sc.key();
+                System.out.printf("%-7s %-36s %5d %7s %7s %7s %10s %10s%n", sc.scope(), key, sc.n(), cell(sc.mae()), cell(sc.bias()), cell(sc.mase()),
+                        cell(sc.overloadPrecision()), cell(sc.overloadRecall()));
+            }
+            return 0;
+        }
+    }
+
+    static String cell(double v) {
+        return Double.isNaN(v) ? "-" : String.format(java.util.Locale.ROOT, "%.2f", v);
+    }
+}

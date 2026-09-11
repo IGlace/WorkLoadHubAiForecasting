@@ -578,6 +578,9 @@ error the quota fields are null and the status says why.
 > are failed at start-up; the host's role rules and integration sequence are in
 > `docs/superpowers/specs/2026-09-11-host-integration-design.md`.
 
+> Amended on 2026-09-11: `accuracy(teamId, from, to)` compares the forecasts made before each past weekday
+> with the logged hours (accuracy evaluation design, 2026-09-11).
+
 ```java
 public interface ForecastService {
     UUID startRun(RunRequest request);                     // teamId, requestedBy, forcedModel, plannedWork (the run day is the server's today)
@@ -638,6 +641,8 @@ Runs in WSL with `java -jar workloadhub-forecast-cli.jar <command>`; the SQLite 
 
 > Amended on 2026-09-11: `narrate` prints the label and the message of each step, not Copilot's thinking and
 > answer. See the host integration design, section 4.1.
+
+> Amended on 2026-09-11: `accuracy --team ... [--from] [--to] [--out] [--json]` (accuracy evaluation design).
 
 Output tables are plain text in English; the CLI is a developer tool and is not localised. The CLI
 never touches PostgreSQL: production access goes through the host.

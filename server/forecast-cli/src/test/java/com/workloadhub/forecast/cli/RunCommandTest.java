@@ -13,6 +13,7 @@ import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.JdbcRunStore;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -41,7 +42,7 @@ class RunCommandTest {
     }
 
     @Test
-    void seedThenRunThenList(@TempDir Path dir) {
+    void seedThenRunThenList(@TempDir Path dir) throws Exception {
         Path db = dir.resolve("r.db");
         Path seeded = dir.resolve("seeded.json");
         CommandLine cli = new CommandLine(new ForecastCli.Root());
@@ -67,6 +68,18 @@ class RunCommandTest {
         String currentJson = capture(cli, 0, "current", "--db", db.toString(), "--team", team, "--from", "2026-09-07", "--to", "2026-09-18", "--json");
         assertTrue(currentJson.trim().startsWith("[") && currentJson.contains("\"demandHrs\""), currentJson);
         assertEquals(2, cli.execute("current", "--db", db.toString(), "--team", team, "--from", "2026-09-18", "--to", "2026-09-07"));
+        assertEquals(0, cli.execute("run", "--db", db.toString(), "--team", team, "--as-of", "2026-08-19", "--model", "seasonal_naive"));
+        String accuracy = capture(cli, 0, "accuracy", "--db", db.toString(), "--team", team, "--from", "2026-08-20", "--to", "2026-09-02");
+        assertTrue(accuracy.contains("team") && accuracy.contains("mae") && accuracy.contains("lead"), accuracy);
+        Path out = dir.resolve("accuracy");
+        assertEquals(0, cli.execute("accuracy", "--db", db.toString(), "--team", team, "--from", "2026-08-20", "--to", "2026-09-02", "--out", out.toString()));
+        assertTrue(Files.readString(out.resolve("accuracy.csv")).startsWith("member_id,day,run_id,lead,forecast,truth"));
+        assertTrue(Files.readString(out.resolve("summary.md")).startsWith("# Forecast accuracy, team "));
+        String accuracyJson = capture(cli, 0, "accuracy", "--db", db.toString(), "--team", team, "--from", "2026-08-20", "--to", "2026-09-02", "--json");
+        assertTrue(accuracyJson.contains("\"scores\"") && accuracyJson.contains("\"current\""), accuracyJson);
+        assertFalse(accuracyJson.contains("NaN"), accuracyJson);
+        assertEquals(2, cli.execute("accuracy", "--db", db.toString(), "--team", team, "--from", "2026-09-02", "--to", "2026-08-20"));
+        assertEquals(2, cli.execute("accuracy", "--db", db.toString(), "--team", "no-such-team"));
     }
 
     /**

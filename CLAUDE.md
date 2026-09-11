@@ -32,9 +32,12 @@ rolling forecast windows (`docs/superpowers/plans/2026-09-10-rolling-forecast-wi
 first weekday after the run day, covers ten weekdays in two windows, is computed per day and keeps a per-day
 current forecast. Then the host integration design
 (`docs/superpowers/specs/2026-09-11-host-integration-design.md`): progress labels, start-up reconciliation and
-a Java-interface sample host; the server's own code is written in the WorkloadHub repository. Next: the live
-Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the real export
-through the seed and the parity procedure, then the server's own integration code, against the sample host.
+a Java-interface sample host; the server's own code is written in the WorkloadHub repository. Then the
+accuracy evaluation (`docs/superpowers/specs/2026-09-11-accuracy-evaluation-design.md`): `accuracy(teamId,
+from, to)` and the CLI `accuracy` compare the forecasts made before each past weekday with the logged hours.
+Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
+real export through the seed and the parity procedure, then the server's own integration code, against the
+sample host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, CI green on `dev`, then fast-forward `main`.
@@ -62,7 +65,7 @@ fix wave, CI green on `dev`, then fast-forward `main`.
 
 ```text
 server/    Java 21 module: `forecast-core` (the library the host adds) and `forecast-cli` (command line:
-           init-db, import, export, seed, run, runs, current, teams, eval, narrate, copilot status);
+           init-db, import, export, seed, run, runs, current, accuracy, teams, eval, narrate, copilot status);
            `server/tools/` holds the parity scripts and their one Python test
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to

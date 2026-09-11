@@ -207,10 +207,10 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   is a run-keyed error map consulted alongside the fetched detail. Note the narrower blast radius: a
   narration that *completes* as failed returns 200 and persists `ai_status`, so only a thrown request is
   silent.
-- **Accuracy evaluation, design first.** Write down what has to be stored and compared (forecast versus actual
-  per member per week); the per-day current forecast (`forecast_current_days`, since 2026-09-10) records the
-  forecast made for each day before it arrived; what remains is the comparison with the logged hours once real
-  weeks have passed.
+- **Accuracy evaluation.** Built (2026-09-11, `docs/superpowers/specs/2026-09-11-accuracy-evaluation-design.md`):
+  `ForecastService.accuracy` and the CLI `accuracy` command compare `forecast_current_days` and each run's day
+  rows with the logged hours. Left open: a history of evaluations (a table and a chart) if the owner wants to
+  see accuracy evolve; results are recomputed on every call today.
 - **WorkloadHub integration.** The module's side is designed and demonstrated
   (`docs/superpowers/specs/2026-09-11-host-integration-design.md`, the sample host); what remains is the
   server's own code (its endpoints, pages and settings), written in the WorkloadHub repository against
@@ -278,6 +278,9 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Accuracy evaluation (2026-09-11).** Rulings: no REST endpoint (the server calls the Java method); nothing
+  stored; a weekday without a log counts as zero hours; MASE against the same weekday one week earlier; lead
+  counts weekdays after the run day.
 - **Host integration through the Java interface** (2026-09-11): the host enforces the v1 roles, narration runs
   on a host executor and the page polls a rotating bilingual label (Copilot's streamed text is no longer
   exposed), one server instance, runs interrupted by a restart are failed at start-up; the sample host in the

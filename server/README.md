@@ -49,6 +49,7 @@ $CLI teams --db ~/whf/workloadhub.db
 $CLI run --team "Platform" --db ~/whf/workloadhub.db --as-of 2026-09-06
 $CLI runs --team "Platform" --db ~/whf/workloadhub.db
 $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal_naive --out ~/whf/eval
+$CLI accuracy --team "Platform" --db ~/whf/workloadhub.db --from 2026-08-20 --to 2026-09-02 --out ~/whf/accuracy
 ```
 
 | command | options | what it does |
@@ -57,6 +58,7 @@ $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal
 | `run` | `--team <name or id> [--as-of] [--db] [--model xgboost\|seasonal_naive] [--user] [--no-planned] [--json]` | Runs a forecast for one team from the run day (default: today; `--as-of` is an experiment override for seeded databases, the server always uses today) and prints the champion, the scores and the member-window table; `--model` forces a model, `--no-planned` switches off planned-work allocation, `--json` prints the result as JSON. Exits 2 on a usage error, 1 on a failed run. |
 | `runs` | `--team <name or id> [--db] [--limit 20]` | Lists the runs of a team, newest first. |
 | `current` | `--team <name or id> [--from] [--to] [--db] [--json]` | Prints the team's current forecast per member and day (the latest run that covered each day) between `--from` (default: today) and `--to` (default: today + 20 days). Exits 2 on a usage error, 1 on a failed call. |
+| `accuracy` | `--team <name or id> [--from] [--to] [--db] [--out dir] [--json]` | Compares the forecasts made before each past weekday with the logged hours between `--from` (default: yesterday minus 20 days) and `--to` (default: yesterday; later dates are clamped): MAE, bias, MASE and overload precision and recall per team, per member and by lead (weekdays between the run day and the day). `--out` writes `accuracy.csv` and `summary.md`; `--json` prints the result. Exits 2 on a usage error, 1 on a failed call. |
 | `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
 | `narrate` | `--run <id> --user <name or id> [--lang en\|fr] [--model m] [--token-env GITHUB_TOKEN] [--db] [--json]` | Stores the user's GitHub token, narrates a finished run through their Copilot seat, prints the progress labels and steps to stderr, and prints the stored result. Exits 0 OK, 3 UNVERIFIED, 1 FAILED or error, 2 usage. |
 | `copilot status` | `--user <name or id> [--db]` | Reports whether this user can narrate: token presence, runtime availability, sign-in and quota. |
@@ -148,6 +150,9 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
   language)`. Refuse a second narration of the same run and language while one is in flight. The sample
   facade's one-at-a-time and in-flight guards are check-then-act on in-memory maps, enough for one instance
   and sequential requests; a host serving concurrent requests for the same user should synchronise them.
+- **Accuracy**: `accuracy(teamId, from, to)` returns the current-forecast rows compared with the logged hours
+  and the scores by team, member and lead; nothing is stored, every call recomputes. Show it to the roles that
+  can view the team.
 - **Tokens**: your settings page calls `GitHubTokenStore.save(userId, token)` and `clear`, and shows
   `copilotStatus(userId)`, which opens a Copilot session and reports authentication and quota — that is the
   settings page's job, not a pre-check. The module reads a token in one place, at narration, and never returns
