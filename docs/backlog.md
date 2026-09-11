@@ -211,9 +211,10 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   per member per week); the per-day current forecast (`forecast_current_days`, since 2026-09-10) records the
   forecast made for each day before it arrived; what remains is the comparison with the logged hours once real
   weeks have passed.
-- **WorkloadHub integration, requirements first.** Document exactly what an importer needs from WorkloadHub
-  (fields per task, per member, per project) so the owner can check whether its API or export supplies them.
-  No importer code until that is known.
+- **WorkloadHub integration.** The module's side is designed and demonstrated
+  (`docs/superpowers/specs/2026-09-11-host-integration-design.md`, the sample host); what remains is the
+  server's own code (its endpoints, pages and settings), written in the WorkloadHub repository against
+  `server/README.md`, "Integrating from the server's own code".
 
 ## Verification on Windows (owner)
 
@@ -277,6 +278,12 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Host integration through the Java interface** (2026-09-11): the host enforces the v1 roles, narration runs
+  on a host executor and the page polls a rotating bilingual label (Copilot's streamed text is no longer
+  exposed), one server instance, runs interrupted by a restart are failed at start-up; the sample host in the
+  tests is the reference. Spec `docs/superpowers/specs/2026-09-11-host-integration-design.md`. Rulings:
+  `VIEWER` and `CENTER_MANAGER` view any team (read only); the one-at-a-time rule applies to skill team leaders
+  only; a member of another team sees nothing.
 - **Rolling forecast windows** (2026-09-10): a forecast starts the first weekday after the run day and covers
   ten weekdays in two windows of five, computed per day; each run upserts a per-day current forecast
   (`forecast_current_days`) that the accuracy evaluation will read; the caller no longer chooses the run day

@@ -114,6 +114,42 @@ The run day is today by the `java.time.Clock` bean; the auto-configuration regis
 production). A forecast covers the ten weekdays after the run day in two windows of five
 (`docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`).
 
+### Integrating from the server's own code
+
+The design is `docs/superpowers/specs/2026-09-11-host-integration-design.md`; the reference implementation is the
+sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/samplehost/`: `ForecastAccess`,
+`HostForecastFacade`, `JavaHostIntegrationTest`).
+
+- **Wiring**: add the dependency, keep `whf.web.enabled` false, set `whf.token-key` from your secret store,
+  `whf.work-dir` to a directory the service account can write, and declare a `java.time.Clock` bean in your
+  time zone. The module's Flyway creates its tables in your schema under `forecast_schema_history`.
+- **Who may do what** (the host enforces it; the module trusts `requestedBy`):
+
+  | role | may start a run for | may view |
+  |---|---|---|
+  | `ADMIN` | any team | any team |
+  | `SKILL_TEAM_LEADER` | a team whose parent team they manage, one at a time | those teams and their own memberships |
+  | `TEAM_LEADER` | the teams they manage | those teams and their own memberships |
+  | `MEMBER` | none | the teams they belong to |
+  | `VIEWER`, `CENTER_MANAGER` | none | any team |
+
+- **A run**: check the role, `startRun(new RunRequest(teamId, userId, null, null))`, let the page poll
+  `progress(runId)` and show `label` in the user's language until `DONE` or `FAILED`, then read `getRun(runId)`
+  and `currentForecast(teamId, from, to)` (per member and day, two windows of five weekdays).
+- **A narration**: check the role, `copilotStatus(userId).hasToken()` and that the run is `DONE`, then submit
+  `narrate(new NarrativeRequest(runId, userId, language, null))` to your own bounded executor and return; the
+  page polls `progress(runId)` (`NARRATING` with a label that rotates through "collecting data", "consulting
+  Copilot", "thinking"; then `NARRATED` or `NARRATION_FAILED`) and reads `narrative(runId, language)`. Refuse a
+  second narration of the same run and language while one is in flight. The sample facade's one-at-a-time and
+  in-flight guards are check-then-act on in-memory maps, enough for one instance and sequential requests; a
+  host serving concurrent requests for the same user should synchronise them.
+- **Tokens**: your settings page calls `GitHubTokenStore.save(userId, token)` and `clear`, and shows
+  `copilotStatus(userId)`. The module reads a token in one place, at narration, and never returns it.
+- **Errors**: `ForecastException.code()`: `*_NOT_FOUND` → 404, `INVALID_REQUEST` → 400, everything else → 409; a
+  refused role check is your 403.
+- **One instance**: progress and the run executor live in the JVM. At start-up the module marks runs left
+  `QUEUED` or `RUNNING` by the previous process as `FAILED` (`interrupted by a restart`).
+
 ### The REST surface (`whf.web.enabled=true`)
 
 Paths are relative to `whf.web.base-path`. Authorisation is the host's: `requestedBy` is trusted as given.

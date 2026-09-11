@@ -157,7 +157,8 @@ starts a run for their team and cannot for another; a skill team leader starts o
 is refused a second while the first runs; a member and a viewer are refused; the page-style polling sees the
 labels move to `DONE`; the current forecast is readable; a narration submitted through the facade ends
 `NARRATED` with the stored narrative in the requested language; a viewer may read the narrative and a member
-of another team may not. The seed provides every role (`ReferenceData.ROLES`).
+of another team may not. The seed provides every role but `VIEWER`; the test's viewer is the
+`CENTER_MANAGER`, which has the same rights.
 
 ## 5. Documentation
 
@@ -178,8 +179,9 @@ of another team may not. The seed provides every role (`ReferenceData.ROLES`).
 asking phrases, no text stored. `JdbcRunStoreTest`: `failInterrupted` marks queued and running rows, leaves
 done and failed rows, returns the count, on both dialects. `DefaultForecastServiceTest`: a queued row before
 construction is failed after `recoverInterruptedRuns`. `ForecastControllerTest` and `SampleHostIntegrationTest`:
-the progress JSON carries `label.en` and `label.fr` and no `thinking`/`answer`. `NarrateCommandTest` (CLI):
-the streamed output shows labels, not answer text. `JavaHostIntegrationTest` as in section 4.3.
+the progress JSON carries `label.en` and `label.fr` and no `thinking`/`answer`. The CLI's `narrate` printer
+prints the label and the message; it is not exercised by a test (the CLI has no gateway stub).
+`JavaHostIntegrationTest` as in section 4.3.
 
 ## 7. Non-goals
 

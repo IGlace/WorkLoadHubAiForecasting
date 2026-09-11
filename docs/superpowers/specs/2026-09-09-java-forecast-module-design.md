@@ -570,6 +570,10 @@ error the quota fields are null and the status says why.
 > carries member windows and days, and `currentForecast(teamId, from, to)` reads the per-day current
 > forecast; see the rolling-windows design, section 8.
 
+> Amended on 2026-09-11: `RunProgress(runId, phase, percent, message, label)`; runs left QUEUED or RUNNING
+> are failed at start-up; the host's role rules and integration sequence are in
+> `docs/superpowers/specs/2026-09-11-host-integration-design.md`.
+
 ```java
 public interface ForecastService {
     UUID startRun(RunRequest request);                     // teamId, requestedBy, forcedModel, plannedWork (the run day is the server's today)

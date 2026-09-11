@@ -269,6 +269,10 @@ the audit trail is the stored facts plus the stored narrative.
 
 ## 10. Progress
 
+> Amended on 2026-09-11: `RunProgress` carries a bilingual `label` that rotates through phrases while Copilot
+> works, and no thinking or answer tails; see `docs/superpowers/specs/2026-09-11-host-integration-design.md`,
+> section 4.1.
+
 `RunProgressTracker` gains `narration(runId, step, detail)`, `thinking(runId, text)`,
 `answer(runId, text)`, `resetAnswer(runId)`, `narrated(runId)` and `narrationFailed(runId, message)`.
 While narrating, `RunProgress` has phase `NARRATING`, a percent by step (`STARTING` 5, `SESSION` 10,

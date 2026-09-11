@@ -19,6 +19,10 @@ reasoning. Version 1 works on **dummy data** only.
 | Team leader | **yes** (does technical work) | own team | own team |
 | Skill team leader | **no** (manages only) | any single team under them, one at a time, on behalf of the team leader | all teams in their department |
 
+- **[amended 2026-09-11]** In the server integration the host enforces this table before calling the forecast
+  module (`docs/superpowers/specs/2026-09-11-host-integration-design.md`, section 3.2): members view their own
+  team, viewers and centre managers view any team and run none, admins run and view any team.
+
 ## 3. Functional requirements
 
 ### 3.1 Forecast
