@@ -96,6 +96,15 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         });
     }
 
+    /** Called once when the module starts: runs the previous process left behind cannot be resumed (design 2026-09-11, section 4.2). */
+    public int recoverInterruptedRuns() {
+        int n = store.failInterrupted(LocalDateTime.now(clock));
+        if (n > 0) {
+            LOG.warn("marked {} run(s) left QUEUED or RUNNING by a previous process as FAILED", n);
+        }
+        return n;
+    }
+
     @Override
     public UUID startRun(RunRequest request) {
         LocalDate asOf = LocalDate.now(clock);

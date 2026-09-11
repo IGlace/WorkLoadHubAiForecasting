@@ -180,4 +180,38 @@ class JdbcRunStoreTest {
         ForecastMigrations.run(ds);
         tiedCreatedAtOrdersByIdDescending(ds);
     }
+
+    void failInterruptedMarksQueuedAndRunningRowsOnly(DataSource ds) {
+        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        UUID queued = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        UUID running = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        store.markRunning(running);
+        UUID done = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        store.finish(done, "xgboost", 0.8, "{}", List.of(), List.of(), "{}", T0.plusMinutes(1));
+        UUID failed = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        store.fail(failed, "boom", T0.plusMinutes(1));
+        assertEquals(2, store.failInterrupted(T0.plusHours(1)));
+        for (UUID id : List.of(queued, running)) {
+            RunSummary r = store.find(id).orElseThrow();
+            assertEquals(RunStatus.FAILED, r.status(), id.toString());
+            assertEquals(JdbcRunStore.INTERRUPTED, r.error());
+            assertEquals(T0.plusHours(1), r.finishedAt());
+        }
+        assertEquals(RunStatus.DONE, store.find(done).orElseThrow().status());
+        assertEquals("boom", store.find(failed).orElseThrow().error());
+        assertEquals(0, store.failInterrupted(T0.plusHours(2)), "nothing left to reconcile");
+    }
+
+    @Test
+    void sqliteFailInterrupted() {
+        failInterruptedMarksQueuedAndRunningRowsOnly(sqlite());
+    }
+
+    @Test
+    void postgresFailInterrupted() {
+        DataSource ds = DatabaseTestSupport.postgresOrSkip();
+        WorkloadHubSchema.createPostgresql(ds);
+        ForecastMigrations.run(ds);
+        failInterruptedMarksQueuedAndRunningRowsOnly(ds);
+    }
 }

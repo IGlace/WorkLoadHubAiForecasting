@@ -57,6 +57,7 @@ record Services(DefaultForecastService service, Dialect dialect, JdbcClient jdbc
         RunProgressTracker progress = new RunProgressTracker(Clock.systemDefaultZone());
         DefaultForecastService service = new DefaultForecastService(ds, dialect, runner, new JdbcRunStore(ds, dialect), progress, 1, true, tokens,
                 new JdbcNarrativeStore(ds, dialect), narrator, gateway, Clock.systemDefaultZone());
+        service.recoverInterruptedRuns();
         return new Services(service, dialect, jdbc, runner, tokens, progress);
     }
 

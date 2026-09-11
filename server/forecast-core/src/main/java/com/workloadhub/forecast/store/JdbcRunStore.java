@@ -71,6 +71,15 @@ public final class JdbcRunStore {
                 .param(RunStatus.FAILED.name()).param(line).param(ts(finishedAt)).param(runId.toString()).update();
     }
 
+    public static final String INTERRUPTED = "interrupted by a restart";
+
+    /** After a restart nothing can still be running a QUEUED or RUNNING row (design 2026-09-11, section 4.2): fail them all, return how many. */
+    public int failInterrupted(LocalDateTime now) {
+        return jdbc.sql("UPDATE forecast_runs SET status = ?, error = ?, finished_at = " + ph("timestamp") + " WHERE status IN (?, ?)")
+                .param(RunStatus.FAILED.name()).param(INTERRUPTED).param(ts(now))
+                .param(RunStatus.QUEUED.name()).param(RunStatus.RUNNING.name()).update();
+    }
+
     public void finish(UUID runId, String champion, double championMase, String backtestJson, List<MemberWindowForecast> windows,
             List<MemberDayForecast> days, String factsJson, LocalDateTime finishedAt) {
         tx.executeWithoutResult(status -> {

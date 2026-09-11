@@ -19,6 +19,7 @@ import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunStatus;
+import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
@@ -325,6 +326,20 @@ class DefaultForecastServiceTest {
         assertEquals("TEAM_NOT_FOUND", ex.code());
         assertEquals(RunStatus.FAILED, service.listRuns(emptyTeam, 1).get(0).status());
         assertEquals("RUN_NOT_DONE", assertThrows(ForecastException.class, () -> service.getRun(service.listRuns(emptyTeam, 1).get(0).id())).code());
+    }
+
+    @Test
+    void interruptedRunsAreFailedWhenTheModuleStarts() {
+        Dialect dialect = Dialect.of(SeededData.dataSource());
+        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource(), dialect);
+        UUID left = raw.create(new RunRequest(team, null, null, null), SeededData.asOf(), LocalDateTime.now());
+        raw.markRunning(left);
+        assertTrue(service.recoverInterruptedRuns() >= 1);
+        RunSummary r = service.listRuns(team, 50).stream().filter(s -> s.id().equals(left)).findFirst().orElseThrow();
+        assertEquals(RunStatus.FAILED, r.status());
+        assertEquals("interrupted by a restart", r.error());
+        assertEquals("FAILED", service.progress(left).phase());
+        assertEquals("forecast failed", service.progress(left).label().en());
     }
 
     /** The seed is expected to carry a member-less "Unassigned" team; this is the fallback if it ever doesn't. */

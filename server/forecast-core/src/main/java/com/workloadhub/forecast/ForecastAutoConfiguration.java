@@ -120,8 +120,10 @@ public class ForecastAutoConfiguration {
     @ConditionalOnMissingBean
     ForecastService forecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
             ForecastProperties properties, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway, Clock clock) {
-        return new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
+        DefaultForecastService service = new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
                 properties.getPlannedWork().isEnabled(), tokens, narratives, narrator, gateway, clock);
+        service.recoverInterruptedRuns();
+        return service;
     }
 
     /** Marker bean so that beans needing the tables can depend on the migrations having run. */
