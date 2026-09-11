@@ -103,19 +103,23 @@ public class NarrateCommand implements Callable<Integer> {
         }
     }
 
-    /** Polls the tracker and prints each new step's label and message to stderr as they arrive. */
+    /**
+     * Polls the tracker and prints each new step to stderr, with the label of that moment. A step is new when the
+     * phase or the message changes: the label rotates every four seconds for a page that polls, which in a
+     * terminal log would only repeat the same step under three names.
+     */
     private static Thread progressPrinter(Services s, UUID runId) {
         Thread t = new Thread(() -> {
-            String last = "";
+            String lastStep = "";
             try {
                 while (!Thread.currentThread().isInterrupted()) {
                     Optional<RunProgress> p = s.progress().get(runId);
                     if (p.isPresent() && p.get().phase().startsWith("NARRAT")) {
                         RunProgress rp = p.get();
-                        String line = "[" + rp.percent() + "%] " + rp.label().en() + " (" + rp.message() + ")";
-                        if (!line.equals(last)) {
-                            System.err.println(line);
-                            last = line;
+                        String step = rp.phase() + "|" + rp.message();
+                        if (!step.equals(lastStep)) {
+                            System.err.println("[" + rp.percent() + "%] " + rp.label().en() + " (" + rp.message() + ")");
+                            lastStep = step;
                         }
                     }
                     Thread.sleep(POLL_MILLIS);

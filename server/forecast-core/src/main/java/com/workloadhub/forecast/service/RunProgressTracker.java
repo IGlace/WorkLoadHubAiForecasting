@@ -39,7 +39,8 @@ public final class RunProgressTracker {
             Map.entry("NARRATED", new ProgressLabel("report ready", "rapport prêt")),
             Map.entry("NARRATION_FAILED", new ProgressLabel("narration failed", "échec de la narration")));
     private static final ProgressLabel STARTING_LABEL = new ProgressLabel("starting Copilot", "démarrage de Copilot");
-    private static final List<ProgressLabel> ASKING_LABELS = List.of(
+    /** Package-private so the tracker's tests can pin the rotation to this very table. */
+    static final List<ProgressLabel> ASKING_LABELS = List.of(
             new ProgressLabel("consulting Copilot", "consultation de Copilot"),
             new ProgressLabel("thinking", "réflexion"),
             new ProgressLabel("writing the report", "rédaction du rapport"));

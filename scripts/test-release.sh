@@ -36,7 +36,7 @@ run() { (cd "$repo" && PATH="$bin" WHF_GATE="$repo/scripts/fake-gate.sh" bash sc
 
 with_tools
 echo "dirty" > "$repo/dirty.txt"
-out="$(run || true)"; code=$?; out="$(run)" && code=0 || code=$?
+out="$(run)" && code=0 || code=$?
 check "dirty tree refused" 1 "$code" "$out" "dirty"
 rm "$repo/dirty.txt"
 

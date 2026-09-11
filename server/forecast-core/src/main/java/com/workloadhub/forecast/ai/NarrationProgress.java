@@ -1,6 +1,6 @@
 package com.workloadhub.forecast.ai;
 
-/** Where a narration reports what it is doing: coded steps, and the live thinking and answer text. */
+/** Where a narration reports what it is doing: coded steps, plus the thinking and answer text the tracker discards. */
 public interface NarrationProgress {
 
     enum Step {
