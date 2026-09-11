@@ -19,5 +19,8 @@ The first version, a Windows desktop application with a Python service, is archi
 ```bash
 cd server && mvn -B verify      # the gate: about six minutes without Docker
 bash scripts/check.sh           # the same gate plus the parity tool's test
-bash scripts/devbox.sh shell    # ... or work inside the development container, if the machine has no JDK
+bash scripts/devbox.sh shell    # a shell in the development container, for a machine with no JDK
 ```
+
+With no JDK on the machine, run the gate **in** the container: `check.sh` on the host skips the Maven
+step and still exits 0, which looks like a pass and has compiled nothing.

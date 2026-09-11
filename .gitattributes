@@ -1,11 +1,19 @@
-# Shell scripts and the Containerfile must keep LF endings in the worktree, not only in the index.
-# Windows checkouts here run with core.autocrlf=true, which gave every .sh a CRLF worktree copy.
-# Git Bash's own bash tolerates that, so nothing complained — but the development container
-# (scripts/devbox.sh) mounts this worktree and runs Linux bash over the same files, and that bash
-# stops on the first line: `set: pipefail: invalid option name`, because the option it read was
-# `pipefail\r`. A message that names nothing it is about.
+# Every text file keeps LF endings in the worktree, not only in the index. The repository has no
+# binary files at all today; `text=auto` still lets git decide, so adding one changes nothing here.
+#
+# Windows checkouts here run with core.autocrlf=true, which gave every file a CRLF worktree copy.
+# Nothing on Windows minded. But the development container (scripts/devbox.sh) mounts this same
+# worktree and runs Linux tools over the same bytes, and two things then go wrong:
+#
+#   - Linux bash stops on the first line of a CRLF script with `set: pipefail: invalid option
+#     name`, because the option it read was `pipefail\r` — a message that names nothing it is
+#     about. Git Bash's own bash tolerates CRLF, which is why it went unnoticed for so long.
+#   - core.autocrlf lives in the Windows *system* gitconfig, which the container's git never reads.
+#     Without this file, git in the box saw 413 files as modified against their LF blobs, which made
+#     `git add -A` in there a trap and made `scripts/release.sh` refuse to run at all — it requires
+#     a clean tree, and the box is the only place on this machine where the gate can run. Neither
+#     `* text=auto` nor core.autocrlf alone fixes that; pinning `eol=lf` does.
 #
 # Adding the attribute is not enough on its own: a worktree that already holds CRLF copies keeps
 # them until the files are checked out again (`git add --renormalize . && git checkout -- .`).
-*.sh text eol=lf
-Containerfile text eol=lf
+* text=auto eol=lf

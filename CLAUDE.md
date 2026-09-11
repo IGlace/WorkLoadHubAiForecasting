@@ -86,12 +86,17 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 - With no JDK on the machine, work inside the development container: `bash scripts/devbox.sh shell`. It
   keeps an Ubuntu box running with the toolchain and this repository bind-mounted at `/work`, so the gate
   and the CLI run there exactly as on Linux, with the engine's socket mounted so the PostgreSQL tests
-  still run. Details in `server/README.md`, "The development container". Shell scripts must stay LF
-  (`.gitattributes`); Linux bash rejects a CRLF script with a message that names nothing it is about.
-- `bash scripts/release.sh` (Linux, WSL) or `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to
-  `dev`; either is the only thing that can refuse a bad release, because git has no pre-merge hook for a
+  still run. `bash scripts/check.sh` on the Windows host instead would skip the Maven step and still exit
+  0, reporting success having compiled nothing. Details in `server/README.md`, "The development container".
+  Every text file stays LF (`.gitattributes`): Linux bash rejects a CRLF script with a message that names
+  nothing it is about, and `core.autocrlf` is Windows-side, so CRLF copies make git inside the box see the
+  whole tree as modified.
+- `bash scripts/release.sh` or `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to `dev`;
+  either is the only thing that can refuse a bad release, because git has no pre-merge hook for a
   fast-forward. Both refuse to run unless mvn and uv are on PATH, so the whole gate runs; neither pushes.
-  `bash scripts/test-release.sh` checks the bash one on a throwaway repository (CI runs it too).
+  `bash scripts/test-release.sh` checks the bash one on a throwaway repository (CI runs it too). On this
+  machine the bash one runs inside the development container, not in WSL: that is where mvn and uv are,
+  and `test-release.sh` passes there. A real release from there has not been done yet.
 - Copilot: the SDK runs an in-process runtime, unpacked once to `~/.copilot/runtime-cache`; tokens need
   `whf.token-key` (server) or `WHF_TOKEN_KEY` (CLI). The live path is checked by hand (`server/README.md`).
 

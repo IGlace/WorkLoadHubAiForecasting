@@ -17,9 +17,11 @@ FROM docker.io/library/maven:3.9-eclipse-temurin-21
 # backtest, facts and runner test with it and leaves JavaHostIntegrationTest waiting two minutes for
 # runs that can never finish: sixteen failures with one cause, and not one of them naming it.
 #
-# The rest is what working inside a shell needs: git and less to read the repository, procps for ps
-# and kill, sqlite3 and psql to look into a forecast database by hand, tzdata so WHF_TZ can set the
-# clock, and python3 for the parity tool.
+# The rest is what working inside a shell needs. ca-certificates and curl fetch the uv installer
+# below; git and less read the repository; procps gives ps and kill; vim-tiny gives `vi` and no
+# `vim`; sqlite3 and psql look into a forecast database by hand; tzdata lets WHF_TZ set the clock;
+# python3 is what server/tools/parity.sh runs. Nothing here needs python3-venv: uv brings its own
+# Python and makes its own environments.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libgomp1 \
@@ -27,7 +29,7 @@ RUN apt-get update \
       git less procps vim-tiny \
       sqlite3 postgresql-client \
       tzdata \
-      python3 python3-venv \
+      python3 \
  && rm -rf /var/lib/apt/lists/*
 
 # uv runs the parity tool's test (`server/tools/tests`), the half of the gate that is not Java. The
@@ -40,7 +42,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh \
 RUN printf '%s\n' 'PS1="\[\e[1;32m\]whf-dev\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ "' >> /root/.bashrc
 
 # Shown by `devbox.sh shell`, which starts a login shell. Kept to the things that are easy to get
-# wrong from inside: where the repository is, and that data must stay out of it.
+# wrong from inside: where the repository is, and that data must stay out of it. It prints only for
+# an interactive shell, and on stderr, so that redirecting a command's output never catches it.
 COPY motd.sh /etc/profile.d/whf-devbox.sh
 
 # The base image's entrypoint prepares a Maven settings file and then execs its arguments; this

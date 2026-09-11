@@ -30,6 +30,14 @@ Decisions taken by the owner, all final:
 | Integration | The module may create its own tables. The host calls a Java interface; the front end is someone else's. |
 | Old code | The Python service, the Electron app and the installer are frozen and archived on a branch. `dev` and `main` carry only the Java project and the documentation. |
 
+Deviation, 2026-09-11: the Windows development path is a container, not WSL. The owner's WSL distro
+has no working DNS and so can install neither a JDK nor Maven; `scripts/devbox.sh` keeps an Ubuntu
+container running with the toolchain and the repository bind-mounted instead. The server target is
+unchanged, and so is everything below that says the module runs on Linux. Read the four mentions of
+WSL in this document — the row above, the `forecast-cli` line in section 2, the CLI in section 12 and
+the non-goal in section 15 — as "Linux, on this machine through `scripts/devbox.sh`". See
+`server/README.md`, "The development container".
+
 ## 2. Architecture and repository layout (approved)
 
 Two Maven modules under `server/`, Java 21, Spring Boot 4.1.x, base package `com.workloadhub.forecast`

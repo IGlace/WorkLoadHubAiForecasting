@@ -11,11 +11,17 @@
 #        bash scripts/devbox.sh exec <cmd> [args...]  run one command inside it
 #        bash scripts/devbox.sh status                what it is, what is mounted, is the socket live
 #        bash scripts/devbox.sh stop                  stop it; `up` brings it back with state intact
+#        bash scripts/devbox.sh restart               stop and start it again
 #        bash scripts/devbox.sh rm                    remove it, keeping the cache volumes
 #        bash scripts/devbox.sh rebuild               rebuild the image and recreate the box
+#        bash scripts/devbox.sh --help                this header
 #
-# It keeps running until stopped, and comes back by itself if it crashes or the engine restarts.
-# After a reboot of Windows, start the engine's machine and run `up` again.
+# It keeps running until stopped, and comes back by itself if it crashes. It does not survive a
+# restart of the engine: podman's machine does not enable podman-restart.service, so after a reboot
+# of Windows, start the machine and run `up` again.
+#
+# The mounts, the timezone and the socket are settled when the box is created. Changing any of the
+# variables below does nothing to a box that already exists: `rm` then `up`, or `rebuild`.
 #
 # CONTAINER_ENGINE  podman or docker; the default is whichever is on PATH, podman first.
 # WHF_IMAGE         the image to build and run (default whf-dev:21).
@@ -24,16 +30,44 @@
 #                   stay out of the repository (default ~/whf; created if missing).
 # WHF_M2_VOLUME     named volume for ~/.m2 (default whf-m2). Losing it costs a full re-resolve:
 #                   measured once at 9:45 for `mvn verify` against 5:47 with it.
-# WHF_CACHE_VOLUME  named volume for ~/.cache (default whf-cache), which holds uv's Pythons and the
-#                   Copilot SDK runtime once it is unpacked.
+# WHF_CACHE_VOLUME  named volume for ~/.cache (default whf-cache), uv's download cache.
+# WHF_UV_VOLUME     named volume for ~/.local/share/uv (default whf-uv), where uv keeps the Python
+#                   versions it downloads: 93 MB, and a fresh one costs a 29 MB download.
+# WHF_COPILOT_VOLUME  named volume for ~/.copilot (default whf-copilot). The SDK unpacks its
+#                   runtime there, to a path it fixes itself, and that costs about 91 MB each time.
 # WHF_TZ            the container's timezone (default UTC). It decides what "today" means to a
-#                   forecast run, so set it if you run without --as-of.
+#                   forecast run, so set it before creating the box if you run without --as-of.
 # CONTAINER_SOCK    the engine socket the box mounts so Testcontainers can start PostgreSQL as a
 #                   sibling container. The default is what podman reports for itself, or the usual
 #                   docker path. Set it to the empty string to leave the socket out.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The header is the help: printing it beats keeping a second copy of it in step. A blank line that
+# is not a comment ends it, so keep the header unbroken.
+help() {
+    awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"
+}
+
+# Answer before anything is set up: reading the help must work on a machine with no engine, and
+# must not create WHF_DATA as a side effect. Naming the commands twice is the price.
+case "${1:-}" in
+help | -h | --help)
+    help
+    exit 0
+    ;;
+"")
+    help
+    exit 2
+    ;;
+up | shell | exec | status | stop | restart | rm | rebuild) ;;
+*)
+    help
+    echo "unknown command: $1" >&2
+    exit 2
+    ;;
+esac
 
 engine="${CONTAINER_ENGINE:-}"
 if [ -z "$engine" ]; then
@@ -61,6 +95,8 @@ image="${WHF_IMAGE:-whf-dev:21}"
 name="${WHF_CONTAINER:-whf-dev}"
 m2_volume="${WHF_M2_VOLUME:-whf-m2}"
 cache_volume="${WHF_CACHE_VOLUME:-whf-cache}"
+uv_volume="${WHF_UV_VOLUME:-whf-uv}"
+copilot_volume="${WHF_COPILOT_VOLUME:-whf-copilot}"
 data="${WHF_DATA:-$HOME/whf}"
 tz="${WHF_TZ:-UTC}"
 
@@ -96,7 +132,10 @@ if [ -z "${CONTAINER_SOCK+x}" ]; then
         # host could name.
         CONTAINER_SOCK="$("$engine" info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null || true)"
         CONTAINER_SOCK="${CONTAINER_SOCK#unix://}"
-        if [ -z "$CONTAINER_SOCK" ]; then
+        # Only worth guessing where a Unix host's rootless socket lives. On Windows the uid is the
+        # host's, not the machine's, so a guess there names a path that cannot exist: leave the
+        # socket out instead and let check_socket say the tests will skip.
+        if [ -z "$CONTAINER_SOCK" ] && [ "$windows" -eq 0 ]; then
             CONTAINER_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
         fi
     else
@@ -108,10 +147,22 @@ exists() { "$engine" inspect --type container "$name" >/dev/null 2>&1; }
 running() { [ "$("$engine" inspect -f '{{.State.Running}}' "$name" 2>/dev/null || true)" = true ]; }
 
 ensure_image() {
-    if ! "$engine" inspect --type image "$image" >/dev/null 2>&1; then
-        echo "==> building $image"
-        "$engine" build -t "$image" -f "$containerfile" "$context"
+    if "$engine" inspect --type image "$image" >/dev/null 2>&1; then
+        return
     fi
+    # `inspect` fails the same way whether the image is absent or the engine is unreachable, and
+    # after a reboot of Windows the second is the likely one. Building then fails with an error
+    # about the Containerfile, which is the wrong place to look: ask the engine how it is first.
+    local why
+    if ! why="$("$engine" info 2>&1 >/dev/null)"; then
+        echo "the container engine is not reachable: $why" >&2
+        if [ "$podman" -eq 1 ]; then
+            echo "start its machine with: podman machine start" >&2
+        fi
+        exit 1
+    fi
+    echo "==> building $image"
+    "$engine" build -t "$image" -f "$containerfile" "$context"
 }
 
 # A bind mount whose source does not exist is not an error: the engine creates it as an empty
@@ -135,7 +186,9 @@ create() {
     echo "==> creating $name from $image"
     local args=(
         run -d --name "$name" --hostname "$name"
-        # Stopping it by hand keeps it stopped; anything else brings it back.
+        # A crash brings it back; `stop` keeps it stopped. Under docker that is what distinguishes
+        # unless-stopped from always; podman documents the two as the same thing, and neither
+        # survives a restart of the engine without podman-restart.service, which is not enabled.
         --restart unless-stopped
         # Testcontainers publishes a port on the engine's host and then connects to it on
         # localhost, which only agrees with the box when the box shares that network.
@@ -144,6 +197,11 @@ create() {
         -v "$data_mount:/data"
         -v "$m2_volume:/root/.m2"
         -v "$cache_volume:/root/.cache"
+        # uv keeps its downloaded Pythons under ~/.local/share/uv, not in ~/.cache, and the Copilot
+        # SDK unpacks its runtime under ~/.copilot. Both paths are the tools' own choice and neither
+        # moves, so each needs a volume to survive `rm`.
+        -v "$uv_volume:/root/.local/share/uv"
+        -v "$copilot_volume:/root/.copilot"
         -w /work
         -e "TZ=$tz"
     )
@@ -205,12 +263,13 @@ exec)
         exit 2
     }
     up >/dev/null
-    # A terminal only when there is one to pass on: forcing -t into a pipe fills the output with
-    # escape codes and makes `devbox.sh exec ... | grep` useless.
+    # -i always, or `devbox.sh exec sqlite3 /data/x.db < query.sql` reads end of file and succeeds
+    # having done nothing. -t only when there is a terminal to pass on: forcing it into a pipe
+    # fills the output with escape codes and makes `devbox.sh exec ... | grep` useless.
     if [ -t 0 ]; then
         exec "$engine" exec -it "$name" "$@"
     fi
-    exec "$engine" exec "$name" "$@"
+    exec "$engine" exec -i "$name" "$@"
     ;;
 status)
     if ! exists; then
@@ -244,19 +303,14 @@ rm)
         exit 0
     }
     "$engine" rm -f "$name"
-    echo "removed $name; the $m2_volume and $cache_volume volumes are kept"
+    echo "removed $name; the $m2_volume, $cache_volume, $uv_volume and $copilot_volume volumes are kept"
     ;;
 rebuild)
-    exists && "$engine" rm -f "$name" >/dev/null
     echo "==> rebuilding $image"
     "$engine" build --pull -t "$image" -f "$containerfile" "$context"
+    # Only now. `--pull` and apt-get both need the network, which on this machine is the fragile
+    # part, and a failed rebuild should leave the box you were working in running.
+    if exists; then "$engine" rm -f "$name" >/dev/null; fi
     up
-    ;;
-*)
-    # The header is the help: printing it beats keeping a second copy of it in step.
-    awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"
-    [ -z "${1:-}" ] && exit 2
-    echo "unknown command: $1" >&2
-    exit 2
     ;;
 esac

@@ -6,7 +6,8 @@ dependency) and `forecast-cli` (a runnable jar for experiments). Design:
 
 ## Prerequisites
 
-A JDK 21 and Maven on the machine, which is what CI uses:
+A JDK 21 and Maven on the machine — the versions CI builds with, though CI installs them through
+`setup-java` rather than apt. On Debian or Ubuntu:
 
 ```bash
 sudo apt update && sudo apt install -y openjdk-21-jdk maven
@@ -42,18 +43,23 @@ bash scripts/devbox.sh shell     # a shell inside it, starting it first if it is
 bash scripts/devbox.sh exec mvn -v        # one command, without opening a shell
 bash scripts/devbox.sh status    # what is mounted, and whether Testcontainers has an engine
 bash scripts/devbox.sh stop      # `up` brings it back with everything intact
+bash scripts/devbox.sh restart   # stop and start again
 bash scripts/devbox.sh rebuild   # after editing scripts/container/Containerfile
+bash scripts/devbox.sh --help    # the script's header, which is the reference for the variables
 ```
 
 Inside the box, `/work` is this repository **bind-mounted, not copied**: an edit made in the box is
 an edit on Windows and the other way round, so an editor on the host and a shell in the box work on
 the same files. `/data` is `~/whf` on the host, for the databases, seeds and exports that must stay
-out of the repository. `~/.m2` and `~/.cache` are named volumes, so resolved dependencies and uv's
-Pythons survive a `rm` or a rebuild — worth keeping, since a full re-resolve took 9:45 against 5:47
-warm. The script's header documents every variable that overrides a default.
+out of the repository. Four named volumes hold what is expensive to fetch again — `~/.m2`,
+`~/.cache`, `~/.local/share/uv` (where uv keeps its downloaded Pythons, not in `~/.cache`) and
+`~/.copilot` (where the SDK unpacks its runtime) — so all of it survives a `rm` or a rebuild. Worth
+keeping: a full Maven re-resolve took 9:45 against 5:47 warm. The script's header documents every
+variable that overrides a default, and which of them are read only when the box is created.
 
 The image is `maven:3.9-eclipse-temurin-21` — Ubuntu 24.04 with Java 21 and Maven 3.9 — plus
-`libgomp1`, git, less, psql, sqlite3 and uv. `libgomp1` is not optional: XGBoost4J loads a native
+`libgomp1`, git, less, ps, psql, sqlite3, uv and `vi` (vim-tiny, so `vim` is not a command).
+`libgomp1` is not optional: XGBoost4J loads a native
 library that needs the OpenMP runtime, and without it sixteen tests fail, four of them as two-minute
 `JavaHostIntegrationTest` timeouts that blame a run for not finishing rather than the library for not
 loading.
@@ -61,18 +67,31 @@ loading.
 The box mounts the engine's own socket, so Testcontainers starts PostgreSQL as a sibling container
 and the database tests **run** rather than skip. `devbox.sh` checks that mount from inside and warns
 if it is not a socket, because a wrong path is created as an empty directory and the only symptom
-would be tests quietly skipping. Testcontainers' reaper is switched off — rootless podman does not
-grant it the privileges it asks for — so a run killed part way can leave a `postgres` container
-behind: `podman ps`.
+would be tests quietly skipping. Testcontainers' reaper is switched off rather than given the
+privileges it asks for (`TESTCONTAINERS_RYUK_PRIVILEGED`), which keeps one setting fewer per engine
+at the cost of a run killed part way leaving a `postgres` container behind: `podman ps`.
 
-Two things to know about sharing one worktree with Windows. Shell scripts must keep LF endings, which
-`.gitattributes` now pins: Linux bash stops on the first CRLF line with `set: pipefail: invalid
-option name`, a message that names nothing it is about. And using git from both the host and the box
-makes each one re-stat the whole index the first time it runs, which is slow once and harmless.
+That socket is also the box's blast radius, and it is wider than the two mounts suggest. Anything
+that executes in there — a Maven plugin, a transitive dependency, a wheel uv fetched — can drive the
+engine, and so can start a sibling container that mounts anything the engine can reach, `/mnt/c`
+included. The box is root inside and stays up indefinitely, so a foothold persists. This is the
+ordinary bargain for running Testcontainers from inside a container; it is worth knowing that it is
+being made.
 
-The container's clock is UTC, and that decides what "today" means to a forecast run: set `WHF_TZ` on
-the host if you run without `--as-of`. Only podman on Windows is exercised; the script prefers podman
-and falls back to docker.
+Sharing one worktree with Windows puts one requirement on the repository: every text file keeps LF
+endings, which `.gitattributes` pins. Linux bash stops on the first CRLF line of a script with `set:
+pipefail: invalid option name`, a message that names nothing it is about — and `core.autocrlf` is a
+Windows-side setting that the container's git never reads, so before the pin the box saw 413 files as
+modified against their LF blobs, which made `git add -A` in there a trap and stopped
+`scripts/release.sh`, whose first check is a clean tree. With the pin, git reads the same in both
+places, and `release.sh` runs in the box — the only place on this machine where the gate can run.
+
+The container's clock is UTC, and that decides what "today" means to a forecast run. `WHF_TZ` changes
+it, but only for a box being created: set it, then `rm` and `up`, if you run without `--as-of`. Only
+podman on Windows is exercised; the script prefers podman and falls back to docker.
+
+On a machine with no JDK, run the gate **inside** the box. `bash scripts/check.sh` on the Windows
+host skips the Maven step and still exits 0, reporting success having compiled nothing.
 
 ## The command line
 
