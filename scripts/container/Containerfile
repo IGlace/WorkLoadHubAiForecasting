@@ -22,6 +22,11 @@ FROM docker.io/library/maven:3.9-eclipse-temurin-21
 # `vim`; sqlite3 and psql look into a forecast database by hand; tzdata lets WHF_TZ set the clock;
 # python3 is what server/tools/parity.sh runs. Nothing here needs python3-venv: uv brings its own
 # Python and makes its own environments.
+#
+# gh is here for the tokens, not for the repository: `gh auth login` then `gh auth token` yields a
+# `gho_` token for your own Copilot seat, which is what `narrate` and the host example store for a
+# user while the application has no sign-in of its own. Ubuntu 24.04 carries it, so no third-party
+# apt source is added for it. It is a stand-in: the real path is a GitHub OAuth App in the server.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libgomp1 \
@@ -30,6 +35,7 @@ RUN apt-get update \
       sqlite3 postgresql-client \
       tzdata \
       python3 \
+      gh \
  && rm -rf /var/lib/apt/lists/*
 
 # uv runs the parity tool's test (`server/tools/tests`), the half of the gate that is not Java. The

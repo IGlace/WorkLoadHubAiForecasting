@@ -35,6 +35,8 @@
 #                   versions it downloads: 93 MB, and a fresh one costs a 29 MB download.
 # WHF_COPILOT_VOLUME  named volume for ~/.copilot (default whf-copilot). The SDK unpacks its
 #                   runtime there, to a path it fixes itself, and that costs about 91 MB each time.
+# WHF_GH_VOLUME     named volume for ~/.config/gh (default whf-gh), where `gh auth login` keeps the
+#                   token it obtained. Without it every rebuild costs another browser sign-in.
 # WHF_TZ            the container's timezone (default UTC). It decides what "today" means to a
 #                   forecast run, so set it before creating the box if you run without --as-of.
 # CONTAINER_SOCK    the engine socket the box mounts so Testcontainers can start PostgreSQL as a
@@ -97,6 +99,7 @@ m2_volume="${WHF_M2_VOLUME:-whf-m2}"
 cache_volume="${WHF_CACHE_VOLUME:-whf-cache}"
 uv_volume="${WHF_UV_VOLUME:-whf-uv}"
 copilot_volume="${WHF_COPILOT_VOLUME:-whf-copilot}"
+gh_volume="${WHF_GH_VOLUME:-whf-gh}"
 data="${WHF_DATA:-$HOME/whf}"
 tz="${WHF_TZ:-UTC}"
 
@@ -202,6 +205,9 @@ create() {
         # moves, so each needs a volume to survive `rm`.
         -v "$uv_volume:/root/.local/share/uv"
         -v "$copilot_volume:/root/.copilot"
+        # gh writes the token from `gh auth login` to ~/.config/gh/hosts.yml. Keeping it means a
+        # rebuild does not send you back to the browser for another device code.
+        -v "$gh_volume:/root/.config/gh"
         -w /work
         -e "TZ=$tz"
     )
@@ -303,7 +309,7 @@ rm)
         exit 0
     }
     "$engine" rm -f "$name"
-    echo "removed $name; the $m2_volume, $cache_volume, $uv_volume and $copilot_volume volumes are kept"
+    echo "removed $name; the $m2_volume, $cache_volume, $uv_volume, $copilot_volume and $gh_volume volumes are kept"
     ;;
 rebuild)
     echo "==> rebuilding $image"

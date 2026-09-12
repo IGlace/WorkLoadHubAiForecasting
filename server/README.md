@@ -51,14 +51,17 @@ bash scripts/devbox.sh --help    # the script's header, which is the reference f
 Inside the box, `/work` is this repository **bind-mounted, not copied**: an edit made in the box is
 an edit on Windows and the other way round, so an editor on the host and a shell in the box work on
 the same files. `/data` is `~/whf` on the host, for the databases, seeds and exports that must stay
-out of the repository. Four named volumes hold what is expensive to fetch again — `~/.m2`,
-`~/.cache`, `~/.local/share/uv` (where uv keeps its downloaded Pythons, not in `~/.cache`) and
-`~/.copilot` (where the SDK unpacks its runtime) — so all of it survives a `rm` or a rebuild. Worth
-keeping: a full Maven re-resolve took 9:45 against 5:47 warm. The script's header documents every
-variable that overrides a default, and which of them are read only when the box is created.
+out of the repository. Five named volumes hold what is expensive to fetch again — `~/.m2`,
+`~/.cache`, `~/.local/share/uv` (where uv keeps its downloaded Pythons, not in `~/.cache`),
+`~/.copilot` (where the SDK unpacks its runtime) and `~/.config/gh` (the token `gh auth login`
+obtained, so a rebuild does not cost another browser sign-in) — so all of it survives a `rm` or a
+rebuild. Worth keeping: a full Maven re-resolve took 9:45 against 5:47 warm. The script's header
+documents every variable that overrides a default, and which of them are read only when the box is
+created.
 
 The image is `maven:3.9-eclipse-temurin-21` — Ubuntu 24.04 with Java 21 and Maven 3.9 — plus
-`libgomp1`, git, less, ps, psql, sqlite3, uv and `vi` (vim-tiny, so `vim` is not a command).
+`libgomp1`, git, less, ps, psql, sqlite3, uv, gh (for a Copilot token, see "Narrating with Copilot")
+and `vi` (vim-tiny, so `vim` is not a command).
 `libgomp1` is not optional: XGBoost4J loads a native
 library that needs the OpenMP runtime, and without it sixteen tests fail, four of them as two-minute
 `JavaHostIntegrationTest` timeouts that blame a run for not finishing rather than the library for not
@@ -306,6 +309,21 @@ export GITHUB_TOKEN="gho_..."                      # the user's own token
 $CLI copilot status --db ~/whf/workloadhub.db --user "Sara Tazi"
 $CLI narrate --db ~/whf/workloadhub.db --run <run id> --user "Sara Tazi" --lang fr
 ```
+
+The application has no sign-in of its own yet, so the token is pasted; the intended path is a GitHub OAuth
+App in the server, where the user signs in, accepts the connection and the server stores what comes back.
+Until then `gh`, which the development box carries, produces one without leaving the terminal:
+
+```bash
+gh auth login           # GitHub.com, HTTPS, "Login with a web browser": it prints a one-time code to
+                        # type at https://github.com/login/device in a browser on the host
+export GITHUB_TOKEN="$(gh auth token)"              # a gho_ token for your own seat
+export WHF_TOKEN_KEY="$(cat /data/.whf-token-key)"  # generated once, outside the repository
+```
+
+The login lives in the `whf-gh` volume and survives a rebuild. Keep the key in a file of your own the same
+way: a new key makes every token stored under the old one unreadable. If a seat check refuses the token,
+`gh auth refresh -h github.com -s copilot` is the thing to try.
 
 `narrate` stores the token for the user, narrates, prints the progress steps and labels to stderr, and
 prints the stored result on stdout: status (`OK`, `UNVERIFIED` with the numbers it could not find in the facts,
