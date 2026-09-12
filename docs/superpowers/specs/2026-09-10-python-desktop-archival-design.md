@@ -4,6 +4,16 @@ Date: 2026-09-10. Status: approved by the owner on 2026-09-10 (design presented 
 section 14, steps 1, 4 and 5, of `2026-09-09-java-forecast-module-design.md`. Steps 2 and 3 of that section
 (the Java module, its parity check and the Copilot narration) landed with plans 1 to 4.
 
+> Deviation recorded 2026-09-12: this design keeps the archive as a **branch** pushed to the GitHub remote.
+> The owner deleted that remote on 2026-09-12, and the branch existed only there, so it went with it. The
+> content survives on `dev`'s own history and now carries the same name as an annotated **tag** at
+> `3c6f836` — the last commit holding `service/`, `app/` and `installer/`, whose child `d985a56` removed
+> them. Everything this document says about the archive still holds with "tag" for "branch", including
+> `git worktree add ../whf-archive archive/python-desktop-v1`, which resolves the tag unchanged. The one
+> difference from the old branch tip `5c69bf6`: `service/tests/test_parity_compare.py` had by then moved to
+> `server/tools/tests/` to stay in the live repository. Section 8's "CI green on `dev`" can no longer
+> happen either; the gate is run by hand in the development container.
+
 ## 1. Goal
 
 `dev` and `main` carry only the Java module and the documentation. The Python service, the Electron desktop

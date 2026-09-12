@@ -1,5 +1,6 @@
-# The local gate, the same steps as CI (.github/workflows/ci.yml) and scripts/check.sh: the Java module's
-# `mvn verify` and the parity gate's test. A step whose tool is missing is skipped with a message.
+# The gate, the same steps as scripts/check.sh and .github/workflows/ci.yml (which has no remote to fire
+# on): the Java module's `mvn verify` and the parity gate's test. Running this by hand is the only gate
+# there is. A step whose tool is missing is skipped with a message.
 # Unlike check.sh, which runs every step and reports each failure, this script stops at the first
 # failing step; both exit non-zero on any failure.
 #

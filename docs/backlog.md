@@ -1,15 +1,24 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04, last updated 2026-09-07; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-12; update this file when an item lands.
 
 Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
-the archive branch only.
+the archived first version only — including the whole "Verification on Windows" section below. Their
+commands (`pwsh scripts/build-installer.ps1`, `uv run pytest tests/test_ai_live.py` in `service/`,
+`whf eval`) exist only in a checkout of the tag `archive/python-desktop-v1`:
+`git worktree add ../whf-archive archive/python-desktop-v1`. Nothing there is on `dev`, and none of it is
+waiting on anyone; the frozen version receives no new features.
 
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
-State on 2026-09-06: the owner's local work (39 commits) was verified and pushed back to the GitHub remote, `dev` and `main` level again.
+State on 2026-09-12: the owner deleted the `origin` remote, so this clone is the only copy. Nothing is
+pushed and `.github/workflows/ci.yml` cannot fire; the gate is `bash scripts/check.sh` run by hand in the
+development container. The CLI was trimmed the same day to the five commands that build and score an
+experiment database.
+
+State on 2026-09-06: the owner's local work (39 commits) was verified and pushed back to the GitHub remote, `dev` and `main` level again (the remote is gone as of 2026-09-12, above).
 
 State on 2026-09-05: released — `scripts/release.ps1` fast-forwarded `main` to `dev` at `0f3eb03` on
 2026-09-04, so both branches carry the team-page live progress, the "Ask Copilot" button scoping and the
@@ -21,9 +30,14 @@ first install straight away; the installer now seeds the data itself, see "Lande
 
 ## Landed
 
-- **The Python service and the desktop app archived** (2026-09-10): `archive/python-desktop-v1` (at `5c69bf6`,
-  plan 4 included) holds `service/`, `app/`, `installer/`, the notebook, the desktop scripts and hooks, and the
-  Python and desktop skills and agents; `dev` and `main` carry the Java module and the documentation. The parity
+- **The Python service and the desktop app archived** (2026-09-10): `archive/python-desktop-v1` held
+  `service/`, `app/`, `installer/`, the notebook, the desktop scripts and hooks, and the
+  Python and desktop skills and agents; `dev` and `main` carry the Java module and the documentation.
+  The branch of that name lived only on the remote deleted on 2026-09-12, so `archive/python-desktop-v1` is
+  now a **tag** at `3c6f836`, the last commit on `dev` that still holds those trees (`d985a56` removed them).
+  It differs from the old branch tip `5c69bf6` only in that `service/tests/test_parity_compare.py` had by then
+  moved to `server/tools/tests/` to stay in the live repository; the `whf` CLI the parity procedure runs is
+  identical. The parity
   procedure runs the Python side from a checkout of the archive (`server/tools/parity.sh ... ARCHIVE_DIR`), and
   the parity gate's test is the one Python test left. Spec
   `docs/superpowers/specs/2026-09-10-python-desktop-archival-design.md`.

@@ -652,6 +652,16 @@ Runs in WSL with `java -jar workloadhub-forecast-cli.jar <command>`; the SQLite 
 
 > Amended on 2026-09-11: `accuracy --team ... [--from] [--to] [--out] [--json]` (accuracy evaluation design).
 
+> Amended on 2026-09-12: the CLI keeps only the commands that build and score an experiment database —
+> `init-db`, `import`, `export`, `seed` and `eval`. `run`, `runs`, `current`, `accuracy`, `teams`,
+> `narrate` and `copilot status` were removed: they exercised `ForecastService`, which is the host's
+> concern, and `server/examples/HostExample.java` now shows that whole round trip instead (including the
+> live Copilot check, `bash server/examples/run-host-example.sh --narrate`). The two amendments above
+> therefore describe commands that no longer exist. `server/README.md` has the current table.
+
+> Amended on 2026-09-12: the CLI runs in the development container (`bash scripts/devbox.sh shell`), not
+> in WSL; there is no JDK on the Windows host.
+
 Output tables are plain text in English; the CLI is a developer tool and is not localised. The CLI
 never touches PostgreSQL: production access goes through the host.
 

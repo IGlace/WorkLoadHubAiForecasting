@@ -1,5 +1,9 @@
 # The same gate as scripts/check.ps1 and scripts/check.sh: the Java module and the parity gate's test.
 # Keep the three in step when any of them changes.
+#
+# This workflow does not run: the owner deleted the `origin` remote on 2026-09-12, so there is no GitHub
+# to fire it. It is kept, and kept in step, so it works again if a remote ever returns. Until then the gate
+# is `bash scripts/check.sh` run by hand in the development container (CLAUDE.md, "Toolchain").
 name: CI
 
 on:

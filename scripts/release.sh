@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the gate, then fast-forward main to dev: the bash twin of scripts/release.ps1. Git has no pre-merge
-# hook for a fast-forward, so this script is what refuses a bad release; CI on GitHub runs the same gate
-# on both branches afterwards. Nothing is pushed.
+# hook for a fast-forward, so this script is the only thing that can refuse a bad release: there is no
+# remote and no CI behind it. Nothing is pushed.
 #
 # Usage: bash scripts/release.sh [FROM] [TO]      (defaults: dev main)
 # WHF_GATE names the gate script to run instead of scripts/check.sh; scripts/test-release.sh uses it.

@@ -1,6 +1,6 @@
 # Forecast evaluation harness and Chronos-2 arrival model: design
 
-> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived at the tag `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
 
 Date: 2026-09-06. Status: approved in brainstorming, pending owner review of this document.
 Inputs: the owner's decisions of 2026-09-06 (below), `docs/superpowers/specs/2026-09-03-workload-forecast-design.md`

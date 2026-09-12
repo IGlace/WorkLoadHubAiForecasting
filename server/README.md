@@ -7,8 +7,7 @@ Design:
 
 ## Prerequisites
 
-A JDK 21 and Maven on the machine — the versions CI builds with, though CI installs them through
-`setup-java` rather than apt. On Debian or Ubuntu:
+A JDK 21 and Maven on the machine. On Debian or Ubuntu:
 
 ```bash
 sudo apt update && sudo apt install -y openjdk-21-jdk maven
@@ -364,7 +363,7 @@ Sessions never resume; each narration is one client and one session, closed at t
 ## Parity check
 
 `server/tools/parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]` runs the Java and Python harnesses on the same
-WorkloadHub export and compares them, where `ARCHIVE_DIR` is a checkout of the branch
+WorkloadHub export and compares them, where `ARCHIVE_DIR` is a checkout of the tag
 `archive/python-desktop-v1` (`git worktree add ../whf-archive archive/python-desktop-v1`), which holds the
 Python service: `forecast init-db`, `import` and `eval --models xgboost,seasonal_naive`
 into `OUT_DIR/java`, then, from `ARCHIVE_DIR/service`, `uv run whf import-workloadhub` and
@@ -402,5 +401,5 @@ per member-week; the gate compares `scores.csv` only.
 The gate's own test, `server/tools/tests/test_parity_compare.py`, runs `parity_compare.py` as a subprocess against
 hand-built `scores.csv` fixtures (pass, tolerance-exceeded, champions-differ, no-booster-rows and
 exactly-at-the-tolerance-boundary). It is the one Python test left in the repository and runs from the root with
-`uv run --python 3.11 --with pytest pytest server/tools/tests`, in `scripts/check.ps1`, `scripts/check.sh` and CI.
+`uv run --python 3.11 --with pytest pytest server/tools/tests`, and in `scripts/check.ps1` and `scripts/check.sh`.
 `parity_compare.py` and `translate-schema.py` stay standalone, standard-library scripts.

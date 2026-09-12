@@ -1,6 +1,6 @@
 # Forecasting internals: the feature matrix, the four arrival models, and the backtest tournament
 
-> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived on branch `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+> Superseded on 2026-09-10: the Python service and desktop app this document describes are archived at the tag `archive/python-desktop-v1`. The current design is `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
 
 Date: 2026-09-07. Describes the code on `dev` at commit `f169361`. Every constant, column and formula
 below is taken from the source named beside it; when the code changes, this document is wrong until

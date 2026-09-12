@@ -13,8 +13,9 @@ against the facts.
   `docs/superpowers/specs/2026-09-10-java-copilot-narration-design.md`.
 - `CLAUDE.md`: how work is done in this repository.
 
-The first version, a Windows desktop application with a Python service, is archived on the branch
-`archive/python-desktop-v1` and receives no new features.
+The first version, a Windows desktop application with a Python service, is archived at the tag
+`archive/python-desktop-v1` and receives no new features. To read or run it:
+`git worktree add ../whf-archive archive/python-desktop-v1`.
 
 ```bash
 cd server && mvn -B verify      # the gate: about six minutes without Docker

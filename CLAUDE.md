@@ -7,12 +7,14 @@ application's own PostgreSQL database, compares them with capacity (40 h/week de
 holidays, absences and the team's capacity plan), and uses each user's own GitHub Copilot seat to explain
 patterns, warn about overload and suggest rebalancing. The host calls a Java interface or an optional REST
 surface; a command line runs the same code on SQLite for experiments. The first version (a Windows desktop
-app with a Python service) is archived on `archive/python-desktop-v1`.
+app with a Python service) is archived at the tag `archive/python-desktop-v1`.
 
 ## Read these first
 
 - `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`: the design of the module (database,
-  seed generator, feature matrix, models, backtest, run pipeline, public API, CLI, testing).
+  seed generator, feature matrix, models, backtest, run pipeline, public API, CLI, testing). Its section 12
+  describes the CLI as first designed; the 2026-09-12 trim cut it to five commands, so read that section as
+  history and `server/README.md` for what exists.
 - `docs/superpowers/specs/2026-09-10-java-copilot-narration-design.md`: Copilot narration from Java (the SDK
   as found, tools, contract, verification, persistence, REST, CLI) and its recorded deviations.
 - `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md`: the real WorkloadHub schema mapped to the
@@ -25,7 +27,7 @@ app with a Python service) is archived on `archive/python-desktop-v1`.
   with Copilot.
 - Documents dated before 2026-09-09 describe the archived version; each carries a note saying so.
 
-## Where the project stands (2026-09-10)
+## Where the project stands (2026-09-12)
 
 Plans 1 to 4 landed on `dev` and `main` (foundation and seed; pipeline core; run, eval and parity; Copilot
 narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Then the
@@ -35,13 +37,15 @@ current forecast. Then the host integration design
 (`docs/superpowers/specs/2026-09-11-host-integration-design.md`): progress labels, start-up reconciliation and
 a Java-interface sample host; the server's own code is written in the WorkloadHub repository. Then the
 accuracy evaluation (`docs/superpowers/specs/2026-09-11-accuracy-evaluation-design.md`): `accuracy(teamId,
-from, to)` compares the forecasts made before each past weekday with the logged hours.
+from, to)` compares the forecasts made before each past weekday with the logged hours. Then, on 2026-09-12,
+the CLI trim: `forecast-cli` keeps only the five commands that build and score an experiment database, and
+everything a host does is shown by `server/examples/HostExample.java` instead.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
 real export through the seed and the parity procedure, then the server's own integration code, against the
 sample host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
-fix wave, CI green on `dev`, then fast-forward `main`.
+fix wave, the gate green by hand in the development container, then fast-forward `main`.
 
 ## Hard rules
 
@@ -56,8 +60,9 @@ fix wave, CI green on `dev`, then fast-forward `main`.
   Copilot, and store the exact facts sent for audit (`forecast_facts`).
 - Test-driven development for every change; jqwik property tests for arithmetic invariants. No test talks to
   Copilot or extracts the SDK's runtime.
-- The GitHub remote (`IGlace/WorkLoadHubAiForecasting`) is the shared copy: `dev` and `main` are pushed there
-  and CI runs on both. Push `dev` when a batch is reviewed.
+- There is no remote. The owner deleted `origin` on 2026-09-12, so this clone is the only copy and nothing
+  is pushed. Never propose a push, a pull request, or "CI will catch it"; the gate is run by hand in the
+  development container. Do not re-add a remote unless the owner asks.
 - English and French are both fully supported in the narrative; a user may switch freely. No third language.
   The CLI's own messages and help are English only, and it does not narrate; the sample host asks for one
   language or the other (`run-host-example.sh --lang en|fr`).
@@ -83,8 +88,9 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 - The gate: `cd server && mvn -B -q verify` (about six minutes without Docker; PostgreSQL tests run through
   Testcontainers when Docker is present, else skip with a message) plus the parity tool's test,
   `uv run --python 3.11 --with pytest pytest server/tools/tests`. `bash scripts/check.sh` and
-  `pwsh scripts/check.ps1` run both; `.github/workflows/ci.yml` runs the same on pushes to `dev` and `main`.
-  Keep the three in step.
+  `pwsh scripts/check.ps1` run both, and running one of them by hand is the only gate there is.
+  `.github/workflows/ci.yml` describes the same steps but cannot fire with no remote; keep the three in
+  step anyway, so it works again if a remote ever returns.
 - With no JDK on the machine, work inside the development container: `bash scripts/devbox.sh shell`. It
   keeps an Ubuntu box running with the toolchain and this repository bind-mounted at `/work`, so the gate
   and the CLI run there exactly as on Linux, with the engine's socket mounted so the PostgreSQL tests
@@ -96,7 +102,7 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 - `bash scripts/release.sh` or `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to `dev`;
   either is the only thing that can refuse a bad release, because git has no pre-merge hook for a
   fast-forward. Both refuse to run unless mvn and uv are on PATH, so the whole gate runs; neither pushes.
-  `bash scripts/test-release.sh` checks the bash one on a throwaway repository (CI runs it too). On this
+  `bash scripts/test-release.sh` checks the bash one on a throwaway repository. On this
   machine the bash one runs inside the development container, not in WSL: that is where mvn and uv are,
   and `test-release.sh` passes there. A real release from there has not been done yet.
 - Copilot: the SDK runs an in-process runtime, unpacked once to `~/.copilot/runtime-cache`; tokens need
@@ -127,7 +133,9 @@ technical-writer. Index in `.claude/agents/README.md`.
 
 - Branches: `dev` is the development branch; all work lands there first. `main` is the release branch and only
   receives fast-forward merges from `dev` once a plan or fix batch is reviewed and every suite is green.
-  `archive/python-desktop-v1` is frozen.
+  `archive/python-desktop-v1` is a **tag**, not a branch: the branch lived only on the deleted remote, so the
+  tag is now the only name for the frozen Python desktop version. `git worktree add ../whf-archive
+  archive/python-desktop-v1` checks it out, which is what `server/tools/parity.sh` wants.
 - Commit messages: imperative subject, short body explaining why.
 - Domain vocabulary: department (a team without a manager), team (team leader), member; demand (open, new and
   planned hours), capacity, overload; arrival model, effort model, champion model, backtest; narrative, facts,

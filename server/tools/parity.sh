@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the parity procedure on one WorkloadHub export: Java eval and Python eval on the same data, then compare.
-# The Python harness lives on the archive branch: ARCHIVE_DIR is a checkout of archive/python-desktop-v1
-# (for example: git worktree add ../whf-archive archive/python-desktop-v1).
+# The Python harness lives in the archived first version: ARCHIVE_DIR is a checkout of the tag
+# archive/python-desktop-v1 (for example: git worktree add ../whf-archive archive/python-desktop-v1).
 # Usage: server/tools/parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"

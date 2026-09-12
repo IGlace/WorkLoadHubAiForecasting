@@ -1,5 +1,5 @@
 # Run the gate, then fast-forward main to dev. Git has no pre-merge hook for a fast-forward, so this
-# script is what refuses a bad release; CI on GitHub runs the same gate on both branches afterwards.
+# script is the only thing that can refuse a bad release: there is no remote and no CI behind it.
 #
 # Usage: pwsh scripts/release.ps1
 [CmdletBinding()]

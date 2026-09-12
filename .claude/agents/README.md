@@ -16,7 +16,7 @@ needs were copied.
 | data-engineer | data and AI | schema mapping, seed generator, import and export |
 | ai-engineer | data and AI | Copilot session, tools, contract and verification |
 | prompt-engineer | data and AI | system prompt and product skills |
-| test-automator | quality and security | JUnit, jqwik, CI |
+| test-automator | quality and security | JUnit, jqwik, the gate |
 | code-reviewer | quality and security | reviews before merge |
 | architect-reviewer | quality and security | design and boundary reviews |
 | security-auditor | quality and security | token storage, Copilot data flow |
