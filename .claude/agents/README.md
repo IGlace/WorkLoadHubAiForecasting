@@ -11,7 +11,7 @@ needs were copied.
 
 | Subagent | Category | Used for |
 |----------|----------|----------|
-| cli-developer | developer experience | the picocli commands of forecast-cli |
+| cli-developer | developer experience | the experiment driver, `server/tools/Experiment.java` |
 | data-scientist | data and AI | feature matrix, models, backtest |
 | data-engineer | data and AI | schema mapping, seed generator, import and export |
 | ai-engineer | data and AI | Copilot session, tools, contract and verification |

@@ -89,6 +89,13 @@ on Linux x86-64 deterministically. It has no web dependency; the controller is
 compiled against `spring-web` marked optional and only activates when the host has Spring MVC.
 `forecast-cli` adds picocli 4.7.7 and `sqlite-jdbc` 3.53.4.0.
 
+Deviation, 2026-09-12: there is one module. `forecast-cli` was removed and its five remaining commands are
+`server/tools/Experiment.java`, a single file run by the Java 21 source launcher (section 12, third
+amendment), so `sqlite-jdbc` moved to `forecast-core` as a `runtime` optional dependency and picocli is gone.
+Read the `forecast-cli` entries above as history. The sentence below about everything under
+`ForecastService` being package-private has never been true of `seed`, `data`, `store` and `eval`: they are
+public because a driver outside the module builds and scores a database with them.
+
 The host calls `ForecastService` (section 11). Everything below it is package-private except the
 `api` records, so the host cannot depend on internals.
 
@@ -589,6 +596,12 @@ error the quota fields are null and the status says why.
 > Amended on 2026-09-11: `accuracy(teamId, from, to)` compares the forecasts made before each past weekday
 > with the logged hours (accuracy evaluation design, 2026-09-11).
 
+> Amended on 2026-09-12: `EvalResult evaluate(EvalConfig config)` — the section 13 backtest, run against the
+> service's own runner. It reads history and writes nothing, so it never touches a run. A null
+> `EvalConfig.asOf()` means the latest task creation date, which only the harness can see;
+> `EvalResult.resolved()` reports the date it chose. It exists because the experiment driver has no reason to
+> assemble a second copy of the engine to measure (section 12's third amendment).
+
 ```java
 public interface ForecastService {
     UUID startRun(RunRequest request);                     // teamId, requestedBy, forcedModel, plannedWork (the run day is the server's today)
@@ -661,6 +674,16 @@ Runs in WSL with `java -jar workloadhub-forecast-cli.jar <command>`; the SQLite 
 
 > Amended on 2026-09-12: the CLI runs in the development container (`bash scripts/devbox.sh shell`), not
 > in WSL; there is no JDK on the Windows host.
+
+> Amended on 2026-09-12: there is no `forecast-cli` module any more. What the trim above left was 408 lines
+> of flag parsing over `forecast-core` classes that are all public, in a Spring Boot application whose
+> repackaged jar could not even serve as a classpath entry. The five commands are now one single-file Java
+> program, `server/tools/Experiment.java`, run by `server/tools/experiment.sh` through Java 21's source
+> launcher (JEP 330) — the way `server/examples/HostExample.java` is already run — and the reactor builds
+> `forecast-core` alone. Evaluation moved into the module as `ForecastService.evaluate(EvalConfig)`, which is
+> what the driver's `eval` calls, so the scores measure the engine a host gets; `EvalResult` carries the
+> config as resolved and a fingerprint of the data, so a report describes only the run that produced it.
+> `ExperimentFlowTest` in `forecast-core` runs the driver as a subprocess, replacing `CliSmokeTest`.
 
 Output tables are plain text in English; the CLI is a developer tool and is not localised. The CLI
 never touches PostgreSQL: production access goes through the host.

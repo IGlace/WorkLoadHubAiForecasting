@@ -6,8 +6,8 @@ GitHub Copilot seat to explain patterns, warn about overload and suggest rebalan
 computes every number; the language model only writes the narrative, and every figure it writes is checked
 against the facts.
 
-- `server/`: the module (`forecast-core`, the host's dependency; `forecast-cli`, a command line for
-  experiments). Build, test and use: [`server/README.md`](server/README.md).
+- `server/`: the module (`forecast-core`, the host's dependency) and `tools/experiment.sh`, which runs a
+  single Java file for experiments on SQLite. Build, test and use: [`server/README.md`](server/README.md).
 - `docs/`: requirements, research, design documents, plans, evaluation results and the backlog. Start with
   `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md` and
   `docs/superpowers/specs/2026-09-10-java-copilot-narration-design.md`.

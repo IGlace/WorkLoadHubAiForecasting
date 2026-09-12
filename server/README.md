@@ -1,7 +1,8 @@
 # WorkloadHub forecast: the Java module
 
-Two Maven modules: `forecast-core` (the library the WorkloadHub Spring Boot application adds as a
-dependency) and `forecast-cli` (a runnable jar that builds an experiment database and scores models on it).
+One Maven module, `forecast-core`: the library the WorkloadHub Spring Boot application adds as a
+dependency. Experiments — building a SQLite database and scoring models on it — are driven by
+`tools/experiment.sh`, which is not a module but a single Java file the launcher compiles on the spot.
 Design:
 `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
 
@@ -26,7 +27,7 @@ tests run against a real database; otherwise they skip themselves with a message
 
 ```bash
 cd server
-mvn -B verify                 # compiles, runs every test, builds forecast-cli/target/workloadhub-forecast-cli-0.1.0-SNAPSHOT.jar
+mvn -B verify                 # compiles, runs every test, builds forecast-core/target/workloadhub-forecast-core-0.1.0-SNAPSHOT.jar
 mvn -B verify -Dseed.full=true   # also times the 264-user, 52-week seed
 ```
 
@@ -96,29 +97,29 @@ podman on Windows is exercised; the script prefers podman and falls back to dock
 On a machine with no JDK, run the gate **inside** the box. `bash scripts/check.sh` on the Windows
 host skips the Maven step and still exits 0, reporting success having compiled nothing.
 
-## The command line
+## Running experiments
 
 ```bash
-CLI="java -jar forecast-cli/target/workloadhub-forecast-cli-0.1.0-SNAPSHOT.jar"
+X="bash tools/experiment.sh"
 
 # 1. a database with the WorkloadHub schema and the module's tables
-$CLI init-db --db ~/whf/workloadhub.db
+$X init-db --db ~/whf/workloadhub.db
 
 # 2. a year of history for the real directory (the export holds personal data: keep it and the output outside git)
-$CLI seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
-$CLI seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --format sql --out ~/whf/seeded.sql
+$X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
+$X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --format sql --out ~/whf/seeded.sql
 
 # 3. load it
-$CLI import --db ~/whf/workloadhub.db ~/whf/seeded.json
+$X import --db ~/whf/workloadhub.db ~/whf/seeded.json
 
 # 4. or a synthetic population with no personal data, for tests and demos
-$CLI seed --synthetic --users 40 --weeks 26 --seed 7 --end 2026-09-06 --out /tmp/synthetic.json
+$X seed --synthetic --users 40 --weeks 26 --seed 7 --end 2026-09-06 --out /tmp/synthetic.json
 
 # 5. dump a database back to JSON
-$CLI export --db ~/whf/workloadhub.db /tmp/dump.json
+$X export --db ~/whf/workloadhub.db /tmp/dump.json
 
 # 6. score every model on it
-$CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal_naive --out ~/whf/eval
+$X eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal_naive --out ~/whf/eval
 ```
 
 | command | options | what it does |
@@ -129,12 +130,21 @@ $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal
 | `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. |
 | `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
 
-Those five are the whole command line: it builds an experiment database and scores models on it, which is
-what the parity check needs (`tools/parity.sh` calls `init-db`, `import` and `eval`) and what
-`ForecastService` has no equivalent for. Everything a host does — starting a run and polling its progress,
-reading the run, the current forecast, the run list, accuracy, `copilotStatus` and a narration — is in
-`examples/HostExample.java`, run through `examples/run-host-example.sh` ("Integrating from the server's own
-code" below).
+Those five are the whole of it: they build an experiment database and score models on it, which is what the
+parity check needs (`tools/parity.sh` calls `init-db`, `import` and `eval`). Everything a *host* does —
+starting a run and polling its progress, reading the run, the current forecast, the run list, accuracy,
+`copilotStatus` and a narration — is in `examples/HostExample.java`, run through
+`examples/run-host-example.sh` ("Integrating from the server's own code" below).
+
+`tools/experiment.sh` runs `tools/Experiment.java` the same way: Java 21's single-file source launcher
+(JEP 330) compiles it against `forecast-core`'s own classes and its runtime dependencies, resolved by
+`tools/core-classpath.sh`, which compiles the module first if the sources are newer. There is no second
+Maven module and no jar — until 2026-09-12 there was one, `forecast-cli`, wrapping picocli around core
+classes that are all public anyway. File arguments are resolved against your working directory. `eval`
+boots the module's auto-configuration over a SQLite `DataSource` and calls `ForecastService.evaluate`, so
+it scores the engine a host gets rather than a copy assembled for the occasion; the other four verbs call
+`forecast-core` classes directly and need no Spring context. `ExperimentFlowTest` in `forecast-core` drives
+the whole file as a subprocess, so it is covered by `mvn verify` like anything else.
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
@@ -302,12 +312,12 @@ Narration uses the requesting user's own GitHub Copilot seat through `copilot-sd
 Tokens are stored encrypted on `users.github_token` with the key in `whf.token-key`: a base64 AES-256 key,
 `openssl rand -base64 32`. Accepted tokens: `gho_`, `ghu_`, `github_pat_`; classic `ghp_` tokens are refused.
 
-The command line does not narrate. The live path is exercised by the sample host,
+The experiment driver does not narrate. The live path is exercised by the sample host,
 `examples/HostExample.java`, which reads the key from `WHF_TOKEN_KEY` (into `whf.token-key`) and the user's
 token from `WHF_EXAMPLE_GH_TOKEN`, saving it through `GitHubTokenStore.save` as a settings page would.
 
 It needs a seeded database, and its default is `/data/workloadhub.db`. `/data` is the box's data mount, the
-host's `~/whf`; it is **not** the `~/whf` that "The command line" above writes to, which inside the box is
+host's `~/whf`; it is **not** the `~/whf` that "Running experiments" above writes to, which inside the box is
 `/root/whf`. So either run that recipe with `--db /data/workloadhub.db` in place of `~/whf/workloadhub.db`
 (`init-db`, then `seed`, then `import`), or leave it where it is and point the example at it with its own
 `--db`. Then, from the root of the repository inside the development container:
@@ -387,10 +397,13 @@ The first synthetic result (36 users, 52 weeks, seed 11, as of 2026-09-06) is in
 alongside both harnesses' `summary.md`. It was produced with:
 
 ```bash
-java -jar forecast-cli/target/workloadhub-forecast-cli-0.1.0-SNAPSHOT.jar \
-  seed --synthetic --users 36 --weeks 52 --seed 11 --end 2026-09-06 --out <file>
+bash tools/experiment.sh seed --synthetic --users 36 --weeks 52 --seed 11 --end 2026-09-06 --out <file>
 tools/parity.sh <file> <out> ../../whf-archive 2026-09-06
 ```
+
+(On the day, the first command was `java -jar forecast-cli/target/workloadhub-forecast-cli-*.jar seed …`;
+the module is gone and the seed is the same code, so the result still reproduces. Its `summary.md` records
+`forecast-cli: 0.1.0` in its versions for the same reason.)
 
 Never run the procedure on the real export inside the repository: point `OUT_DIR` outside git and keep the
 real-mode result in the owner's own folder.

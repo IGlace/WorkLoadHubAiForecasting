@@ -6,15 +6,15 @@ forecasts each team member's work hours for the next two weeks from the team's t
 application's own PostgreSQL database, compares them with capacity (40 h/week default over the working days,
 holidays, absences and the team's capacity plan), and uses each user's own GitHub Copilot seat to explain
 patterns, warn about overload and suggest rebalancing. The host calls a Java interface or an optional REST
-surface; a command line runs the same code on SQLite for experiments. The first version (a Windows desktop
+surface; a single-file Java driver runs the same code on SQLite for experiments. The first version (a Windows desktop
 app with a Python service) is archived at the tag `archive/python-desktop-v1`.
 
 ## Read these first
 
 - `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`: the design of the module (database,
   seed generator, feature matrix, models, backtest, run pipeline, public API, CLI, testing). Its section 12
-  describes the CLI as first designed; the 2026-09-12 trim cut it to five commands, so read that section as
-  history and `server/README.md` for what exists.
+  describes the CLI as first designed; on 2026-09-12 it was trimmed to five commands and then removed
+  altogether, so read that section as history and `server/README.md` for what exists.
 - `docs/superpowers/specs/2026-09-10-java-copilot-narration-design.md`: Copilot narration from Java (the SDK
   as found, tools, contract, verification, persistence, REST, CLI) and its recorded deviations.
 - `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md`: the real WorkloadHub schema mapped to the
@@ -23,8 +23,8 @@ app with a Python service) is archived at the tag `archive/python-desktop-v1`.
   the owner's answers, still the source of truth for scope questions.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
-- `server/README.md`: build, the CLI, the seed, the parity check, using the module from the server, narrating
-  with Copilot.
+- `server/README.md`: build, running experiments, the seed, the parity check, using the module from the
+  server, narrating with Copilot.
 - Documents dated before 2026-09-09 describe the archived version; each carries a note saying so.
 
 ## Where the project stands (2026-09-12)
@@ -38,8 +38,12 @@ current forecast. Then the host integration design
 a Java-interface sample host; the server's own code is written in the WorkloadHub repository. Then the
 accuracy evaluation (`docs/superpowers/specs/2026-09-11-accuracy-evaluation-design.md`): `accuracy(teamId,
 from, to)` compares the forecasts made before each past weekday with the logged hours. Then, on 2026-09-12,
-the CLI trim: `forecast-cli` keeps only the five commands that build and score an experiment database, and
-everything a host does is shown by `server/examples/HostExample.java` instead.
+the CLI trim: `forecast-cli` kept only the five commands that build and score an experiment database, and
+everything a host does is shown by `server/examples/HostExample.java` instead. The same day the module went
+too: those five commands were 408 lines wrapping public `forecast-core` classes, so they are now one
+single-file Java program, `server/tools/Experiment.java`, run by `server/tools/experiment.sh` the way the
+sample host is run; and evaluation became a module feature, `ForecastService.evaluate(EvalConfig)`, which is
+the path the driver's `eval` takes.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
 real export through the seed and the parity procedure, then the server's own integration code, against the
 sample host.
@@ -64,17 +68,17 @@ fix wave, the gate green by hand in the development container, then fast-forward
   is pushed. Never propose a push, a pull request, or "CI will catch it"; the gate is run by hand in the
   development container. Do not re-add a remote unless the owner asks.
 - English and French are both fully supported in the narrative; a user may switch freely. No third language.
-  The CLI's own messages and help are English only, and it does not narrate; the sample host asks for one
-  language or the other (`run-host-example.sh --lang en|fr`).
+  The experiment driver's own messages and help are English only, and it does not narrate; the sample host
+  asks for one language or the other (`run-host-example.sh --lang en|fr`).
 - The real export and any real-mode seed output stay outside the repository.
 
 ## Layout
 
 ```text
-server/    Java 21 module: `forecast-core` (the library the host adds) and `forecast-cli` (command line for
-           experiments: init-db, import, export, seed, eval — everything a host does goes through
-           `ForecastService`, shown by `server/examples/HostExample.java`);
-           `server/tools/` holds the parity scripts and their one Python test
+server/    Java 21 module: `forecast-core`, the library the host adds and the only artifact. Two single-file
+           programs are run by the launcher, not built: `server/examples/HostExample.java` (what a host does
+           through `ForecastService`) and `server/tools/Experiment.java` (experiments on SQLite: init-db,
+           import, export, seed, eval). `server/tools/` also holds the parity scripts and their one Python test
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
            dev), `test-release.sh` (the release script's self-test), `devbox.sh` (the development
@@ -84,7 +88,7 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 
 ## Toolchain
 
-- Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, picocli, Flyway, XGBoost4J, copilot-sdk-java.
+- Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java.
 - The gate: `cd server && mvn -B -q verify` (about six minutes without Docker; PostgreSQL tests run through
   Testcontainers when Docker is present, else skip with a message) plus the parity tool's test,
   `uv run --python 3.11 --with pytest pytest server/tools/tests`. `bash scripts/check.sh` and
@@ -93,7 +97,7 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
   step anyway, so it works again if a remote ever returns.
 - With no JDK on the machine, work inside the development container: `bash scripts/devbox.sh shell`. It
   keeps an Ubuntu box running with the toolchain and this repository bind-mounted at `/work`, so the gate
-  and the CLI run there exactly as on Linux, with the engine's socket mounted so the PostgreSQL tests
+  and the experiment driver run there exactly as on Linux, with the engine's socket mounted so the PostgreSQL tests
   still run. `bash scripts/check.sh` on the Windows host instead would skip the Maven step and still exit
   0, reporting success having compiled nothing. Details in `server/README.md`, "The development container".
   Every text file stays LF (`.gitattributes`): Linux bash rejects a CRLF script with a message that names

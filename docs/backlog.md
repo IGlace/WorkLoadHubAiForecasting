@@ -30,6 +30,17 @@ first install straight away; the installer now seeds the data itself, see "Lande
 
 ## Landed
 
+- **`forecast-cli` removed; evaluation is a module feature** (2026-09-12): the trim earlier that day left five
+  commands that build and score an experiment database — 408 lines of flag parsing over `forecast-core`
+  classes that are all public, carried by a Spring Boot module whose repackaged jar could not even be put on a
+  classpath. They are now one file, `server/tools/Experiment.java`, run by `server/tools/experiment.sh`
+  through Java 21's single-file source launcher, the way `server/examples/HostExample.java` already runs;
+  `server/tools/core-classpath.sh` is the compile-and-resolve step both share. `ForecastService` gained
+  `evaluate(EvalConfig)`, so `eval` measures the engine a host gets rather than a copy assembled for the
+  occasion, and `EvalResult` now carries the config as resolved and a fingerprint of the data. `CliSmokeTest`
+  became `ExperimentFlowTest` in `forecast-core`, which runs the driver as a subprocess, so the file is
+  covered by the gate instead of by nothing. Design section 12, third amendment.
+
 - **The Python service and the desktop app archived** (2026-09-10): `archive/python-desktop-v1` held
   `service/`, `app/`, `installer/`, the notebook, the desktop scripts and hooks, and the
   Python and desktop skills and agents; `dev` and `main` carry the Java module and the documentation.
@@ -326,7 +337,8 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   not scrub `projects.key` (keys are department codes by construction); CI's Maven call lacks `-q`;
   `check.ps1` prints its skip line during step collection; the seed's log rows use quarter-hour slices (spec
   says 1 to 8 h); `Reference.covers` replaces rather than completes reference rows; the importer leaves
-  autocommit off before close; CLI errors fall to picocli's default handler. The CLAUDE.md hard rule "no WSL"
+  autocommit off before close; CLI errors fall to picocli's default handler (moot since 2026-09-12: the
+  driver that replaced the CLI handles them itself). The CLAUDE.md hard rule "no WSL"
   predated the server direction and was dropped on 2026-09-10 with the archival.
 - Java module residuals parked at the close of the pipeline-core final review (2026-09-09):
   - The Python effort model's cycle-time regressor was not ported; `EffortModel.familyCycleDays` uses the

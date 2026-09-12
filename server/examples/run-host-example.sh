@@ -7,30 +7,17 @@
 #
 # Run it inside the development container (`bash scripts/devbox.sh shell`): that is where Java, Maven and
 # XGBoost's libgomp are, and the Copilot SDK runtime is pinned to linux-x64. The default database is
-# /data/workloadhub.db; if it is not there, build it with three CLI commands, not one — `seed` only writes a
-# JSON export, so it is `init-db --db /data/workloadhub.db`, then `seed --out <file>`, then `import --db
-# /data/workloadhub.db <file>` (server/README.md, "The command line"). Or pass --db and use your own.
+# /data/workloadhub.db; if it is not there, build it with three commands, not one — `seed` only writes a JSON
+# export, so it is `experiment.sh init-db --db /data/workloadhub.db`, then `experiment.sh seed --out <file>`,
+# then `experiment.sh import --db /data/workloadhub.db <file>` (server/README.md, "Running experiments"). Or
+# pass --db and use your own.
 #
 # No module is added to the build for this: the file is compiled by Java 21's single-file source launcher
-# (JEP 330) against forecast-core's own compiled classes and its runtime dependencies. The repackaged CLI jar
-# cannot serve as a classpath entry, because its dependencies live under BOOT-INF/lib where only Boot's own
-# loader can find them.
+# (JEP 330) against forecast-core's own compiled classes and its runtime dependencies, resolved by
+# server/tools/core-classpath.sh. server/tools/experiment.sh runs the same way.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-server="$(dirname "$here")"
-cp_file="$server/forecast-core/target/example-classpath.txt"
-classes="$server/forecast-core/target/classes"
+classpath="$(bash "$(dirname "$here")/tools/core-classpath.sh")"
 
-cd "$server"
-if [ ! -d "$classes" ] || [ -n "$(find forecast-core/src/main -newer "$classes" -name '*.java' -print -quit 2>/dev/null)" ]; then
-    echo "==> compiling forecast-core" >&2
-    mvn -B -q -pl forecast-core -DskipTests compile
-fi
-if [ ! -f "$cp_file" ] || [ forecast-core/pom.xml -nt "$cp_file" ] || [ pom.xml -nt "$cp_file" ]; then
-    echo "==> resolving the runtime classpath" >&2
-    mvn -B -q -pl forecast-core dependency:build-classpath \
-        -Dmdep.outputFile=target/example-classpath.txt -Dmdep.includeScope=runtime
-fi
-
-exec java --class-path "$classes:$(cat "$cp_file")" "$here/HostExample.java" "$@"
+exec java --class-path "$classpath" "$here/HostExample.java" "$@"
