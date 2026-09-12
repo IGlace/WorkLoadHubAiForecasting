@@ -302,6 +302,42 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Single-model simplification (2026-09-12).** Spec
+  `docs/superpowers/specs/2026-09-12-single-model-simplification-design.md`. Rulings: `SeasonalNaive` is deleted
+  outright, not demoted to a MASE yardstick, so the backtest score becomes MAE in hours reported next to
+  `mean_actual_hours` for scale; the parity procedure is retired entirely rather than retargeted, which empties
+  `server/tools/tests/` and makes the gate `mvn verify` alone with no `uv` precondition; a team with too little
+  history still forecasts, marked `confidence: thin_history` with no interval band, and only a booster that
+  cannot train at all fails the run. Accepted costs: no scale-free score, no independent cross-check against the
+  archived Python service, a weaker booster regression test, and no graceful degradation when the XGBoost native
+  library is missing. The two-model question is closed; do not reopen it.
+- **Over-engineering survey (2026-09-12).** Found while scoping the single-model change; each item needs its own
+  brainstorm before any work. Ranked by size:
+  1. **`seed/` ships inside the library.** 2,300 lines over 18 files, about a fifth of `forecast-core`'s main
+     source, whose only consumers are `src/test` and `server/tools/Experiment.java`. `forecast-core/pom.xml` has
+     no jar exclusions, so every host that adds the dependency also ships the synthetic-data generator
+     (`WorkQueue` alone is 509 lines). Candidate fixes: a second Maven module, or `src/test` plus a test-jar on
+     the driver's classpath. Structural, no behaviour changes. The largest single win.
+  2. **Two ways to reach Copilot.** `whf.copilot.cli-path` switches `SdkCopilotGateway` from the in-process SDK
+     runtime to a CLI subprocess (`SdkCopilotGateway:254-257`). This was a deliberate ruling of the narration
+     plan (2026-09-10, section 15, recorded below), not an accident — but it is a second path that the hard rule
+     "no `copilot login` on the server" points away from, and it is worth asking whether it still earns its keep.
+  3. **`facts/Clustering`.** K-means, 10 restarts, 100 iterations, silhouette-based selection, 210 lines, to
+     produce one integer per member used in exactly one place (`FactsBuilder:67`) so the narrative can say a
+     member behaves like others (`whf-pattern-discovery/SKILL.md:19`). Steep machinery-to-output ratio; check
+     whether a simpler rule reads the same to the narrator.
+  4. **Speculative configuration.** `ForecastProperties` exposes ten settings; `web.base-path`,
+     `flyway.enabled`, `copilot.model` (empty default) and `run-threads` configure variation nobody has
+     requested.
+  - Two further findings are **not** left here: they touch the same files as the single-model change, so the
+    owner folded them into it (section 13 of its spec). The duplicated arithmetic (`round2` written three times,
+    `mae` twice) collapses into a new neutral `com.workloadhub.forecast.Numbers` — not `eval/Metrics`, which
+    would close a package cycle, since `eval` already depends on `backtest`. And planned work loses its
+    per-request nullable `Boolean`, leaving `whf.planned-work.enabled` as the only control.
+  - Checked and **not** a finding: the `web/` REST surface. It defaults to `whf.web.enabled=false` and the
+    requirements never mention REST, but the host integration design records that the sample host drives the
+    REST controller only (`2026-09-11-host-integration-design.md:16-17`), so it is the demonstrated integration
+    path, not dead weight. Removing it is a product decision, not a cleanup.
 - **Accuracy evaluation (2026-09-11).** Rulings: MASE over the rows with a prior-week log (count `maseN`); public holidays not scored, counted; the summary carries the log-lag and lead-pooling caveats. Follow-ups: report the number of distinct runs behind the lead rows (a weekly cadence confounds lead with weekday); a narrower truth load than `loadAll()` if profiling asks. no REST endpoint (the server calls the Java method); nothing
   stored; a weekday without a log counts as zero hours; MASE against the same weekday one week earlier; lead
   counts weekdays after the run day.
