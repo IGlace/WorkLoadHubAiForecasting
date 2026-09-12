@@ -35,7 +35,7 @@ current forecast. Then the host integration design
 (`docs/superpowers/specs/2026-09-11-host-integration-design.md`): progress labels, start-up reconciliation and
 a Java-interface sample host; the server's own code is written in the WorkloadHub repository. Then the
 accuracy evaluation (`docs/superpowers/specs/2026-09-11-accuracy-evaluation-design.md`): `accuracy(teamId,
-from, to)` and the CLI `accuracy` compare the forecasts made before each past weekday with the logged hours.
+from, to)` compares the forecasts made before each past weekday with the logged hours.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
 real export through the seed and the parity procedure, then the server's own integration code, against the
 sample host.
@@ -59,14 +59,16 @@ fix wave, CI green on `dev`, then fast-forward `main`.
 - The GitHub remote (`IGlace/WorkLoadHubAiForecasting`) is the shared copy: `dev` and `main` are pushed there
   and CI runs on both. Push `dev` when a batch is reviewed.
 - English and French are both fully supported in the narrative; a user may switch freely. No third language.
-  The CLI's own messages and help are English only; its narratives are `--lang en` or `fr`.
+  The CLI's own messages and help are English only, and it does not narrate; the sample host asks for one
+  language or the other (`run-host-example.sh --lang en|fr`).
 - The real export and any real-mode seed output stay outside the repository.
 
 ## Layout
 
 ```text
-server/    Java 21 module: `forecast-core` (the library the host adds) and `forecast-cli` (command line:
-           init-db, import, export, seed, run, runs, current, accuracy, teams, eval, narrate, copilot status);
+server/    Java 21 module: `forecast-core` (the library the host adds) and `forecast-cli` (command line for
+           experiments: init-db, import, export, seed, eval — everything a host does goes through
+           `ForecastService`, shown by `server/examples/HostExample.java`);
            `server/tools/` holds the parity scripts and their one Python test
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
@@ -98,7 +100,8 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
   machine the bash one runs inside the development container, not in WSL: that is where mvn and uv are,
   and `test-release.sh` passes there. A real release from there has not been done yet.
 - Copilot: the SDK runs an in-process runtime, unpacked once to `~/.copilot/runtime-cache`; tokens need
-  `whf.token-key` (server) or `WHF_TOKEN_KEY` (CLI). The live path is checked by hand (`server/README.md`).
+  `whf.token-key` (the sample host reads it from `WHF_TOKEN_KEY`). The live path is checked by hand, through
+  `bash server/examples/run-host-example.sh --narrate` (`server/README.md`).
 
 ## Skills and agents
 

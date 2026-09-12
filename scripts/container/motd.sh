@@ -3,7 +3,7 @@
 # able to end the session.
 #
 # Only for a shell someone is sitting at, and on stderr. A login shell is not always interactive:
-# `bash -lc 'java -jar ... narrate ...' > narrative.md` is a login shell too, and a banner on its
+# `bash -lc '... run-host-example.sh --narrate ...' > narrative.md` is a login shell too, and a banner on its
 # stdout would end up in the file. Capturing a narration is a thing this project actually does.
 case $- in
 *i*)

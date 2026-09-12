@@ -1,7 +1,8 @@
 # WorkloadHub forecast: the Java module
 
 Two Maven modules: `forecast-core` (the library the WorkloadHub Spring Boot application adds as a
-dependency) and `forecast-cli` (a runnable jar for experiments). Design:
+dependency) and `forecast-cli` (a runnable jar that builds an experiment database and scores models on it).
+Design:
 `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
 
 ## Prerequisites
@@ -117,26 +118,24 @@ $CLI seed --synthetic --users 40 --weeks 26 --seed 7 --end 2026-09-06 --out /tmp
 # 5. dump a database back to JSON
 $CLI export --db ~/whf/workloadhub.db /tmp/dump.json
 
-# 6. list the teams, run a forecast, list its runs, and score every model
-$CLI teams --db ~/whf/workloadhub.db
-$CLI run --team "Platform" --db ~/whf/workloadhub.db --as-of 2026-09-06
-$CLI runs --team "Platform" --db ~/whf/workloadhub.db
+# 6. score every model on it
 $CLI eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal_naive --out ~/whf/eval
-$CLI accuracy --team "Platform" --db ~/whf/workloadhub.db --from 2026-08-20 --to 2026-09-02 --out ~/whf/accuracy
 ```
 
 | command | options | what it does |
 |---|---|---|
-| `teams` | `[--db]` | Lists the teams with their counted member count. |
-| `run` | `--team <name or id> [--as-of] [--db] [--model xgboost\|seasonal_naive] [--user] [--no-planned] [--json]` | Runs a forecast for one team from the run day (default: today; `--as-of` is an experiment override for seeded databases, the server always uses today) and prints the champion, the scores and the member-window table; `--model` forces a model, `--no-planned` switches off planned-work allocation, `--json` prints the result as JSON. Exits 2 on a usage error, 1 on a failed run. |
-| `runs` | `--team <name or id> [--db] [--limit 20]` | Lists the runs of a team, newest first. |
-| `current` | `--team <name or id> [--from] [--to] [--db] [--json]` | Prints the team's current forecast per member and day (the latest run that covered each day) between `--from` (default: today) and `--to` (default: today + 20 days). Exits 2 on a usage error, 1 on a failed call. |
-| `accuracy` | `--team <name or id> [--from] [--to] [--db] [--out dir] [--json]` | Compares the forecasts made before each past weekday with the logged hours between `--from` and `--to` (default: the last 20 days ending yesterday, both included; later dates are clamped): MAE, bias, MASE and overload precision and recall per team, per member and by lead (weekdays between the run day and the day). MASE here is daily, against the same weekday a week earlier, not the run's weekly MASE; it is scored over the rows whose member has a log that earlier weekday and their count is reported as `mase_n`. The last days read low until hours are logged. `--out` writes `accuracy.csv` and `summary.md`; `--json` prints the result. Exits 2 on a usage error, 1 on a failed call. |
+| `init-db` | `[--db] [--force]` | Creates the 24 WorkloadHub tables and the module's tables in a new SQLite file; refuses an existing file without `--force`. |
+| `import` | `[--db] <file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
+| `export` | `[--db] <file>` | Writes the database's WorkloadHub tables as a JSON export. |
+| `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. |
 | `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
-| `narrate` | `--run <id> --user <name or id> [--lang en\|fr] [--model m] [--token-env GITHUB_TOKEN] [--db] [--json]` | Stores the user's GitHub token, narrates a finished run through their Copilot seat, prints the progress labels and steps to stderr, and prints the stored result. Exits 0 OK, 3 UNVERIFIED, 1 FAILED or error, 2 usage. |
-| `copilot status` | `--user <name or id> [--db]` | Reports whether this user can narrate: token presence, runtime availability, sign-in and quota. |
 
-`run` first fails any run left `QUEUED` or `RUNNING` by an earlier crash; the other commands leave them alone.
+Those five are the whole command line: it builds an experiment database and scores models on it, which is
+what the parity check needs (`tools/parity.sh` calls `init-db`, `import` and `eval`) and what
+`ForecastService` has no equivalent for. Everything a host does — starting a run and polling its progress,
+reading the run, the current forecast, the run list, accuracy, `copilotStatus` and a narration — is in
+`examples/HostExample.java`, run through `examples/run-host-example.sh` ("Integrating from the server's own
+code" below).
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
@@ -232,14 +231,16 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
   it.
 - **Errors**: `ForecastException.code()`: `*_NOT_FOUND` → 404, `INVALID_REQUEST` → 400, everything else → 409; a
   refused role check is your 403.
-- **Try the calls first**: `bash examples/run-host-example.sh --team <uuid>` (inside the development container)
-  runs `examples/HostExample.java`, a standalone Spring Boot application on the seeded SQLite file that makes
-  every one of those calls and prints what comes back — a run with its progress labels, the windows and the
-  overload, the current forecast, the run list, accuracy and `copilotStatus`. Without `--team` it lists the
-  teams. It is compiled by Java's single-file source launcher against `forecast-core`'s classes, so it adds no
-  module to the build and can be edited and re-run in a few seconds. What it deliberately leaves out is the
-  host's own work: the role check, the one-run-at-a-time rule and the narration executor, which are in the
-  sample facade above.
+- **Try the calls first**: `bash server/examples/run-host-example.sh --team <uuid>` (from the root of the
+  repository, inside the development container) runs `examples/HostExample.java`, a standalone Spring Boot
+  application on the seeded SQLite file that makes every one of those calls and prints what comes back — a run
+  with its progress labels, the windows and the overload, the current forecast, the run list, accuracy and
+  `copilotStatus`. Without `--team` it lists the teams, marking which of them have a `TEAM_LEADER`: the example
+  acts as that user, and refuses a team that has none, since it has no session to take a user from. With
+  `--narrate` it also calls the model, which is the live Copilot check ("Narrating with Copilot" below). It is
+  compiled by Java's single-file source launcher against `forecast-core`'s classes, so it adds no module to the
+  build and can be edited and re-run in a few seconds. What it deliberately leaves out is the host's own work:
+  the role check, the one-run-at-a-time rule and the narration executor, which are in the sample facade above.
 - **One instance**: progress and the run executor live in the JVM. Once every bean is up (after your own
   Flyway, whichever owns the module's tables) the module marks runs left `QUEUED` or `RUNNING` by the previous
   process as `FAILED` (`interrupted by a restart`); a database that cannot answer is logged, never fatal.
@@ -297,18 +298,31 @@ Narration uses the requesting user's own GitHub Copilot seat through `copilot-sd
 **in-process runtime** (`runtime.node`, from the `copilot-sdk-java-runtime` artifact with classifier
 `linux-x64`, 44 MB on the classpath); on first use it is unpacked into `~/.copilot/runtime-cache/<version>/`
 (91 MB, once per SDK version, nothing downloaded). To use an installed Copilot CLI as a subprocess instead, set
-`whf.copilot.cli-path` (server) or `WHF_COPILOT_CLI_PATH` (CLI).
+`whf.copilot.cli-path`.
 
-Tokens are stored encrypted on `users.github_token` with the key in `whf.token-key` (server) or
-`WHF_TOKEN_KEY` (CLI): a base64 AES-256 key, `openssl rand -base64 32`. Accepted tokens: `gho_`, `ghu_`,
-`github_pat_`; classic `ghp_` tokens are refused.
+Tokens are stored encrypted on `users.github_token` with the key in `whf.token-key`: a base64 AES-256 key,
+`openssl rand -base64 32`. Accepted tokens: `gho_`, `ghu_`, `github_pat_`; classic `ghp_` tokens are refused.
+
+The command line does not narrate. The live path is exercised by the sample host,
+`examples/HostExample.java`, which reads the key from `WHF_TOKEN_KEY` (into `whf.token-key`) and the user's
+token from `WHF_EXAMPLE_GH_TOKEN`, saving it through `GitHubTokenStore.save` as a settings page would.
+
+It needs a seeded database, and its default is `/data/workloadhub.db`. `/data` is the box's data mount, the
+host's `~/whf`; it is **not** the `~/whf` that "The command line" above writes to, which inside the box is
+`/root/whf`. So either run that recipe with `--db /data/workloadhub.db` in place of `~/whf/workloadhub.db`
+(`init-db`, then `seed`, then `import`), or leave it where it is and point the example at it with its own
+`--db`. Then, from the root of the repository inside the development container:
 
 ```bash
 export WHF_TOKEN_KEY="$(openssl rand -base64 32)"   # keep it: the stored tokens are unreadable without it
-export GITHUB_TOKEN="gho_..."                      # the user's own token
-$CLI copilot status --db ~/whf/workloadhub.db --user "Sara Tazi"
-$CLI narrate --db ~/whf/workloadhub.db --run <run id> --user "Sara Tazi" --lang fr
+export WHF_EXAMPLE_GH_TOKEN="gho_..."               # the user's own token
+bash server/examples/run-host-example.sh                                   # lists the teams of /data/workloadhub.db
+bash server/examples/run-host-example.sh --team <uuid> --narrate --lang fr
 ```
+
+Pick a team the listing marks `TEAM_LEADER`. The seed leaves many without one — a department team's head is a
+`SKILL_TEAM_LEADER`, and a manager who is also an `ADMIN` keeps that role — and the example stops with a
+message rather than forecasting for a team it has no user to act as.
 
 The application has no sign-in of its own yet, so the token is pasted; the intended path is a GitHub OAuth
 App in the server, where the user signs in, accepts the connection and the server stores what comes back.
@@ -317,7 +331,7 @@ Until then `gh`, which the development box carries, produces one without leaving
 ```bash
 gh auth login           # GitHub.com, HTTPS, "Login with a web browser": it prints a one-time code to
                         # type at https://github.com/login/device in a browser on the host
-export GITHUB_TOKEN="$(gh auth token)"              # a gho_ token for your own seat
+export WHF_EXAMPLE_GH_TOKEN="$(gh auth token)"      # a gho_ token for your own seat
 export WHF_TOKEN_KEY="$(cat /data/.whf-token-key)"  # generated once, outside the repository
 ```
 
@@ -325,17 +339,22 @@ The login lives in the `whf-gh` volume and survives a rebuild. Keep the key in a
 way: a new key makes every token stored under the old one unreadable. If a seat check refuses the token,
 `gh auth refresh -h github.com -s copilot` is the thing to try.
 
-`narrate` stores the token for the user, narrates, prints the progress steps and labels to stderr, and
-prints the stored result on stdout: status (`OK`, `UNVERIFIED` with the numbers it could not find in the facts,
-`FAILED` with the reason and the last answer), model, attempts, cost, then the narrative JSON. Exit codes: 0 OK,
-3 UNVERIFIED, 1 FAILED or error, 2 usage. Every narration is a row in `forecast_narratives`, whatever its
-status, so a failed one keeps its cost.
+The example acts as the `TEAM_LEADER` the chosen team has (a token can only be stored for a user who exists,
+which is why a team without one is refused), forecasts the team first — narration needs a `DONE` run — and then prints `copilotStatus` (token, runtime and version,
+authenticated, login, message), whether a narrative of that language is already stored, and, with `--narrate`,
+the narration: status (`OK`, `UNVERIFIED` with the numbers it could not find in the facts, `FAILED` with the
+reason and the last answer), attempts, tool calls, the narrative JSON and the verification JSON. Without
+`--narrate` it stops after `copilotStatus` and calls no model. Every narration is a row in
+`forecast_narratives`, whatever its status, so a failed one keeps its cost.
 
-No automated test talks to Copilot. The live check is manual: run the two commands above on a seeded database
-with a real token, and read `copilot status` first (it starts the runtime with the token and reports the login
-and the quota). In the printed steps (the message names each tool), confirm that the nine tools were called
-(`get_run_overview` first, then the five member tools for every member, then `get_project_timelines`,
-`get_planned_work` and `get_rebalancing_candidates`) and that no permission prompt was needed: the tools are
+No automated test talks to Copilot. The live check is manual: run the command above on a seeded database with a
+real token, and read `copilotStatus` first (it starts the runtime with the token and reports the login and the
+quota). Then confirm from the printed tool-call count that the model used the tools: the nine are
+`get_run_overview`, the five member tools (called for every member), `get_project_timelines`,
+`get_planned_work` and `get_rebalancing_candidates`, so a full narration is roughly `4 + 5 x members` calls.
+The names themselves are in `progress(runId).message` (`tool <name>`) for a
+host that polls while narration runs, which this example does not, since it calls `narrate` on the main thread.
+Confirm too that no permission prompt was needed: the tools are
 marked `skipPermission(true)`, and the handler behind them approves only a request whose `kind` is
 `custom-tool` and whose `toolName` is one of the nine. A prompt of another `kind` would still let the
 narration through — the tools skip permission — but it means the handler's assumption about the runtime is

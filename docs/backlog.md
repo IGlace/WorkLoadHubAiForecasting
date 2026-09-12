@@ -208,8 +208,7 @@ Ordered roughly by value. Each of these has an owner decision behind it.
   narration that *completes* as failed returns 200 and persists `ai_status`, so only a thrown request is
   silent.
 - **Accuracy evaluation.** Built (2026-09-11, `docs/superpowers/specs/2026-09-11-accuracy-evaluation-design.md`):
-  `ForecastService.accuracy` and the CLI `accuracy` command compare `forecast_current_days` and each run's day
-  rows with the logged hours. Left open: a history of evaluations (a table and a chart) if the owner wants to
+  `ForecastService.accuracy` compares `forecast_current_days` and each run's day rows with the logged hours. Left open: a history of evaluations (a table and a chart) if the owner wants to
   see accuracy evolve; results are recomputed on every call today.
 - **WorkloadHub integration.** The module's side is designed and demonstrated
   (`docs/superpowers/specs/2026-09-11-host-integration-design.md`, the sample host); what remains is the
@@ -290,15 +289,18 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 - **Rolling forecast windows** (2026-09-10): a forecast starts the first weekday after the run day and covers
   ten weekdays in two windows of five, computed per day; each run upserts a per-day current forecast
   (`forecast_current_days`) that the accuracy evaluation will read; the caller no longer chooses the run day
-  (REST refuses `asOf`; the CLI keeps `--as-of` for seeded experiments); the evaluation's demand level is per
+  (REST refuses `asOf`; `--as-of` survives on the CLI's `eval` alone, for seeded experiments); the evaluation's demand level is per
   member-window while its arrival level, the parity gate, is unchanged. Spec
   `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`.
 - **Rolling windows, recorded follow-ups** (2026-09-10 final review): a `new_hours_after_window` fact for
   predicted arrival hours that spill past window 2 (planned work already reports `hours_after_window`); a
-  guard so a CLI `run --as-of` on a live database cannot overwrite arrived days in `forecast_current_days`
-  (today it is scoped to seeded databases by convention only); `GET .../current` and `current` with only
-  `from` given far ahead default `to` to today + 20 and answer `INVALID_REQUEST`; the 20-day default is
-  written twice (controller and CLI); `Truth.realisedHours` (weekly) has no production caller;
+  guard so a run given a back-dated run day cannot overwrite arrived days in `forecast_current_days` on a live
+  database (raised against the CLI's `run --as-of`, which the 2026-09-12 trim of the command line removed; the
+  hazard moved rather than closed, to the sample host's fixed `Clock` and its `--as-of`, and is still scoped to
+  seeded databases by convention only); `GET .../current` with only
+  `from` given far ahead defaults `to` to today + 20 and answers `INVALID_REQUEST` (the 20-day default was
+  written twice, in the controller and the CLI's `current`, until the 2026-09-12 trim removed the second);
+  `Truth.realisedHours` (weekly) has no production caller;
   `JdbcRunStore.finish` re-reads the team id and re-sorts what `ORDER BY` already ordered; a window row's
   `absence_hours` comes from the day rows while its capacity may come from the application's week row;
   `CapacityRule`'s identity-keyed index is mutated from run threads (predates this branch) and two concurrent

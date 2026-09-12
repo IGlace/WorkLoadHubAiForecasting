@@ -24,8 +24,8 @@ FROM docker.io/library/maven:3.9-eclipse-temurin-21
 # Python and makes its own environments.
 #
 # gh is here for the tokens, not for the repository: `gh auth login` then `gh auth token` yields a
-# `gho_` token for your own Copilot seat, which is what `narrate` and the host example store for a
-# user while the application has no sign-in of its own. Ubuntu 24.04 carries it, so no third-party
+# `gho_` token for your own Copilot seat, which is what the host example stores for a user while the
+# application has no sign-in of its own. Ubuntu 24.04 carries it, so no third-party
 # apt source is added for it. It is a stand-in: the real path is a GitHub OAuth App in the server.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \

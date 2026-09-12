@@ -97,7 +97,8 @@ public class HostExample {
                     usage: run-host-example.sh [--db FILE] [--team UUID] [--as-of ISO_DATE] [--narrate] [--lang en|fr]
 
                       --db       SQLite file to read (default /data/workloadhub.db)
-                      --team     the team to forecast; without it the example lists the teams and stops
+                      --team     the team to forecast, one the listing marks TEAM_LEADER (the example acts as
+                                 that user); without it the example lists the teams and stops
                       --as-of    the run day the fixed clock reports (default 2026-09-06, the seed's last day)
                       --narrate  also ask Copilot for the narrative; needs WHF_TOKEN_KEY and a stored token
                       --lang     narrative language, en or fr (default en)""");
@@ -129,22 +130,42 @@ public class HostExample {
             if (team == null) {
                 return;
             }
+            UUID leader = leaderOf(jdbc, team);
+            if (leader == null) {
+                // Example only, and the only thing that can go wrong before a single call is made: this example
+                // has no session to take a user from, so a team with no TEAM_LEADER leaves it nobody to act as.
+                // Said here rather than a minute of real computing later, where `startRun` would refuse with
+                // INVALID_REQUEST: userId is required, out of main and as a stack trace.
+                System.err.println("no TEAM_LEADER on team " + team + ", so the example has no user to act as.");
+                System.err.println("Run without --team and pass one of the teams the listing marks TEAM_LEADER.");
+                return;
+            }
             Calls calls = new Calls(service, ctx.getBean(GitHubTokenStore.class), LocalDate.parse(opts.getOrDefault("as-of", "2026-09-06")),
-                    leaderOf(jdbc, team), namesOf(jdbc));
+                    leader, namesOf(jdbc));
             calls.run(team, opts.containsKey("narrate"), opts.getOrDefault("lang", "en"));
         }
     }
 
-    /** Example only: a server knows its team ids from its own pages. Prints the teams when --team is absent. */
+    /**
+     * Example only: a server knows its team ids from its own pages, and its session's user. Prints the teams
+     * when --team is absent, each with whether it has a {@code TEAM_LEADER} — see {@link #leaderOf}, which has
+     * nobody to act as without one. The seed leaves plenty of teams without: a department team's head is a
+     * {@code SKILL_TEAM_LEADER}, and a manager who is also an {@code ADMIN} keeps that role.
+     */
     private static UUID pickTeam(JdbcClient jdbc, String requested) {
         if (requested != null) {
             return UUID.fromString(requested);
         }
-        System.out.printf("%-38s %s%n", "team id", "name");
-        for (Map<String, Object> row : jdbc.sql("SELECT id, name FROM teams ORDER BY name").query().listOfRows()) {
-            System.out.printf("%-38s %s%n", row.get("id"), row.get("name"));
+        System.out.printf("%-38s %-14s %s%n", "team id", "leader", "name");
+        for (Map<String, Object> row : jdbc.sql("""
+                SELECT t.id, t.name, (SELECT COUNT(*) FROM team_members tm JOIN users u ON u.id = tm.user_id
+                                      WHERE tm.team_id = t.id AND u.role = 'TEAM_LEADER') AS leaders
+                FROM teams t ORDER BY t.name""").query().listOfRows()) {
+            boolean hasLeader = ((Number) row.get("leaders")).intValue() > 0;
+            System.out.printf("%-38s %-14s %s%n", row.get("id"), hasLeader ? "TEAM_LEADER" : "-", row.get("name"));
         }
-        System.out.println("\npass one of these as --team <uuid>");
+        System.out.println("\npass one of the teams marked TEAM_LEADER as --team <uuid>: the example acts as that user,"
+                + "\nand the ones marked - have nobody it could act as");
         return null;
     }
 
