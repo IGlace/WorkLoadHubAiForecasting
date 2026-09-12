@@ -229,6 +229,14 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
   it.
 - **Errors**: `ForecastException.code()`: `*_NOT_FOUND` → 404, `INVALID_REQUEST` → 400, everything else → 409; a
   refused role check is your 403.
+- **Try the calls first**: `bash examples/run-host-example.sh --team <uuid>` (inside the development container)
+  runs `examples/HostExample.java`, a standalone Spring Boot application on the seeded SQLite file that makes
+  every one of those calls and prints what comes back — a run with its progress labels, the windows and the
+  overload, the current forecast, the run list, accuracy and `copilotStatus`. Without `--team` it lists the
+  teams. It is compiled by Java's single-file source launcher against `forecast-core`'s classes, so it adds no
+  module to the build and can be edited and re-run in a few seconds. What it deliberately leaves out is the
+  host's own work: the role check, the one-run-at-a-time rule and the narration executor, which are in the
+  sample facade above.
 - **One instance**: progress and the run executor live in the JVM. Once every bean is up (after your own
   Flyway, whichever owns the module's tables) the module marks runs left `QUEUED` or `RUNNING` by the previous
   process as `FAILED` (`interrupted by a restart`); a database that cannot answer is logged, never fatal.
