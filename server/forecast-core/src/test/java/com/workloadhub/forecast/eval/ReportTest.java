@@ -25,8 +25,9 @@ class ReportTest {
                         new ScoreRow("seasonal_naive", 1, origin, "mase", 1.0)),
                 List.of(new DemandRow("xgboost", origin, team, member, 1, origin.plusWeeks(1).plusDays(1), origin.plusWeeks(2), 30, 28, 40, 20, 8, 2),
                         new DemandRow("xgboost", origin, team, member, 2, origin.plusWeeks(2).plusDays(1), origin.plusWeeks(3), 45, 30, 40, 40, 5, 0)),
-                Map.of(), Truth.SOURCE, 3.2, List.of(origin));
-        Report.write(result, new EvalConfig(LocalDate.of(2026, 9, 6), 1, List.of(), List.of()), Map.of("tasks", "2"), Map.of("java", "21"), dir);
+                Map.of(), Truth.SOURCE, 3.2, List.of(origin),
+                new EvalConfig(LocalDate.of(2026, 9, 6), 1, List.of(), List.of()), Map.of("tasks", "2"));
+        Report.write(result, Map.of("java", "21"), dir);
         List<String> scores = Files.readAllLines(dir.resolve("scores.csv"));
         assertEquals("model,horizon,origin,metric,value", scores.get(0));
         assertEquals("xgboost,1,2026-08-17,mase,0.8", scores.get(1));
@@ -40,5 +41,19 @@ class ReportTest {
         assertTrue(summary.contains("## Level B") && summary.contains("overload_precision"));
         assertTrue(summary.contains("- tasks: 2") && summary.contains("- java: 21"));
         assertTrue(summary.contains("| xgboost | 8.500 |"), "demand MAE (2 + 15) / 2 in Level B");
+    }
+
+    /**
+     * The versions have to come off what actually ran, or the section is decoration. xgboost4j's jar carries its
+     * Maven coordinates but no {@code Implementation-Version}, so a manifest-only reading reports it as unknown —
+     * which is how a hand-copied "3.4.0" survived in reports until 2026-09-12.
+     */
+    @Test
+    void versionsComeFromTheJarsThatRan() {
+        Map<String, String> versions = Report.versions();
+        assertEquals(List.of("java", "xgboost4j", "forecast-core"), List.copyOf(versions.keySet()));
+        assertEquals(System.getProperty("java.version"), versions.get("java"));
+        assertTrue(versions.get("xgboost4j").matches("\\d+\\.\\d+\\.\\d+.*"), () -> "xgboost4j: " + versions.get("xgboost4j"));
+        assertEquals("unknown", versions.get("forecast-core"), "the tests run against target/classes, which is no release");
     }
 }

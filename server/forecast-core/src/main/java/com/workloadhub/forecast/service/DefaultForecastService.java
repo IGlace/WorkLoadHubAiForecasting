@@ -28,6 +28,9 @@ import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.ForecastRepository;
 import com.workloadhub.forecast.eval.Accuracy;
+import com.workloadhub.forecast.eval.EvalConfig;
+import com.workloadhub.forecast.eval.EvalResult;
+import com.workloadhub.forecast.eval.Harness;
 import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.facts.FactsBuilder;
 import com.workloadhub.forecast.model.ModelUnavailable;
@@ -260,6 +263,25 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
         return Accuracy.evaluate(teamId, from, last, today, store.currentDays(teamId, from, last), store.runDays(teamId, from, last),
                 Truth.realisedHoursByDay(data));
+    }
+
+    /**
+     * The harness measures this service's own {@code runner}, with the capacity rule the runner was built with, so an
+     * evaluation reports the engine the host actually runs rather than a separately configured copy of it.
+     */
+    @Override
+    public EvalResult evaluate(EvalConfig config) {
+        if (config == null) {
+            throw ForecastException.invalidRequest("config is required");
+        }
+        if (config.origins() < 1) {
+            throw ForecastException.invalidRequest("origins must be at least 1, was " + config.origins());
+        }
+        for (UUID teamId : config.teams()) {
+            requireTeam(teamId);
+        }
+        ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
+        return new Harness(runner, runner.capacityRule()).evaluate(data, config);
     }
 
     @Override

@@ -69,6 +69,33 @@ class HarnessTest {
     }
 
     @Test
+    void theResultCarriesTheConfigItRanAndAFingerprintOfTheData() {
+        assertEquals(SeededData.asOf(), result.resolved().asOf());
+        assertEquals(2, result.resolved().origins());
+        assertEquals(String.valueOf(data.members().size()), result.fingerprint().get("members"));
+        assertEquals(String.valueOf(data.teams().size()), result.fingerprint().get("teams"));
+        assertEquals(String.valueOf(data.tasks().size()), result.fingerprint().get("tasks"));
+        assertEquals(String.valueOf(data.timeLogs().size()), result.fingerprint().get("time_logs"));
+        assertEquals(lastCreated(), result.fingerprint().get("last_created"));
+        assertTrue(result.fingerprint().get("first_created").compareTo(lastCreated()) <= 0);
+    }
+
+    /** The caller may not have loaded the data, so only the harness can say when history ends. */
+    @Test
+    void aNullAsOfBecomesTheLatestTaskCreationDate() {
+        CapacityRule rule = new CapacityRule(40);
+        EvalResult defaulted = new Harness(new ForecastRunner(rule, true), rule)
+                .evaluate(data, new EvalConfig(null, 1, List.of(Backtest.FLOOR), List.of()));
+        assertEquals(lastCreated(), defaulted.resolved().asOf().toString());
+        assertEquals(1, defaulted.resolved().origins());
+        assertEquals(List.of(Backtest.FLOOR), defaulted.resolved().models());
+    }
+
+    private static String lastCreated() {
+        return data.tasks().stream().map(t -> t.createdDate().toLocalDate()).max(java.time.LocalDate::compareTo).orElseThrow().toString();
+    }
+
+    @Test
     void unknownModelIsRejected() {
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> new Harness(new ForecastRunner(new CapacityRule(40), true), new CapacityRule(40))
                 .evaluate(data, new EvalConfig(SeededData.asOf(), 1, List.of("gbm"), List.of()))).code());

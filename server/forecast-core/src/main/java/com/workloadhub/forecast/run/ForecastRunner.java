@@ -58,6 +58,11 @@ public final class ForecastRunner {
         this.plannedWorkDefault = plannedWorkDefault;
     }
 
+    /** The rule this runner computes capacity with, so an evaluation measures the runner as configured. */
+    public CapacityRule capacityRule() {
+        return capacityRule;
+    }
+
     public static double round2(double v) {
         return Math.round(v * 100.0) / 100.0;
     }

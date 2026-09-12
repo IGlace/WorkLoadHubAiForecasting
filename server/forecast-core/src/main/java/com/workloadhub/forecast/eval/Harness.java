@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -43,13 +44,15 @@ public final class Harness {
         this.rule = rule;
     }
 
-    public EvalResult evaluate(ForecastData data, EvalConfig config) {
+    public EvalResult evaluate(ForecastData data, EvalConfig configIn) {
         long started = System.nanoTime();
-        for (String name : config.models()) {
+        for (String name : configIn.models()) {
             if (!ModelRegistry.isKnown(name)) {
                 throw ForecastException.invalidRequest("unknown model " + name + "; known: " + ModelRegistry.NAMES);
             }
         }
+        EvalConfig config = configIn.asOf() != null ? configIn
+                : new EvalConfig(lastCreated(data).orElseGet(LocalDate::now), configIn.origins(), configIn.models(), configIn.teams());
         Map<String, Supplier<ArrivalModel>> factories = new LinkedHashMap<>();
         ModelRegistry.factories(null).forEach((name, f) -> {
             if (config.models().isEmpty() || config.models().contains(name) || name.equals(Backtest.FLOOR)) {
@@ -66,7 +69,23 @@ public final class Harness {
         List<ScoreRow> scores = arrivalLevel(bt);
         Map<String, String> skipped = new LinkedHashMap<>(bt.unavailable());
         List<DemandRow> demand = demandLevel(data, factories, origins, config.teams(), skipped);
-        return new EvalResult(scores, demand, skipped, Truth.SOURCE, (System.nanoTime() - started) / 1e9, origins);
+        return new EvalResult(scores, demand, skipped, Truth.SOURCE, (System.nanoTime() - started) / 1e9, origins, config, fingerprint(data));
+    }
+
+    /** What the evaluation ran against, for the report's reproducibility section. */
+    static Map<String, String> fingerprint(ForecastData data) {
+        Map<String, String> f = new LinkedHashMap<>();
+        f.put("members", String.valueOf(data.members().size()));
+        f.put("teams", String.valueOf(data.teams().size()));
+        f.put("tasks", String.valueOf(data.tasks().size()));
+        f.put("time_logs", String.valueOf(data.timeLogs().size()));
+        f.put("first_created", data.tasks().stream().map(t -> t.createdDate().toLocalDate()).min(LocalDate::compareTo).map(Object::toString).orElse("none"));
+        f.put("last_created", lastCreated(data).map(Object::toString).orElse("none"));
+        return f;
+    }
+
+    private static Optional<LocalDate> lastCreated(ForecastData data) {
+        return data.tasks().stream().map(t -> t.createdDate().toLocalDate()).max(LocalDate::compareTo);
     }
 
     static List<ScoreRow> arrivalLevel(Backtest.Result bt) {

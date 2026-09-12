@@ -28,6 +28,10 @@ import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
+import com.workloadhub.forecast.eval.EvalConfig;
+import com.workloadhub.forecast.eval.EvalResult;
+import com.workloadhub.forecast.eval.Harness;
+import com.workloadhub.forecast.eval.ScoreRow;
 import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.run.ForecastRunner;
@@ -422,5 +426,32 @@ class DefaultForecastServiceTest {
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, LocalDate.of(2026, 9, 2), LocalDate.of(2026, 8, 20))).code());
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.accuracy(activeTeam, null, LocalDate.of(2026, 8, 20))).code());
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> service.accuracy(UUID.randomUUID(), LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2))).code());
+    }
+
+    /**
+     * The point of evaluation on the service is that it measures the engine the host runs. If it ever diverged from
+     * the harness called directly on the same runner, the parity gate against the archived Python harness would be
+     * measuring something other than the module. {@code seconds} is wall-clock and is excluded.
+     */
+    @Test
+    void evaluateBacktestsThroughTheServicesOwnRunner() {
+        EvalConfig config = new EvalConfig(SeededData.asOf(), 1, List.of("seasonal_naive"), List.of(team));
+        EvalResult viaService = service.evaluate(config);
+        CapacityRule rule = new CapacityRule(40);
+        EvalResult direct = new Harness(new ForecastRunner(rule, true), rule).evaluate(SeededData.data(), config);
+        assertEquals(scored(direct), scored(viaService), "the service and the harness measure the same engine");
+        assertEquals(direct.demand(), viaService.demand());
+        assertEquals(SeededData.asOf(), viaService.resolved().asOf());
+        assertEquals(String.valueOf(SeededData.data().tasks().size()), viaService.fingerprint().get("tasks"));
+
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.evaluate(null)).code());
+        assertEquals("INVALID_REQUEST",
+                assertThrows(ForecastException.class, () -> service.evaluate(new EvalConfig(SeededData.asOf(), 0, List.of(), List.of()))).code());
+        assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class,
+                () -> service.evaluate(new EvalConfig(SeededData.asOf(), 1, List.of(), List.of(UUID.randomUUID())))).code());
+    }
+
+    private static List<ScoreRow> scored(EvalResult result) {
+        return result.scores().stream().filter(s -> !s.metric().equals("seconds")).toList();
     }
 }

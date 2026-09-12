@@ -4,14 +4,19 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.CodeSource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.TreeMap;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import ml.dmlc.xgboost4j.java.XGBoost;
 
 /** scores.csv, demand.csv and summary.md in the columns of the Python harness. */
 public final class Report {
@@ -32,7 +37,54 @@ public final class Report {
     private Report() {
     }
 
-    public static Path write(EvalResult result, EvalConfig config, Map<String, String> fingerprint, Map<String, String> versions, Path outDir) throws IOException {
+    /**
+     * What produced a report, for its "Versions" section: the JVM, the gradient-boosting library and this module.
+     * Read at runtime from the jar each class came from rather than hand-copied, so a version in a report cannot
+     * drift from the one that computed the numbers under it — which is the whole point of recording it.
+     */
+    public static Map<String, String> versions() {
+        Map<String, String> versions = new LinkedHashMap<>();
+        versions.put("java", System.getProperty("java.version"));
+        versions.put("xgboost4j", versionOf(XGBoost.class));
+        versions.put("forecast-core", versionOf(Report.class));
+        return versions;
+    }
+
+    /**
+     * The manifest first, then Maven's own {@code pom.properties} inside the same jar, because a jar built by the
+     * jar plugin's defaults carries the coordinates but no {@code Implementation-Version} — xgboost4j's does not.
+     * A class loaded from a directory has neither and reports {@code unknown}: that is a working copy, not a release.
+     */
+    private static String versionOf(Class<?> type) {
+        Package pkg = type.getPackage();
+        if (pkg != null && pkg.getImplementationVersion() != null) {
+            return pkg.getImplementationVersion();
+        }
+        CodeSource source = type.getProtectionDomain().getCodeSource();
+        if (source == null || source.getLocation() == null || !source.getLocation().getPath().endsWith(".jar")) {
+            return "unknown";
+        }
+        try (JarFile jar = new JarFile(Path.of(source.getLocation().toURI()).toFile())) {
+            JarEntry entry = jar.stream().filter(e -> e.getName().startsWith("META-INF/maven/") && e.getName().endsWith("/pom.properties"))
+                    .findFirst().orElse(null);
+            if (entry == null) {
+                return "unknown";
+            }
+            Properties coordinates = new Properties();
+            try (var in = jar.getInputStream(entry)) {
+                coordinates.load(in);
+            }
+            return coordinates.getProperty("version", "unknown");
+        } catch (Exception unreadable) {
+            return "unknown";
+        }
+    }
+
+    /**
+     * The config and the data fingerprint come off {@code result}, so the report can only ever describe the
+     * evaluation that produced it.
+     */
+    public static Path write(EvalResult result, Map<String, String> versions, Path outDir) throws IOException {
         Files.createDirectories(outDir);
         StringBuilder scores = new StringBuilder("model,horizon,origin,metric,value\n");
         for (ScoreRow r : result.scores()) {
@@ -48,11 +100,12 @@ public final class Report {
                     .append(',').append(csv(r.newHours())).append(',').append(csv(r.plannedHours())).append('\n');
         }
         Files.writeString(outDir.resolve("demand.csv"), demand.toString(), StandardCharsets.UTF_8);
-        Files.writeString(outDir.resolve("summary.md"), summary(result, config, fingerprint, versions), StandardCharsets.UTF_8);
+        Files.writeString(outDir.resolve("summary.md"), summary(result, versions), StandardCharsets.UTF_8);
         return outDir;
     }
 
-    static String summary(EvalResult result, EvalConfig config, Map<String, String> fingerprint, Map<String, String> versions) {
+    static String summary(EvalResult result, Map<String, String> versions) {
+        EvalConfig config = result.resolved();
         List<String> parts = new ArrayList<>();
         parts.add("# Forecast evaluation, as of " + config.asOf());
         parts.add("");
@@ -80,7 +133,7 @@ public final class Report {
         parts.add("");
         parts.add("## Data fingerprint");
         parts.add("");
-        parts.add(fingerprint.entrySet().stream().map(e -> "- " + e.getKey() + ": " + e.getValue()).collect(Collectors.joining("\n")));
+        parts.add(result.fingerprint().entrySet().stream().map(e -> "- " + e.getKey() + ": " + e.getValue()).collect(Collectors.joining("\n")));
         parts.add("");
         parts.add("## Versions");
         parts.add("");
