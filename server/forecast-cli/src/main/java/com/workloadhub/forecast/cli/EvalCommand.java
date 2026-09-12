@@ -43,47 +43,46 @@ public class EvalCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        try (Services s = Services.open(db.dataSource())) {
-            ForecastData data = new ForecastRepository(s.jdbc(), s.dialect()).loadAll();
-            LocalDate date;
-            List<UUID> teamIds = new ArrayList<>();
-            List<String> modelNames = models == null ? List.of() : Arrays.stream(models.split(",")).map(String::trim).filter(m -> !m.isEmpty()).toList();
-            try {
-                date = asOf != null ? LocalDate.parse(asOf) : data.tasks().stream().map(t -> t.createdDate().toLocalDate()).max(LocalDate::compareTo).orElse(LocalDate.now());
-                if (teams != null) {
-                    for (String t : teams.split(",")) {
-                        teamIds.add(TeamArg.resolve(s.jdbc(), s.dialect(), t.trim()));
-                    }
+        Services s = Services.open(db.dataSource());
+        ForecastData data = new ForecastRepository(s.jdbc(), s.dialect()).loadAll();
+        LocalDate date;
+        List<UUID> teamIds = new ArrayList<>();
+        List<String> modelNames = models == null ? List.of() : Arrays.stream(models.split(",")).map(String::trim).filter(m -> !m.isEmpty()).toList();
+        try {
+            date = asOf != null ? LocalDate.parse(asOf) : data.tasks().stream().map(t -> t.createdDate().toLocalDate()).max(LocalDate::compareTo).orElse(LocalDate.now());
+            if (teams != null) {
+                for (String t : teams.split(",")) {
+                    teamIds.add(TeamArg.resolve(s.jdbc(), s.dialect(), t.trim()));
                 }
-            } catch (IllegalArgumentException | java.time.format.DateTimeParseException e) {
-                System.err.println("error: " + e.getMessage());
-                return 2;
             }
-            Path outDir = out != null ? out : Path.of("eval", date.toString());
-            System.out.println("Evaluating as of " + date + " with " + origins + " origins, models " + (modelNames.isEmpty() ? "all" : modelNames) + ", teams "
-                    + (teamIds.isEmpty() ? "all" : teamIds.size()));
-            EvalResult result;
-            try {
-                result = new Harness(s.runner(), new CapacityRule(40)).evaluate(data, new EvalConfig(date, origins, modelNames, teamIds));
-            } catch (ForecastException e) {
-                System.err.println("error: " + e.code() + ": " + e.getMessage());
-                return "INVALID_REQUEST".equals(e.code()) ? 2 : 1;
-            }
-            Map<String, String> fingerprint = new LinkedHashMap<>();
-            fingerprint.put("members", String.valueOf(data.members().size()));
-            fingerprint.put("teams", String.valueOf(data.teams().size()));
-            fingerprint.put("tasks", String.valueOf(data.tasks().size()));
-            fingerprint.put("time_logs", String.valueOf(data.timeLogs().size()));
-            fingerprint.put("first_created", data.tasks().stream().map(t -> t.createdDate().toLocalDate()).min(LocalDate::compareTo).map(Object::toString).orElse("none"));
-            fingerprint.put("last_created", data.tasks().stream().map(t -> t.createdDate().toLocalDate()).max(LocalDate::compareTo).map(Object::toString).orElse("none"));
-            Map<String, String> versions = new LinkedHashMap<>();
-            versions.put("java", System.getProperty("java.version"));
-            versions.put("xgboost4j", "3.4.0");
-            versions.put("forecast-cli", "0.1.0");
-            Report.write(result, new EvalConfig(date, origins, modelNames, teamIds), fingerprint, versions, outDir);
-            System.out.println(Report.levelA(result));
-            System.out.println("Wrote " + outDir.toAbsolutePath());
-            return 0;
+        } catch (IllegalArgumentException | java.time.format.DateTimeParseException e) {
+            System.err.println("error: " + e.getMessage());
+            return 2;
         }
+        Path outDir = out != null ? out : Path.of("eval", date.toString());
+        System.out.println("Evaluating as of " + date + " with " + origins + " origins, models " + (modelNames.isEmpty() ? "all" : modelNames) + ", teams "
+                + (teamIds.isEmpty() ? "all" : teamIds.size()));
+        EvalResult result;
+        try {
+            result = new Harness(s.runner(), new CapacityRule(40)).evaluate(data, new EvalConfig(date, origins, modelNames, teamIds));
+        } catch (ForecastException e) {
+            System.err.println("error: " + e.code() + ": " + e.getMessage());
+            return "INVALID_REQUEST".equals(e.code()) ? 2 : 1;
+        }
+        Map<String, String> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("members", String.valueOf(data.members().size()));
+        fingerprint.put("teams", String.valueOf(data.teams().size()));
+        fingerprint.put("tasks", String.valueOf(data.tasks().size()));
+        fingerprint.put("time_logs", String.valueOf(data.timeLogs().size()));
+        fingerprint.put("first_created", data.tasks().stream().map(t -> t.createdDate().toLocalDate()).min(LocalDate::compareTo).map(Object::toString).orElse("none"));
+        fingerprint.put("last_created", data.tasks().stream().map(t -> t.createdDate().toLocalDate()).max(LocalDate::compareTo).map(Object::toString).orElse("none"));
+        Map<String, String> versions = new LinkedHashMap<>();
+        versions.put("java", System.getProperty("java.version"));
+        versions.put("xgboost4j", "3.4.0");
+        versions.put("forecast-cli", "0.1.0");
+        Report.write(result, new EvalConfig(date, origins, modelNames, teamIds), fingerprint, versions, outDir);
+        System.out.println(Report.levelA(result));
+        System.out.println("Wrote " + outDir.toAbsolutePath());
+        return 0;
     }
 }

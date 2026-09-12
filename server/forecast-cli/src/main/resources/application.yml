@@ -8,4 +8,5 @@ logging:
     com.workloadhub.forecast: info
 whf:
   flyway:
-    enabled: false   # init-db runs the migrations explicitly, after creating the WorkloadHub tables
+    enabled: false   # no auto-configured start-up migration: init-db runs the migrations explicitly, after
+                     # creating the WorkloadHub tables, and eval runs them itself through Services.open

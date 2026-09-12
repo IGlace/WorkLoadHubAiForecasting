@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/** --team accepts a UUID or a team name; --user accepts a UUID, a full name or an email. */
+/** --team accepts a UUID or a team name. */
 final class TeamArg {
 
     private TeamArg() {
@@ -30,22 +30,6 @@ final class TeamArg {
         List<String> names = jdbc.sql("SELECT name FROM teams ORDER BY name").query().listOfRows().stream().map(r -> r.get("name").toString()).toList();
         throw new IllegalArgumentException(rows.isEmpty() ? "no team named '" + nameOrId + "'; teams: " + names
                 : rows.size() + " teams named '" + nameOrId + "', use the id");
-    }
-
-    static UUID resolveUser(JdbcClient jdbc, Dialect dialect, String nameOrId) {
-        if (nameOrId == null || nameOrId.isBlank()) {
-            return null;
-        }
-        UUID asUuid = tryUuid(nameOrId);
-        if (asUuid != null) {
-            return asUuid;
-        }
-        List<Map<String, Object>> rows = jdbc.sql("SELECT id FROM users WHERE LOWER(full_name) = LOWER(?) OR LOWER(email) = LOWER(?)")
-                .param(nameOrId.trim()).param(nameOrId.trim()).query().listOfRows();
-        if (rows.size() != 1) {
-            throw new IllegalArgumentException(rows.isEmpty() ? "no user '" + nameOrId + "'" : "several users match '" + nameOrId + "', use the id");
-        }
-        return UUID.fromString(rows.get(0).get("id").toString());
     }
 
     private static UUID tryUuid(String nameOrId) {
