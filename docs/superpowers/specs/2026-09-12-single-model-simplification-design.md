@@ -1,5 +1,11 @@
 # Single-model simplification design
 
+> **Superseded on 2026-09-13 by `2026-09-13-weekly-hours-forecast-design.md`.** It was approved but never
+> implemented. Every ruling below still holds and is carried forward there, so implement from that document
+> and read this one as history. Two points differ and the newer document wins: its section 13.2 keeps
+> `TeamOutcome.plannedWorkEnabled` and the `planned_basis` fact, which go with `PlannedWork`; and its
+> section 5 reads `mean_actual_hours` as mean arrival hours, which becomes mean logged hours.
+
 Date: 2026-09-12. Status: approved by the owner in chat (five rulings recorded in section 1). Amends the Java
 module design (`2026-09-09-java-forecast-module-design.md`, sections 8 models, 9 backtest, 11 public API and
 13 parity) and the Copilot narration design (`2026-09-10-java-copilot-narration-design.md`, the facts
