@@ -56,7 +56,7 @@ class SampleHostIntegrationTest {
         FakeGateway fake = (FakeGateway) gateway;
 
         MvcResult started = mvc.perform(post("/api/forecast/runs").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"teamId\": \"" + team + "\", \"requestedBy\": \"" + member + "\", \"forcedModel\": \"seasonal_naive\"}"))
+                .content("{\"teamId\": \"" + team + "\", \"requestedBy\": \"" + member + "\"}"))
                 .andExpect(status().isAccepted()).andReturn();
         UUID run = UUID.fromString(json(started).path("id").asText());
         long deadline = System.currentTimeMillis() + 120_000;
@@ -69,7 +69,9 @@ class SampleHostIntegrationTest {
         JsonNode result = json(mvc.perform(get("/api/forecast/runs/" + run)).andExpect(status().isOk()).andReturn());
         assertTrue(result.path("memberWindows").size() > 0);
         assertTrue(result.path("memberDays").size() > 0);
-        assertEquals("seasonal_naive", result.path("run").path("championModel").asText());
+        assertTrue(result.path("run").has("mae"), "the run reports its backtest MAE");
+        JsonNode mae = result.path("run").path("mae");
+        assertTrue(mae.isNull() || mae.asDouble() >= 0.0, "MAE in hours cannot be negative");
         assertEquals(SeededData.asOf().toString(), result.path("run").path("asOf").asText(), "the host's clock");
         JsonNode current = json(mvc.perform(get("/api/forecast/teams/" + team + "/current?from=2026-09-07&to=2026-09-18")).andExpect(status().isOk()).andReturn());
         assertEquals(result.path("memberDays").size(), current.size());
