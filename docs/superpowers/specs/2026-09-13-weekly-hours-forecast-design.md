@@ -2,7 +2,7 @@
 
 Date: 2026-09-13, reviewed 2026-09-14. Status: designed in chat with the owner on 2026-09-13 (eight rulings in
 section 1) and **reviewed by the owner on 2026-09-14**, which closed the two open points and took seven
-further rulings, all in section 18. Ready for an implementation plan.
+further rulings, then three more as the review closed, all in section 18. Ready for an implementation plan.
 
 **Supersedes `2026-09-12-single-model-simplification-design.md`.** That spec was approved but never
 implemented; every ruling in it still holds and is carried forward here, so this document is the only one to
@@ -368,17 +368,32 @@ inside a particular window whatever else happens, which is precisely the trigger
 hours off that member and onto someone with room. Both are deterministic, both are computed from facts that
 already exist, and neither invents a ratio or a threshold.
 
-**Undated: `backlog_excess_hrs`, cumulative** (ruling, section 18.2). Each member's window row gains
+**Undated: `backlog_excess_hrs`, cumulative and measured against the forecast** (rulings 18.2 and 18.10).
+Each member's window row gains
 
 ```
-backlog_excess_hrs(k) = round2(max(0, open_est_hours − Σ capacity_hrs(1..k)))
+backlog_excess_hrs(k) = round2(max(0, open_est_hours − Σ demand_hrs(1..k)))
 ```
 
-where `open_est_hours` is the member's open remaining hours already reported in `patterns`. The capacity is
-**cumulative over windows 1 to k**, not window k's alone. The first draft compared the same open backlog with
-each window separately, which prints one number repeatedly — six nearly identical figures at six windows — and
-invites a reader to add them up. Cumulative asks "is there more open work here than the next k windows can
-take", falls as the windows absorb it, and reaches zero at the window where the backlog finally fits.
+where `open_est_hours` is the member's open remaining hours already reported in `patterns` and `demand_hrs` is
+this run's own predicted demand for each window.
+
+Two decisions are folded into that one line. **Cumulative** (18.2), because the first draft compared the same
+open backlog with each window separately, which prints one number repeatedly — six nearly identical figures at
+six windows — and invites a reader to add them up. **Against predicted demand rather than capacity** (18.10),
+which was put to the owner as a choice and answered with the reason that settles it: the forecast is not a
+fact a team leader trusts outright, it is an analysis that flags who has free hours and who is buried, and
+what it misses the narrative is there to catch. So the number a leader reads should be what is left over
+after the work the model expects to get done, not an arithmetic remainder against raw capacity. It says: *this
+much of the queue is still standing when the coming windows are over.*
+
+The cost, stated because the document should not hide it: this fact now depends on the model. An optimistic
+forecast makes the leftover look smaller, where a capacity comparison would have stayed put. It remains a
+fact in the JSON and `NumberVerifier` still checks anything the narrative says about it, but it is no longer
+an independent check *on* the forecast — it is a reading *of* it. `capacity_hrs` stays on every window row, so
+a reader who wants the arithmetic remainder can still see both numbers side by side.
+
+It stays non-increasing across a run's windows, because cumulative demand only grows.
 
 **Dated: `due_excess_hrs`, per window** (ruling, section 18.5). Each member's window row also gains
 
@@ -394,24 +409,40 @@ number in the narrative against the facts it was given, so a gap Copilot subtrac
 and is reported `UNVERIFIED`. Computing the subtraction here makes the sentence that matters most to a team
 leader both sayable and verified.
 
-**Both feed rebalancing.** `rebalancing_candidates` gains two lists beside `overloaded` and `underloaded`:
+**Work already late is reported on its own** (ruling 18.11). Neither number above catches it: the window
+filter keeps only tasks whose due date falls inside a window, so a task that went overdue last week belongs to
+no window and contributes to no `due_excess_hrs`, even though it is the strongest possible case for moving
+work. Rather than fold it into the first window and blur what that window's number means, each member gains a
+single `overdue_hrs`, the remaining hours of their open tasks already past their due date at the run day. It
+is **per member, not per window** — the work is late as of the run, not late in a particular future window —
+and it sits beside `open_est_hours` in `patterns`, where `overdue_open` already counts the same tasks.
+
+**All three feed rebalancing.** `rebalancing_candidates` gains two lists beside `overloaded` and
+`underloaded`:
 `backlog_pressed`, the members whose `backlog_excess_hrs` is above zero in the **last** window — the
 cumulative figure is non-increasing, so that is the strictest test and means the backlog does not fit inside
 the whole run — and `deadline_pressed`, those whose `due_excess_hrs` is above zero in **any** window, since a
 deadline gap in any single window is enough to act on. `whf-rebalancing-advice` reads the second as the
-strongest case for moving work: the hours cannot be deferred, so either they move or the deadline slips.
+strongest case for moving work: the hours cannot be deferred, so either they move or the deadline slips, and
+a positive `overdue_hrs` is the case that has already slipped.
 
 `whf-forecast-interpretation` gains two rules. When `overload` is zero but `backlog_excess_hrs` is not, the
 member is not predicted to exceed their hours yet holds more open work than the coming windows can absorb.
 When `due_excess_hrs` is above zero, say how many hours more are due in that window than it holds, and name
 rebalancing as the answer.
 
-### 8.2 Where the two numbers are computed
+### 8.2 Where the numbers are computed
 
-They are fields of `MemberWindowForecast` and `NOT NULL` columns, so `ForecastRunner` must produce them, and
-neither input is reachable from there today. `due_hours` is summed inside `FactsBuilder` from the
-`Lifecycle`-derived `TaskFacts` of the member's open tasks; `open_est_hours` is summed inside `Patterns` and
-surfaces on `MemberPattern`. Saying "it is already built" is true and useless: something has to move.
+`backlog_excess_hrs` and `due_excess_hrs` are fields of `MemberWindowForecast` and `NOT NULL` columns, so
+`ForecastRunner` must produce them, and neither input is reachable from there today. `due_hours` is summed
+inside `FactsBuilder` from the `Lifecycle`-derived `TaskFacts` of the member's open tasks; `open_est_hours` is
+summed inside `Patterns` and surfaces on `MemberPattern`. Saying "it is already built" is true and useless:
+something has to move. `overdue_hrs` is the exception — it is a member-level fact, so it is summed in
+`Patterns` beside the `overdue_open` count it matches, and needs nothing moved.
+
+`backlog_excess_hrs` also needs the run's own `demand_hrs` per window (ruling 18.10), which `ForecastRunner`
+holds directly: the window rows are built there, so the cumulative sum is a running total over the rows it has
+just produced. It must be computed after the band, not beside it, since it reads the final demand figure.
 
 Both are one-line sums over the same open-task list that `ForecastRunner` already holds, so **the two sums
 move to small static helpers beside the window arithmetic**, and `FactsBuilder` and `Patterns` call them
@@ -525,10 +556,11 @@ Removed from the facts, with their producers:
 
 Added or changed:
 
-- Member `forecast` rows gain `backlog_excess_hrs` and `due_excess_hrs` (section 8). `due_hours` stays as it
-  is; the new key is the gap, not a replacement.
+- Member `forecast` rows gain `backlog_excess_hrs` and `due_excess_hrs` (section 8). `due_hours` and
+  `capacity_hrs` stay as they are; the new keys are gaps, not replacements.
+- `patterns` gains `overdue_hrs`, per member, beside the `overdue_open` count (section 8.1).
 - `rebalancing_candidates` gains `backlog_pressed` and `deadline_pressed` (section 8).
-- `patterns` gains `logged_weekday_shares` (section 5).
+- `patterns` gains `logged_weekday_shares` (section 5) as well.
 - `history_13w` reports `{week, logged_hours, arrival_hours, tasks}` — the member's own history of the
   quantity now being forecast, with arrivals kept beside it as context.
 - The `model` map:
@@ -571,11 +603,15 @@ reported beside it.
   member will log in the window, never capped"; the **champion** bullet becomes a **model** bullet naming
   `xgboost`, its target, `mae` beside `mean_actual_hours` and `confidence`; the window sentence says a run
   covers between one and six contiguous windows and that `model.windows` says how many; `backlog_excess_hrs`,
-  `due_excess_hrs`, `backlog_pressed` and `deadline_pressed` are documented, the first as cumulative over the
-  windows so far and the second as that window's own; `planned_basis` and `planned_backlog` go.
+  `due_excess_hrs`, `overdue_hrs`, `backlog_pressed` and `deadline_pressed` are documented — the first as what
+  is left of the queue after the windows so far are forecast, the second as that window's own deadline gap,
+  the third as work already late — with a sentence saying the first reads the forecast rather than checking
+  it; `planned_basis` and `planned_backlog` go.
 - `whf-rebalancing-advice`: `deadline_pressed` is named as the strongest case for moving work, because those
-  hours cannot be deferred — either they move or the deadline slips — and `due_excess_hrs` says how many.
-  `backlog_pressed` stays the weaker, undated case.
+  hours cannot be deferred — either they move or the deadline slips — and `due_excess_hrs` says how many; a
+  positive `overdue_hrs` is the case that has already slipped and comes first of all. `backlog_pressed` stays
+  the weaker, undated case, and the skill says it is read off the forecast, so a member whose forecast is
+  optimistic can be pressed without the number showing it.
 - `whf-forecast-interpretation`: the "where the demand comes from" rule is replaced by the two
   pressure rules of section 8.1; the "below 1.0 is reliable" rule is replaced by stating `mae` next to
   `mean_actual_hours` and letting the reader judge, never calling the forecast good or bad; a
@@ -690,8 +726,10 @@ member and fits 7 horizons — the horizon count is run-day dependent (section 4
 *w + 1* boosters), so the case must pin the weekday or it fails on a Friday; a
 thin-history run forecasts with a null `mae`, `confidence` `thin_history` and an interval basis of
 `"none: no scored origins"`; a run whose booster cannot fit ends `FAILED` with the `ModelUnavailable` message;
-`backlog_excess_hrs` is positive exactly when open remaining hours exceed the summed capacity of the windows
-up to and including that one, and is non-increasing across a run's windows; `due_excess_hrs` is positive
+`backlog_excess_hrs` is positive exactly when open remaining hours exceed the summed predicted demand of the
+windows up to and including that one, allowing for the rounding above, and is non-increasing across a run's
+windows; `overdue_hrs` is positive exactly when the member holds an open task past its due date, and agrees
+with the `overdue_open` count on which members it names; `due_excess_hrs` is positive
 exactly when that window's `due_hours` exceeds that window's capacity; a member in `deadline_pressed` has a
 positive `due_excess_hrs` in at least one window; a matrix built at two windows, handed to a backtest asking
 for horizon 7, fails with a message naming the missing horizon rather than reading a column that is not there
@@ -710,9 +748,10 @@ and the narration fixtures hardcoding a champion (`NarrativeContractTest:53`, `N
 
 ## 18. The owner's review, 2026-09-14
 
-The two open points were closed (items 1 and 7) and seven more rulings were taken: three prompted by findings
-that contradicted this document, and two more, at the end, by the seed generator being unable to exercise what
-the design needs. They are numbered here and cited from the sections they change.
+The two open points were closed (items 1 and 7) and ten more rulings were taken: three prompted by findings
+that contradicted this document, two by the seed generator being unable to exercise what the design needs, and
+three as the review closed, when a self-review pass of this document raised them. They are numbered here and
+cited from the sections they change.
 
 1. **`MIN_HISTORY_WEEKS = 10 + maxHorizon`** (section 4.2). Confirmed as proposed. The usable training span
    stays constant at every window count; a six-window run needs about 19 weeks of history before it scores.
@@ -745,6 +784,19 @@ the design needs. They are numbered here and cited from the sections they change
 9. **The seed work lands in this plan, as an early task** (section 22). Changing the seed on its own would
    turn the current suite red, because roughly 175 to 200 tests across 29 files assert against today's
    seeded behaviour and those tests are being rewritten by this change anyway. One branch, one green gate.
+10. **`backlog_excess_hrs` is measured against predicted demand, not capacity** (section 8.1). Put to the
+    owner as a choice between an arithmetic remainder against capacity and what the forecast says is left
+    over. The owner's reason decides it: the forecast is not a fact a team leader trusts outright, it is an
+    analysis that flags who has free hours and who is buried, and what it misses the narrative exists to
+    catch. The accepted cost is that the fact now depends on the model rather than checking it.
+11. **Work already overdue gets its own number** (section 8.1). `overdue_hrs` per member, the remaining hours
+    of open tasks already past their due date at the run day. It is not folded into the first window, which
+    would blur what that window's `due_excess_hrs` means, and not left out, which would hide the most urgent
+    case from the list meant to trigger rebalancing.
+12. **One plan, not four** (section 23). The review proposed splitting the work into parity retirement, the
+    retarget, the configurable windows and the pressure facts. The owner kept it as one plan: nothing lands
+    half-done and there is one branch to follow. Section 23 records what that costs and how the standing
+    workflow absorbs it.
 
 ## 19. What this costs, accepted
 
@@ -790,7 +842,7 @@ and none is lost that a rerun cannot reproduce.
 This spec covers the retarget to logged hours, the deletions that fall out of it, the configurable window
 count, the capacity default, the two pressure facts of section 8.1, the weekday split of section 5, the parity
 retirement and one-step gate of section 16, the `Numbers` extraction, and the seed generator changes of
-section 22. Nothing else.
+section 22. Nothing else. Section 23 records that it is one plan, and the task order that follows from it.
 
 An earlier draft of this sentence listed only the first four and a single "backlog-pressure fact"; it
 understated the document's own contents, which matters because a plan writer scopes from it.
@@ -859,3 +911,40 @@ being rewritten anyway.
 Two properties are worth adding while the generator is open: a member's logged hours never exceed their
 present hours **except** through the overtime path, and over a long enough history every member shows a
 non-degenerate weekday shape.
+
+## 23. One plan, and what that costs
+
+The self-review judged this too large for a single plan and proposed four: parity retirement and the one-step
+gate first, then the seed and the retarget, then the configurable window count, then the pressure facts. The
+owner ruled for **one plan** (18.12): nothing lands half-done, and there is one branch to follow rather than
+four to sequence.
+
+The argument for splitting was not wrong, so the plan has to answer it rather than ignore it.
+
+**What makes it large.** Eight production files and a package deleted; six public records reshaped; one
+migration; five product skills; the facts contract; the evaluation harness, the experiment driver and the
+sample host; four scripts and the paused CI file; eight documents; the seed generator; and roughly twenty
+named test suites rewritten, with about 175 to 200 tests standing on seeded data.
+
+**How the standing workflow absorbs it.** A task per section, a review per task, then a whole-branch review
+and one fix wave, exactly as the four landed plans did. The size shows up as more tasks, not as bigger ones.
+
+**The order within the plan is not free**, and the review's proposed seams become the task order:
+
+1. **Parity retirement and the one-step gate** (section 16), first. The parity scripts and their Python test
+   compare Java output against arrival-hours behaviour, so they go red the moment the retarget lands; deleting
+   them first avoids fixing something that is about to be removed, and every later task gets a faster gate.
+2. **The seed** (section 22), second, per ruling 18.9, so every later task is written against data that can
+   show overload, weekday shape and under-logging.
+3. **The retarget and the deletions** (sections 3, 3.1, 6, 7, 9), the heart of it, and the point at which
+   training and measurement become the same quantity.
+4. **The configurable window count** (sections 4 and 3.2), which carries the one real unknown: turning
+   `Features.HORIZONS` and `MIN_HISTORY_WEEKS` from constants into functions of the count.
+5. **The weekday split** (section 5) and **the pressure facts** (section 8), both additive, both depending on
+   the shape of what comes before. The pressure facts come last because `backlog_excess_hrs` reads the run's
+   own demand (section 8.2), which task 3 defines and task 4 may widen.
+
+**The risk the owner accepted**, recorded plainly: a long-lived branch, a single large final review, and a
+schema that changes in one migration rather than two, so the rollback of section 20 is all or nothing. The
+mitigation is the review per task; if the branch is still red after the fix wave, splitting it then is still
+open, and the task order above is already the seam.
