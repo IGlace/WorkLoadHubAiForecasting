@@ -1,7 +1,5 @@
 package com.workloadhub.forecast.api;
 
-import com.workloadhub.forecast.eval.EvalConfig;
-import com.workloadhub.forecast.eval.EvalResult;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -21,13 +19,6 @@ public interface ForecastService {
 
     /** How the forecasts made before each weekday between two days compared with the hours logged on it (design 2026-09-11). */
     AccuracyResult accuracy(UUID teamId, LocalDate from, LocalDate to);
-
-    /**
-     * Backtests the model against history: arrival accuracy per horizon, and demand accuracy of whole
-     * replayed runs per team (spec section 13). This reads history and writes nothing, so it never touches a run.
-     * A null {@link EvalConfig#asOf()} means the latest task creation date; {@link EvalResult#resolved()} says which.
-     */
-    EvalResult evaluate(EvalConfig config);
 
     RunProgress progress(UUID runId);
 
