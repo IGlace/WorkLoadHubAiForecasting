@@ -1,8 +1,8 @@
 # Weekly hours forecast design
 
 Date: 2026-09-13, reviewed 2026-09-14. Status: designed in chat with the owner on 2026-09-13 (eight rulings in
-section 1) and **reviewed by the owner on 2026-09-14**, which closed the two open points and took four further
-rulings, all in section 18. Ready for an implementation plan.
+section 1) and **reviewed by the owner on 2026-09-14**, which closed the two open points and took seven
+further rulings, all in section 18. Ready for an implementation plan.
 
 **Supersedes `2026-09-12-single-model-simplification-design.md`.** That spec was approved but never
 implemented; every ruling in it still holds and is carried forward here, so this document is the only one to
@@ -125,7 +125,7 @@ and is added back under an honest name:
 | `weeks_since_last_arrival` | arrival series | unchanged — it is about arrivals |
 | `team_backlog_unassigned_hrs` | present, `TeamContext` | unchanged — **this is ruling 5**: the team's unassigned backlog is already a feature column, so `PlannedWork` becoming "a feature" needs no new column, only the deletion of the addend (section 6) |
 | `due_hrs_h{h}`, `working_days_h{h}`, `absence_hrs_h{h}`, `available_hrs_h{h}` | per horizon | unchanged, and now more directly relevant: `available_hrs_h{h}` is the ceiling on what a member can log |
-| `fresh_hours`, `est_hours` (stored series values) | stored per row | **deleted** — `Features.FRESH` was read only by `SeasonalNaive`, and `lag1` is by definition the row's own week |
+| `fresh_hours`, `est_hours` (stored series values) | stored per row | **deleted** — `Features.FRESH` was read only by `SeasonalNaive`, `Features.EST` by nothing at all, and the arrival value of the row's own week returns as `arrival_hrs_lag1` |
 
 The **shared** column count stays 42 (four removed, four added). `Features.FRESH` and `Features.EST` are
 deleted; `SyntheticMatrix` (the test helper that writes them) is updated. `Features.EST` is already dead code
@@ -183,9 +183,12 @@ New property, and the only control:
 - `ForecastRunner`'s constructor becomes `(CapacityRule capacityRule, int windows)` — the
   `boolean plannedWorkDefault` argument goes with `PlannedWork` (section 6). `prepare` reads the field.
 
-Everything downstream already derives from the window list rather than from the constant: `Horizon.days`,
-`Horizon.horizons`, `FactsBuilder`'s `run.windows`, the day and window tables, and `Accuracy`. No caller
-assumes "two" except in text, which section 14 corrects.
+Everything **downstream of the window list** already derives from it rather than from the constant:
+`Horizon.days`, `Horizon.horizons`, `FactsBuilder`'s `run.windows`, the day and window tables, and `Accuracy`.
+Two pieces of code upstream of it do assume two, and each has its own section: `Features.HORIZONS`, the
+hardcoded `{1, 2, 3}` (section 3.2), and `Backtest.MIN_HISTORY_WEEKS`, the fixed 13 (section 4.2). An earlier
+draft of this paragraph claimed no caller assumes two except in text; that was wrong, and those two sections
+exist because of it.
 
 ### 4.1 Horizons and the maximum horizon
 
@@ -240,19 +243,32 @@ the member's logged hours falling on each of Monday to Friday. It is reported as
 
 The rule, for member *m* and horizon week *W* with prediction *P*:
 
-1. Let *K* be the working days of *W* per the `WorkingCalendar` (weekends and holidays excluded). If *K* is
-   empty, *W* contributes nothing.
-2. Let *s_d* be *m*'s logged weekday share for day *d*, renormalised to sum to 1 over *K*. If every share over
-   *K* is zero — a member with no logged history, or all their mass on a holiday — fall back to an even split,
-   which is exactly today's behaviour.
+1. Let *K* be the working days of *W* per the `WorkingCalendar`, **with weekends, holidays and the member's
+   full-absence days excluded**. If *K* is empty, *W* contributes nothing.
+
+   The absence part is a defect this document nearly carried forward. Section 6 deletes `CapacityRule.offDays`
+   as dead once `EffortModel` and `PlannedWork` go, but it is the only thing that produces a member's
+   full-absence days, and today's even split never passes them either (`ForecastRunner:176` passes an empty
+   set). Without them, predicted hours land on a day of zero capacity and read as pure overload, and ruling
+   18.4 says no hour is ever logged on such a day. So `offDays` **survives**, moved next to the split that now
+   uses it, and `FULL_DAY_HOURS` is deleted in favour of comparing a day's absence hours with that day's own
+   capacity: a fixed 8.0 would be wrong beside an 8.8-hour day, and the seed writes 8.8-hour absence rows
+   after section 22.
+2. Let *s_d* be *m*'s logged weekday share for day *d*, **renormalised over *K* alone**, not over the five
+   weekdays. If every share over *K* is zero — a member with no logged history, or one whose whole logged mass
+   sits on weekdays that are holidays or absences *in this particular week* — fall back to an even split over
+   *K*, which is exactly today's behaviour. (Shares are per weekday and, by ruling 18.4, no hour is ever
+   logged on a holiday, so the zero case is about this week's calendar, never about the shares themselves.)
 3. Day *d* receives `P × s_d`, but only days inside the run's horizon are emitted.
 
 Step 3 is deliberate and unchanged in substance: a **holiday** inside the week redistributes its hours onto the
 remaining working days (step 1 excluded it from *K*), while a day **already past** drops its hours, because
 days already past are not re-forecast. The `limitations` fact already states this and keeps doing so.
 
-Rounding is unchanged: each day figure is rounded to two decimals, the window figure is the rounded raw sum,
-and the existing comment at `ForecastRunner:210` explaining the few-hundredths difference stays.
+Rounding is unchanged in substance: each day figure is rounded to two decimals and the window figure is the
+rounded raw sum, so the two can differ by a few hundredths. The comment at `ForecastRunner:210` explains that
+difference in terms of rounding "each component", and the components are the open, new and planned split that
+section 7 collapses, so the comment is **rewritten** for the single figure rather than kept.
 
 ## 6. What is deleted
 
@@ -266,7 +282,8 @@ and the existing comment at `ForecastRunner:210` explaining the few-hundredths d
 | `run/ModelRegistry.java` | deleted |
 | `planned/PlannedWork.java` | deleted, package and all |
 | `calendar/HourPlacement.java` | deleted — its only production callers are `EffortModel` and `PlannedWork` |
-| `capacity/CapacityRule.offDays` and `FULL_DAY_HOURS` | deleted — `offDays` exists only to feed the two placements above, and `8.0` would be wrong beside an 8.8-hour day (section 10) |
+| `capacity/CapacityRule.FULL_DAY_HOURS` | deleted — a fixed `8.0` is wrong beside an 8.8-hour day (section 10); a full-absence day becomes one whose absence hours meet that day's own capacity |
+| `capacity/CapacityRule.offDays` | **kept**, against the first draft, which deleted it with its two callers. It is the only producer of a member's full-absence days and section 5 step 1 now needs them |
 
 `ForecastProperties` loses the nested `PlannedWork` class and the `whf.planned-work.enabled` property, and
 gains `whf.forecast.windows`. `ForecastRunner` loses `plannedWorkDefault`; `DefaultForecastService` loses the
@@ -378,14 +395,29 @@ and is reported `UNVERIFIED`. Computing the subtraction here makes the sentence 
 leader both sayable and verified.
 
 **Both feed rebalancing.** `rebalancing_candidates` gains two lists beside `overloaded` and `underloaded`:
-`backlog_pressed`, the members whose `backlog_excess_hrs` is above zero in any window, and `deadline_pressed`,
-those whose `due_excess_hrs` is above zero in any window. `whf-rebalancing-advice` reads the second as the
+`backlog_pressed`, the members whose `backlog_excess_hrs` is above zero in the **last** window — the
+cumulative figure is non-increasing, so that is the strictest test and means the backlog does not fit inside
+the whole run — and `deadline_pressed`, those whose `due_excess_hrs` is above zero in **any** window, since a
+deadline gap in any single window is enough to act on. `whf-rebalancing-advice` reads the second as the
 strongest case for moving work: the hours cannot be deferred, so either they move or the deadline slips.
 
 `whf-forecast-interpretation` gains two rules. When `overload` is zero but `backlog_excess_hrs` is not, the
 member is not predicted to exceed their hours yet holds more open work than the coming windows can absorb.
 When `due_excess_hrs` is above zero, say how many hours more are due in that window than it holds, and name
 rebalancing as the answer.
+
+### 8.2 Where the two numbers are computed
+
+They are fields of `MemberWindowForecast` and `NOT NULL` columns, so `ForecastRunner` must produce them, and
+neither input is reachable from there today. `due_hours` is summed inside `FactsBuilder` from the
+`Lifecycle`-derived `TaskFacts` of the member's open tasks; `open_est_hours` is summed inside `Patterns` and
+surfaces on `MemberPattern`. Saying "it is already built" is true and useless: something has to move.
+
+Both are one-line sums over the same open-task list that `ForecastRunner` already holds, so **the two sums
+move to small static helpers beside the window arithmetic**, and `FactsBuilder` and `Patterns` call them
+instead of summing for themselves. That keeps one definition of each quantity, which is the point of
+computing the gap at all — a narrative comparing a `due_hours` from one summation with a `due_excess_hrs`
+from another would eventually contradict itself. A test pins the two agreeing on the same fixture.
 
 ## 9. The backtest, MAE and thin history
 
@@ -397,7 +429,8 @@ numbers. `Backtest` stops being a tournament:
 | `run(feat, Map<String, Supplier<ArrivalModel>>, origins, horizons)` | `run(feat, origins, horizons)` |
 | `Score(model, origin, horizon, mae, mase)` | `Score(origin, horizon, mae)` |
 | `Result(scores, residuals, residualRows, unavailable, secondsPerModel)` keyed by model then horizon | `Result(scores, residuals, residualRows, seconds)` keyed by horizon |
-| `FLOOR`, `Champion`, `selectChampion`, `mase`, `meanMase`, `meanMaseByModel` | deleted |
+| `FLOOR`, `Champion`, `selectChampion`, `meanMase`, `meanMaseByModel` | deleted |
+| `mase` | **moved, not deleted**: it becomes `Numbers.mase` (section 16) and `Accuracy` calls it there |
 
 `Result` gains `meanMae()` and `meanActualHours()`. The prediction interval is unchanged: pooled residuals per
 horizon, the 0.1 and 0.9 linear quantiles.
@@ -438,8 +471,13 @@ suggests the default is wrong.
 2. Otherwise the latest earlier row's `base`, scaled by the week's working days over five, minus absence hours.
 3. Only when the member has no capacity row at all → `whf.default-weekly-hours`.
 
-On real WorkloadHub data with a capacity plan, 40 → 44 changes nothing for anyone who has rows. It bites on
-seeded databases and on members with no plan.
+On real WorkloadHub data with a capacity plan, 40 → 44 changes nothing for anyone who has rows. It bites only
+on a member with no capacity row at all.
+
+**An earlier draft said it bites on seeded databases. It does not, and that was wrong.** `CapacityWriter`
+writes a `user_capacity` row for every member and every employed week, at `BASE_HOURS = 40.0`, so the property
+is never reached in seeded data and changing it alone would leave every seeded team on 40 hours — still
+contradicting C1. The seed's own base is corrected with it, in section 22.
 
 **Overload is confirmed as the owner described it**, and this change does not alter it:
 
@@ -456,7 +494,10 @@ One migration, `V4__weekly_hours.sql`, in both `db/forecast/postgresql/` and `db
 
 - `forecast_runs`: drop `forced_model`, `champion_model`, `champion_mase`; add `mae double precision` / `REAL`.
 - `forecast_member_windows`: drop `open_hrs`, `new_hrs`, `planned_hrs`; add
-  `backlog_excess_hrs double precision NOT NULL` and `due_excess_hrs double precision NOT NULL`.
+  `backlog_excess_hrs double precision NOT NULL DEFAULT 0` and `due_excess_hrs double precision NOT NULL
+  DEFAULT 0`. The default is what makes them addable at all: SQLite refuses `ADD COLUMN ... NOT NULL` without
+  one outright, and PostgreSQL refuses it on a table that has rows. Both keep the default, since every writer
+  supplies the value and a default of zero is the truthful reading of "no pressure recorded".
 - `forecast_member_days` and `forecast_current_days`: drop `open_hrs`, `new_hrs`, `planned_hrs`.
 
 `JdbcRunStore` follows in its INSERTs, SELECT lists, `finish(...)` and row mappers.
@@ -541,7 +582,7 @@ reported beside it.
   `thin_history` run is described plainly as unscored; `due_hours` above capacity keeps its rule.
 - `whf-likely-work`: the planned-allocation source and its `high` confidence rule go. The top confidence
   becomes `medium` (a live project matching a role the member already holds), and the skill says so. This is
-  a real loss and section 17 records it.
+  a real loss and section 19 item 4 records it.
 - `whf-pattern-discovery`: `logged_weekday_shares` is added and distinguished from `weekday_shares` in one
   sentence.
 
@@ -555,14 +596,16 @@ count is the only way to evaluate a horizon other than the default. `Harness.eva
 `ModelRegistry` validation and the factory filtering; `EvalResult` drops `skipped`.
 
 `ScoreRow` and `DemandRow` lose their `model` column and `DemandRow` loses `openHrs`, `newHrs` and
-`plannedHrs` (`Harness:163`), changing the `scores.csv` and `demand.csv` headers. The `mase` and `beats_naive`
+`plannedHrs` (`Harness:163`), gaining `backlogExcessHrs` and `dueExcessHrs` in their place, so `demand.csv` —
+the only place the harness reports demand — can still be read against the pressure the run found. Both
+headers change. The `mase` and `beats_naive`
 metric rows are deleted; `mae`, `coverage80`, `wql` and `seconds` remain. `Report` drops its "Models
 requested" line.
 
 `server/tools/Experiment.java`: `eval` drops `--models` and gains `--windows N` (1 to 6, default 2), refusing
 anything outside the range with the same message the auto-configuration uses. `server/tools/experiment.sh`
 follows in its header comment. This is the one place the window count is not a property, because the driver is
-not a host and has no property source; confirmed at the 2026-09-14 review (section 18.6) as a consequence of
+not a host and has no property source; confirmed at the 2026-09-14 review (section 18.7) as a consequence of
 ruling 4 rather than an exception to it. Since section 3.2 ties a matrix to the count it was built with, the
 flag also decides the matrix the driver builds, and `eval` rebuilds rather than reusing one built at another
 count.
@@ -627,8 +670,12 @@ retarget happened.
 
 **New property tests**:
 
-- `band`: `demand ≥ 0`, `low ≤ demand ≤ high`, `low ≥ 0`, `overload = max(0, demand − capacity)` and
-  `overload = 0` exactly when `demand ≤ capacity`.
+- `band`: `demand ≥ 0`, `low ≤ demand ≤ high`, `low ≥ 0`, and `overload = round2(max(0, demand − capacity))`.
+  The obvious companion — `overload = 0` exactly when `demand ≤ capacity` — is **false as stated** and must be
+  written with the rounding in it: the formula rounds last, so a demand of `capacity + 0.004` gives an
+  overload of `0.0` while exceeding capacity. The property is `overload = 0` exactly when
+  `demand ≤ capacity + 0.005`. jqwik finds the naive form in a few hundred tries; the same correction applies
+  to the two pressure facts below, which round the same way.
 - The weekday split: for a week wholly inside the horizon the day hours sum to the week's prediction within
   rounding; no day is negative; a non-working day receives nothing; an all-zero share vector reproduces the
   even split.
@@ -638,7 +685,9 @@ retarget happened.
   non-degenerate naive; `round2` idempotent and never more than 0.005 from its input.
 
 **New cases**: `whf.forecast.windows` outside 1 to 6 fails start-up with a message naming the property and the
-range; a run at `windows = 6` produces 30 day rows and 6 window rows per member and fits 7 horizons; a
+range; a run at `windows = 6` **from a pinned Monday `asOf`** produces 30 day rows and 6 window rows per
+member and fits 7 horizons — the horizon count is run-day dependent (section 4.1: a run fits between *w* and
+*w + 1* boosters), so the case must pin the weekday or it fails on a Friday; a
 thin-history run forecasts with a null `mae`, `confidence` `thin_history` and an interval basis of
 `"none: no scored origins"`; a run whose booster cannot fit ends `FAILED` with the `ModelUnavailable` message;
 `backlog_excess_hrs` is positive exactly when open remaining hours exceed the summed capacity of the windows
@@ -661,8 +710,9 @@ and the narration fixtures hardcoding a champion (`NarrativeContractTest:53`, `N
 
 ## 18. The owner's review, 2026-09-14
 
-The two open points were closed and four more rulings were taken, two of them prompted by findings that
-contradicted this document. They are numbered here and cited from the sections they change.
+The two open points were closed (items 1 and 7) and seven more rulings were taken: three prompted by findings
+that contradicted this document, and two more, at the end, by the seed generator being unable to exercise what
+the design needs. They are numbered here and cited from the sections they change.
 
 1. **`MIN_HISTORY_WEEKS = 10 + maxHorizon`** (section 4.2). Confirmed as proposed. The usable training span
    stays constant at every window count; a six-window run needs about 19 weeks of history before it scores.
@@ -685,6 +735,16 @@ contradicted this document. They are numbered here and cited from the sections t
    overload was the first draft's largest stated cost and it was overstated; section 19 is rewritten.
 7. **`--windows N` on the experiment driver** (section 14). Confirmed, as a consequence of the driver having
    no property source rather than an exception to ruling 4.
+8. **The seed generator is changed to model real logging** (section 22). Raised during the review: a seeded
+   member can never log more than 8 hours in a day, so a seeded week never exceeds 40 logged hours while
+   every seeded member carries an explicit 40-hour capacity row. Under the retarget that makes `overload`
+   arithmetically unreachable on seeded data — the opposite of the real system, where nothing caps logging.
+   The seed gains an 8.8-hour day and a 44-hour capacity base, per-member weekday profiles, a logging
+   discipline factor independent of the estimate ratio, and a minority of members and weeks that genuinely
+   run over.
+9. **The seed work lands in this plan, as an early task** (section 22). Changing the seed on its own would
+   turn the current suite red, because roughly 175 to 200 tests across 29 files assert against today's
+   seeded behaviour and those tests are being rewritten by this change anyway. One branch, one green gate.
 
 ## 19. What this costs, accepted
 
@@ -699,8 +759,9 @@ Stated plainly, and revised where the 2026-09-14 review overturned an item:
    *does*, not by what is asked of them: someone handed 70 hours of work in a 44-hour window logs their long
    week, not the full 70, so the forecast shows a real overrun rather than the size of the queue behind it.
    Section 8.1 is what covers the queue, and it is a complement now rather than the rescue the draft made it.
-2. **The forecast inherits logging discipline.** A member who works 40 hours and logs 25 is forecast to log
-   25. The module cannot tell under-logging from under-working, and the narrative must not pretend otherwise:
+2. **The forecast inherits logging discipline.** A member who works a full 44-hour week and logs 25 hours is
+   forecast to log 25. The module cannot tell under-logging from under-working, and the narrative must not
+   pretend otherwise:
    `data_quality.unlogged_tasks` already flags the tasks, and `limitations` now says it in words. This is the
    sharpest edge of the retarget and it is the direct consequence of measuring what is recorded.
 3. **The demand breakdown is gone.** A narrative can no longer say "most of this is work already on their
@@ -727,7 +788,12 @@ and none is lost that a rerun cannot reproduce.
 ## 21. Out of scope
 
 This spec covers the retarget to logged hours, the deletions that fall out of it, the configurable window
-count, the capacity default and the backlog-pressure fact. Nothing else.
+count, the capacity default, the two pressure facts of section 8.1, the weekday split of section 5, the parity
+retirement and one-step gate of section 16, the `Numbers` extraction, and the seed generator changes of
+section 22. Nothing else.
+
+An earlier draft of this sentence listed only the first four and a single "backlog-pressure fact"; it
+understated the document's own contents, which matters because a plan writer scopes from it.
 
 The remaining findings of the 2026-09-12 over-engineering survey keep their own brainstorms and are explicitly
 **not** here:
@@ -741,3 +807,55 @@ The remaining findings of the 2026-09-12 over-engineering survey keep their own 
 
 The `web` REST surface stays: it defaults to disabled, and the host integration design records the sample host
 driving it as the demonstrated path. Removing it would be a product decision, not a simplification.
+
+## 22. The seed generator
+
+Raised at the 2026-09-14 review and ruled there (18.8 and 18.9). The seed is not a test fixture on the side:
+it is production code in the library, roughly 175 to 200 tests across 29 files stand on it, and the evaluation
+harness measures whatever world it builds. Retargeting the forecast at logged hours without touching it would
+leave the new behaviour measured against data that cannot produce the cases the tool exists to catch.
+
+### 22.1 What is wrong for a logged-hours forecast
+
+| Finding | Where | Why it blocks the retarget |
+|---|---|---|
+| A present working day gives a member exactly 8 hours to spend, a hard ceiling | `AbsencePlanner.hoursPresent`, and `WorkQueue.logDay` only ever decrements what is left | A seeded week never exceeds 40 logged hours. `WorkQueueTest` asserts the ceiling, so it is deliberate, not incidental |
+| Every member and employed week gets a capacity row at a 40-hour base | `CapacityWriter.BASE_HOURS` | Demand is capped at exactly capacity, so `overload` is arithmetically zero for every seeded member, forever |
+| Both contradict requirement C1 | `docs/requirements/requirements-v1.md`, C1 and line 85 | The requirement has always said 44 hours and 8.8 a day |
+| Logging is flat across the week: the day is 8 hours or nothing, with no weekday branch | `AbsencePlanner.hoursPresent` | `logged_weekday_shares` comes out flat, so the section 5 split always falls through to its even-split fallback and ships untested |
+| A task's logged hours are its estimate times a per-member ratio times per-task noise | `WorkQueue.assign`, with the ratio drawn once per member in `simulate` | A model retargeted at logged hours still learns the arrival signal, lagged and smoothed, so the backtest flatters itself |
+| Nothing represents logging discipline | nowhere | The sharpest cost in section 19 — a member who works a full week and logs 25 hours — cannot occur in seeded data |
+
+Overload does exist in seeded data today, but only in *assigned estimated* hours: `team_capacity.allocated_hrs`
+can exceed `total_capacity_hrs` in an event week. That is the quantity this change stops forecasting.
+
+### 22.2 What changes
+
+1. **The working day becomes 8.8 hours and the capacity base 44**, in `AbsencePlanner` and
+   `CapacityWriter.BASE_HOURS`, so the seed, the module default (section 10) and requirement C1 finally agree.
+   Absence rows move to 8.8 with them, so a full-day absence still reads as a full day.
+2. **A per-member weekday profile.** Each member draws a fixed Monday-to-Friday shape once, so their present
+   hours vary by weekday around the 8.8-hour day rather than being flat. This is what gives
+   `logged_weekday_shares` something real to describe and the section 5 split something to get right.
+3. **A logging discipline factor, drawn per member and independent of the estimate ratio.** A member logs that
+   fraction of the hours they actually work. The estimate ratio stays what it is — estimation bias — and
+   discipline becomes a separate, unobserved cause of the gap between work done and hours recorded. Without
+   two independent factors the retarget cannot be distinguished from the thing it replaces.
+4. **Overtime.** A minority of members, and a minority of weeks for everyone, exceed the 8.8-hour day, so
+   logged hours can run past capacity and `overload` can fire. The real system has no cap (ruling 18.6); the
+   seed must stop pretending otherwise.
+
+The seed stays deterministic given `--seed`: every new factor is drawn from the same seeded generator, in a
+fixed order, and the properties already asserted about it still hold.
+
+### 22.3 What it costs
+
+Every test that asserts a seeded number moves. The shared fixtures are the ones to change first — the
+per-JVM synthetic dataset and the facts fixture built on it, which hardcodes a 40-hour capacity rule — and the
+seed package's own suites pin the new behaviour. This is why ruling 18.9 puts the work inside this plan as an
+early task rather than in a plan of its own: on its own it turns the suite red, and here the same tests are
+being rewritten anyway.
+
+Two properties are worth adding while the generator is open: a member's logged hours never exceed their
+present hours **except** through the overtime path, and over a long enough history every member shows a
+non-degenerate weekday shape.
