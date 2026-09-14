@@ -56,6 +56,10 @@ public final class SyntheticMatrix {
                     r[col.get("roll_std_" + win)] = 0.0;
                 }
                 r[col.get("weeks_since_last_arrival")] = 0.0;
+                for (int k = 1; k <= 4; k++) {
+                    int j = i - (k - 1);
+                    r[col.get("arrival_hrs_lag" + k)] = j >= 0 ? f[j] : Double.NaN;
+                }
                 r[col.get("member_id")] = m;
                 r[col.get("team_id")] = m % 3;
                 r[col.get("role")] = 0;
@@ -66,8 +70,6 @@ public final class SyntheticMatrix {
                     r[col.get(Features.target(h))] = i + h < weeks ? f[i + h] : Double.NaN;
                     r[col.get("working_days_h" + h)] = 5;
                 }
-                r[col.get(Features.FRESH)] = f[i];
-                r[col.get(Features.EST)] = f[i];
                 keys.add(new MemberWeek(UUID.fromString(memberIds.get(m)), FIRST_WEEK.plusWeeks(i)));
                 rows.add(r);
             }

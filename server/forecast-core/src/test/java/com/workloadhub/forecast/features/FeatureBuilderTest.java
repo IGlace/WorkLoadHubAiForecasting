@@ -9,6 +9,7 @@ import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecast.testing.TestData;
@@ -28,17 +29,31 @@ class FeatureBuilderTest {
     static final LocalDate ORIGIN = LocalDate.of(2026, 8, 24);
     static final MemberRow ANA = TestData.member("ana", TestData.TEAM).withJoined(ORIGIN.minusWeeks(6));
 
-    /** Ana receives 8 h in week −5, 4 h (backlog, lag 3 days) in week −4, 12 h in week −2, a Bug in week −1. */
+    /**
+     * Ana receives 8 h in week −5, 4 h (backlog, lag 3 days) in week −4, 12 h in week −2, a Bug in week −1.
+     * She logs a deliberately different number of hours each of those weeks (5, 1, 3, 9) plus 6 h in week
+     * −3, when nothing was assigned to her at all, so a test that reads the logged series cannot pass by
+     * accident if it silently reads the arrival series instead (task 4's retarget).
+     */
     static ForecastData ana() {
         List<TaskRow> tasks = new ArrayList<>();
         LocalDateTime w5 = ORIGIN.minusWeeks(5).atTime(9, 0);
-        tasks.add(TestData.task("1", ANA.id(), w5, 8));
+        TaskRow first = TestData.task("1", ANA.id(), w5, 8);
+        tasks.add(first);
         TaskRow lagged = TestData.task("2", ANA.id(), ORIGIN.minusWeeks(4).atTime(9, 0), 4);
         tasks.add(lagged);
-        tasks.add(TestData.task("3", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 12).withPriority("HIGH"));
-        tasks.add(TestData.task("4", ANA.id(), ORIGIN.minusWeeks(1).atTime(9, 0), 2).withType("Bug").withReporter(ANA.id()));
+        TaskRow third = TestData.task("3", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 12).withPriority("HIGH");
+        tasks.add(third);
+        TaskRow fourth = TestData.task("4", ANA.id(), ORIGIN.minusWeeks(1).atTime(9, 0), 2).withType("Bug").withReporter(ANA.id());
+        tasks.add(fourth);
+        List<TimeLogRow> logs = List.of(
+                TestData.log(first.id(), ANA.id(), ORIGIN.minusWeeks(5), 5),
+                TestData.log(lagged.id(), ANA.id(), ORIGIN.minusWeeks(4), 1),
+                TestData.log(first.id(), ANA.id(), ORIGIN.minusWeeks(3), 6),
+                TestData.log(third.id(), ANA.id(), ORIGIN.minusWeeks(2), 3),
+                TestData.log(fourth.id(), ANA.id(), ORIGIN.minusWeeks(1), 9));
         return TestData.data(List.of(ANA), tasks,
-                List.of(TestData.assignee(lagged.id(), ANA.fullName(), lagged.createdDate().plusDays(3))), List.of());
+                List.of(TestData.assignee(lagged.id(), ANA.fullName(), lagged.createdDate().plusDays(3))), logs);
     }
 
     static FeatureMatrix matrix(ForecastData data) {
@@ -59,22 +74,23 @@ class FeatureBuilderTest {
     }
 
     @Test
-    void lagsRollingStatsAndGapFollowTheFreshSeries() {
+    void lagsAndRollingStatsFollowTheLoggedSeriesWhileGapAndArrivalLagsFollowArrivals() {
         FeatureMatrix m = matrix(ana());
         int origin = row(m, ORIGIN);
-        assertEquals(0.0, m.get(origin, "lag1"));
-        assertEquals(2.0, m.get(origin, "lag2"));
-        assertEquals(12.0, m.get(origin, "lag3"));
-        assertEquals(0.0, m.get(origin, "lag4"), "week −3 had nothing");
+        // lag1..lag4 are the target's own history: the logged series, not the estimates.
+        assertEquals(0.0, m.get(origin, "lag1"), "nothing logged yet this week");
+        assertEquals(9.0, m.get(origin, "lag2"));
+        assertEquals(3.0, m.get(origin, "lag3"));
+        assertEquals(6.0, m.get(origin, "lag4"), "week −3 had no assignment but 6 h were logged");
         assertTrue(Double.isNaN(m.get(origin, "lag8")), "before the member's first row");
-        assertEquals(0.0, m.get(origin, "fresh_hours"));
+        assertEquals(0.0, m.get(origin, "arrival_hrs_lag1"), "nothing assigned this week");
         int w4 = row(m, ORIGIN.minusWeeks(4));
-        assertEquals(0.0, m.get(w4, "fresh_hours"), "the 4 h task had a 3-day lag");
-        assertEquals(4.0, m.get(w4, "est_hours"));
-        assertEquals((0 + 8 + 0) / 3.0, m.get(w4, "roll_mean_4"), 1e-9, "three rows so far");
-        assertEquals((0 + 8 + 0 + 0 + 12 + 2 + 0) / 7.0, m.get(origin, "roll_mean_8"), 1e-9);
+        assertEquals(0.0, m.get(w4, "arrival_hrs_lag1"), "the 4 h task had a 3-day lag, so it was not fresh");
+        assertEquals((0 + 5 + 1) / 3.0, m.get(w4, "roll_mean_4"), 1e-9, "three rows so far, of the logged series");
+        assertEquals((0 + 5 + 1 + 6 + 3 + 9 + 0) / 7.0, m.get(origin, "roll_mean_8"), 1e-9);
         assertEquals(0.0, m.get(0, "roll_std_4"), "one value, no deviation");
-        assertEquals(Math.sqrt(32.0), m.get(row(m, ORIGIN.minusWeeks(5)), "roll_std_4"), 1e-9, "sample std of {0, 8}");
+        assertEquals(Math.sqrt(12.5), m.get(row(m, ORIGIN.minusWeeks(5)), "roll_std_4"), 1e-9, "sample std of {0, 5}, the logged hours");
+        // weeks_since_last_arrival is genuinely about arrivals, so it keeps reading the fresh series (unaffected by the logs above).
         assertEquals(1.0, m.get(origin, "weeks_since_last_arrival"));
         assertEquals(52.0, m.get(0, "weeks_since_last_arrival"));
         assertEquals(1.0, m.get(w4, "weeks_since_last_arrival"), "week −5 was the last fresh arrival");
@@ -100,12 +116,12 @@ class FeatureBuilderTest {
     }
 
     @Test
-    void targetsAreTheFutureFreshHoursAndUnknownPastTheOrigin() {
+    void targetsAreTheFutureLoggedHoursAndUnknownPastTheOrigin() {
         FeatureMatrix m = matrix(ana());
         int w3 = row(m, ORIGIN.minusWeeks(3));
-        assertEquals(12.0, m.get(w3, "target_h1"));
-        assertEquals(2.0, m.get(w3, "target_h2"));
-        assertEquals(0.0, m.get(w3, "target_h3"));
+        assertEquals(3.0, m.get(w3, "target_h1"), "the logged hours of week −2, not its estimate of 12");
+        assertEquals(9.0, m.get(w3, "target_h2"), "the logged hours of week −1, not its estimate of 2");
+        assertEquals(0.0, m.get(w3, "target_h3"), "nothing logged at the origin week");
         int w1 = row(m, ORIGIN.minusWeeks(1));
         assertEquals(0.0, m.get(w1, "target_h1"));
         assertTrue(Double.isNaN(m.get(w1, "target_h2")));
@@ -137,7 +153,7 @@ class FeatureBuilderTest {
                 .build(data.members(), origin);
         assertTrue(m.rowCount() > data.members().size() * 20, "rows " + m.rowCount());
         List<String> expected = new ArrayList<>(Features.featureColumns(1));
-        expected.removeAll(List.of("logged_hours_lag1", "logged_hours_lag2", "logged_hours_lag3", "logged_hours_lag4", "open_tasks",
+        expected.removeAll(List.of("arrival_hrs_lag1", "arrival_hrs_lag2", "arrival_hrs_lag3", "arrival_hrs_lag4", "open_tasks",
                 "open_remaining_hrs", "overdue_open", "in_progress_tasks", "team_backlog_unassigned_hrs", "proj_active",
                 "proj_planning", "proj_first_due_weeks", "due_hrs_h1"));
         assertEquals(expected, m.nonEmptyColumns(expected), "Task 6 fills the rest");
@@ -162,9 +178,10 @@ class FeatureBuilderTest {
                 TestData.log(running.id(), ANA.id(), ORIGIN, 2)));
         FeatureMatrix m = matrix(data);
         int atW2 = row(m, w2);
-        assertEquals(7.0, m.get(atW2, "logged_hours_lag1"));
-        assertEquals(5.0, m.get(atW2, "logged_hours_lag2"));
-        assertEquals(0.0, m.get(atW2, "logged_hours_lag3"));
+        // lag1..lag3 are the target's own history now, so they carry what logged_hours_lag1..3 used to.
+        assertEquals(7.0, m.get(atW2, "lag1"));
+        assertEquals(5.0, m.get(atW2, "lag2"));
+        assertEquals(0.0, m.get(atW2, "lag3"));
         assertEquals(2.0, m.get(atW2, "open_tasks"), "running and queued; done finished this week");
         assertEquals(6.0 + 6.0, m.get(atW2, "open_remaining_hrs"), "10 − 4 logged, plus 6 untouched");
         assertEquals(1.0, m.get(atW2, "overdue_open"), "running is due inside the week");
@@ -178,7 +195,7 @@ class FeatureBuilderTest {
     }
 
     @Test
-    void targetHEqualsFreshHoursHWeeksLaterWhereBothExist() {
+    void targetHEqualsLoggedHoursHWeeksLaterWhereBothExist() {
         ForecastData data = SeededData.data();
         LocalDate origin = com.workloadhub.forecast.calendar.Weeks.lastCompleteWeek(SeededData.asOf());
         FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE)
@@ -199,11 +216,12 @@ class FeatureBuilderTest {
                 if (j == null) {
                     continue;
                 }
-                assertEquals(m.get(j, "fresh_hours"), target[i], 1e-9, () -> future + " at h" + h);
+                // lag1 is the row's OWN week (see Features.LAGS), i.e. that future row's own logged hours.
+                assertEquals(m.get(j, "lag1"), target[i], 1e-9, () -> future + " at h" + h);
                 checked++;
             }
         }
-        assertTrue(checked > 0, "the seed gives at least one row with both a target and its future fresh_hours");
+        assertTrue(checked > 0, "the seed gives at least one row with both a target and its future logged hours (lag1)");
     }
 
     @Test

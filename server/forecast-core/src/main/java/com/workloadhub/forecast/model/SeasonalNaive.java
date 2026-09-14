@@ -22,7 +22,9 @@ public final class SeasonalNaive implements ArrivalModel {
     @Override
     public SeasonalNaive fit(FeatureMatrix train, int[] horizons) {
         Map<MemberWeek, Double> h = new HashMap<>();
-        double[] fresh = train.column(Features.FRESH);
+        // Features.FRESH is gone (task 4); lag1 is the row's own week by the off-by-one convention documented on
+        // Features.LAGS, so it is the arrival-series equivalent. This class is deleted in task 5.
+        double[] fresh = train.column("lag1");
         for (int i = 0; i < train.rowCount(); i++) {
             h.put(train.key(i), fresh[i]);
         }

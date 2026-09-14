@@ -67,7 +67,7 @@ public final class FactsBuilder {
         Map<UUID, Integer> clusters = Clustering.assign(patterns);
         Map<UUID, MemberPattern> patternById = patterns.stream().collect(Collectors.toMap(MemberPattern::memberId, x -> x));
         List<LocalDate> historyWeeks = Weeks.between(p.origin().minusWeeks(HISTORY_WEEKS - 1), p.origin());
-        WeeklySeries series = WeeklySeries.build(lc, out.members(), historyWeeks);
+        WeeklySeries series = WeeklySeries.build(lc, data, out.members(), historyWeeks);
         Set<UUID> teamProjects = data.projectIdsOfTeamAndParent(out.teamId());
         Set<UUID> liveProjectIds = new java.util.HashSet<>();
         for (TaskFacts f : lc.all()) {

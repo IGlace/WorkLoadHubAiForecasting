@@ -7,14 +7,18 @@ import java.util.List;
 public final class Features {
 
     public static final int[] HORIZONS = {1, 2, 3};
+    /**
+     * Note the off-by-one, which is deliberate and load-bearing: {@code ownHistory} computes
+     * {@code j = i - (lag - 1)}, so {@code lag1} is the row's OWN week, not the week before it. It is
+     * leakage-safe because every target is a strictly later week. {@code arrival_hrs_lag1..4} follow the same
+     * convention so that one meaning of "lag 1" holds across the whole matrix.
+     */
     public static final int[] LAGS = {1, 2, 3, 4, 8, 13};
     public static final int[] ROLL_WINDOWS = {4, 8, 13};
     public static final int WINDOW_13 = 13;
     /** Weeks of history a run loads before the origin: a year for the floor plus the longest window. */
     public static final int HISTORY_WEEKS = 65;
     public static final List<String> CATEGORICAL = List.of("member_id", "team_id", "role", "job_title");
-    public static final String FRESH = "fresh_hours";
-    public static final String EST = "est_hours";
 
     private static final List<String> SHARED = build();
 
@@ -41,7 +45,7 @@ public final class Features {
         c.add("share_project_13w");
         c.add("reopen_rate_13w");
         for (int k = 1; k <= 4; k++) {
-            c.add("logged_hours_lag" + k);
+            c.add("arrival_hrs_lag" + k);
         }
         c.add("open_tasks");
         c.add("open_remaining_hrs");
@@ -74,7 +78,7 @@ public final class Features {
         return List.copyOf(c);
     }
 
-    /** Every stored column: shared features, per-horizon features and targets, and the two series values. */
+    /** Every stored column: shared features, per-horizon features and targets. */
     public static List<String> allColumns() {
         List<String> c = new ArrayList<>(SHARED);
         for (int h : HORIZONS) {
@@ -83,8 +87,6 @@ public final class Features {
         for (int h : HORIZONS) {
             c.add(target(h));
         }
-        c.add(FRESH);
-        c.add(EST);
         return List.copyOf(c);
     }
 

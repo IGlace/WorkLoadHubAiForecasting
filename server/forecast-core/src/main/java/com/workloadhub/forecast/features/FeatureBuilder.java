@@ -44,7 +44,7 @@ public final class FeatureBuilder {
         List<MemberRow> members = membersIn.stream().sorted(Comparator.comparing(MemberRow::id, Ids.UUID_ORDER)).toList();
         LocalDate firstWeek = origin.minusWeeks(Features.HISTORY_WEEKS - 1);
         List<LocalDate> weeks = Weeks.between(firstWeek, origin);
-        WeeklySeries series = WeeklySeries.build(lc, members, weeks);
+        WeeklySeries series = WeeklySeries.build(lc, data, members, weeks);
         Map<String, List<String>> books = codebooks(members);
         List<String> columns = Features.allColumns();
         Map<String, Integer> col = new HashMap<>();
@@ -60,7 +60,7 @@ public final class FeatureBuilder {
             List<TaskFacts> tasks = lc.assignedTo(m.id());
             MemberContext mc = new MemberContext(m, tasks, data);       // Task 6 uses the log index
             double[] fresh = series.fresh(m.id());
-            double[] est = series.est(m.id());
+            double[] logged = series.logged(m.id());
             int start = startIndex(m, tasks, weeks);
             for (int i = start; i <= originIndex; i++) {
                 LocalDate w = weeks.get(i);
@@ -69,9 +69,10 @@ public final class FeatureBuilder {
                 }
                 double[] r = new double[columns.size()];
                 Arrays.fill(r, Double.NaN);
-                ownHistory(r, col, fresh, start, i);
+                ownHistory(r, col, logged, start, i);
+                weeksSinceLastArrival(r, col, fresh, start, i);
                 windowStats(r, col, mc, w);
-                throughput(r, col, mc, w);                               // Task 6
+                throughput(r, col, mc, w, fresh, start, i);              // Task 6
                 teams.fill(r, col, m.primaryTeamId(), w);                // Task 6
                 for (int h : Features.HORIZONS) {
                     LocalDate target = w.plusWeeks(h);
@@ -81,7 +82,7 @@ public final class FeatureBuilder {
                     r[col.get("absence_hrs_h" + h)] = avail[1];
                     r[col.get("available_hrs_h" + h)] = avail[2];
                     r[col.get("due_hrs_h" + h)] = mc.dueHours(w, target);   // Task 6
-                    r[col.get(Features.target(h))] = i + h <= originIndex ? fresh[i + h] : Double.NaN;
+                    r[col.get(Features.target(h))] = i + h <= originIndex ? logged[i + h] : Double.NaN;
                 }
                 r[col.get("member_id")] = books.get("member_id").indexOf(m.id().toString());
                 r[col.get("team_id")] = books.get("team_id").indexOf(m.primaryTeamId().toString());
@@ -89,8 +90,6 @@ public final class FeatureBuilder {
                 r[col.get("job_title")] = books.get("job_title").indexOf(title(m));
                 r[col.get("tenure_weeks")] = Weeks.weeksBetween(m.joined(), w);
                 r[col.get("week_of_year")] = Weeks.isoWeek(w);
-                r[col.get(Features.FRESH)] = fresh[i];
-                r[col.get(Features.EST)] = est[i];
                 keys.add(new MemberWeek(m.id(), w));
                 rows.add(r);
             }
@@ -124,29 +123,34 @@ public final class FeatureBuilder {
         return start.isBefore(weeks.get(0)) ? 0 : weeks.size();
     }
 
-    private static void ownHistory(double[] r, Map<String, Integer> col, double[] f, int start, int i) {
+    /** The target's own history: lags and rolling windows of the logged series. */
+    private static void ownHistory(double[] r, Map<String, Integer> col, double[] series, int start, int i) {
         for (int lag : Features.LAGS) {
             int j = i - (lag - 1);
-            r[col.get("lag" + lag)] = j >= start ? f[j] : Double.NaN;
+            r[col.get("lag" + lag)] = j >= start ? series[j] : Double.NaN;
         }
         for (int w : Features.ROLL_WINDOWS) {
             int from = Math.max(start, i - w + 1);
             int n = i - from + 1;
             double sum = 0;
             for (int j = from; j <= i; j++) {
-                sum += f[j];
+                sum += series[j];
             }
             double mean = sum / n;
             double sq = 0;
             for (int j = from; j <= i; j++) {
-                sq += (f[j] - mean) * (f[j] - mean);
+                sq += (series[j] - mean) * (series[j] - mean);
             }
             r[col.get("roll_mean_" + w)] = mean;
             r[col.get("roll_std_" + w)] = n >= 2 ? Math.sqrt(sq / (n - 1)) : 0.0;
         }
+    }
+
+    /** Weeks since the member's last fresh arrival: about arrivals, so it reads the arrival series, not the target's. */
+    private static void weeksSinceLastArrival(double[] r, Map<String, Integer> col, double[] fresh, int start, int i) {
         double since = NEVER_WEEKS;
         for (int j = i; j >= start; j--) {
-            if (f[j] > 0) {
+            if (fresh[j] > 0) {
                 since = i - j;
                 break;
             }
@@ -283,9 +287,10 @@ public final class FeatureBuilder {
         }
     }
 
-    private void throughput(double[] r, Map<String, Integer> col, MemberContext mc, LocalDate w) {
+    private void throughput(double[] r, Map<String, Integer> col, MemberContext mc, LocalDate w, double[] f, int start, int i) {
         for (int k = 1; k <= 4; k++) {
-            r[col.get("logged_hours_lag" + k)] = mc.loggedInWeek(w.minusWeeks(k - 1));
+            int j = i - (k - 1);
+            r[col.get("arrival_hrs_lag" + k)] = j >= start ? f[j] : Double.NaN;
         }
         LocalDate end = w.plusDays(6);
         int open = 0;

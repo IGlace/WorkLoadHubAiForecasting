@@ -16,6 +16,13 @@ public final class Truth {
     private Truth() {
     }
 
+    /**
+     * Every member, every week. {@code features.WeeklySeries.logged} computes the same sum for one member
+     * list and week range (the forecast's target); the two cannot live in one method because
+     * {@code WeeklySeries} is scoped to a member list and this one is not, so they stay as two definitions
+     * of the same arithmetic — bucketed by {@link Weeks#mondayOf}, rounded to six decimals — held together by
+     * {@code features.WeeklySeriesTest.theSeriesAgreesWithTruth}.
+     */
     public static SortedMap<MemberWeek, Double> realisedHours(ForecastData data) {
         SortedMap<MemberWeek, Double> out = new TreeMap<>();
         for (TimeLogRow l : data.timeLogs()) {

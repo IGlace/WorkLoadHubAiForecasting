@@ -25,7 +25,7 @@ class SeasonalNaiveTest {
         for (int i = 0; i < test.rowCount(); i++) {
             LocalDate lastYear = origin.plusWeeks(1).minusWeeks(52);
             int j = m.keys().indexOf(new com.workloadhub.forecast.features.MemberWeek(test.key(i).member(), lastYear));
-            assertEquals(m.get(j, Features.FRESH), p1[i], 1e-9, "same week last year");
+            assertEquals(m.get(j, "lag1"), p1[i], 1e-9, "same week last year");
         }
         FeatureMatrix shortTrain = m.filter(k -> k.week().isAfter(origin.minusWeeks(20)) && !k.week().isAfter(origin.minusWeeks(3)));
         SeasonalNaive recent = new SeasonalNaive();

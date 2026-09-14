@@ -1,15 +1,21 @@
 package com.workloadhub.forecast.features;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.data.rows.TimeLogRow;
+import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.testing.TestData;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.SortedMap;
 import org.junit.jupiter.api.Test;
 
 class WeeklySeriesTest {
@@ -27,7 +33,7 @@ class WeeklySeriesTest {
         TaskRow bens = TestData.task("4", BEN.id(), created, 2);
         ForecastData data = TestData.data(List.of(ANA, BEN), List.of(fresh, lagged, nextWeek, bens),
                 List.of(TestData.assignee(lagged.id(), ANA.fullName(), created.plusDays(3))), List.of());
-        WeeklySeries s = WeeklySeries.build(Lifecycle.derive(data), List.of(ANA, BEN), List.of(W1, W1.plusWeeks(1), W1.plusWeeks(2)));
+        WeeklySeries s = WeeklySeries.build(Lifecycle.derive(data), data, List.of(ANA, BEN), List.of(W1, W1.plusWeeks(1), W1.plusWeeks(2)));
         assertEquals(new WeeklySeries.Cell(13.0, 8.0, 2, 1), s.cell(ANA.id(), W1));
         assertEquals(new WeeklySeries.Cell(3.0, 3.0, 1, 1), s.cell(ANA.id(), W1.plusWeeks(1)));
         assertEquals(WeeklySeries.Cell.ZERO, s.cell(ANA.id(), W1.plusWeeks(2)));
@@ -42,9 +48,53 @@ class WeeklySeriesTest {
         TaskRow early = TestData.task("1", ANA.id(), created, 8);
         TaskRow unassigned = TestData.task("2", null, created, 8);
         ForecastData data = TestData.data(List.of(ANA, BEN), List.of(early, unassigned), List.of(), List.of());
-        WeeklySeries s = WeeklySeries.build(Lifecycle.derive(data), List.of(BEN), List.of(W1));
+        WeeklySeries s = WeeklySeries.build(Lifecycle.derive(data), data, List.of(BEN), List.of(W1));
         assertEquals(WeeklySeries.Cell.ZERO, s.cell(ANA.id(), W1));
         assertEquals(WeeklySeries.Cell.ZERO, s.cell(BEN.id(), W1));
         assertEquals(1, s.members().size());
+    }
+
+    @Test
+    void loggedHoursArePerMemberAndWeekAndZeroWhenNothingWasLogged() {
+        LocalDateTime created = W1.atTime(9, 0);
+        TaskRow t1 = TestData.task("1", ANA.id(), created, 8);
+        List<LocalDate> weeks = List.of(W1, W1.plusWeeks(1), W1.plusWeeks(2));
+        List<MemberRow> members = List.of(ANA, BEN);
+        ForecastData data = TestData.data(members, List.of(t1), List.of(), List.of(
+                TestData.log(t1.id(), ANA.id(), W1.plusDays(2), 3.0),
+                TestData.log(t1.id(), ANA.id(), W1.plusWeeks(1).plusDays(1), 2.5)));
+        WeeklySeries s = WeeklySeries.build(Lifecycle.derive(data), data, members, weeks);
+        double[] logged = s.logged(ANA.id());
+        assertEquals(weeks.size(), logged.length);
+        for (double h : logged) {
+            assertFalse(Double.isNaN(h), "a week with no logs is 0.0, never NaN");
+            assertTrue(h >= 0.0);
+        }
+        double fromSeries = 0;
+        for (double h : logged) {
+            fromSeries += h;
+        }
+        double fromTimeLogs = data.timeLogs().stream()
+                .filter(l -> l.userId().equals(ANA.id()))
+                .filter(l -> weeks.contains(Weeks.mondayOf(l.day())))
+                .mapToDouble(TimeLogRow::hours).sum();
+        assertEquals(fromTimeLogs, fromSeries, 1e-6, "the series is the time logs, bucketed by Monday");
+    }
+
+    @Test
+    void theSeriesAgreesWithTruth() {
+        LocalDateTime created = W1.atTime(9, 0);
+        TaskRow t1 = TestData.task("1", ANA.id(), created, 8);
+        List<LocalDate> weeks = List.of(W1, W1.plusWeeks(1), W1.plusWeeks(2));
+        List<MemberRow> members = List.of(ANA, BEN);
+        ForecastData data = TestData.data(members, List.of(t1), List.of(), List.of(
+                TestData.log(t1.id(), ANA.id(), W1.plusDays(2), 3.0),
+                TestData.log(t1.id(), ANA.id(), W1.plusWeeks(1).plusDays(1), 2.5)));
+        WeeklySeries s = WeeklySeries.build(Lifecycle.derive(data), data, members, weeks);
+        SortedMap<MemberWeek, Double> truth = Truth.realisedHours(data);
+        for (int i = 0; i < weeks.size(); i++) {
+            double expected = truth.getOrDefault(new MemberWeek(ANA.id(), weeks.get(i)), 0.0);
+            assertEquals(expected, s.logged(ANA.id())[i], 1e-6);
+        }
     }
 }
