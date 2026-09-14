@@ -122,11 +122,30 @@ class SeedGeneratorTest {
         for (var a : env.rows("absences")) {
             absentDays.add(a.get("user_id") + "|" + a.get("date"));
         }
+        // A present day can now run long (WorkStyle.hoursOn = presence x weekdayWeight x overtimeFactor).
+        // weekdayWeight is only floor-clamped (>= 0.4), not ceiling-clamped, and the five weekdays only
+        // balance to a mean of 1 in total (their sum is exactly 5, WorkStyleTest pins that), not
+        // individually: a week can lean almost entirely onto one day, so no tight per-day bound holds.
+        // The per-day check below is therefore a loose sanity ceiling (a day cannot absorb more than a
+        // whole week's worth of weight), and the tight, provably-correct bound is asserted per member-week
+        // instead, where the weekday weights are guaranteed to sum to 5.
+        Map<String, Map<String, Double>> perMemberWeek = new HashMap<>();
         for (var e : perDay.entrySet()) {
             for (var d : e.getValue().entrySet()) {
-                // presence caps logged hours at AbsencePlanner.HOURS_PER_DAY (44 h / 5 days), not a bare 8 h day
-                assertTrue(d.getValue() <= AbsencePlanner.HOURS_PER_DAY + 1e-9, "more than a day's hours on " + d.getKey());
+                assertTrue(d.getValue() <= AbsencePlanner.HOURS_PER_DAY * 5 * WorkStyle.MAX_OVERTIME_FACTOR + 1e-9,
+                        "a single day absorbed more than a whole week's worth of hours, even with overtime, on " + d.getKey());
                 assertFalse(absentDays.contains(e.getKey() + "|" + d.getKey()), "log on an absence day");
+                LocalDate day = LocalDate.parse(d.getKey());
+                perMemberWeek.computeIfAbsent(e.getKey(), k -> new HashMap<>())
+                        .merge(SeedConfig.mondayOf(day).toString(), d.getValue(), Double::sum);
+            }
+        }
+        for (var e : perMemberWeek.entrySet()) {
+            for (var wk : e.getValue().entrySet()) {
+                // weekdayWeights sum to exactly 5, so a member's week can never exceed a full 44 h week
+                // times the largest overtime factor, however the days within it were weighted.
+                assertTrue(wk.getValue() <= CapacityWriter.BASE_HOURS * WorkStyle.MAX_OVERTIME_FACTOR + 1e-9,
+                        "more than a week's worth of hours, even with overtime, for " + e.getKey() + "@" + wk.getKey());
             }
         }
         Map<String, Double> estimatesDone = new HashMap<>();

@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.seed;
 
+import com.workloadhub.forecast.Numbers;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayDeque;
@@ -241,6 +242,7 @@ public final class WorkQueue {
         // the member's estimation bias: lognormal(1.0, 0.25), clamped so one member's draw at the
         // distribution's tail cannot push their whole logged/estimated ratio outside a realistic band
         double ratio = Math.max(0.6, Math.min(1.6, rnd.lognormal(1.0, 0.25)));
+        WorkStyle style = WorkStyle.draw(rnd);
         Deque<Work> queue = new ArrayDeque<>();
         List<Work> sleeping = new ArrayList<>(); // done, waiting for a possible reopen
         int next = 0;
@@ -249,7 +251,8 @@ public final class WorkQueue {
                 queue.addLast(assign(p, leader, arrivals.get(next), ratio));
                 next++;
             }
-            double hours = plan.hoursPresent(p, day);
+            double present0 = plan.hoursPresent(p, day);
+            double hours = present0 > 0 ? style.hoursOn(day.getDayOfWeek(), present0, rnd) : 0.0;
             boolean present = hours > 0;
             // reopen scheduled tasks
             for (Work w : new ArrayList<>(sleeping)) {
@@ -286,7 +289,7 @@ public final class WorkQueue {
                         start(p, w, day.atTime(9, 15));
                     }
                 }
-                logDay(p, queue, day, hours);
+                logDay(p, queue, day, hours, style);
             }
             // move finished tasks out of the queue
             for (Work w : new ArrayList<>(queue)) {
@@ -406,7 +409,7 @@ public final class WorkQueue {
         return n;
     }
 
-    private void logDay(Person p, Deque<Work> queue, LocalDate day, double hours) {
+    private void logDay(Person p, Deque<Work> queue, LocalDate day, double hours, WorkStyle style) {
         // a task starts 0 to 3 working days after assignment: any not-yet-started, eligible task that
         // has waited 3 present days or more is overdue and must be worked today, ahead of the usual
         // top-three FIFO order and beyond MAX_ACTIVE if there are more than three of them at once.
@@ -443,7 +446,7 @@ public final class WorkQueue {
             if (!w.started) {
                 start(p, w, day.atTime(9, 0));
             }
-            timeLogRows.add(Rows.timeLog(rnd.uuid(), w.id, p.id(), give, day, "Work on " + w.row.get("key")));
+            timeLogRows.add(Rows.timeLog(rnd.uuid(), w.id, p.id(), Numbers.round2(style.logged(give)), day, "Work on " + w.row.get("key")));
             w.logged += give;
             left -= give;
             w.row.put("remaining_estimate_hrs", Math.max(0.0, w.estimate - w.logged));
