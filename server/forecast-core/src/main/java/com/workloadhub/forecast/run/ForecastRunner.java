@@ -45,14 +45,21 @@ public final class ForecastRunner {
     }
 
     private final CapacityRule capacityRule;
+    private final int windows;
 
-    public ForecastRunner(CapacityRule capacityRule) {
+    public ForecastRunner(CapacityRule capacityRule, int windows) {
         this.capacityRule = capacityRule;
+        this.windows = windows;
     }
 
     /** The rule this runner computes capacity with, so an evaluation measures the runner as configured. */
     public CapacityRule capacityRule() {
         return capacityRule;
+    }
+
+    /** The window count (whf.forecast.windows) this runner computes every run at. */
+    public int windows() {
+        return windows;
     }
 
     public static Band band(double demand, double q10, double q90, double capacity) {
@@ -68,12 +75,12 @@ public final class ForecastRunner {
         Lifecycle lc = Lifecycle.derive(data);
         WorkingCalendar cal = WorkingCalendar.fromHolidays(data.holidays());
         LocalDate origin = Weeks.lastCompleteWeek(asOf);
-        List<ForecastWindow> windows = Horizon.windows(asOf);
-        int[] horizons = Horizon.horizons(origin, windows);
-        FeatureMatrix features = new FeatureBuilder(data, lc, cal, capacityRule).build(data.members(), origin);
+        List<ForecastWindow> windowList = Horizon.windows(asOf, windows);
+        int[] horizons = Horizon.horizons(origin, windowList);
+        FeatureMatrix features = new FeatureBuilder(data, lc, cal, capacityRule, windows).build(data.members(), origin);
         LocalDate firstWeek = features.rowCount() == 0 ? origin : features.keys().stream().map(MemberWeek::week).min(LocalDate::compareTo).orElse(origin);
         int historyWeeks = features.rowCount() == 0 ? 0 : (int) Weeks.weeksBetween(firstWeek, origin) + 1;
-        List<LocalDate> origins = features.rowCount() == 0 ? List.of() : Backtest.origins(origin, firstWeek);
+        List<LocalDate> origins = features.rowCount() == 0 ? List.of() : Backtest.origins(origin, firstWeek, Horizon.maxHorizon(origin, windows));
         seconds.put("features", elapsed(t0));
 
         long t1 = System.nanoTime();
@@ -104,7 +111,7 @@ public final class ForecastRunner {
             }
         }
         seconds.put("forecast", elapsed(t2));
-        return new Prepared(data, lc, cal, asOf, origin, windows, horizons, features, origins, backtest, mae, meanActual,
+        return new Prepared(data, lc, cal, asOf, origin, windowList, horizons, features, origins, backtest, mae, meanActual,
                 offsets, predicted, historyWeeks, seconds);
     }
 

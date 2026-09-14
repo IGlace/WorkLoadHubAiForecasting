@@ -6,6 +6,7 @@ import com.workloadhub.forecast.ai.Prompts;
 import com.workloadhub.forecast.ai.SdkCopilotGateway;
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
+import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.service.DefaultForecastService;
@@ -79,7 +80,12 @@ public class ForecastAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     ForecastRunner forecastRunner(CapacityRule capacityRule, ForecastProperties properties) {
-        return new ForecastRunner(capacityRule);
+        int windows = properties.getForecast().getWindows();
+        if (windows < Horizon.MIN_WINDOWS || windows > Horizon.MAX_WINDOWS) {
+            throw new IllegalStateException("whf.forecast.windows must be between " + Horizon.MIN_WINDOWS
+                    + " and " + Horizon.MAX_WINDOWS + ", but was " + windows);
+        }
+        return new ForecastRunner(capacityRule, windows);
     }
 
     @Bean

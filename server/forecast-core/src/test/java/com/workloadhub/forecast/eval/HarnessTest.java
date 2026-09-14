@@ -28,7 +28,7 @@ class HarnessTest {
         data = SeededData.data();
         CapacityRule rule = new CapacityRule(40);
         List<UUID> teams = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).limit(2).toList();
-        result = new Harness(new ForecastRunner(rule), rule)
+        result = new Harness(new ForecastRunner(rule, 2), rule)
                 .evaluate(data, new EvalConfig(SeededData.asOf(), 2, List.of(), teams));
     }
 
@@ -79,7 +79,7 @@ class HarnessTest {
     @Test
     void aNullAsOfBecomesTheLatestTaskCreationDate() {
         CapacityRule rule = new CapacityRule(40);
-        EvalResult defaulted = new Harness(new ForecastRunner(rule), rule)
+        EvalResult defaulted = new Harness(new ForecastRunner(rule, 2), rule)
                 .evaluate(data, new EvalConfig(null, 1, List.of(XgboostHours.NAME), List.of()));
         assertEquals(lastCreated(), defaulted.resolved().asOf().toString());
         assertEquals(1, defaulted.resolved().origins());
@@ -92,7 +92,7 @@ class HarnessTest {
 
     @Test
     void unknownModelIsRejected() {
-        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> new Harness(new ForecastRunner(new CapacityRule(40)), new CapacityRule(40))
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> new Harness(new ForecastRunner(new CapacityRule(40), 2), new CapacityRule(40))
                 .evaluate(data, new EvalConfig(SeededData.asOf(), 1, List.of("gbm"), List.of()))).code());
     }
 }

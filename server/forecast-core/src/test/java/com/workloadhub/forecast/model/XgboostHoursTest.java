@@ -48,8 +48,8 @@ class XgboostHoursTest {
     @Test
     void beatsTheMeanBaselineOnAPlantedSeasonalSignalAndNeverPredictsBelowZero() {
         try (XgboostHours xgb = new XgboostHours()) {
-            xgb.fit(TRAIN, Features.HORIZONS);
-            for (int h : Features.HORIZONS) {
+            xgb.fit(TRAIN, Features.horizons(SyntheticMatrix.WINDOWS));
+            for (int h : Features.horizons(SyntheticMatrix.WINDOWS)) {
                 double[] y = TEST.target(h);
                 double[] p = xgb.predict(TEST, h);
                 assertEquals(TEST.rowCount(), p.length);

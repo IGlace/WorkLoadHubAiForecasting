@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 /**
  * Two-level evaluation: arrival accuracy of the single booster, and demand accuracy of the whole pipeline.
@@ -38,8 +39,6 @@ import java.util.UUID;
  * window count); until then this is the minimal shape that compiles and measures the one model there is.
  */
 public final class Harness {
-
-    public static final int[] HORIZONS = {1, 2};
 
     private final ForecastRunner runner;
     private final CapacityRule rule;
@@ -61,15 +60,23 @@ public final class Harness {
         LocalDate origin = Weeks.lastCompleteWeek(config.asOf());
         Lifecycle lc = Lifecycle.derive(data);
         WorkingCalendar cal = WorkingCalendar.fromHolidays(data.holidays());
-        FeatureMatrix features = new FeatureBuilder(data, lc, cal, rule).build(data.members(), origin);
+        int windows = runner.windows();
+        // The horizons this evaluation scores: one per window (1..windows), the shape HORIZONS = {1, 2} always
+        // had at the old fixed window count of two. This is narrower than Features.horizons(windows), which pads
+        // to windows + 1 for the feature matrix a live run needs; the evaluation harness has no such run-day
+        // edge case to cover, and padding it here starves leave-one-out coverage at the extra horizon with few
+        // origins (task 11 revisits this harness's shape; task 8 only stops it assuming windows is always two).
+        int[] horizons = IntStream.rangeClosed(1, windows).toArray();
+        int maxHorizon = windows;
+        FeatureMatrix features = new FeatureBuilder(data, lc, cal, rule, windows).build(data.members(), origin);
         LocalDate firstWeek = features.keys().stream().map(MemberWeek::week).min(LocalDate::compareTo).orElse(origin);
-        List<LocalDate> origins = features.rowCount() == 0 ? List.of() : Backtest.origins(origin, firstWeek, config.origins());
+        List<LocalDate> origins = features.rowCount() == 0 ? List.of() : Backtest.origins(origin, firstWeek, config.origins(), maxHorizon);
         Map<String, String> skipped = new LinkedHashMap<>();
         List<ScoreRow> scores;
         Backtest.Result bt;
         try {
-            bt = Backtest.run(features, origins, HORIZONS);
-            scores = arrivalLevel(bt);
+            bt = Backtest.run(features, origins, horizons);
+            scores = arrivalLevel(bt, horizons);
         } catch (ModelUnavailable e) {
             skipped.put(XgboostHours.NAME, e.getMessage());
             scores = List.of();
@@ -96,7 +103,7 @@ public final class Harness {
 
     /** {@code mase} and {@code beats_naive} are gone with the tournament's naive floor (task 5); {@code mae}, the interval metrics and
      * {@code seconds} are what remains scored. */
-    static List<ScoreRow> arrivalLevel(Backtest.Result bt) {
+    static List<ScoreRow> arrivalLevel(Backtest.Result bt, int[] horizons) {
         List<ScoreRow> rows = new ArrayList<>();
         for (Backtest.Score s : bt.scores()) {
             rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "mae", s.mae()));
@@ -120,7 +127,7 @@ public final class Harness {
             }
             rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "coverage80", coverage));
             rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "wql", wql));
-            rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "seconds", s.horizon() == HORIZONS[0] ? bt.seconds() / Math.max(1, bt.scores().size() / HORIZONS.length) : Double.NaN));
+            rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "seconds", s.horizon() == horizons[0] ? bt.seconds() / Math.max(1, bt.scores().size() / horizons.length) : Double.NaN));
         }
         return rows;
     }

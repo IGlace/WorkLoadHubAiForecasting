@@ -18,19 +18,26 @@ class BacktestTest {
     static final FeatureMatrix M = SyntheticMatrix.plantedSignal();
     static final LocalDate FIRST_WEEK = M.key(0).week();
     static final LocalDate LAST = M.key(M.rowCount() - 1).week();
-    static final List<LocalDate> ALL_ORIGINS = Backtest.origins(LAST, FIRST_WEEK);
+    static final int MAX_HORIZON = 3;
+    static final List<LocalDate> ALL_ORIGINS = Backtest.origins(LAST, FIRST_WEEK, MAX_HORIZON);
     static final LocalDate ORIGIN_A = ALL_ORIGINS.get(2);
     static final LocalDate ORIGIN_B = ALL_ORIGINS.get(3);
 
     @Test
+    void minHistoryWeeksIsTenPlusTheMaximumHorizon() {
+        assertEquals(13, Backtest.minHistoryWeeks(3), "two windows, the old fixed value");
+        assertEquals(17, Backtest.minHistoryWeeks(7), "six windows");
+    }
+
+    @Test
     void originsStepBackTwoWeeksAndNeedThirteenWeeksOfHistory() {
-        List<LocalDate> all = Backtest.origins(LAST, LAST.minusWeeks(69));
+        List<LocalDate> all = Backtest.origins(LAST, LAST.minusWeeks(69), MAX_HORIZON);
         assertEquals(6, all.size());
         assertEquals(LAST.minusWeeks(12), all.get(0));
         assertEquals(LAST.minusWeeks(2), all.get(5));
-        List<LocalDate> few = Backtest.origins(LAST, LAST.minusWeeks(18));
+        List<LocalDate> few = Backtest.origins(LAST, LAST.minusWeeks(18), MAX_HORIZON);
         assertEquals(List.of(LAST.minusWeeks(4), LAST.minusWeeks(2)), few, "origins 6 and 4 weeks back have under 13 weeks");
-        assertTrue(Backtest.origins(LAST, LAST.minusWeeks(10)).isEmpty());
+        assertTrue(Backtest.origins(LAST, LAST.minusWeeks(10), MAX_HORIZON).isEmpty());
     }
 
     @Test

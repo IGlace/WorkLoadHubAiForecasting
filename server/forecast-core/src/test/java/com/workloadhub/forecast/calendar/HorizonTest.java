@@ -8,16 +8,56 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
+import net.jqwik.api.Provide;
+import net.jqwik.api.constraints.IntRange;
+import net.jqwik.time.api.Dates;
 import net.jqwik.time.api.constraints.DateRange;
 import org.junit.jupiter.api.Test;
 
 class HorizonTest {
 
+    /** A year of dates so every weekday of the week is exercised, Friday, Saturday and Sunday runs included. */
+    @Provide
+    Arbitrary<LocalDate> runDays() {
+        return Dates.dates().between(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+    }
+
+    @Property(tries = 400)
+    void anyCountGivesThatManyContiguousWindowsOfFiveWeekdays(
+            @ForAll @IntRange(min = 1, max = 6) int count,
+            @ForAll("runDays") LocalDate asOf) {
+        List<ForecastWindow> ws = Horizon.windows(asOf, count);
+        assertEquals(count, ws.size());
+        LocalDate previous = null;
+        for (ForecastWindow w : ws) {
+            assertEquals(5, w.weekdays().size());
+            for (LocalDate d : w.weekdays()) {
+                assertTrue(Horizon.isWeekday(d), d + " is a weekend");
+            }
+            if (previous != null) {
+                assertTrue(w.start().isAfter(previous), "windows are contiguous and ordered");
+            }
+            previous = w.end();
+        }
+        assertEquals(Horizon.firstDay(asOf), ws.get(0).start(), "the horizon starts the first weekday after the run");
+    }
+
+    @Property(tries = 400)
+    void theMaximumHorizonIsAlwaysOneMoreThanTheWindowCount(
+            @ForAll @IntRange(min = 1, max = 6) int count,
+            @ForAll("runDays") LocalDate asOf) {
+        LocalDate origin = Weeks.lastCompleteWeek(asOf);
+        int[] hs = Horizon.horizons(origin, Horizon.windows(asOf, count));
+        assertEquals(count + 1, hs[hs.length - 1]);
+        assertEquals(count + 1, Horizon.maxHorizon(origin, count));
+    }
+
     @Property
     boolean tenDistinctWeekdaysAfterTheRunDayInTwoContiguousWindows(@ForAll @DateRange(min = "2020-01-01", max = "2030-12-31") LocalDate asOf) {
-        List<ForecastWindow> w = Horizon.windows(asOf);
+        List<ForecastWindow> w = Horizon.windows(asOf, 2);
         List<LocalDate> days = Horizon.days(w);
         boolean shape = w.size() == 2 && days.size() == 10 && new HashSet<>(days).size() == 10
                 && w.get(0).weekdays().size() == 5 && w.get(1).weekdays().size() == 5 && w.get(0).index() == 1 && w.get(1).index() == 2;
@@ -46,7 +86,7 @@ class HorizonTest {
 
     @Test
     void theWorkedExamplesOfTheDesign() {
-        List<ForecastWindow> wed = Horizon.windows(LocalDate.of(2026, 9, 9));
+        List<ForecastWindow> wed = Horizon.windows(LocalDate.of(2026, 9, 9), 2);
         assertEquals(LocalDate.of(2026, 9, 10), wed.get(0).start());
         assertEquals(LocalDate.of(2026, 9, 16), wed.get(0).end());
         assertEquals(LocalDate.of(2026, 9, 17), wed.get(1).start());
@@ -55,13 +95,13 @@ class HorizonTest {
                 LocalDate.of(2026, 9, 16)), wed.get(0).weekdays());
         assertTrue(wed.get(0).contains(LocalDate.of(2026, 9, 14)) && !wed.get(0).contains(LocalDate.of(2026, 9, 12)));
         for (LocalDate asOf : List.of(LocalDate.of(2026, 9, 11), LocalDate.of(2026, 9, 12), LocalDate.of(2026, 9, 13))) {
-            List<ForecastWindow> w = Horizon.windows(asOf);
+            List<ForecastWindow> w = Horizon.windows(asOf, 2);
             assertEquals(LocalDate.of(2026, 9, 14), w.get(0).start(), asOf.toString());
             assertEquals(LocalDate.of(2026, 9, 18), w.get(0).end());
             assertEquals(LocalDate.of(2026, 9, 21), w.get(1).start());
             assertEquals(LocalDate.of(2026, 9, 25), w.get(1).end());
         }
-        List<ForecastWindow> mon = Horizon.windows(LocalDate.of(2026, 9, 7));
+        List<ForecastWindow> mon = Horizon.windows(LocalDate.of(2026, 9, 7), 2);
         assertEquals(LocalDate.of(2026, 9, 8), mon.get(0).start());
         assertEquals(LocalDate.of(2026, 9, 14), mon.get(0).end());
         assertEquals(LocalDate.of(2026, 9, 21), mon.get(1).end());
@@ -69,9 +109,9 @@ class HorizonTest {
 
     @Test
     void horizonsAreTheWeeksTheDaysTouchCountedFromTheOrigin() {
-        assertArrayEquals(new int[] {1, 2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 9)), Horizon.windows(LocalDate.of(2026, 9, 9))));
-        assertArrayEquals(new int[] {1, 2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 7)), Horizon.windows(LocalDate.of(2026, 9, 7))));
-        assertArrayEquals(new int[] {2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 11)), Horizon.windows(LocalDate.of(2026, 9, 11))));
-        assertArrayEquals(new int[] {2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 6)), Horizon.windows(LocalDate.of(2026, 9, 6))));
+        assertArrayEquals(new int[] {1, 2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 9)), Horizon.windows(LocalDate.of(2026, 9, 9), 2)));
+        assertArrayEquals(new int[] {1, 2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 7)), Horizon.windows(LocalDate.of(2026, 9, 7), 2)));
+        assertArrayEquals(new int[] {2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 11)), Horizon.windows(LocalDate.of(2026, 9, 11), 2)));
+        assertArrayEquals(new int[] {2, 3}, Horizon.horizons(Weeks.lastCompleteWeek(LocalDate.of(2026, 9, 6)), Horizon.windows(LocalDate.of(2026, 9, 6), 2)));
     }
 }

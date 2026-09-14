@@ -6,7 +6,6 @@ import java.util.List;
 /** Column names and constants of the feature matrix (spec section 6). */
 public final class Features {
 
-    public static final int[] HORIZONS = {1, 2, 3};
     /**
      * Note the off-by-one, which is deliberate and load-bearing: {@code ownHistory} computes
      * {@code j = i - (lag - 1)}, so {@code lag1} is the row's OWN week, not the week before it. It is
@@ -78,13 +77,22 @@ public final class Features {
         return List.copyOf(c);
     }
 
-    /** Every stored column: shared features, per-horizon features and targets. */
-    public static List<String> allColumns() {
+    /** The horizons a run of this many windows fits: 1 to windows + 1. */
+    public static int[] horizons(int windows) {
+        int[] out = new int[windows + 1];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = i + 1;
+        }
+        return out;
+    }
+
+    /** Every stored column for a matrix built at this window count: shared features, per-horizon features and targets. */
+    public static List<String> allColumns(int windows) {
         List<String> c = new ArrayList<>(SHARED);
-        for (int h : HORIZONS) {
+        for (int h : horizons(windows)) {
             c.addAll(horizonColumns(h));
         }
-        for (int h : HORIZONS) {
+        for (int h : horizons(windows)) {
             c.add(target(h));
         }
         return List.copyOf(c);

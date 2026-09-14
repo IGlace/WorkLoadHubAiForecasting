@@ -37,7 +37,7 @@ class FactsBuilderTest {
     @BeforeAll
     static void run() {
         ForecastData data = SeededData.data();
-        ForecastRunner runner = new ForecastRunner(new CapacityRule(40));
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(40), 2);
         Prepared prepared = runner.prepare(data, SeededData.asOf(), ForecastRunner.ProgressListener.NONE);
         UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
         outcome = runner.forTeam(prepared, team);
@@ -94,7 +94,7 @@ class FactsBuilderTest {
     void aThinHistoryRunIsUnscoredAndSaysSo() {
         LocalDate youngAsOf = SeededData.asOf().minusWeeks(22);
         ForecastData young = Truncation.at(SeededData.data(), youngAsOf);
-        ForecastRunner runner = new ForecastRunner(new CapacityRule(40));
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(40), 2);
         Prepared prepared = runner.prepare(young, youngAsOf, ForecastRunner.ProgressListener.NONE);
         assertTrue(prepared.backtestOrigins().isEmpty(), "under 13 weeks before every origin");
         UUID team = young.teams().stream().filter(t -> !young.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
@@ -205,7 +205,7 @@ class FactsBuilderTest {
         ProjectRow doneProject = new ProjectRow(doneProjectId, "DONE", "Done Project", "ACTIVE", TestData.TEAM);
         ForecastData data = TestData.data(List.of(ana), List.of(openTask, doneTask), List.of(), List.of())
                 .withProjects(List.of(liveProject, doneProject));
-        ForecastRunner runner = new ForecastRunner(new CapacityRule(40));
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(40), 2);
         Prepared prepared = runner.prepare(data, asOf, ForecastRunner.ProgressListener.NONE);
         TeamOutcome outcome = runner.forTeam(prepared, TestData.TEAM);
         Map<String, Object> facts = FactsBuilder.build(outcome, UUID.fromString("00000000-0000-0000-0000-000000000002"),

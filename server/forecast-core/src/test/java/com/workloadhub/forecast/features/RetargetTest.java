@@ -53,7 +53,7 @@ class RetargetTest {
             assertEquals(20.0, fresh[i], 1e-6, "the arrival series still reports the estimates");
         }
 
-        FeatureMatrix m = new FeatureBuilder(data, lc, cal, rule).build(members, ORIGIN);
+        FeatureMatrix m = new FeatureBuilder(data, lc, cal, rule, 2).build(members, ORIGIN);
         int row = m.keys().indexOf(new MemberWeek(MEMBER.id(), ORIGIN.minusWeeks(4)));
         assertTrue(row >= 0);
         assertEquals(10.0, m.get(row, Features.target(1)), 1e-6,

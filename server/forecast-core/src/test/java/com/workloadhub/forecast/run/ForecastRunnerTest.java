@@ -36,7 +36,7 @@ class ForecastRunnerTest {
     @BeforeAll
     static void prepare() {
         data = SeededData.data();
-        runner = new ForecastRunner(new CapacityRule(40));
+        runner = new ForecastRunner(new CapacityRule(40), 2);
         prepared = runner.prepare(data, SeededData.asOf(), ForecastRunner.ProgressListener.NONE);
         team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
     }
@@ -65,7 +65,7 @@ class ForecastRunnerTest {
     void timeFrameFollowsTheRunDay() {
         LocalDate asOf = SeededData.asOf();                                   // Sunday 2026-09-06
         assertEquals(Weeks.lastCompleteWeek(asOf), prepared.origin());
-        assertEquals(Horizon.windows(asOf), prepared.windows());
+        assertEquals(Horizon.windows(asOf, 2), prepared.windows());
         assertEquals(LocalDate.of(2026, 9, 7), prepared.windows().get(0).start());
         assertEquals(LocalDate.of(2026, 9, 18), prepared.windows().get(1).end());
         assertArrayEquals(new int[] {2, 3}, prepared.horizons(), "a weekend run: the week just ended is complete, the windows touch the next two");

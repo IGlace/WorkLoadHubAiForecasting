@@ -6,10 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
 
-/** The rolling horizon: two windows of five weekdays starting the first weekday after the run day (design 2026-09-10, section 3). */
+/** The rolling horizon: a configurable number of windows of five weekdays starting the first weekday after the run day
+ * (design 2026-09-10, section 3; window count design 2026-09-13, section 4). */
 public final class Horizon {
 
-    public static final int WINDOWS = 2;
+    public static final int MIN_WINDOWS = 1;
+    public static final int MAX_WINDOWS = 6;
     public static final int WEEKDAYS_PER_WINDOW = 5;
 
     private Horizon() {
@@ -24,10 +26,10 @@ public final class Horizon {
         return d;
     }
 
-    public static List<ForecastWindow> windows(LocalDate asOf) {
-        List<ForecastWindow> out = new ArrayList<>(WINDOWS);
+    public static List<ForecastWindow> windows(LocalDate asOf, int windows) {
+        List<ForecastWindow> out = new ArrayList<>(windows);
         LocalDate d = firstDay(asOf);
-        for (int i = 1; i <= WINDOWS; i++) {
+        for (int i = 1; i <= windows; i++) {
             List<LocalDate> days = new ArrayList<>(WEEKDAYS_PER_WINDOW);
             while (days.size() < WEEKDAYS_PER_WINDOW) {
                 if (!isWeekend(d)) {
@@ -38,6 +40,17 @@ public final class Horizon {
             out.add(new ForecastWindow(i, days.get(0), days.get(days.size() - 1), days));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The largest horizon a run of this many windows reaches, for every run day.
+     *
+     * <p>{@code origin} is always the previous week's Monday, so the run day's own week is horizon 1, and
+     * {@code 5 * windows} weekdays starting inside horizon 1 or 2 end no later than the last weekday of
+     * horizon {@code windows + 1}.
+     */
+    public static int maxHorizon(LocalDate origin, int windows) {
+        return windows + 1;
     }
 
     /** Every weekday of the horizon, window 1 then window 2. */

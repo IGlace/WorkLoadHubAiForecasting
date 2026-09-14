@@ -32,12 +32,14 @@ public final class FeatureBuilder {
     private final Lifecycle lc;
     private final WorkingCalendar cal;
     private final CapacityRule rule;
+    private final int windows;
 
-    public FeatureBuilder(ForecastData data, Lifecycle lc, WorkingCalendar cal, CapacityRule rule) {
+    public FeatureBuilder(ForecastData data, Lifecycle lc, WorkingCalendar cal, CapacityRule rule, int windows) {
         this.data = data;
         this.lc = lc;
         this.cal = cal;
         this.rule = rule;
+        this.windows = windows;
     }
 
     public FeatureMatrix build(List<MemberRow> membersIn, LocalDate origin) {
@@ -46,7 +48,7 @@ public final class FeatureBuilder {
         List<LocalDate> weeks = Weeks.between(firstWeek, origin);
         WeeklySeries series = WeeklySeries.build(lc, data, members, weeks);
         Map<String, List<String>> books = codebooks(members);
-        List<String> columns = Features.allColumns();
+        List<String> columns = Features.allColumns(windows);
         Map<String, Integer> col = new HashMap<>();
         for (int i = 0; i < columns.size(); i++) {
             col.put(columns.get(i), i);
@@ -74,7 +76,7 @@ public final class FeatureBuilder {
                 windowStats(r, col, mc, w);
                 throughput(r, col, mc, w, fresh, start, i);              // Task 6
                 teams.fill(r, col, m.primaryTeamId(), w);                // Task 6
-                for (int h : Features.HORIZONS) {
+                for (int h : Features.horizons(windows)) {
                     LocalDate target = w.plusWeeks(h);
                     double[] avail = availability.computeIfAbsent(new MemberWeek(m.id(), target), k -> new double[] {
                             cal.workingDaysInWeek(target), rule.absenceHours(m.id(), target, data, cal), rule.capacity(m, target, data, cal)});

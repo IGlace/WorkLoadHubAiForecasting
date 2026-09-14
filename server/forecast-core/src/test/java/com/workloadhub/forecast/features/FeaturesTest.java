@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.features;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,9 +11,18 @@ import org.junit.jupiter.api.Test;
 
 class FeaturesTest {
 
+    static final int WINDOWS = 2;
+
+    @Test
+    void horizonsRunFromOneToWindowsPlusOne() {
+        assertArrayEquals(new int[] {1, 2, 3}, Features.horizons(2));
+        assertArrayEquals(new int[] {1, 2, 3, 4, 5, 6, 7}, Features.horizons(6));
+        assertArrayEquals(new int[] {1, 2}, Features.horizons(1));
+    }
+
     @Test
     void fortySixColumnsPerHorizonInTheSpecOrderWithoutDuplicates() {
-        for (int h : Features.HORIZONS) {
+        for (int h : Features.horizons(WINDOWS)) {
             List<String> cols = Features.featureColumns(h);
             assertEquals(46, cols.size(), cols.toString());
             assertEquals(cols.size(), new HashSet<>(cols).size());
@@ -24,7 +34,7 @@ class FeaturesTest {
                 assertTrue(cols.contains("arrival_hrs_lag" + k));
             }
             assertFalse(cols.contains("logged_hours_lag1"));
-            for (int other : Features.HORIZONS) {
+            for (int other : Features.horizons(WINDOWS)) {
                 if (other != h) {
                     assertFalse(cols.contains("due_hrs_h" + other));
                 }
@@ -34,8 +44,9 @@ class FeaturesTest {
 
     @Test
     void sharedColumnsStayFortyTwoWithArrivalsInPlaceOfLoggedHours() {
-        List<String> shared = Features.featureColumns(Features.HORIZONS[0]).stream()
-                .filter(c -> !c.endsWith("_h" + Features.HORIZONS[0])).toList();
+        int h0 = Features.horizons(WINDOWS)[0];
+        List<String> shared = Features.featureColumns(h0).stream()
+                .filter(c -> !c.endsWith("_h" + h0)).toList();
         assertEquals(42, shared.size(), shared.toString());
         for (int k = 1; k <= 4; k++) {
             assertTrue(shared.contains("arrival_hrs_lag" + k));
@@ -50,9 +61,9 @@ class FeaturesTest {
 
     @Test
     void allColumnsHoldEveryHorizonOnce() {
-        List<String> all = Features.allColumns();
+        List<String> all = Features.allColumns(WINDOWS);
         assertEquals(all.size(), new HashSet<>(all).size());
-        for (int h : Features.HORIZONS) {
+        for (int h : Features.horizons(WINDOWS)) {
             assertTrue(all.containsAll(Features.featureColumns(h)));
             assertTrue(all.contains(Features.target(h)));
         }
@@ -61,5 +72,12 @@ class FeaturesTest {
         assertEquals(List.of("member_id", "team_id", "role", "job_title"), Features.CATEGORICAL);
         assertTrue(Features.isCategorical("role"));
         assertFalse(Features.isCategorical("lag1"));
+    }
+
+    @Test
+    void allColumnsScalesWithTheWindowCount() {
+        int perHorizon = Features.horizonColumns(1).size() + 1; // the per-horizon columns plus one target column
+        assertEquals(Features.allColumns(2).size() + 4 * perHorizon, Features.allColumns(6).size(),
+                "six windows reaches horizon 7, three more than two windows: four extra horizons of columns");
     }
 }

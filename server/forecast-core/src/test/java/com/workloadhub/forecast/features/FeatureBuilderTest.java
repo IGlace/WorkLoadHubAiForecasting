@@ -26,6 +26,7 @@ class FeatureBuilderTest {
 
     static final WorkingCalendar CAL = WorkingCalendar.fromHolidays(List.of());
     static final CapacityRule RULE = new CapacityRule(40);
+    static final int WINDOWS = 2;
     static final LocalDate ORIGIN = LocalDate.of(2026, 8, 24);
     static final MemberRow ANA = TestData.member("ana", TestData.TEAM).withJoined(ORIGIN.minusWeeks(6));
 
@@ -57,7 +58,7 @@ class FeatureBuilderTest {
     }
 
     static FeatureMatrix matrix(ForecastData data) {
-        return new FeatureBuilder(data, Lifecycle.derive(data), CAL, RULE).build(data.members(), ORIGIN);
+        return new FeatureBuilder(data, Lifecycle.derive(data), CAL, RULE, WINDOWS).build(data.members(), ORIGIN);
     }
 
     static int row(FeatureMatrix m, LocalDate week) {
@@ -68,7 +69,7 @@ class FeatureBuilderTest {
     void rowsRunFromTheJoinWeekToTheOriginWithAllColumns() {
         FeatureMatrix m = matrix(ana());
         assertEquals(7, m.rowCount(), "join week −6 to origin inclusive");
-        assertEquals(Features.allColumns(), m.columns());
+        assertEquals(Features.allColumns(WINDOWS), m.columns());
         assertEquals(new MemberWeek(ANA.id(), ORIGIN.minusWeeks(6)), m.key(0));
         assertEquals(new MemberWeek(ANA.id(), ORIGIN), m.key(6));
     }
@@ -149,7 +150,7 @@ class FeatureBuilderTest {
     void seededMatrixHasEveryFeatureColumnPopulated() {
         ForecastData data = SeededData.data();
         LocalDate origin = com.workloadhub.forecast.calendar.Weeks.lastCompleteWeek(SeededData.asOf());
-        FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE)
+        FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE, WINDOWS)
                 .build(data.members(), origin);
         assertTrue(m.rowCount() > data.members().size() * 20, "rows " + m.rowCount());
         List<String> expected = new ArrayList<>(Features.featureColumns(1));
@@ -198,14 +199,14 @@ class FeatureBuilderTest {
     void targetHEqualsLoggedHoursHWeeksLaterWhereBothExist() {
         ForecastData data = SeededData.data();
         LocalDate origin = com.workloadhub.forecast.calendar.Weeks.lastCompleteWeek(SeededData.asOf());
-        FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE)
+        FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE, WINDOWS)
                 .build(data.members(), origin);
         Map<MemberWeek, Integer> rowOf = new HashMap<>();
         for (int i = 0; i < m.rowCount(); i++) {
             rowOf.put(m.key(i), i);
         }
         int checked = 0;
-        for (int h : Features.HORIZONS) {
+        for (int h : Features.horizons(WINDOWS)) {
             double[] target = m.target(h);
             for (int i = 0; i < m.rowCount(); i++) {
                 if (Double.isNaN(target[i])) {

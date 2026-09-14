@@ -72,7 +72,7 @@ class DefaultForecastServiceTest {
     static DefaultForecastService build(DataSource ds, FakeGateway g, RunProgressTracker tracker, JdbcRunStore runs) {
         Dialect dialect = Dialect.of(ds);
         JdbcGitHubTokenStore t = new JdbcGitHubTokenStore(JdbcClient.create(ds), dialect, AesGcmCipher.fromBase64Key(KEY));
-        return new DefaultForecastService(ds, dialect, new ForecastRunner(new CapacityRule(40)), runs, tracker, 1, t,
+        return new DefaultForecastService(ds, dialect, new ForecastRunner(new CapacityRule(40), 2), runs, tracker, 1, t,
                 new JdbcNarrativeStore(ds, dialect), new Narrator(g, Prompts.load(), Duration.ofSeconds(5), ""), g,
                 Clock.fixed(SeededData.asOf().atTime(12, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
     }
@@ -435,7 +435,7 @@ class DefaultForecastServiceTest {
         EvalConfig config = new EvalConfig(SeededData.asOf(), 1, List.of(XgboostHours.NAME), List.of(team));
         EvalResult viaService = service.evaluate(config);
         CapacityRule rule = new CapacityRule(40);
-        EvalResult direct = new Harness(new ForecastRunner(rule), rule).evaluate(SeededData.data(), config);
+        EvalResult direct = new Harness(new ForecastRunner(rule, 2), rule).evaluate(SeededData.data(), config);
         assertEquals(scored(direct), scored(viaService), "the service and the harness measure the same engine");
         assertEquals(direct.demand(), viaService.demand());
         assertEquals(SeededData.asOf(), viaService.resolved().asOf());

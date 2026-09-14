@@ -16,6 +16,8 @@ import java.util.UUID;
 public final class SyntheticMatrix {
 
     public static final LocalDate FIRST_WEEK = LocalDate.of(2025, 6, 2);
+    /** The window count {@link #plantedSignal()} and {@link #arrivals} are built for: horizons 1..3. */
+    public static final int WINDOWS = 2;
 
     private SyntheticMatrix() {
     }
@@ -28,7 +30,7 @@ public final class SyntheticMatrix {
 
     public static FeatureMatrix arrivals(int members, int weeks, long seed) {
         Random rnd = new Random(seed);
-        List<String> columns = Features.allColumns();
+        List<String> columns = Features.allColumns(WINDOWS);
         Map<String, Integer> col = new HashMap<>();
         for (int i = 0; i < columns.size(); i++) {
             col.put(columns.get(i), i);
@@ -72,7 +74,7 @@ public final class SyntheticMatrix {
                 r[col.get("job_title")] = 0;
                 r[col.get("tenure_weeks")] = i;
                 r[col.get("week_of_year")] = FIRST_WEEK.plusWeeks(i).get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR);
-                for (int h : Features.HORIZONS) {
+                for (int h : Features.horizons(WINDOWS)) {
                     r[col.get(Features.target(h))] = i + h < weeks ? f[i + h] : Double.NaN;
                     r[col.get("working_days_h" + h)] = 5;
                 }

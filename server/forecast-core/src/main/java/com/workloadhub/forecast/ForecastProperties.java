@@ -10,7 +10,7 @@ public class ForecastProperties {
     private String workDir = System.getProperty("user.home") + "/.workloadhub-forecast";
     private double defaultWeeklyHours = 44.0;
     private int runThreads = 2;
-    private final PlannedWork plannedWork = new PlannedWork();
+    private final Forecast forecast = new Forecast();
     private final Copilot copilot = new Copilot();
     private final Web web = new Web();
     private final Flyway flyway = new Flyway();
@@ -23,15 +23,15 @@ public class ForecastProperties {
     public void setDefaultWeeklyHours(double v) { this.defaultWeeklyHours = v; }
     public int getRunThreads() { return runThreads; }
     public void setRunThreads(int runThreads) { this.runThreads = runThreads; }
-    public PlannedWork getPlannedWork() { return plannedWork; }
+    public Forecast getForecast() { return forecast; }
     public Copilot getCopilot() { return copilot; }
     public Web getWeb() { return web; }
     public Flyway getFlyway() { return flyway; }
 
-    public static class PlannedWork {
-        private boolean enabled = true;
-        public boolean isEnabled() { return enabled; }
-        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public static class Forecast {
+        private int windows = 2;
+        public int getWindows() { return windows; }
+        public void setWindows(int windows) { this.windows = windows; }
     }
 
     public static class Copilot {

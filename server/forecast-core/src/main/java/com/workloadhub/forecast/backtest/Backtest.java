@@ -19,7 +19,6 @@ public final class Backtest {
 
     public static final int ORIGIN_COUNT = 6;
     public static final int ORIGIN_STEP_WEEKS = 2;
-    public static final int MIN_HISTORY_WEEKS = 13;
     static final double LOW_QUANTILE = 0.1;
     static final double HIGH_QUANTILE = 0.9;
 
@@ -60,15 +59,25 @@ public final class Backtest {
     private Backtest() {
     }
 
-    public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek) {
-        return origins(lastCompleteWeek, firstWeek, ORIGIN_COUNT);
+    /**
+     * The history an origin needs behind it, ruling 18.1 of the 2026-09-13 design: 13 weeks at two windows,
+     * exactly the old fixed value, and 17 at six. Scaling it keeps the usable training span constant, because
+     * {@code run} trains on weeks up to {@code origin - maxHorizon} so a training row's target cannot overlap
+     * the test week.
+     */
+    public static int minHistoryWeeks(int maxHorizon) {
+        return 10 + maxHorizon;
     }
 
-    public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek, int count) {
+    public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek, int maxHorizon) {
+        return origins(lastCompleteWeek, firstWeek, ORIGIN_COUNT, maxHorizon);
+    }
+
+    public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek, int count, int maxHorizon) {
         List<LocalDate> out = new ArrayList<>();
         for (int k = count; k >= 1; k--) {
             LocalDate origin = lastCompleteWeek.minusWeeks((long) k * ORIGIN_STEP_WEEKS);
-            if (ChronoUnit.WEEKS.between(firstWeek, origin) >= MIN_HISTORY_WEEKS) {
+            if (ChronoUnit.WEEKS.between(firstWeek, origin) >= minHistoryWeeks(maxHorizon)) {
                 out.add(origin);
             }
         }

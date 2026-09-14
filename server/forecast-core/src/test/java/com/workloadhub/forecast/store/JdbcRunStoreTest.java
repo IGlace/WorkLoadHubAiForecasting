@@ -47,7 +47,7 @@ class JdbcRunStoreTest {
     /** Ten days of one member for a run made on {@code asOf}, every day carrying {@code demand} so a later run's values are recognisable. */
     static List<MemberDayForecast> days(LocalDate asOf, double demand) {
         List<MemberDayForecast> out = new ArrayList<>();
-        for (ForecastWindow w : Horizon.windows(asOf)) {
+        for (ForecastWindow w : Horizon.windows(asOf, 2)) {
             for (LocalDate d : w.weekdays()) {
                 out.add(new MemberDayForecast(USER, d, w.index(), demand, 8, Math.max(0, demand - 8), true));
             }

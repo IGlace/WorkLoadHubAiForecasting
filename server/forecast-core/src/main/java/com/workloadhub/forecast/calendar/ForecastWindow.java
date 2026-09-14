@@ -3,7 +3,7 @@ package com.workloadhub.forecast.calendar;
 import java.time.LocalDate;
 import java.util.List;
 
-/** Five weekdays of the horizon: its index (1 or 2), its first and last weekday, and its weekdays in order (holidays included, weekends never). */
+/** Five weekdays of the horizon: its index (1 to the run's configured window count), its first and last weekday, and its weekdays in order (holidays included, weekends never). */
 public record ForecastWindow(int index, LocalDate start, LocalDate end, List<LocalDate> weekdays) {
 
     public ForecastWindow {

@@ -17,8 +17,10 @@ import org.junit.jupiter.api.Test;
 /** Every non-target column of a row at week w must be computable from the database as it stood at the end of w. */
 class FeatureLeakageTest {
 
+    static final int WINDOWS = 2;
+
     static FeatureMatrix build(ForecastData data, LocalDate origin) {
-        return new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), new CapacityRule(40))
+        return new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), new CapacityRule(40), WINDOWS)
                 .build(data.members(), origin);
     }
 
@@ -30,7 +32,7 @@ class FeatureLeakageTest {
         FeatureMatrix fromFull = build(full, origin).filter(k -> k.week().equals(past));
         FeatureMatrix fromCut = build(Truncation.at(full, past.plusDays(6)), past).filter(k -> k.week().equals(past));
         assertEquals(fromFull.keys(), fromCut.keys());
-        List<String> columns = Features.allColumns().stream().filter(c -> !c.startsWith("target_h")).toList();
+        List<String> columns = Features.allColumns(WINDOWS).stream().filter(c -> !c.startsWith("target_h")).toList();
         int compared = 0;
         for (int i = 0; i < fromFull.rowCount(); i++) {
             for (String c : columns) {
@@ -48,7 +50,7 @@ class FeatureLeakageTest {
     void everyFeatureColumnIsPopulatedOnTheSeed() {
         ForecastData data = SeededData.data();
         FeatureMatrix m = build(data, Weeks.lastCompleteWeek(SeededData.asOf()));
-        for (int h : Features.HORIZONS) {
+        for (int h : Features.horizons(WINDOWS)) {
             List<String> cols = Features.featureColumns(h);
             assertEquals(cols, m.nonEmptyColumns(cols), "all-NaN columns at horizon " + h);
         }
