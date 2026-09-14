@@ -17,7 +17,6 @@ import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.features.WeeklySeries;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
-import com.workloadhub.forecast.planned.PlannedWork;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
 import java.time.LocalDate;
@@ -134,16 +133,13 @@ public final class FactsBuilder {
         for (ForecastWindow w : out.prepared().windows()) {
             double demand = 0;
             double capacity = 0;
-            double planned = 0;
             for (MemberWindowForecast r : out.memberWindows()) {
                 if (r.windowIndex() == w.index()) {
                     demand += r.demandHrs();
                     capacity += r.capacityHrs();
-                    planned += r.plannedHrs();
                 }
             }
-            totals.add(map("window", w.index(), "start", str(w.start()), "end", str(w.end()), "demand", round1(demand), "capacity", round1(capacity),
-                    "planned", round1(planned)));
+            totals.add(map("window", w.index(), "start", str(w.start()), "end", str(w.end()), "demand", round1(demand), "capacity", round1(capacity)));
         }
         Set<LocalDate> horizonWeeks = new TreeSet<>();
         for (LocalDate d : Horizon.days(out.prepared().windows())) {
@@ -155,25 +151,8 @@ public final class FactsBuilder {
                 teamCapacity.add(map("week", str(r.weekStart()), "total", Numbers.round2(r.totalCapacity()), "allocated", Numbers.round2(r.allocated())));
             }
         }
-        Map<UUID, double[]> byProject = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
-        Map<UUID, Set<UUID>> tasksByProject = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
-        for (PlannedWork.Piece piece : out.planned().pieces()) {
-            UUID pid = piece.projectId();
-            double[] acc = byProject.computeIfAbsent(pid, k -> new double[3]);
-            if (tasksByProject.computeIfAbsent(pid, k -> new java.util.HashSet<>()).add(piece.taskId())) {
-                acc[0] += piece.estimate();
-            }
-            acc[1] += piece.hoursInWindow();
-            acc[2] += piece.hoursAfterWindow();
-        }
-        List<Object> backlog = new ArrayList<>();
-        byProject.forEach((pid, acc) -> backlog.add(map("project_id", str(pid), "project_key", projects.containsKey(pid) ? projects.get(pid).key() : null,
-                "tasks", tasksByProject.get(pid).size(), "estimated_hours", Numbers.round2(acc[0]), "hours_in_window", Numbers.round2(acc[1]),
-                "hours_after_window", Numbers.round2(acc[2]))));
         return map("id", str(out.teamId()), "name", team == null ? null : team.name(), "parent_team_id", team == null ? null : str(team.parentId()),
-                "manager_id", team == null ? null : str(team.managerId()), "totals", totals, "team_capacity", teamCapacity,
-                "planned_backlog", map("candidates", out.planned().candidateCount(), "candidate_hours", Numbers.round2(out.planned().candidateHours()),
-                        "projects", backlog));
+                "manager_id", team == null ? null : str(team.managerId()), "totals", totals, "team_capacity", teamCapacity);
     }
 
     private static Map<String, Object> member(MemberRow m, TeamOutcome out, List<MemberWindowForecast> rows, List<MemberDayForecast> days,
@@ -199,13 +178,13 @@ public final class FactsBuilder {
                 }
             }
             forecast.add(map("window", r.windowIndex(), "start", str(r.windowStart()), "end", str(r.windowEnd()), "demand", r.demandHrs(), "low", r.lowHrs(),
-                    "high", r.highHrs(), "capacity", r.capacityHrs(), "overload", r.overloadHrs(), "open_hours", r.openHrs(), "new_hours", r.newHrs(),
-                    "planned_hours", r.plannedHrs(), "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", Numbers.round2(due)));
+                    "high", r.highHrs(), "capacity", r.capacityHrs(), "overload", r.overloadHrs(),
+                    "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", Numbers.round2(due)));
         }
         List<Object> dayList = new ArrayList<>();
         for (MemberDayForecast d : days) {
             dayList.add(map("day", str(d.day()), "window", d.windowIndex(), "demand", d.demandHrs(), "capacity", d.capacityHrs(), "overload", d.overloadHrs(),
-                    "open_hours", d.openHrs(), "new_hours", d.newHrs(), "planned_hours", d.plannedHrs(), "working_day", d.workingDay()));
+                    "working_day", d.workingDay()));
         }
         Map<String, Object> patternMap = pattern.toMap();
         patternMap.put("cluster", cluster);
@@ -226,14 +205,6 @@ public final class FactsBuilder {
         List<Object> loggedWeeks = new ArrayList<>();
         for (LocalDate w : Weeks.between(p.origin().minusWeeks(LOGGED_WEEKS - 1), p.origin())) {
             loggedWeeks.add(map("week", str(w), "hours", Numbers.round2(logged.getOrDefault(w, 0.0))));
-        }
-        List<Object> planned = new ArrayList<>();
-        for (PlannedWork.Piece piece : out.planned().pieces()) {
-            if (piece.member().equals(m.id())) {
-                planned.add(map("key", piece.key(), "title", piece.title(), "project_key", key(projects, piece.projectId()), "type", piece.family().label(),
-                        "estimated_hours", Numbers.round2(piece.estimate()), "share", Numbers.round2(piece.share()), "expected_date", str(piece.expectedDate()),
-                        "expected_window", piece.expectedWindow() == null ? "after_window" : piece.expectedWindow(), "hours_in_window", Numbers.round2(piece.hoursInWindow())));
-            }
         }
         List<Object> roles = new ArrayList<>();
         for (Map.Entry<UUID, List<TaskFacts>> e : recentByProject.entrySet()) {
@@ -262,7 +233,7 @@ public final class FactsBuilder {
                 "reopened_tasks", mine.stream().filter(f -> f.task().reopened()).map(f -> f.task().key()).sorted().toList(),
                 "logged_hours_4w", loggedWeeks,
                 "unlogged_tasks", mine.stream().filter(TaskFacts::unlogged).map(f -> f.task().key()).sorted().toList(),
-                "likely_work", map("planned", planned, "project_roles", roles, "recent_mix", recentMix));
+                "likely_work", map("project_roles", roles, "recent_mix", recentMix));
     }
 
     private static List<Object> projectFacts(TeamOutcome out, Set<UUID> teamProjects, Map<UUID, ProjectRow> projects) {
@@ -300,12 +271,13 @@ public final class FactsBuilder {
             double[] q = p.bandOffsets().get(h);
             horizons.put(String.valueOf(h), map("low_offset", Numbers.round2(q[0]), "high_offset", Numbers.round2(q[1])));
         }
-        Map<String, Object> mase = new TreeMap<>();
-        p.backtest().meanMaseByModel().forEach((k, v) -> mase.put(k, finite(v)));
-        return map("champion", p.champion(), "champion_mase", finite(p.championMase()), "forced_model", p.forcedModel(), "mase_by_model", mase,
+        return map("name", "xgboost", "target", "logged hours per member-week", "mae", finite(p.mae() == null ? Double.NaN : p.mae()),
+                "mean_actual_hours", finite(p.meanActualHours() == null ? Double.NaN : p.meanActualHours()),
+                "confidence", p.mae() == null ? "thin_history" : "scored",
                 "backtest_origins", p.backtestOrigins().stream().map(FactsBuilder::str).toList(), "horizons", java.util.Arrays.stream(p.horizons()).boxed().toList(),
-                "interval", map("basis", "backtest residuals", "horizons", horizons), "unavailable", new TreeMap<>(p.backtest().unavailable()),
-                "planned_basis", out.plannedWorkEnabled() ? PLANNED_BASIS : "disabled", "limitations", LIMITATIONS,
+                "windows", p.windows().size(),
+                "interval", map("basis", p.mae() == null ? "none: no scored origins" : "backtest residuals", "horizons", horizons),
+                "limitations", LIMITATIONS,
                 "seconds_by_phase", new LinkedHashMap<>(p.secondsByPhase()));
     }
 

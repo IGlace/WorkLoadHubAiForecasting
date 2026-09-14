@@ -35,10 +35,10 @@ class FactsBuilderTest {
     @BeforeAll
     static void run() {
         ForecastData data = SeededData.data();
-        ForecastRunner runner = new ForecastRunner(new CapacityRule(40), true);
-        Prepared prepared = runner.prepare(data, SeededData.asOf(), null, ForecastRunner.ProgressListener.NONE);
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(40));
+        Prepared prepared = runner.prepare(data, SeededData.asOf(), ForecastRunner.ProgressListener.NONE);
         UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
-        outcome = runner.forTeam(prepared, team, null);
+        outcome = runner.forTeam(prepared, team);
         facts = FactsBuilder.build(outcome, UUID.fromString("00000000-0000-0000-0000-000000000001"), LocalDateTime.of(2026, 9, 6, 12, 0));
         json = FactsBuilder.toJson(facts);
     }
@@ -61,7 +61,7 @@ class FactsBuilderTest {
         assertEquals(1, ((Map<?, ?>) ((List<?>) team.get("totals")).get(0)).get("window"));
         assertNotNull(team.get("planned_backlog"));
         Map<?, ?> model = (Map<?, ?>) facts.get("model");
-        assertEquals(outcome.prepared().champion(), model.get("champion"));
+        assertEquals(outcome.prepared().mae(), model.get("champion"));
         assertEquals("backtest residuals", ((Map<?, ?>) model.get("interval")).get("basis"));
         assertEquals("share weights, 26-week window, shrink k=3", model.get("planned_basis"));
         Map<?, ?> quality = (Map<?, ?>) facts.get("data_quality");
@@ -126,9 +126,9 @@ class FactsBuilderTest {
         ProjectRow doneProject = new ProjectRow(doneProjectId, "DONE", "Done Project", "ACTIVE", TestData.TEAM);
         ForecastData data = TestData.data(List.of(ana), List.of(openTask, doneTask), List.of(), List.of())
                 .withProjects(List.of(liveProject, doneProject));
-        ForecastRunner runner = new ForecastRunner(new CapacityRule(40), true);
-        Prepared prepared = runner.prepare(data, asOf, null, ForecastRunner.ProgressListener.NONE);
-        TeamOutcome outcome = runner.forTeam(prepared, TestData.TEAM, null);
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(40));
+        Prepared prepared = runner.prepare(data, asOf, ForecastRunner.ProgressListener.NONE);
+        TeamOutcome outcome = runner.forTeam(prepared, TestData.TEAM);
         Map<String, Object> facts = FactsBuilder.build(outcome, UUID.fromString("00000000-0000-0000-0000-000000000002"),
                 LocalDateTime.of(2026, 9, 6, 12, 0));
 

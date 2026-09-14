@@ -40,8 +40,8 @@ class JdbcRunStoreTest {
 
     static List<MemberWindowForecast> windows() {
         return List.of(
-                new MemberWindowForecast(USER, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 10, 5.5, 2, 17.5, 15, 20, 40, 0, 5, 0),
-                new MemberWindowForecast(USER, 2, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 18), 4, 6, 0, 10, 10, 12, 32, 0, 4, 8));
+                new MemberWindowForecast(USER, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 17.5, 15, 20, 40, 0, 5, 0),
+                new MemberWindowForecast(USER, 2, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 18), 10, 10, 12, 32, 0, 4, 8));
     }
 
     /** Ten days of one member for a run made on {@code asOf}, every day carrying {@code demand} so a later run's values are recognisable. */
@@ -49,7 +49,7 @@ class JdbcRunStoreTest {
         List<MemberDayForecast> out = new ArrayList<>();
         for (ForecastWindow w : Horizon.windows(asOf)) {
             for (LocalDate d : w.weekdays()) {
-                out.add(new MemberDayForecast(USER, d, w.index(), demand, 0, 0, demand, 8, Math.max(0, demand - 8), true));
+                out.add(new MemberDayForecast(USER, d, w.index(), demand, 8, Math.max(0, demand - 8), true));
             }
         }
         return out;
@@ -57,7 +57,7 @@ class JdbcRunStoreTest {
 
     void lifecycle(DataSource ds) {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
-        UUID id = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        UUID id = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         RunSummary queued = store.find(id).orElseThrow();
         assertEquals(RunStatus.QUEUED, queued.status());
         assertEquals(TEAM, queued.teamId());
@@ -65,11 +65,10 @@ class JdbcRunStoreTest {
         assertEquals(T0, queued.createdAt());
         store.markRunning(id);
         assertEquals(RunStatus.RUNNING, store.find(id).orElseThrow().status());
-        store.finish(id, "xgboost", 0.83, "{\"scores\":[]}", windows(), days(LocalDate.of(2026, 9, 6), 3), "{\"run\":{}}", T0.plusMinutes(1));
+        store.finish(id, 0.83, "{\"scores\":[]}", windows(), days(LocalDate.of(2026, 9, 6), 3), "{\"run\":{}}", T0.plusMinutes(1));
         RunSummary done = store.find(id).orElseThrow();
         assertEquals(RunStatus.DONE, done.status());
-        assertEquals("xgboost", done.championModel());
-        assertEquals(0.83, done.championMase(), 1e-9);
+        assertEquals(0.83, done.mae(), 1e-9);
         assertEquals(T0.plusMinutes(1), done.finishedAt());
         assertEquals(windows(), store.memberWindows(id));
         assertEquals(days(LocalDate.of(2026, 9, 6), 3), store.memberDays(id));
@@ -77,13 +76,12 @@ class JdbcRunStoreTest {
         assertEquals("{\"run\":{}}", store.facts(id).orElseThrow());
         assertEquals("{\"scores\":[]}", store.backtestJson(id).orElseThrow());
 
-        UUID failed = store.create(new RunRequest(TEAM, null, "xgboost", false), LocalDate.of(2026, 9, 6), T0.plusMinutes(2));
+        UUID failed = store.create(new RunRequest(TEAM, null), LocalDate.of(2026, 9, 6), T0.plusMinutes(2));
         store.fail(failed, "boom\nstack line 2", T0.plusMinutes(3));
         RunSummary f = store.find(failed).orElseThrow();
         assertEquals(RunStatus.FAILED, f.status());
         assertEquals("boom", f.error());
-        assertEquals("xgboost", f.forcedModel());
-        assertNull(f.championModel());
+        assertNull(f.mae());
         assertTrue(store.facts(failed).isEmpty());
 
         List<RunSummary> list = store.list(TEAM, 10);
@@ -91,13 +89,13 @@ class JdbcRunStoreTest {
         assertEquals(1, store.list(TEAM, 1).size());
         assertTrue(store.list(UUID.randomUUID(), 10).isEmpty());
         assertFalse(store.find(UUID.randomUUID()).isPresent());
-        UUID nanRun = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0.plusMinutes(4));
-        store.finish(nanRun, "seasonal_naive", Double.NaN, "{}", List.of(), List.of(), "{}", T0.plusMinutes(5));
-        assertNull(store.find(nanRun).orElseThrow().championMase(), "NaN is stored as null");
+        UUID nanRun = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0.plusMinutes(4));
+        store.finish(nanRun, Double.NaN, "{}", List.of(), List.of(), "{}", T0.plusMinutes(5));
+        assertNull(store.find(nanRun).orElseThrow().mae(), "NaN is stored as null");
 
-        UUID bigRun = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0.plusMinutes(6));
+        UUID bigRun = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0.plusMinutes(6));
         List<MemberWindowForecast> manyRows = manyRows(450);
-        store.finish(bigRun, "xgboost", 0.5, "{}", manyRows, List.of(), "{}", T0.plusMinutes(7));
+        store.finish(bigRun, 0.5, "{}", manyRows, List.of(), "{}", T0.plusMinutes(7));
         assertEquals(manyRows, store.memberWindows(bigRun), "450 rows survive a batched insert, in order");
     }
 
@@ -106,7 +104,7 @@ class JdbcRunStoreTest {
         List<MemberWindowForecast> out = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             UUID user = UUID.nameUUIDFromBytes(("user-" + i).getBytes(StandardCharsets.UTF_8));
-            out.add(new MemberWindowForecast(user, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 1, 2, 0, 3, 2, 5, 40, 0, 5, 0));
+            out.add(new MemberWindowForecast(user, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 3, 2, 5, 40, 0, 5, 0));
         }
         out.sort((a, b) -> a.userId().toString().compareTo(b.userId().toString()));
         return out;
@@ -117,10 +115,10 @@ class JdbcRunStoreTest {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
         LocalDate wednesday = LocalDate.of(2026, 9, 2);
         LocalDate monday = LocalDate.of(2026, 9, 7);
-        UUID first = store.create(new RunRequest(TEAM, USER, null, null), wednesday, T0);
-        store.finish(first, "xgboost", 0.8, "{}", List.of(), days(wednesday, 1), "{}", T0.plusMinutes(1));
-        UUID second = store.create(new RunRequest(TEAM, USER, null, null), monday, T0.plusDays(5));
-        store.finish(second, "xgboost", 0.8, "{}", List.of(), days(monday, 2), "{}", T0.plusDays(5).plusMinutes(1));
+        UUID first = store.create(new RunRequest(TEAM, USER), wednesday, T0);
+        store.finish(first, 0.8, "{}", List.of(), days(wednesday, 1), "{}", T0.plusMinutes(1));
+        UUID second = store.create(new RunRequest(TEAM, USER), monday, T0.plusDays(5));
+        store.finish(second, 0.8, "{}", List.of(), days(monday, 2), "{}", T0.plusDays(5).plusMinutes(1));
         List<CurrentDayForecast> current = store.currentDays(TEAM, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
         assertEquals(13, current.size(), "three days only the first run covered, ten the second overwrote");
         for (CurrentDayForecast c : current) {
@@ -163,8 +161,8 @@ class JdbcRunStoreTest {
 
     void tiedCreatedAtOrdersByIdDescending(DataSource ds) {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
-        UUID a = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
-        UUID b = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        UUID a = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
+        UUID b = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         List<UUID> ordered = store.list(TEAM, 10).stream().map(RunSummary::id).toList();
         List<UUID> expected = a.toString().compareTo(b.toString()) > 0 ? List.of(a, b) : List.of(b, a);
         assertEquals(expected, ordered, "same created_at: newest (highest) id first");
@@ -185,12 +183,12 @@ class JdbcRunStoreTest {
 
     void failInterruptedMarksQueuedAndRunningRowsOnly(DataSource ds) {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
-        UUID queued = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
-        UUID running = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        UUID queued = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
+        UUID running = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         store.markRunning(running);
-        UUID done = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
-        store.finish(done, "xgboost", 0.8, "{}", List.of(), List.of(), "{}", T0.plusMinutes(1));
-        UUID failed = store.create(new RunRequest(TEAM, USER, null, null), LocalDate.of(2026, 9, 6), T0);
+        UUID done = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
+        store.finish(done, 0.8, "{}", List.of(), List.of(), "{}", T0.plusMinutes(1));
+        UUID failed = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         store.fail(failed, "boom", T0.plusMinutes(1));
         assertEquals(2, store.failInterrupted(T0.plusHours(1)));
         for (UUID id : List.of(queued, running)) {
@@ -220,20 +218,20 @@ class JdbcRunStoreTest {
     void runDaysJoinTheRunDayOfEveryDoneRunInTheRange(DataSource ds) {
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
         LocalDate wednesday = LocalDate.of(2026, 8, 19);
-        UUID first = store.create(new RunRequest(TEAM, USER, null, null), wednesday, T0);
+        UUID first = store.create(new RunRequest(TEAM, USER), wednesday, T0);
         store.markRunning(first);
-        store.finish(first, "seasonal_naive", 1.0, "{}", windows(), days(wednesday, 7), "{}", T0.plusMinutes(1));
+        store.finish(first, 1.0, "{}", windows(), days(wednesday, 7), "{}", T0.plusMinutes(1));
         LocalDate friday = LocalDate.of(2026, 8, 21);
-        UUID second = store.create(new RunRequest(TEAM, USER, null, null), friday, T0.plusHours(1));
+        UUID second = store.create(new RunRequest(TEAM, USER), friday, T0.plusHours(1));
         store.markRunning(second);
-        store.finish(second, "seasonal_naive", 1.0, "{}", windows(), days(friday, 8), "{}", T0.plusHours(2));
-        UUID failed = store.create(new RunRequest(TEAM, USER, null, null), friday, T0.plusHours(3));
+        store.finish(second, 1.0, "{}", windows(), days(friday, 8), "{}", T0.plusHours(2));
+        UUID failed = store.create(new RunRequest(TEAM, USER), friday, T0.plusHours(3));
         store.markRunning(failed);
         store.fail(failed, "boom", T0.plusHours(4));
         // A third run finished, so it has day rows in the range, and is then put back to RUNNING: only the status filter can keep it out.
-        UUID reopened = store.create(new RunRequest(TEAM, USER, null, null), friday, T0.plusHours(5));
+        UUID reopened = store.create(new RunRequest(TEAM, USER), friday, T0.plusHours(5));
         store.markRunning(reopened);
-        store.finish(reopened, "seasonal_naive", 1.0, "{}", windows(), days(friday, 9), "{}", T0.plusHours(6));
+        store.finish(reopened, 1.0, "{}", windows(), days(friday, 9), "{}", T0.plusHours(6));
         Dialect dialect = Dialect.of(ds);
         assertEquals(1, JdbcClient.create(ds).sql("UPDATE forecast_runs SET status = ? WHERE id = " + dialect.placeholder("uuid"))
                 .param(RunStatus.RUNNING.name()).param(reopened.toString()).update());

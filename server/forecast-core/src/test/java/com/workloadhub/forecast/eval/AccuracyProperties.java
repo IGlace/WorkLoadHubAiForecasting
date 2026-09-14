@@ -54,8 +54,8 @@ class AccuracyProperties {
                 if (Horizon.isWeekday(d)) {
                     double f = forecast.get(i % forecast.size());
                     double t = logged.get(i % logged.size());
-                    current.add(new CurrentDayForecast(TEAM, user, d, RUN, f, 0, 0, f, 8, Math.max(0, f - 8), LocalDateTime.of(2026, 8, 1, 9, 0)));
-                    runDays.add(new RunDayForecast(RUN, AS_OF, new MemberDayForecast(user, d, 1, f, 0, 0, f, 8, Math.max(0, f - 8), true)));
+                    current.add(new CurrentDayForecast(TEAM, user, d, RUN, f, 8, Math.max(0, f - 8), LocalDateTime.of(2026, 8, 1, 9, 0)));
+                    runDays.add(new RunDayForecast(RUN, AS_OF, new MemberDayForecast(user, d, 1, f, 8, Math.max(0, f - 8), true)));
                     truth.put(new MemberDay(user, d), t);
                     if (priorWeek) {
                         truth.put(new MemberDay(user, d.minusDays(7)), t + 1);

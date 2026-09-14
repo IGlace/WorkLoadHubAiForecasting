@@ -9,12 +9,12 @@ import com.workloadhub.forecast.ai.Narrator;
 import com.workloadhub.forecast.ai.Prompts;
 import com.workloadhub.forecast.ai.RuntimeInfo;
 import com.workloadhub.forecast.api.AccuracyResult;
+import com.workloadhub.forecast.api.BacktestScore;
 import com.workloadhub.forecast.api.CopilotStatus;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
-import com.workloadhub.forecast.api.ModelScore;
 import com.workloadhub.forecast.api.NarrativeRequest;
 import com.workloadhub.forecast.api.NarrativeResult;
 import com.workloadhub.forecast.api.NarrativeStatus;
@@ -83,7 +83,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     private final CopilotGateway gateway;
 
     public DefaultForecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
-            int threads, boolean plannedWorkDefault, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway,
+            int threads, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway,
             Clock clock) {
         this.dataSource = dataSource;
         this.dialect = dialect;
@@ -155,13 +155,12 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
             store.markRunning(id);
             progress.update(id, "LOADING", 2, "reading the WorkloadHub tables");
             ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
-            Prepared prepared = runner.prepare(data, asOf, request.forcedModel(),
-                    (phase, percent, message) -> progress.update(id, phase, percent, message));
-            TeamOutcome outcome = runner.forTeam(prepared, request.teamId(), request.plannedWork());
+            Prepared prepared = runner.prepare(data, asOf, (phase, percent, message) -> progress.update(id, phase, percent, message));
+            TeamOutcome outcome = runner.forTeam(prepared, request.teamId());
             progress.update(id, "FACTS", 85, "building the facts");
             String facts = FactsBuilder.toJson(FactsBuilder.build(outcome, id, LocalDateTime.now()));
             progress.update(id, "PERSIST", 95, "storing the run");
-            store.finish(id, prepared.champion(), prepared.championMase(), backtestJson(prepared), outcome.memberWindows(), outcome.memberDays(), facts,
+            store.finish(id, prepared.mae(), backtestJson(prepared), outcome.memberWindows(), outcome.memberDays(), facts,
                     LocalDateTime.now());
             progress.done(id);
             return null;
@@ -186,18 +185,13 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         List<Object> scores = new ArrayList<>();
         for (Backtest.Score s : p.backtest().scores()) {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("model", s.model());
             row.put("origin", s.origin().toString());
             row.put("horizon", s.horizon());
             row.put("mae", finite(s.mae()));
-            row.put("mase", finite(s.mase()));
             scores.add(row);
         }
         root.put("scores", scores);
-        Map<String, Object> mase = new TreeMap<>();
-        p.backtest().meanMaseByModel().forEach((k, v) -> mase.put(k, finite(v)));
-        root.put("mase_by_model", mase);
-        root.put("unavailable", new TreeMap<>(p.backtest().unavailable()));
+        root.put("mean_mae", finite(p.backtest().meanMae()));
         root.put("origins", p.backtestOrigins().stream().map(LocalDate::toString).toList());
         return ExportFiles.mapper().writeValueAsString(root);
     }
@@ -213,16 +207,12 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
             throw ForecastException.of("RUN_NOT_DONE", "run " + runId + " is " + run.status());
         }
         JsonNode bt = ExportFiles.mapper().readTree(store.backtestJson(runId).orElse("{}"));
-        List<ModelScore> scores = new ArrayList<>();
+        List<BacktestScore> scores = new ArrayList<>();
         for (JsonNode s : bt.path("scores")) {
-            scores.add(new ModelScore(s.path("model").asText(), LocalDate.parse(s.path("origin").asText()), s.path("horizon").asInt(),
-                    s.path("mae").isNull() ? null : s.path("mae").asDouble(), s.path("mase").isNull() ? null : s.path("mase").asDouble()));
+            scores.add(new BacktestScore(LocalDate.parse(s.path("origin").asText()), s.path("horizon").asInt(),
+                    s.path("mae").isNull() ? null : s.path("mae").asDouble()));
         }
-        Map<String, Double> mase = new TreeMap<>();
-        bt.path("mase_by_model").properties().forEach(e -> mase.put(e.getKey(), e.getValue().isNull() ? null : e.getValue().asDouble()));
-        Map<String, String> unavailable = new TreeMap<>();
-        bt.path("unavailable").properties().forEach(e -> unavailable.put(e.getKey(), e.getValue().asText()));
-        return new RunResult(run, scores, mase, unavailable, store.memberWindows(runId), store.memberDays(runId), store.facts(runId).orElse("{}"));
+        return new RunResult(run, scores, store.memberWindows(runId), store.memberDays(runId), store.facts(runId).orElse("{}"));
     }
 
     @Override

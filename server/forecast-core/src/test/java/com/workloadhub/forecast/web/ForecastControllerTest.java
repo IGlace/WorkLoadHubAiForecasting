@@ -30,7 +30,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -70,7 +69,7 @@ class ForecastControllerTest {
     GitHubTokenStore tokens;
 
     static RunSummary summary() {
-        return new RunSummary(RUN, TEAM, USER, LocalDate.of(2026, 9, 6), RunStatus.DONE, null, "xgboost", 0.83, null, LocalDateTime.of(2026, 9, 6, 10, 0), null);
+        return new RunSummary(RUN, TEAM, USER, LocalDate.of(2026, 9, 6), RunStatus.DONE, 0.83, null, LocalDateTime.of(2026, 9, 6, 10, 0), null);
     }
 
     static NarrativeResult narrative(NarrativeStatus status) {
@@ -82,10 +81,10 @@ class ForecastControllerTest {
     void startsARunAndAnswers202WithItsId() throws Exception {
         when(service.startRun(any(RunRequest.class))).thenReturn(RUN);
         mvc.perform(post("/forecast-api/runs").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"teamId\": \"" + TEAM + "\", \"requestedBy\": \"" + USER + "\", \"forcedModel\": \"xgboost\"}"))
+                .content("{\"teamId\": \"" + TEAM + "\", \"requestedBy\": \"" + USER + "\"}"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.id").value(RUN.toString()));
-        verify(service).startRun(new RunRequest(TEAM, USER, "xgboost", null));
+        verify(service).startRun(new RunRequest(TEAM, USER));
     }
 
     @Test
@@ -98,7 +97,7 @@ class ForecastControllerTest {
 
     @Test
     void readsTheCurrentForecastWithDefaultsFromTheClock() throws Exception {
-        CurrentDayForecast row = new CurrentDayForecast(TEAM, USER, LocalDate.of(2026, 9, 10), RUN, 4, 2, 0, 6, 8, 0, LocalDateTime.of(2026, 9, 9, 10, 0));
+        CurrentDayForecast row = new CurrentDayForecast(TEAM, USER, LocalDate.of(2026, 9, 10), RUN, 6, 8, 0, LocalDateTime.of(2026, 9, 9, 10, 0));
         when(service.currentForecast(TEAM, LocalDate.of(2026, 9, 10), LocalDate.of(2026, 9, 16))).thenReturn(List.of(row));
         when(service.currentForecast(TEAM, LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 29))).thenReturn(List.of(row, row));
         mvc.perform(get("/forecast-api/teams/" + TEAM + "/current?from=2026-09-10&to=2026-09-16")).andExpect(status().isOk())
@@ -110,10 +109,10 @@ class ForecastControllerTest {
 
     @Test
     void readsRunsProgressAndLists() throws Exception {
-        when(service.getRun(RUN)).thenReturn(new RunResult(summary(), List.of(), Map.of(), Map.of(), List.of(), List.of(), "{}"));
+        when(service.getRun(RUN)).thenReturn(new RunResult(summary(), List.of(), List.of(), List.of(), "{}"));
         when(service.progress(RUN)).thenReturn(new RunProgress(RUN, "NARRATING", 40, "tool get_member_forecast", new ProgressLabel("collecting data", "collecte des données")));
         when(service.listRuns(TEAM, 5)).thenReturn(List.of(summary()));
-        mvc.perform(get("/forecast-api/runs/" + RUN)).andExpect(status().isOk()).andExpect(jsonPath("$.run.championModel").value("xgboost"));
+        mvc.perform(get("/forecast-api/runs/" + RUN)).andExpect(status().isOk()).andExpect(jsonPath("$.run.mae").value(0.83));
         mvc.perform(get("/forecast-api/runs/" + RUN + "/progress")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.phase").value("NARRATING")).andExpect(jsonPath("$.label.en").value("collecting data"))
                 .andExpect(jsonPath("$.label.fr").value("collecte des données")).andExpect(jsonPath("$.answer").doesNotExist());

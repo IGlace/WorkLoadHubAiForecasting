@@ -79,7 +79,7 @@ public class ForecastAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     ForecastRunner forecastRunner(CapacityRule capacityRule, ForecastProperties properties) {
-        return new ForecastRunner(capacityRule, properties.getPlannedWork().isEnabled());
+        return new ForecastRunner(capacityRule);
     }
 
     @Bean
@@ -124,7 +124,7 @@ public class ForecastAutoConfiguration {
     ForecastService forecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
             ForecastProperties properties, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway, Clock clock) {
         return new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
-                properties.getPlannedWork().isEnabled(), tokens, narratives, narrator, gateway, clock);
+                tokens, narratives, narrator, gateway, clock);
     }
 
     /** Reconciles the interrupted runs once every singleton exists, so a host that owns the tables has migrated them first. */

@@ -41,6 +41,15 @@ class ForecastMigrationsTest {
         assertTrue(hasColumn(ds, "forecast_narratives", "tool_calls"));
         assertTrue(hasColumn(ds, "forecast_member_windows", "demand_hrs"));
         assertTrue(hasColumn(ds, "forecast_current_days", "forecast_at"));
+        assertTrue(hasColumn(ds, "forecast_runs", "mae"), "V4 adds the single MAE column");
+        assertFalse(hasColumn(ds, "forecast_runs", "forced_model"), "V4 drops the tournament columns");
+        assertFalse(hasColumn(ds, "forecast_runs", "champion_model"));
+        assertFalse(hasColumn(ds, "forecast_runs", "champion_mase"));
+        for (String table : java.util.List.of("forecast_member_windows", "forecast_member_days", "forecast_current_days")) {
+            assertFalse(hasColumn(ds, table, "open_hrs"), table + " no longer has the open/new/planned split");
+            assertFalse(hasColumn(ds, table, "new_hrs"), table);
+            assertFalse(hasColumn(ds, table, "planned_hrs"), table);
+        }
     }
 
     /** V1 alone first, then the whole set: the upgrade path a database that ran before the rolling horizon existed takes. */

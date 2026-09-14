@@ -94,7 +94,7 @@ class ForecastAutoConfigurationTest {
         WorkloadHubSchema.createSqlite(ds);
         ForecastMigrations.run(ds);
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
-        UUID run = store.create(new RunRequest(UUID.randomUUID(), null, null, null), LocalDate.of(2026, 9, 7), LocalDateTime.of(2026, 9, 7, 9, 0));
+        UUID run = store.create(new RunRequest(UUID.randomUUID(), null), LocalDate.of(2026, 9, 7), LocalDateTime.of(2026, 9, 7, 9, 0));
         store.markRunning(run);
         assertEquals(RunStatus.RUNNING, store.find(run).orElseThrow().status());
         new ApplicationContextRunner()

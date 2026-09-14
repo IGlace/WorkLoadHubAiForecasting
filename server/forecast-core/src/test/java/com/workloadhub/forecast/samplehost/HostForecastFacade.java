@@ -68,7 +68,7 @@ public final class HostForecastFacade implements AutoCloseable {
                 throw new HostForbidden("one team at a time: run " + latest + " is still in progress");
             }
         }
-        UUID id = service.startRun(new RunRequest(teamId, userId, null, null));
+        UUID id = service.startRun(new RunRequest(teamId, userId));
         teamOfRun.put(id, teamId);
         latestRunOfUser.put(userId, id);
         return id;

@@ -60,7 +60,7 @@ public class ForecastController {
         if (body.asOf() != null) {
             throw ForecastException.invalidRequest("asOf is not accepted: a run always starts from today");
         }
-        return new StartedRun(service.startRun(new RunRequest(body.teamId(), body.requestedBy(), body.forcedModel(), body.plannedWork())));
+        return new StartedRun(service.startRun(new RunRequest(body.teamId(), body.requestedBy())));
     }
 
     @GetMapping("/teams/{teamId}/current")

@@ -30,7 +30,7 @@ class AccuracyTest {
     static final LocalDate SAT = MON.plusDays(5);
 
     static CurrentDayForecast current(UUID user, LocalDate day, UUID run, double demand, double capacity) {
-        return new CurrentDayForecast(TEAM, user, day, run, demand, 0, 0, demand, capacity, Math.max(0, demand - capacity), LocalDateTime.of(2026, 8, 20, 9, 0));
+        return new CurrentDayForecast(TEAM, user, day, run, demand, capacity, Math.max(0, demand - capacity), LocalDateTime.of(2026, 8, 20, 9, 0));
     }
 
     static RunDayForecast runDay(UUID run, LocalDate asOf, UUID user, LocalDate day, double demand, double capacity) {
@@ -39,7 +39,7 @@ class AccuracyTest {
 
     static RunDayForecast runDay(UUID run, LocalDate asOf, UUID user, LocalDate day, double demand, double capacity, boolean workingDay) {
         return new RunDayForecast(run, asOf,
-                new MemberDayForecast(user, day, 1, demand, 0, 0, demand, capacity, Math.max(0, demand - capacity), workingDay));
+                new MemberDayForecast(user, day, 1, demand, capacity, Math.max(0, demand - capacity), workingDay));
     }
 
     @Test
