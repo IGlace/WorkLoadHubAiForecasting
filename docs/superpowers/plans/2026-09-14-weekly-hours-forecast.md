@@ -64,7 +64,8 @@ Project-wide requirements. Every task's requirements implicitly include this sec
 - Test-driven: the failing test comes first in every task, and its failure is observed before any implementation.
 - jqwik property tests for arithmetic invariants.
 - The gate is `cd server && mvn -B -q verify` run by hand; CI is paused and will not catch anything.
-- Commit messages: imperative subject, a short body saying why, then after a blank line the two trailer lines the dispatch names. **Do not push.** No model identifier in any committed content.
+- Commit messages: imperative subject, a short body saying why, then after a blank line the two trailer lines the dispatch names, verbatim. **Do not push.**
+- No model identifier anywhere else in committed content — not in code, comments, documents, skills or test names. **The attribution trailer is the sole exception**: it is mandated for this session and every commit on this branch already carries one, so it is not a violation of the line above. This wording was corrected after Task 1's review read the two rules as contradicting each other; they do not, but the earlier phrasing said they did.
 
 ---
 
