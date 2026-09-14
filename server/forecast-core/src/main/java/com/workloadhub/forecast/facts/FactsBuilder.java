@@ -38,9 +38,9 @@ public final class FactsBuilder {
     public static final int LOGGED_WEEKS = 4;
     public static final int ROLE_WINDOW_WEEKS = 26;
     public static final double UNDERLOAD_RATIO = 0.7;
-    public static final String PLANNED_BASIS = "share weights, 26-week window, shrink k=3";
-    public static final String LIMITATIONS = "predicted arrivals are spread evenly over a week's working days and the days already past are not"
-            + " re-forecast; open tasks are placed from the first forecast day; backlog work created and assigned inside the horizon is missed by both components";
+    public static final String LIMITATIONS = "predicted hours are spread over a week's working days by the member's logged-hours weekday shares;"
+            + " days already past are not re-forecast; the forecast is of hours logged, so a member who logs less than they work is forecast to work"
+            + " less; and it is a forecast of what someone will get through rather than of what is waiting for them";
 
     private FactsBuilder() {
     }
@@ -163,9 +163,11 @@ public final class FactsBuilder {
         Lifecycle lc = p.lifecycle();
         List<TaskFacts> mine = lc.assignedTo(m.id());
         List<Object> history = new ArrayList<>();
-        for (LocalDate w : historyWeeks) {
+        double[] loggedByWeek = series.logged(m.id());
+        for (int i = 0; i < historyWeeks.size(); i++) {
+            LocalDate w = historyWeeks.get(i);
             WeeklySeries.Cell c = series.cell(m.id(), w);
-            history.add(map("week", str(w), "hours", round1(c.estHours()), "fresh_hours", round1(c.freshHours()), "tasks", c.nTasks()));
+            history.add(map("week", str(w), "logged_hours", round1(loggedByWeek[i]), "arrival_hours", round1(c.estHours()), "tasks", c.nTasks()));
         }
         List<TaskFacts> open = mine.stream().filter(f -> !f.done()).toList();
         List<Object> forecast = new ArrayList<>();
@@ -271,12 +273,17 @@ public final class FactsBuilder {
             double[] q = p.bandOffsets().get(h);
             horizons.put(String.valueOf(h), map("low_offset", Numbers.round2(q[0]), "high_offset", Numbers.round2(q[1])));
         }
-        return map("name", "xgboost", "target", "logged hours per member-week", "mae", finite(p.mae() == null ? Double.NaN : p.mae()),
-                "mean_actual_hours", finite(p.meanActualHours() == null ? Double.NaN : p.meanActualHours()),
-                "confidence", p.mae() == null ? "thin_history" : "scored",
+        // A NaN mae (every backtest origin scored zero rows) must read exactly like a null one: never "scored",
+        // never a number a narrative could quote as a measurement.
+        Double mae = finite(p.mae() == null ? Double.NaN : p.mae());
+        boolean scored = mae != null;
+        Double meanActualHours = scored ? finite(p.meanActualHours() == null ? Double.NaN : p.meanActualHours()) : null;
+        return map("name", "xgboost", "target", "logged hours per member-week", "mae", mae,
+                "mean_actual_hours", meanActualHours,
+                "confidence", scored ? "scored" : "thin_history",
                 "backtest_origins", p.backtestOrigins().stream().map(FactsBuilder::str).toList(), "horizons", java.util.Arrays.stream(p.horizons()).boxed().toList(),
                 "windows", p.windows().size(),
-                "interval", map("basis", p.mae() == null ? "none: no scored origins" : "backtest residuals", "horizons", horizons),
+                "interval", map("basis", scored ? "backtest residuals" : "none: no scored origins", "horizons", horizons),
                 "limitations", LIMITATIONS,
                 "seconds_by_phase", new LinkedHashMap<>(p.secondsByPhase()));
     }

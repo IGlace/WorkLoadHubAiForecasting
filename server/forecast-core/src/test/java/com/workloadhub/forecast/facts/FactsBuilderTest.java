@@ -3,6 +3,7 @@ package com.workloadhub.forecast.facts;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.capacity.CapacityRule;
@@ -11,6 +12,7 @@ import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
+import com.workloadhub.forecast.lifecycle.Truncation;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
@@ -59,13 +61,94 @@ class FactsBuilderTest {
         assertEquals(outcome.teamId().toString(), team.get("id"));
         assertEquals(2, ((List<?>) team.get("totals")).size());
         assertEquals(1, ((Map<?, ?>) ((List<?>) team.get("totals")).get(0)).get("window"));
-        assertNotNull(team.get("planned_backlog"));
         Map<?, ?> model = (Map<?, ?>) facts.get("model");
-        assertEquals(outcome.prepared().mae(), model.get("champion"));
+        assertEquals(outcome.prepared().mae(), model.get("mae"));
+        assertEquals("xgboost", model.get("name"));
+        assertEquals(2, model.get("windows"));
         assertEquals("backtest residuals", ((Map<?, ?>) model.get("interval")).get("basis"));
-        assertEquals("share weights, 26-week window, shrink k=3", model.get("planned_basis"));
         Map<?, ?> quality = (Map<?, ?>) facts.get("data_quality");
         assertEquals(outcome.prepared().historyWeeks(), quality.get("history_weeks"));
+    }
+
+    @Test
+    void theRemovedKeysAreGone() {
+        for (String key : List.of("open_hours", "new_hours", "planned_hours", "planned_backlog", "planned_basis", "champion", "champion_mase",
+                "forced_model", "mase_by_model", "unavailable")) {
+            assertFalse(json.contains("\"" + key + "\""), key + " is still in the facts");
+        }
+    }
+
+    @Test
+    void theModelBlockNamesItsTargetAndItsScale() {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) facts.get("model");
+        assertEquals("xgboost", model.get("name"));
+        assertEquals("logged hours per member-week", model.get("target"));
+        assertTrue(model.containsKey("mae"));
+        assertTrue(model.containsKey("mean_actual_hours"));
+        assertEquals(2, model.get("windows"), "a narrative can say how far ahead it is reading");
+        assertEquals("scored", model.get("confidence"));
+    }
+
+    @Test
+    void aThinHistoryRunIsUnscoredAndSaysSo() {
+        LocalDate youngAsOf = SeededData.asOf().minusWeeks(22);
+        ForecastData young = Truncation.at(SeededData.data(), youngAsOf);
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(40));
+        Prepared prepared = runner.prepare(young, youngAsOf, ForecastRunner.ProgressListener.NONE);
+        assertTrue(prepared.backtestOrigins().isEmpty(), "under 13 weeks before every origin");
+        UUID team = young.teams().stream().filter(t -> !young.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+        TeamOutcome thin = runner.forTeam(prepared, team);
+        Map<String, Object> thinFacts = FactsBuilder.build(thin, UUID.fromString("00000000-0000-0000-0000-000000000003"),
+                LocalDateTime.of(2026, 9, 6, 12, 0));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) thinFacts.get("model");
+        assertNull(model.get("mae"));
+        assertNull(model.get("mean_actual_hours"));
+        assertEquals("thin_history", model.get("confidence"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> interval = (Map<String, Object>) model.get("interval");
+        assertEquals("none: no scored origins", interval.get("basis"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> horizonBand = (Map<String, Object>) ((Map<String, Object>) interval.get("horizons")).values().iterator().next();
+        assertEquals(0.0, horizonBand.get("low_offset"));
+        assertEquals(0.0, horizonBand.get("high_offset"), "a zero-width band, which must never read as certainty");
+    }
+
+    @Test
+    void aNaNMaeReadsExactlyLikeThinHistoryNeverAsAScoredMeasurement() {
+        // meanMae() returns NaN, not null, when scoring ran but every origin scored zero rows (Backtest.java).
+        // A NaN reaching the facts would be quoted by the narrative as if it were a real measurement.
+        Prepared p = outcome.prepared();
+        Prepared nanScored = new Prepared(p.data(), p.lifecycle(), p.calendar(), p.asOf(), p.origin(), p.windows(), p.horizons(), p.features(),
+                p.backtestOrigins(), p.backtest(), Double.NaN, Double.NaN, p.bandOffsets(), p.predictedHours(), p.historyWeeks(), p.secondsByPhase());
+        TeamOutcome nanOutcome = new TeamOutcome(nanScored, outcome.teamId(), outcome.members(), outcome.memberWindows(), outcome.memberDays());
+        Map<String, Object> nanFacts = FactsBuilder.build(nanOutcome, UUID.fromString("00000000-0000-0000-0000-000000000004"),
+                LocalDateTime.of(2026, 9, 6, 12, 0));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) nanFacts.get("model");
+        assertNull(model.get("mae"), "a NaN mae must read as absent, not as a number");
+        assertNull(model.get("mean_actual_hours"));
+        assertEquals("thin_history", model.get("confidence"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> interval = (Map<String, Object>) model.get("interval");
+        assertEquals("none: no scored origins", interval.get("basis"));
+        assertFalse(FactsBuilder.toJson(nanFacts).contains("NaN"), "no NaN literal ever reaches the JSON");
+    }
+
+    @Test
+    void theHistoryBlockReportsWhatIsForecast() {
+        List<?> members = (List<?>) facts.get("members");
+        Map<?, ?> first = (Map<?, ?>) members.get(0);
+        List<?> history = (List<?>) first.get("history_13w");
+        Map<?, ?> row = (Map<?, ?>) history.get(0);
+        assertTrue(row.containsKey("logged_hours"));
+        assertTrue(row.containsKey("arrival_hours"));
+        assertTrue(row.containsKey("tasks"));
+        assertFalse(row.containsKey("fresh_hours"));
+        assertFalse(row.containsKey("hours"));
     }
 
     @Test
@@ -80,11 +163,11 @@ class FactsBuilderTest {
         assertEquals(2, forecast.size());
         Map<?, ?> window = (Map<?, ?>) forecast.get(0);
         assertEquals(outcome.memberWindows().get(0).demandHrs(), window.get("demand"));
-        assertTrue(window.containsKey("due_hours") && window.containsKey("planned_hours") && window.containsKey("working_days"));
+        assertTrue(window.containsKey("due_hours") && window.containsKey("working_days"));
         Map<?, ?> patterns = (Map<?, ?>) first.get("patterns");
         assertTrue(patterns.containsKey("cluster") && patterns.containsKey("hours_per_week_13w"));
         Map<?, ?> likely = (Map<?, ?>) first.get("likely_work");
-        assertEquals(List.of("planned", "project_roles", "recent_mix"), List.copyOf(((Map<String, ?>) likely).keySet()));
+        assertEquals(List.of("project_roles", "recent_mix"), List.copyOf(((Map<String, ?>) likely).keySet()));
         assertEquals(1, window.get("window"));
         assertEquals("2026-09-07", window.get("start"));
         List<?> days = (List<?>) first.get("days");
@@ -92,10 +175,6 @@ class FactsBuilderTest {
         Map<?, ?> day = (Map<?, ?>) days.get(0);
         assertEquals("2026-09-07", day.get("day"));
         assertTrue(day.containsKey("demand") && day.containsKey("capacity") && day.containsKey("working_day"));
-        for (Object p : (List<?>) likely.get("planned")) {
-            Object expected = ((Map<?, ?>) p).get("expected_window");
-            assertTrue(expected.equals(1) || expected.equals(2) || expected.equals("after_window"), String.valueOf(expected));
-        }
         assertEquals(4, ((List<?>) first.get("logged_hours_4w")).size());
         assertNotNull(first.get("open_tasks"));
         assertNotNull(first.get("reopened_tasks"));

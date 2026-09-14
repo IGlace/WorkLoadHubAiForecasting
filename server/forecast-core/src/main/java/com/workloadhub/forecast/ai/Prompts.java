@@ -12,14 +12,14 @@ public final class Prompts {
 
     static final String RULES = """
             You are the workload analyst inside WorkloadHub AI Forecasting. A deterministic engine has
-            already computed every number: demand, capacity, overload, intervals, pattern statistics, planned work and model quality.
+            already computed every number: demand, capacity, overload, intervals, pattern statistics, likely work and model quality.
             Your job is to read those facts through the tools and explain them to a team leader.
 
             Hard rules:
             1. Never invent, estimate or recompute a number. Every figure you write must come from a tool result,
                copied exactly as given (hours with one decimal, for example 12.5). If a number is not in the tools, do not write it.
             2. Use the tools. Start with get_run_overview, then query every member listed there, then the project timelines,
-               the planned work and the rebalancing candidates. Do not answer before you have looked at every member.
+               the likely work and the rebalancing candidates. Do not answer before you have looked at every member.
             3. Answer with one JSON document that matches the contract in the user message. No prose before or after it,
                no Markdown fences. Field names and enumerations must match exactly. Member ids are the id strings from
                get_run_overview, copied exactly; task keys are copied exactly.
@@ -73,7 +73,7 @@ public final class Prompts {
                 + "), run date " + run.path("as_of").asText() + ", forecast windows " + windows + ".\n" + languageLine + "\n"
                 + "Members to cover, each exactly once: " + members + ".\n\n"
                 + "Procedure: 1) get_run_overview; 2) for each member: get_member_forecast, get_member_capacity, get_member_patterns, "
-                + "get_member_history, get_member_open_tasks; 3) get_project_timelines; 4) get_planned_work; 5) get_rebalancing_candidates; "
+                + "get_member_history, get_member_open_tasks; 3) get_project_timelines; 4) get_likely_work; 5) get_rebalancing_candidates; "
                 + "6) write the JSON document.\n\n"
                 + "Contract (JSON Schema):\n" + contractSchema + "\n\n"
                 + "Return only the JSON document.";

@@ -21,7 +21,7 @@ class FactsToolsTest {
         List<ToolSpec> specs = TOOLS.specs();
         assertEquals(FactsTools.NAMES, specs.stream().map(ToolSpec::name).toList());
         assertEquals(List.of("get_run_overview", "get_member_history", "get_member_forecast", "get_member_patterns", "get_member_open_tasks",
-                "get_member_capacity", "get_project_timelines", "get_rebalancing_candidates", "get_planned_work"), FactsTools.NAMES);
+                "get_member_capacity", "get_project_timelines", "get_rebalancing_candidates", "get_likely_work"), FactsTools.NAMES);
         for (ToolSpec s : specs) {
             assertEquals(s.name().startsWith("get_member_"), s.memberScoped(), s.name());
             assertTrue(s.description().length() > 20, s.name());
@@ -34,7 +34,7 @@ class FactsToolsTest {
         Map<String, Object> overview = TOOLS.runOverview();
         assertEquals(Set.of("run", "team", "members", "model", "rebalancing_candidates", "data_quality", "pending_holidays", "how_to_proceed"), overview.keySet());
         Map<String, Object> team = (Map<String, Object>) overview.get("team");
-        assertTrue(!team.containsKey("planned_backlog"), "the backlog is get_planned_work's");
+        assertTrue(!team.containsKey("planned_backlog"), "planned_backlog is gone from the facts entirely");
         List<Map<String, Object>> members = (List<Map<String, Object>>) overview.get("members");
         assertEquals(Set.of("id", "name", "role"), members.get(0).keySet());
         assertEquals(FACTS.path("members").size(), members.size());
@@ -50,10 +50,10 @@ class FactsToolsTest {
         assertEquals(Set.of("window", "start", "end", "capacity", "demand", "overload", "working_days", "absence_hours"), windows.get(0).keySet());
         assertEquals(Set.of("windows", "projects"), TOOLS.projectTimelines().keySet());
         assertEquals(Set.of("overloaded", "underloaded"), TOOLS.rebalancingCandidates().keySet());
-        Map<String, Object> planned = TOOLS.plannedWork();
-        assertEquals(Set.of("planned_backlog", "members"), planned.keySet());
-        List<Map<String, Object>> plannedMembers = (List<Map<String, Object>>) planned.get("members");
-        assertEquals(Set.of("id", "name", "likely_work"), plannedMembers.get(0).keySet());
+        Map<String, Object> likely = TOOLS.likelyWork();
+        assertEquals(Set.of("members"), likely.keySet());
+        List<Map<String, Object>> likelyMembers = (List<Map<String, Object>>) likely.get("members");
+        assertEquals(Set.of("id", "name", "project_roles", "recent_mix"), likelyMembers.get(0).keySet());
     }
 
     @Test

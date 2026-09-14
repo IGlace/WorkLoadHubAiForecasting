@@ -23,7 +23,7 @@ class NumberVerifierTest {
              "members": [
                {"id": "%s", "name": "A", "forecast": [{"window": 1, "start": "2026-09-07", "demand": 52.04, "capacity": 40.0, "overload": 12.04}]},
                {"id": "%s", "name": "B", "forecast": [{"window": 1, "start": "2026-09-07", "demand": 20.5, "capacity": 40.0, "overload": 0.0}]}],
-             "model": {"champion": "xgboost", "champion_mase": 0.913},
+             "model": {"name": "xgboost", "target": "logged hours per member-week", "mae": 2.3, "mean_actual_hours": 31.4, "confidence": "scored"},
              "rebalancing_candidates": {
                "overloaded": [{"member_id": "%s", "name": "A", "overload_hours": 12.0}],
                "underloaded": [{"member_id": "%s", "name": "B", "spare_hours": 19.5}]}}
@@ -45,7 +45,7 @@ class NumberVerifierTest {
     @Test
     void factNumbersRoundToOneDecimalAndToIntegers() {
         Set<Double> nums = NumberVerifier.factNumbers(FACTS);
-        assertTrue(nums.containsAll(Set.of(52.0, 12.0, 40.0, 20.5, 0.9, 1.0, 2.0)), nums.toString());
+        assertTrue(nums.containsAll(Set.of(52.0, 12.0, 40.0, 20.5, 2.3, 31.4)), nums.toString());
     }
 
     @Test
@@ -111,7 +111,7 @@ class NumberVerifierTest {
 
     @Test
     void aMembersTextMayCiteRunTeamAndModelNumbers() {
-        assertTrue(NumberVerifier.verify(narrative("Demand 52.0 h of the team's 72.5 h against 88.0 h, MASE 0.91."), FACTS).ok());
+        assertTrue(NumberVerifier.verify(narrative("Demand 52.0 h of the team's 72.5 h against 88.0 h, MAE 2.3 h."), FACTS).ok());
     }
 
     @Test

@@ -12,7 +12,7 @@ import tools.jackson.databind.JsonNode;
 final class FactsTools {
 
     static final List<String> NAMES = List.of("get_run_overview", "get_member_history", "get_member_forecast", "get_member_patterns",
-            "get_member_open_tasks", "get_member_capacity", "get_project_timelines", "get_rebalancing_candidates", "get_planned_work");
+            "get_member_open_tasks", "get_member_capacity", "get_project_timelines", "get_rebalancing_candidates", "get_likely_work");
 
     private final JsonNode facts;
     private final Map<String, JsonNode> members = new TreeMap<>();
@@ -30,7 +30,7 @@ final class FactsTools {
                         id -> runOverview()),
                 new ToolSpec("get_member_history", "Last 13 weeks of task arrivals (hours and counts), logged hours of the last 4 weeks, unlogged and reopened tasks for one member.",
                         true, this::memberHistory),
-                new ToolSpec("get_member_forecast", "Forecast rows per window (five weekdays each: demand, low, high, capacity, overload, open, new and planned hours, due hours) and the day-by-day rows for one member.",
+                new ToolSpec("get_member_forecast", "Forecast rows per window (five weekdays each: demand, low, high, capacity, overload, due hours) and the day-by-day rows for one member.",
                         true, this::memberForecast),
                 new ToolSpec("get_member_patterns", "Deterministic pattern statistics for one member (assignment style, weekday rhythm, trend, estimate bias, cycle time, lateness, cluster, backlog).",
                         true, this::memberPatterns),
@@ -42,8 +42,8 @@ final class FactsTools {
                         false, id -> projectTimelines()),
                 new ToolSpec("get_rebalancing_candidates", "Members with overload and members with spare capacity over the two windows.", false,
                         id -> rebalancingCandidates()),
-                new ToolSpec("get_planned_work", "The team's planned backlog per project and, per member, the planned tasks, project roles and recent mix (likely work).",
-                        false, id -> plannedWork()));
+                new ToolSpec("get_likely_work", "Per member, the likely-work signals: project roles held on live projects and the recent task-type mix.",
+                        false, id -> likelyWork()));
     }
 
     private static Object plain(JsonNode node) {
@@ -69,12 +69,11 @@ final class FactsTools {
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> team = (Map<String, Object>) plain(facts.path("team"));
-        team.remove("planned_backlog");
         return map("run", plain(facts.path("run")), "team", team, "members", list, "model", plain(facts.path("model")),
                 "rebalancing_candidates", plain(facts.path("rebalancing_candidates")), "data_quality", plain(facts.path("data_quality")),
                 "pending_holidays", plain(facts.path("pending_holidays")),
                 "how_to_proceed", "Call get_member_forecast, get_member_capacity, get_member_patterns, get_member_history and get_member_open_tasks"
-                        + " for every member id listed here, then get_project_timelines, get_planned_work and get_rebalancing_candidates, then answer with the JSON document.");
+                        + " for every member id listed here, then get_project_timelines, get_likely_work and get_rebalancing_candidates, then answer with the JSON document.");
     }
 
     Map<String, Object> memberHistory(String id) {
@@ -125,11 +124,13 @@ final class FactsTools {
                 "underloaded", plain(facts.path("rebalancing_candidates").path("underloaded")));
     }
 
-    Map<String, Object> plannedWork() {
+    Map<String, Object> likelyWork() {
         List<Object> list = new ArrayList<>();
         for (JsonNode m : facts.path("members")) {
-            list.add(map("id", m.path("id").asText(), "name", m.path("name").asText(), "likely_work", plain(m.path("likely_work"))));
+            JsonNode lw = m.path("likely_work");
+            list.add(map("id", m.path("id").asText(), "name", m.path("name").asText(),
+                    "project_roles", plain(lw.path("project_roles")), "recent_mix", plain(lw.path("recent_mix"))));
         }
-        return map("planned_backlog", plain(facts.path("team").path("planned_backlog")), "members", list);
+        return map("members", list);
     }
 }

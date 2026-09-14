@@ -360,7 +360,7 @@ No automated test talks to Copilot. The live check is manual: run the command ab
 real token, and read `copilotStatus` first (it starts the runtime with the token and reports the login and the
 quota). Then confirm from the printed tool-call count that the model used the tools: the nine are
 `get_run_overview`, the five member tools (called for every member), `get_project_timelines`,
-`get_planned_work` and `get_rebalancing_candidates`, so a full narration is roughly `4 + 5 x members` calls.
+`get_likely_work` and `get_rebalancing_candidates`, so a full narration is roughly `4 + 5 x members` calls.
 The names themselves are in `progress(runId).message` (`tool <name>`) for a
 host that polls while narration runs, which this example does not, since it calls `narrate` on the main thread.
 Confirm too that no permission prompt was needed: the tools are

@@ -18,7 +18,7 @@ class PromptsTest {
              "team": {"id": "44444444-4444-4444-4444-444444444444", "name": "Mobile Apps"},
              "members": [{"id": "aaaaaaaa-0000-0000-0000-000000000004", "name": "Sara Tazi", "role": "TEAM_LEADER"},
                          {"id": "aaaaaaaa-0000-0000-0000-000000000005", "name": "Omar Benali", "role": "MEMBER"}],
-             "model": {"champion": "xgboost"}}
+             "model": {"name": "xgboost"}}
             """;
 
     static JsonNode facts() {
@@ -48,7 +48,7 @@ class PromptsTest {
         assertTrue(en.contains("member_id aaaaaaaa-0000-0000-0000-000000000005 (Omar Benali, MEMBER)"));
         JsonNode roleless = ExportFiles.mapper().readTree(FACTS.replace("\"role\": \"MEMBER\"", "\"role\": null"));
         assertTrue(p.userPrompt(roleless, "en").contains("(Omar Benali, member)"), "a null role is the default, never the word null");
-        assertTrue(en.contains("get_run_overview") && en.contains("get_planned_work") && en.contains("get_rebalancing_candidates"));
+        assertTrue(en.contains("get_run_overview") && en.contains("get_likely_work") && en.contains("get_rebalancing_candidates"));
         assertTrue(en.contains(p.contractSchema()));
         assertTrue(en.contains("Language: en") && en.contains("in English"));
         String fr = p.userPrompt(facts(), "fr");

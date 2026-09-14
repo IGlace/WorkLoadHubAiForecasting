@@ -50,7 +50,7 @@ class NarrativeContractTest {
                  "rebalancing": [{"from_member_id": "%s", "to_member_id": "%s", "window": "2026-09-07", "hours": 8.0,
                                   "reason": "Omar has 20.0 h spare.", "confidence": "medium", "task_keys": ["WEB-1"]}],
                  "suggested_adjustments": [],
-                 "model_notes": "Champion xgboost, MASE 0.9."}
+                 "model_notes": "xgboost booster, MAE 2.3 h against a mean of 31.4 h logged."}
                 """.formatted(A, B, A, A, B);
         return (ObjectNode) ExportFiles.mapper().readTree(json);
     }

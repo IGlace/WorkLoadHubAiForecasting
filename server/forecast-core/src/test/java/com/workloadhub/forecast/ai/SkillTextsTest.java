@@ -24,11 +24,22 @@ class SkillTextsTest {
     @Test
     void theSkillsSpeakTheJavaFactsVocabulary() {
         String all = String.join("\n", SkillTexts.load().stream().map(SkillTexts.Skill::text).toList());
-        assertTrue(all.contains("xgboost") && all.contains("seasonal_naive"));
-        assertTrue(!all.contains("chronos2") && !all.contains("tsb") && !all.contains(" gbm"), "old model names are gone");
-        assertTrue(all.contains("planned_hours") && all.contains("likely_work") && all.contains("due_hours"));
+        assertTrue(all.contains("xgboost"));
+        assertTrue(!all.contains("seasonal_naive") && !all.contains("chronos2") && !all.contains("tsb") && !all.contains(" gbm"),
+                "old and retired model names are gone");
+        assertTrue(all.contains("mae") && all.contains("mean_actual_hours") && all.contains("thin_history"), "the model block's own vocabulary");
+        assertTrue(all.contains("likely_work") && all.contains("due_hours"));
         assertTrue(all.contains("40 h"), "the Java module's default capacity");
-        assertTrue(all.contains("window") && all.contains("expected_window") && all.contains("five weekdays"), "the rolling horizon vocabulary");
+        assertTrue(all.contains("window") && all.contains("five weekdays"), "the rolling horizon vocabulary");
         assertTrue(!all.contains("expected_week") && !all.contains("two-week forecast") && !all.contains("per member and week"), "the weekly horizon is gone");
+    }
+
+    @Test
+    void noSkillNamesARemovedFactKey() {
+        String all = String.join("\n", SkillTexts.load().stream().map(SkillTexts.Skill::text).toList());
+        for (String key : List.of("open_hours", "new_hours", "planned_hours", "planned_backlog", "planned_basis", "champion", "champion_mase",
+                "forced_model", "mase_by_model", "unavailable", "expected_window", "hours_in_window", "fresh_hours")) {
+            assertTrue(!all.contains(key), key + " is still named by a skill");
+        }
     }
 }
