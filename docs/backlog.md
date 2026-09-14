@@ -315,7 +315,11 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   so the target needs no day filter; a second pressure fact `due_excess_hrs` and a `deadline_pressed` list are
   added, because work that must finish inside a window is what makes a leader rebalance and Copilot can only
   state the gap if the gap is itself a fact; overtime is recordable, so overload survives the retarget and the
-  spec's largest stated cost was wrong; the experiment driver gets `--windows N`.
+  spec's largest stated cost was wrong; the experiment driver gets `--windows N`; the seed generator changes
+  with it, because a seeded member cannot log past 8 hours a day against a 40-hour capacity row, so overload
+  would be unreachable on seeded data; the backlog figure is measured against predicted demand rather than
+  capacity, since the forecast is an analysis a leader reads and the narrative catches what it misses; work
+  already late becomes `overdue_hrs`, per member; and it stays one plan, with the task order in section 23.
 
   It supersedes the single-model simplification below and is the only document to implement from. The
   2026-09-13 rulings behind it: the booster's target becomes logged hours per member-week, so training and

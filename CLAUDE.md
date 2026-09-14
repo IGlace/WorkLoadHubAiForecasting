@@ -24,9 +24,10 @@ app with a Python service) is archived at the tag `archive/python-desktop-v1`.
 - `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`: **reviewed by the owner on 2026-09-14
   and ready for an implementation plan; nothing of it is implemented.** It retargets the forecast at logged
   hours, deletes `EffortModel`, `PlannedWork`, `SeasonalNaive` and the champion machinery, makes the window
-  count configurable, corrects the capacity default to 44 h, and adds two deterministic pressure facts. Its
-  section 18 holds the seven rulings of that review and is the first thing to read; each one cites the
-  section it changes. Read the document before changing anything in `model/`, `planned/`, `backtest/`,
+  count configurable, corrects the capacity default to 44 h, adds the pressure facts a forecast cannot show,
+  and changes the seed generator, which today cannot produce overtime at all. Its section 18 holds the twelve
+  rulings of that review and is the first thing to read; each one cites the section it changes. Section 23
+  gives the task order. Read the document before changing anything in `model/`, `planned/`, `backtest/`,
   `features/` or the facts contract; it supersedes `2026-09-12-single-model-simplification-design.md`, which
   is history.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
@@ -63,9 +64,13 @@ contradiction was found and fixed — the per-horizon feature columns must be si
 `Features.HORIZONS` stops being a constant — and its worst-stated cost was overturned, because WorkloadHub
 puts no cap on logging, so overtime is recorded and overload survives the retarget. That review also added a
 second pressure fact: work due inside a window beyond what the window holds, with the members it presses, so
-Copilot can state the gap in hours and advise rebalancing. **Reviewed and ready for a plan; nothing of it is
-implemented.** Until it lands, the code still forecasts arrival hours and the parity procedure it retires is
-still in the tree.
+Copilot can state the gap in hours and advise rebalancing, plus `overdue_hrs` for work already late. The
+backlog figure is measured against predicted demand rather than capacity, because the forecast is an analysis
+a leader reads rather than a fact, and the narrative is there to catch what it misses. The seed generator
+changes with it (section 22): a seeded member can never log past 8 hours in a day against a 40-hour capacity
+row, so under the retarget overload would be arithmetically unreachable on seeded data. It stays one plan
+(section 23). **Reviewed and ready for a plan; nothing of it is implemented.** Until it lands, the code still
+forecasts arrival hours and the parity procedure it retires is still in the tree.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
 real export through the seed and the parity procedure, then the server's own integration code, against the
 sample host.
