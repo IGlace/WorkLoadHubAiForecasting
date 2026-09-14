@@ -24,7 +24,7 @@ import javax.sql.DataSource;
 import org.sqlite.SQLiteDataSource;
 
 /**
- * Builds and scores an experiment database on SQLite: the five things the owner does from a terminal that the
+ * Builds an experiment database on SQLite: the four things the owner does from a terminal that the
  * WorkloadHub server never does.
  *
  * <p>This is not a Maven module and deliberately so. Until 2026-09-12 it was {@code forecast-cli}, a Spring Boot
@@ -115,7 +115,7 @@ public final class Experiment {
         }
     }
 
-    // ---- the five commands ------------------------------------------------------------------------------------
+    // ---- the four commands ------------------------------------------------------------------------------------
 
     private static int initDb(Args args) throws Exception {
         Path db = args.db();

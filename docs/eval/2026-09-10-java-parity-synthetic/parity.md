@@ -3,6 +3,10 @@
 > retired by the weekly-hours-forecast design (section 16): there is one model, no champion and no MASE
 > comparable across two harnesses any more, so nothing produces a report like this today. This directory is
 > kept because it records a run that happened, not as a live procedure's output.
+>
+> The harness that produced these numbers was removed on 2026-09-14
+> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). This directory stays as the record of
+> the run.
 
 # Parity: Python harness against Java harness
 

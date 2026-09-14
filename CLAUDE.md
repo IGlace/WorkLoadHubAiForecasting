@@ -76,6 +76,13 @@ window count is `whf.forecast.windows` (1 to 6, default 2), capacity defaults to
 (`server/tools/parity.sh`, `parity_compare.py`, `server/tools/tests/`) is retired —
 `docs/eval/2026-09-10-java-parity-synthetic/` stays as a record of the run that produced it, with a note that
 the procedure is gone.
+Then, on 2026-09-14, the evaluation removal
+(`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`): with the features settled and the model
+locked, the offline harness had nothing left to measure, so `ForecastService.evaluate(EvalConfig)`,
+`Harness`, `Report`, their row types, the orphaned `AccuracyReport` and the driver's `eval` command are
+gone, and the driver is four verbs that build and move an experiment database. `accuracy(teamId, from, to)`
+is the module's only evaluation surface; the per-run backtest still gives each window its interval and each
+run its `mae`.
 The last three tasks ran back to back at the owner's request, then one combined review over all three,
 then one fix wave (`1a93de2`): it corrected a half-day absence that deleted a whole day from the forecast,
 opened the two pressure lists to the tool Copilot actually calls, put 44 h and 8.8 h in the product skills
@@ -117,7 +124,7 @@ fix wave, the gate green by hand in the development container, then fast-forward
 server/    Java 21 module: `forecast-core`, the library the host adds and the only artifact. Two single-file
            programs are run by the launcher, not built: `server/examples/HostExample.java` (what a host does
            through `ForecastService`) and `server/tools/Experiment.java` (experiments on SQLite: init-db,
-           import, export, seed, eval)
+           import, export, seed)
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
            dev), `test-release.sh` (the release script's self-test), `devbox.sh` (the development

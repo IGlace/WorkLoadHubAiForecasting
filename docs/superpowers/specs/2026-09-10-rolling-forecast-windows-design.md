@@ -224,6 +224,13 @@ and the absence of `expected_week`.
 
 ## 10. Evaluation harness
 
+> Removed on 2026-09-14. The offline evaluation harness this section (10. Evaluation harness) describes —
+> `ForecastService.evaluate(EvalConfig)`, `Harness`, `Report` and the driver's `eval` command — was deleted
+> once the features were settled and the model locked
+> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). Read this section as history. The
+> per-run backtest it shares vocabulary with is still there and still feeds every run's intervals and `mae`;
+> `accuracy(teamId, from, to)` is unchanged.
+
 - The arrival level is unchanged (`Harness.HORIZONS = {1, 2}`, `scores.csv` identical in shape): the
   Python parity gate compares it and stays valid.
 - The demand level replays each origin with `asOf = origin + 1 week` (a Monday, as today) through the same

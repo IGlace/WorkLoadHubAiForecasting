@@ -626,6 +626,13 @@ All stay factual, short and specific to this domain, as CLAUDE.md requires.
 
 ## 14. Evaluation harness, the experiment driver and the sample host
 
+> Removed on 2026-09-14. The offline evaluation harness this section (14. Evaluation harness, the
+> experiment driver and the sample host) describes — `ForecastService.evaluate(EvalConfig)`, `Harness`,
+> `Report` and the driver's `eval` command — was deleted once the features were settled and the model locked
+> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). Read this section as history. The
+> per-run backtest it shares vocabulary with is still there and still feeds every run's intervals and `mae`;
+> `accuracy(teamId, from, to)` is unchanged.
+
 `EvalConfig` becomes `(LocalDate asOf, int origins, List<UUID> teams, int windows)` with `windows` defaulting
 to 2. `Harness` constructs its own `ForecastRunner` outside Spring, so it cannot read the property; passing the
 count is the only way to evaluate a horizon other than the default. `Harness.evaluate` drops the

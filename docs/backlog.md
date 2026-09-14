@@ -306,6 +306,11 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Evaluation removed (2026-09-14).** The offline harness is gone; `accuracy(teamId, from, to)` is the only
+  evaluation surface. Nothing can now grade the model before a forecast is live — that is the accepted cost
+  of locking the features and the model (`2026-09-14-evaluation-removal-design.md`, section 10). Reopening
+  the question means restoring the harness from git history, deliberately.
+
 - **Open after the weekly hours forecast landed (2026-09-14).** The plan's combined review raised these
   and the fix wave deliberately left them to the owner. The review itself is summarised in the closing
   notes of `docs/superpowers/plans/2026-09-14-weekly-hours-forecast.md`.

@@ -39,6 +39,13 @@ or the capacity arithmetic; any change to what Copilot does.
 
 ## 3. Evaluation harness
 
+> Noted on 2026-09-14: the Java evaluation harness this section (3. Evaluation harness) led to, by way of
+> the 2026-09-09 design — `ForecastService.evaluate(EvalConfig)`, `Harness`, `Report` and the driver's `eval`
+> command — has itself been removed, once the features were settled and the model locked
+> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). Read this already-superseded section as
+> history two layers deep now. The per-run backtest is still there and still feeds every run's intervals and
+> `mae`; `accuracy(teamId, from, to)` is unchanged.
+
 ### 3.1 Command
 
 ```
