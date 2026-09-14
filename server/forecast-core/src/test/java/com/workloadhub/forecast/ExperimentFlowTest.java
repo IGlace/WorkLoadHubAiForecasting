@@ -76,38 +76,12 @@ class ExperimentFlowTest {
         assertFalse(Files.exists(outside));
     }
 
-    /**
-     * The reason the driver exists: seed, load, score. A small synthetic population and two origins keep it to a few
-     * seconds while still going through {@code ForecastService.evaluate} and writing the three files it produces:
-     * {@code scores.csv}, {@code demand.csv} and {@code summary.md}, whose first line carries the as-of date.
-     */
-    @Test
-    void evalScoresTheDatabaseAndWritesTheHarnessFiles(@TempDir Path dir) throws Exception {
-        Path db = dir.resolve("e.db");
-        Path seeded = dir.resolve("seeded.json");
-        assertOk(experiment("seed", "--synthetic", "--users", "14", "--weeks", "24", "--seed", "5", "--end", "2026-09-06",
-                "--out", seeded.toString()), "Wrote");
-        assertOk(experiment("init-db", "--db", db.toString()), "Created");
-        assertOk(experiment("import", "--db", db.toString(), seeded.toString()), "Imported");
-
-        Path out = dir.resolve("eval");
-        assertOk(experiment("eval", "--db", db.toString(), "--as-of", "2026-09-06", "--origins", "2", "--windows", "2",
-                "--out", out.toString()), "2 windows");
-        assertTrue(Files.exists(out.resolve("scores.csv")) && Files.exists(out.resolve("demand.csv")) && Files.exists(out.resolve("summary.md")),
-                () -> "scores.csv, demand.csv and summary.md in " + out);
-        assertTrue(Files.readString(out.resolve("summary.md")).startsWith("# Forecast evaluation, as of 2026-09-06"),
-                "the first line the old parity procedure used to parse the as-of date off");
-
-        assertEquals(2, experiment("eval", "--db", db.toString(), "--teams", "no-such-team", "--out", out.toString()).exit(), "an unknown team");
-        assertEquals(2, experiment("eval", "--db", db.toString(), "--windows", "0", "--out", out.toString()).exit(), "windows out of range");
-        assertEquals(2, experiment("eval", "--db", db.toString(), "--windows", "7", "--out", out.toString()).exit(), "windows out of range");
-    }
-
     /** A mistyped command or option is a bad request, not a stack trace and not a silent no-op. */
     @Test
     void unknownCommandsAndOptionsAreRefused() throws Exception {
         assertEquals(2, experiment().exit(), "no command at all");
         assertEquals(2, experiment("run", "--team", "x").exit(), "'run' is the host's business, not the driver's");
+        assertEquals(2, experiment("eval", "--db", "x.db").exit(), "the evaluation harness was removed on 2026-09-14");
         assertEquals(2, experiment("init-db", "--wat", "x").exit());
         assertEquals(2, experiment("import", "--db", "x.db").exit(), "import needs a file");
         assertEquals(0, experiment("--help").exit());

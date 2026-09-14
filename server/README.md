@@ -118,9 +118,6 @@ $X seed --synthetic --users 40 --weeks 26 --seed 7 --end 2026-09-06 --out /tmp/s
 
 # 5. dump a database back to JSON
 $X export --db ~/whf/workloadhub.db /tmp/dump.json
-
-# 6. score the model on it
-$X eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --windows 2 --out ~/whf/eval
 ```
 
 | command | options | what it does |
@@ -129,9 +126,8 @@ $X eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --windows 2 --out ~/whf/eva
 | `import` | `[--db] <file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
 | `export` | `[--db] <file>` | Writes the database's WorkloadHub tables as a JSON export. |
 | `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. |
-| `eval` | `[--as-of] [--db] [--origins 6] [--windows 2] [--teams a,b] [--out dir]` | Scores the model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--windows` is the window count (1 to 6, default 2) — since a feature matrix is tied to the count it was built with, `eval` always rebuilds one at the count given; `--teams` defaults to all. |
 
-Those five are the whole of it: they build an experiment database and score the model on it. Everything a
+Those four are the whole of it: they build and move an experiment database. Everything a
 *host* does — starting a run and polling its progress, reading the run, the current forecast, the run list,
 accuracy, `copilotStatus` and a narration — is in `examples/HostExample.java`, run through
 `examples/run-host-example.sh` ("Integrating from the server's own code" below).
@@ -140,11 +136,10 @@ accuracy, `copilotStatus` and a narration — is in `examples/HostExample.java`,
 (JEP 330) compiles it against `forecast-core`'s own classes and its runtime dependencies, resolved by
 `tools/core-classpath.sh`, which compiles the module first if the sources are newer. There is no second
 Maven module and no jar — until 2026-09-12 there was one, `forecast-cli`, wrapping picocli around core
-classes that are all public anyway. File arguments are resolved against your working directory. `eval`
-boots the module's auto-configuration over a SQLite `DataSource`, with `whf.forecast.windows` set to
-`--windows`, and calls `ForecastService.evaluate`, so it scores the engine a host gets rather than a copy
-assembled for the occasion; the other four verbs call `forecast-core` classes directly and need no Spring
-context. `ExperimentFlowTest` in `forecast-core` drives the whole file as a subprocess, so it is covered by
+classes that are all public anyway. File arguments are resolved against your working directory. Every verb calls `forecast-core` classes
+directly and needs no Spring context: the one that booted the module was `eval`, removed on 2026-09-14
+with the evaluation harness (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`).
+`ExperimentFlowTest` in `forecast-core` drives the whole file as a subprocess, so it is covered by
 `mvn verify` like anything else.
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
