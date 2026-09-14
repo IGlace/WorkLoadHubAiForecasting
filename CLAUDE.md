@@ -8,7 +8,7 @@ application's own PostgreSQL database, compares them with capacity (44 h/week de
 holidays, absences and the team's capacity plan), and uses each user's own GitHub Copilot seat to explain
 patterns, warn about overload and suggest rebalancing. The host calls a Java interface or an optional REST
 surface; a single-file Java driver runs the same code on SQLite for experiments. The first version (a Windows desktop
-app with a Python service) is archived at the tag `archive/python-desktop-v1`.
+app with a Python service) is archived on the remote branch `archive/python-desktop-v1`.
 
 ## Read these first
 
@@ -116,8 +116,10 @@ fix wave, the gate green by hand in the development container, then fast-forward
 - The `origin` remote is back since 2026-09-14 (`IGlace/WorkLoadHubAiForecasting`); the owner deleted it on
   2026-09-12 and restored it. `dev` is pushed there. CI is paused on it by the owner's decision of
   2026-09-14, so never say "CI will catch it": the gate is `bash scripts/check.sh` run by hand in the
-  development container before anything is pushed. The tag `archive/python-desktop-v1` is not on the remote
-  yet; only the owner can push it.
+  development container before anything is pushed. `archive/python-desktop-v1` **is** on the remote, as a
+  branch (`origin/archive/python-desktop-v1`): 68 commits ending 2026-09-10, carrying the Electron app, the
+  Python service and the first Java migration history. Corrected on 2026-09-14, when the earlier claim that
+  it was an unpushed tag was checked against `git ls-remote` and found false; no such tag exists anywhere.
 - English and French are both fully supported in the narrative; a user may switch freely. No third language.
   The experiment driver's own messages and help are English only, and it does not narrate; the sample host
   asks for one language or the other (`run-host-example.sh --lang en|fr`).
@@ -194,9 +196,12 @@ technical-writer. Index in `.claude/agents/README.md`.
 
 - Branches: `dev` is the development branch; all work lands there first. `main` is the release branch and only
   receives fast-forward merges from `dev` once a plan or fix batch is reviewed and every suite is green.
-  `archive/python-desktop-v1` is a **tag**, not a branch: the branch lived only on the deleted remote, so the
-  tag is now the only name for the frozen Python desktop version. `git worktree add ../whf-archive
-  archive/python-desktop-v1` checks it out.
+  `archive/python-desktop-v1` is a **branch on the remote**, not a tag: it survived the 2026-09-12 remote
+  deletion and is the only name for the frozen Python desktop version. `git fetch origin
+  archive/python-desktop-v1 && git worktree add ../whf-archive origin/archive/python-desktop-v1` checks it
+  out. Its history is unrelated to `dev`'s: the restored remote started `dev` afresh on 2026-09-11, so the
+  two share no ancestor and must never be merged into each other — a merge would resurrect every file the
+  Java module has since deleted.
 - Commit messages: imperative subject, short body explaining why.
 - Domain vocabulary: department (a team without a manager), team (team leader), member; demand, capacity,
   overload; the model and its target (logged hours per member-week), backtest; narrative, facts, contract,
