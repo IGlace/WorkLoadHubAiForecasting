@@ -37,6 +37,24 @@ public final class Patterns {
                 .filter(f -> !f.assignedDay().isBefore(windowStart) && f.assignedDay().isBefore(windowEnd)).toList();
         double[] weekly = new double[WINDOW_WEEKS];
         double[] weekdayCounts = new double[5];
+        double[] loggedWeekdayHours = new double[5];
+        for (var log : data.timeLogs()) {
+            if (!log.userId().equals(member) || log.day().isBefore(windowStart) || !log.day().isBefore(windowEnd)) {
+                continue;
+            }
+            DayOfWeek dow = log.day().getDayOfWeek();
+            if (dow.getValue() <= 5) {
+                loggedWeekdayHours[dow.getValue() - 1] += log.hours();
+            }
+        }
+        double loggedWeekdayTotal = 0;
+        for (double h : loggedWeekdayHours) {
+            loggedWeekdayTotal += h;
+        }
+        List<Double> loggedWeekdayShares = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            loggedWeekdayShares.add(loggedWeekdayTotal == 0 ? 0.0 : round3(loggedWeekdayHours[i] / loggedWeekdayTotal));
+        }
         int self = 0;
         int manual = 0;
         int project = 0;
@@ -119,7 +137,7 @@ public final class Patterns {
         }
         return new MemberPattern(member, n, hours13, hours13 / WINDOW_WEEKS, round3(slope(weekly)),
                 n == 0 ? null : (double) manual / n, n == 0 ? null : (double) self / n, n == 0 ? null : (double) project / n,
-                weekdayTotal == 0 ? null : WEEKDAYS.get(top), weekdayShares,
+                weekdayTotal == 0 ? null : WEEKDAYS.get(top), weekdayShares, loggedWeekdayShares,
                 ratios.isEmpty() ? null : median(ratios), cycles.isEmpty() ? null : median(cycles), cycleByFamily,
                 lateness.isEmpty() ? null : median(lateness), lateness.isEmpty() ? null : lateness.stream().filter(l -> l > 0).count() / (double) lateness.size(),
                 n == 0 ? null : (double) withProject / n, hoursByProject, open, openHours, overdue);

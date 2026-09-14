@@ -13,6 +13,7 @@ import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.data.rows.MemberRow;
+import com.workloadhub.forecast.facts.Patterns;
 import com.workloadhub.forecast.features.FeatureBuilder;
 import com.workloadhub.forecast.features.FeatureMatrix;
 import com.workloadhub.forecast.features.MemberDay;
@@ -22,9 +23,11 @@ import com.workloadhub.forecast.model.XgboostHours;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -66,6 +69,39 @@ public final class ForecastRunner {
         double d = Numbers.round2(Math.max(0.0, demand));
         return new Band(d, Numbers.round2(Math.max(0.0, d + q10)), Numbers.round2(d + q90),
                 Numbers.round2(Math.max(0.0, d - capacity)));
+    }
+
+    /**
+     * Splits one horizon week's prediction across its weekdays (design section 5): {@code K} is the week's
+     * working days per {@code cal}, with weekends, holidays and {@code offDays} excluded; each day in
+     * {@code K} takes the member's logged weekday share renormalised over {@code K} alone, falling back to an
+     * even split over {@code K} when every share in it is zero; only days within {@code [first, last]} are
+     * emitted, so a day already past drops its hours instead of redistributing them.
+     */
+    static Map<LocalDate, Double> splitWeek(double prediction, List<Double> weekdayShares, LocalDate monday,
+            WorkingCalendar cal, Set<LocalDate> offDays, LocalDate first, LocalDate last) {
+        List<LocalDate> k = new ArrayList<>();
+        for (LocalDate d = monday; !d.isAfter(monday.plusDays(4)); d = d.plusDays(1)) {
+            if (cal.isWorkingDay(d) && !offDays.contains(d)) {
+                k.add(d);
+            }
+        }
+        if (k.isEmpty()) {
+            return Map.of();
+        }
+        double sum = 0;
+        for (LocalDate d : k) {
+            sum += weekdayShares.get(d.getDayOfWeek().getValue() - 1);
+        }
+        Map<LocalDate, Double> out = new LinkedHashMap<>();
+        for (LocalDate d : k) {
+            if (d.isBefore(first) || d.isAfter(last)) {
+                continue;
+            }
+            double s = sum > 0 ? weekdayShares.get(d.getDayOfWeek().getValue() - 1) / sum : 1.0 / k.size();
+            out.put(d, prediction * s);
+        }
+        return out;
     }
 
     public Prepared prepare(ForecastData data, LocalDate asOf, ProgressListener progress) {
@@ -127,23 +163,25 @@ public final class ForecastRunner {
         List<ForecastWindow> windows = p.windows();
         LocalDate first = windows.get(0).start();
         LocalDate last = windows.get(windows.size() - 1).end();
-        // A predicted week's hours land evenly on that week's working days inside the horizon (design
-        // 2026-09-10, section 4); task 9 replaces the even split with the member's weekday shares.
+        // A predicted week's hours land on the days the member actually works (design section 5), not evenly:
+        // K excludes weekends, holidays and the member's full-absence days, the shares are renormalised over K
+        // alone (falling back to an even split when the member has no logged shape over K), and only days
+        // inside the horizon are emitted — so a holiday or absence redistributes its hours onto the rest of the
+        // week, while a day already past simply drops its hours instead.
+        Map<UUID, List<Double>> sharesByMember = new HashMap<>();
+        Map<UUID, Set<LocalDate>> offDaysByMember = new HashMap<>();
+        for (MemberRow m : members) {
+            sharesByMember.put(m.id(), Patterns.of(m.id(), p.lifecycle(), data, p.asOf()).loggedWeekdayShares());
+            offDaysByMember.put(m.id(), capacityRule.offDays(m.id(), data, m, p.calendar()));
+        }
         SortedMap<MemberDay, Double> demandByDay = new TreeMap<>();
         p.predictedHours().forEach((k, v) -> {
             if (!byId.containsKey(k.member())) {
                 return;
             }
-            LocalDate monday = k.week();
-            int working = p.calendar().workingDaysInWeek(monday);
-            if (working == 0) {
-                return;
-            }
-            for (LocalDate d = monday; !d.isAfter(monday.plusDays(6)); d = d.plusDays(1)) {
-                if (p.calendar().isWorkingDay(d) && !d.isBefore(first) && !d.isAfter(last)) {
-                    demandByDay.merge(new MemberDay(k.member(), d), v / working, Double::sum);
-                }
-            }
+            Map<LocalDate, Double> split = splitWeek(v, sharesByMember.get(k.member()), k.week(), p.calendar(),
+                    offDaysByMember.get(k.member()), first, last);
+            split.forEach((d, hrs) -> demandByDay.merge(new MemberDay(k.member(), d), hrs, Double::sum));
         });
         List<MemberWindowForecast> windowRows = new ArrayList<>();
         List<MemberDayForecast> dayRows = new ArrayList<>();

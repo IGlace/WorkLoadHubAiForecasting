@@ -1,6 +1,7 @@
 package com.workloadhub.forecast.facts;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -8,11 +9,14 @@ import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecast.testing.TestData;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -22,6 +26,20 @@ class PatternsTest {
     static final LocalDate AS_OF = LocalDate.of(2026, 9, 2);              // Wednesday; window Monday 2026-06-01 .. 2026-08-30
     static final MemberRow ANA = TestData.member("ana", TestData.TEAM);
     static final UUID PROJECT = TestData.id("proj");
+
+    /** {@code m} logging {@code monday}h on every Monday and {@code friday}h on every Friday of the 13-week window, nothing else. */
+    static ForecastData mondayFridayLogs(MemberRow m, double monday, double friday) {
+        TaskRow t = TestData.task("logs", m.id(), LocalDate.of(2026, 6, 1).atTime(9, 0), 1);
+        List<TimeLogRow> logs = new ArrayList<>();
+        for (LocalDate d = LocalDate.of(2026, 6, 1); d.isBefore(LocalDate.of(2026, 8, 31)); d = d.plusDays(1)) {
+            if (d.getDayOfWeek() == DayOfWeek.MONDAY) {
+                logs.add(TestData.log(t.id(), m.id(), d, monday));
+            } else if (d.getDayOfWeek() == DayOfWeek.FRIDAY) {
+                logs.add(TestData.log(t.id(), m.id(), d, friday));
+            }
+        }
+        return TestData.data(List.of(m), List.of(t), List.of(), logs);
+    }
 
     @Test
     void recentWindowStatisticsFollowTheThirteenWeeks() {
@@ -47,7 +65,7 @@ class PatternsTest {
         assertEquals(4, p.openTasks());
         assertEquals(58.0, p.openEstHours(), 1e-9);
         assertEquals(ANA.id().toString(), p.toMap().get("member_id"), "member ids are strings in the facts");
-        assertEquals(20, p.toMap().size());
+        assertEquals(21, p.toMap().size());
     }
 
     @Test
@@ -79,5 +97,43 @@ class PatternsTest {
             assertTrue(table.get(i - 1).memberId().toString().compareTo(table.get(i).memberId().toString()) < 0);
         }
         assertTrue(table.stream().anyMatch(p -> p.tasks13w() > 0));
+    }
+
+    @Test
+    void loggedWeekdaySharesAreHoursNotTaskCounts() {
+        // A member who logs 6 hours every Monday and 2 every Friday, and nothing else.
+        ForecastData data = mondayFridayLogs(ANA, 6.0, 2.0);
+        Lifecycle lc = Lifecycle.derive(data);
+        UUID member = ANA.id();
+        LocalDate asOf = AS_OF;
+        MemberPattern p = Patterns.of(member, lc, data, asOf);
+        List<Double> s = p.loggedWeekdayShares();
+        assertEquals(5, s.size());
+        assertEquals(0.75, s.get(0), 1e-6, "Monday");
+        assertEquals(0.0, s.get(1), 1e-6);
+        assertEquals(0.25, s.get(4), 1e-6, "Friday");
+        assertEquals(1.0, s.stream().mapToDouble(Double::doubleValue).sum(), 1e-6);
+    }
+
+    @Test
+    void aMemberWhoLoggedNothingHasNoShape() {
+        MemberRow noLogs = TestData.member("no-logs", TestData.TEAM);
+        ForecastData data = TestData.data(List.of(noLogs), List.of(), List.of(), List.of());
+        Lifecycle lc = Lifecycle.derive(data);
+        UUID memberWithNoLogs = noLogs.id();
+        LocalDate asOf = AS_OF;
+        MemberPattern p = Patterns.of(memberWithNoLogs, lc, data, asOf);
+        assertEquals(List.of(0.0, 0.0, 0.0, 0.0, 0.0), p.loggedWeekdayShares());
+    }
+
+    @Test
+    void theTwoWeekdaySeriesAreDifferentThings() {
+        ForecastData data = mondayFridayLogs(ANA, 6.0, 2.0);
+        Lifecycle lc = Lifecycle.derive(data);
+        UUID member = ANA.id();
+        LocalDate asOf = AS_OF;
+        MemberPattern p = Patterns.of(member, lc, data, asOf);
+        assertNotNull(p.weekdayShares(), "task assignment, by count");
+        assertNotNull(p.loggedWeekdayShares(), "hours logged, by hours");
     }
 }

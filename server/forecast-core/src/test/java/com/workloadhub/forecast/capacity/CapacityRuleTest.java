@@ -51,7 +51,8 @@ class CapacityRuleTest {
         assertEquals(36 * 4 / 5.0 - 8, new CapacityRule(40).capacity(d.members().get(0), LocalDate.of(2026, 4, 27), d, cal), 1e-9);
         ForecastData none = data(List.of(), List.of());
         assertEquals(40.0, new CapacityRule(40).capacity(none.members().get(0), LocalDate.of(2026, 3, 16), none, cal), 1e-9);
-        assertEquals(java.util.Set.of(LocalDate.of(2026, 4, 28), LocalDate.of(2026, 5, 2)), CapacityRule.offDays(M, d));
+        assertEquals(java.util.Set.of(LocalDate.of(2026, 4, 28), LocalDate.of(2026, 5, 2)),
+                new CapacityRule(40).offDays(M, d, d.members().get(0), cal));
     }
 
     @Test

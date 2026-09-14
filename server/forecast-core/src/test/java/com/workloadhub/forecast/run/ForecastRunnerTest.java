@@ -15,13 +15,17 @@ import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.calendar.ForecastWindow;
 import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.calendar.Weeks;
+import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.lifecycle.Truncation;
 import com.workloadhub.forecast.testing.SeededData;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -179,5 +183,57 @@ class ForecastRunnerTest {
         assertEquals(prepared.mae(), again.mae());
         assertEquals(prepared.predictedHours(), again.predictedHours());
         assertEquals(runner.forTeam(prepared, team).memberWindows(), runner.forTeam(again, team).memberWindows());
+    }
+
+    // The week used by the weekday-split tests below: a Monday, with a wide-open horizon so it is always
+    // wholly inside it. shares/cal/offDays are varied per test before dayHours(day) is called.
+    static final LocalDate monday = LocalDate.of(2026, 9, 7);
+    static final LocalDate tuesday = monday.plusDays(1);
+    static final LocalDate wednesday = monday.plusDays(2);
+    static final LocalDate thursday = monday.plusDays(3);
+    static final LocalDate friday = monday.plusDays(4);
+
+    List<Double> shares = List.of(0.4, 0.3, 0.2, 0.1, 0.0);
+    WorkingCalendar cal = WorkingCalendar.fromHolidays(List.of());
+    Set<LocalDate> offDays = Set.of();
+
+    private double dayHours(LocalDate day) {
+        Map<LocalDate, Double> days = ForecastRunner.splitWeek(20.0, shares, monday, cal, offDays,
+                monday.minusDays(30), monday.plusDays(30));
+        return days.getOrDefault(day, 0.0);
+    }
+
+    @Test
+    void aWeeksHoursFollowTheMembersWeekdayShape() {
+        // A member whose shares are Monday 0.4, Tuesday 0.3, Wednesday 0.2, Thursday 0.1, Friday 0.0,
+        // predicted 20 hours for a week wholly inside the horizon with no holiday and no absence.
+        assertEquals(8.0, dayHours(monday), 1e-6);
+        assertEquals(6.0, dayHours(tuesday), 1e-6);
+        assertEquals(4.0, dayHours(wednesday), 1e-6);
+        assertEquals(2.0, dayHours(thursday), 1e-6);
+        assertEquals(0.0, dayHours(friday), 1e-6);
+    }
+
+    @Test
+    void aHolidayRedistributesOntoTheRestOfTheWeek() {
+        cal = WorkingCalendar.fromHolidays(List.of(new HolidayRow(wednesday, wednesday, true, true, "Test Holiday")));
+        // The same member and week, with Wednesday a public holiday: the 0.2 share is removed from the
+        // denominator, so the other four days carry the whole 20 hours between them.
+        assertEquals(0.0, dayHours(wednesday), 1e-6);
+        assertEquals(20.0, dayHours(monday) + dayHours(tuesday) + dayHours(thursday) + dayHours(friday), 1e-6);
+    }
+
+    @Test
+    void aFullAbsenceDayTakesNoHours() {
+        offDays = Set.of(tuesday);
+        // The same, with Tuesday a full-day absence.
+        assertEquals(0.0, dayHours(tuesday), 1e-6);
+    }
+
+    @Test
+    void aMemberWithNoLoggedHistoryGetsTheEvenSplit() {
+        shares = List.of(0.0, 0.0, 0.0, 0.0, 0.0);
+        // Shares all zero: 20 hours over five working days is 4.0 each, exactly today's behaviour.
+        assertEquals(4.0, dayHours(monday), 1e-6);
     }
 }
