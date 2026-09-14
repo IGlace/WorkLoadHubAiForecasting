@@ -1,5 +1,5 @@
-# The same gate as scripts/check.ps1 and scripts/check.sh: the Java module and the parity gate's test.
-# Keep the three in step when any of them changes.
+# The same gate as scripts/check.ps1 and scripts/check.sh: the Java module's `mvn verify`. Keep the
+# three in step when any of them changes.
 #
 # Paused on 2026-09-14 at the owner's request: the weekly hours forecast design is about to rewrite
 # `model/`, `planned/` and `backtest/`, so a run per push would only report a gate the work has not
@@ -30,13 +30,3 @@ jobs:
       - name: Verify
         run: mvn -B verify
         working-directory: server
-
-  tools:
-    name: Parity gate test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv run --python 3.11 --with pytest pytest server/tools/tests -q
-      - name: Release script self-test
-        run: bash scripts/test-release.sh

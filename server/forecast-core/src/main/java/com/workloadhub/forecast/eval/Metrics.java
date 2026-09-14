@@ -9,14 +9,7 @@ public final class Metrics {
     }
 
     public static double mae(double[] y, double[] p) {
-        if (y.length == 0) {
-            return Double.NaN;
-        }
-        double s = 0;
-        for (int i = 0; i < y.length; i++) {
-            s += Math.abs(y[i] - p[i]);
-        }
-        return s / y.length;
+        return com.workloadhub.forecast.Numbers.mae(y, p);
     }
 
     /** Mean of forecast minus truth: positive means the forecast runs high. */

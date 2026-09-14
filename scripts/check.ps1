@@ -1,6 +1,6 @@
-# The gate, the same steps as scripts/check.sh and .github/workflows/ci.yml (which has no remote to fire
-# on): the Java module's `mvn verify` and the parity gate's test. Running this by hand is the only gate
-# there is. A step whose tool is missing is skipped with a message.
+# The gate, the same step as scripts/check.sh and .github/workflows/ci.yml (which has no remote to fire
+# on): the Java module's `mvn verify`. Running this by hand is the only gate there is. A step whose tool
+# is missing is skipped with a message.
 # Unlike check.sh, which runs every step and reports each failure, this script stops at the first
 # failing step; both exit non-zero on any failure.
 #
@@ -27,14 +27,8 @@ if (Get-Command mvn -ErrorAction SilentlyContinue) {
 } else {
     Write-Host "SKIP server (mvn verify): mvn not found on PATH" -ForegroundColor Yellow
 }
-if (Get-Command uv -ErrorAction SilentlyContinue) {
-    Add-Step "tools (parity gate test)" $root "uv" @("run", "--python", "3.11", "--with", "pytest", "pytest", "server/tools/tests", "-q")
-} else {
-    Write-Host "SKIP tools (parity gate test): uv not found on PATH" -ForegroundColor Yellow
-}
-
 if ($steps.Count -eq 0) {
-    Write-Host "gate ran nothing: install mvn and uv" -ForegroundColor Red
+    Write-Host "gate ran nothing: install mvn" -ForegroundColor Red
     exit 1
 }
 

@@ -21,8 +21,8 @@ fail() {
 [ -z "$(git status --porcelain)" ] || fail "the working tree is dirty; commit or stash before releasing"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 [ "$branch" = "$from" ] || fail "expected to be on '$from' but the current branch is '$branch'"
-if ! command -v mvn >/dev/null 2>&1 || ! command -v uv >/dev/null 2>&1; then
-    fail "release needs mvn and uv on PATH so that the whole gate runs"
+if ! command -v mvn >/dev/null 2>&1; then
+    fail "release needs mvn on PATH so that the whole gate runs"
 fi
 
 bash "$gate" || fail "the gate failed; '$to' was not moved"

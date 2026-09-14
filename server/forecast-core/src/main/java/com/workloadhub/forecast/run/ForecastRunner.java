@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.run;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.MemberDayForecast;
 import com.workloadhub.forecast.api.MemberWindowForecast;
@@ -63,18 +64,14 @@ public final class ForecastRunner {
         return capacityRule;
     }
 
-    public static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
-
     public static Band band(double open, double fresh, double planned, double q10, double q90, double ratio, double capacity) {
-        double o = round2(open);
-        double n = round2(fresh);
-        double p = round2(planned);
-        double demand = round2(o + n + p);
-        double low = round2(Math.min(demand, o + p + Math.max(0.0, n + Math.min(0.0, q10) * ratio)));
-        double high = round2(Math.max(demand, o + p + n + Math.max(0.0, q90) * ratio));
-        double overload = round2(Math.max(0.0, demand - capacity));
+        double o = Numbers.round2(open);
+        double n = Numbers.round2(fresh);
+        double p = Numbers.round2(planned);
+        double demand = Numbers.round2(o + n + p);
+        double low = Numbers.round2(Math.min(demand, o + p + Math.max(0.0, n + Math.min(0.0, q10) * ratio)));
+        double high = Numbers.round2(Math.max(demand, o + p + n + Math.max(0.0, q90) * ratio));
+        double overload = Numbers.round2(Math.max(0.0, demand - capacity));
         return new Band(o, n, p, demand, low, high, overload);
     }
 
@@ -208,9 +205,9 @@ public final class ForecastRunner {
                     double cap = capacityRule.dayCapacity(m, d, data, p.calendar());
                     boolean workingDay = p.calendar().isWorkingDay(d);
                     // Day rows round each component so the stored day figures add up exactly; the window band rounds the raw sums, so a window and the sum of its days can differ by a few hundredths of an hour.
-                    double demand = round2(round2(o) + round2(n) + round2(pl));
-                    dayRows.add(new MemberDayForecast(m.id(), d, w.index(), round2(o), round2(n), round2(pl), demand, cap,
-                            round2(Math.max(0.0, demand - cap)), workingDay));
+                    double demand = Numbers.round2(Numbers.round2(o) + Numbers.round2(n) + Numbers.round2(pl));
+                    dayRows.add(new MemberDayForecast(m.id(), d, w.index(), Numbers.round2(o), Numbers.round2(n), Numbers.round2(pl), demand, cap,
+                            Numbers.round2(Math.max(0.0, demand - cap)), workingDay));
                     openSum += o;
                     freshSum += n;
                     plannedSum += pl;
@@ -226,9 +223,9 @@ public final class ForecastRunner {
                         q90 += q[1] / w.weekdays().size();
                     }
                 }
-                Band b = band(openSum, freshSum, plannedSum, q10, q90, ratio, round2(capacity));
+                Band b = band(openSum, freshSum, plannedSum, q10, q90, ratio, Numbers.round2(capacity));
                 windowRows.add(new MemberWindowForecast(m.id(), w.index(), w.start(), w.end(), b.open(), b.fresh(), b.planned(), b.demand(), b.low(),
-                        b.high(), round2(capacity), b.overload(), workingDays, round2(absence)));
+                        b.high(), Numbers.round2(capacity), b.overload(), workingDays, Numbers.round2(absence)));
             }
         }
         windowRows.sort(Comparator.comparing(MemberWindowForecast::userId, Ids.UUID_ORDER).thenComparingInt(MemberWindowForecast::windowIndex));

@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.backtest;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.features.FeatureMatrix;
 import com.workloadhub.forecast.model.ArrivalModel;
 import com.workloadhub.forecast.model.ModelUnavailable;
@@ -90,24 +91,6 @@ public final class Backtest {
         return out;
     }
 
-    public static double mase(double[] y, double[] yHat, double[] yNaive) {
-        double num = 0;
-        double den = 0;
-        for (int i = 0; i < y.length; i++) {
-            num += Math.abs(y[i] - yHat[i]);
-            den += Math.abs(y[i] - yNaive[i]);
-        }
-        return den == 0.0 ? Double.NaN : num / den;
-    }
-
-    static double mae(double[] y, double[] yHat) {
-        double s = 0;
-        for (int i = 0; i < y.length; i++) {
-            s += Math.abs(y[i] - yHat[i]);
-        }
-        return y.length == 0 ? Double.NaN : s / y.length;
-    }
-
     public static Result run(FeatureMatrix feat, Map<String, Supplier<ArrivalModel>> factories, List<LocalDate> origins, int[] horizons) {
         // the floor must always be scored and pooled, even when the caller only asked for other models.
         Map<String, Supplier<ArrivalModel>> withFloor = factories;
@@ -154,7 +137,7 @@ public final class Backtest {
                     long started = System.nanoTime();
                     double[] yHat = e.getValue().predict(test, h);
                     seconds.merge(e.getKey(), (System.nanoTime() - started) / 1e9, Double::sum);
-                    scores.add(new Score(e.getKey(), origin, h, mae(y, yHat), mase(y, yHat, yNaive)));
+                    scores.add(new Score(e.getKey(), origin, h, Numbers.mae(y, yHat), Numbers.mase(y, yHat, yNaive)));
                     List<Double> pool = residuals.computeIfAbsent(e.getKey(), k -> new TreeMap<>()).computeIfAbsent(h, k -> new ArrayList<>());
                     List<Residual> rowPool = residualRows.computeIfAbsent(e.getKey(), k -> new TreeMap<>()).computeIfAbsent(h, k -> new ArrayList<>());
                     for (int i = 0; i < y.length; i++) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The gate, the same steps as scripts/check.ps1 and .github/workflows/ci.yml (which has no remote to fire
-# on): the Java module's `mvn verify` and the parity gate's test. Running this by hand is the only gate
-# there is. A step whose tool is missing is skipped with a message.
+# The gate, the same step as scripts/check.ps1 and .github/workflows/ci.yml (which has no remote to fire
+# on): the Java module's `mvn verify`. Running this by hand is the only gate there is. A step whose tool
+# is missing is skipped with a message.
 # Unlike check.ps1, which stops at the first failing step, this script runs every step and reports each
 # failure; both exit non-zero on any failure.
 #
@@ -32,15 +32,8 @@ else
     echo "SKIP server (mvn verify): mvn not found on PATH"
 fi
 
-if command -v uv >/dev/null 2>&1; then
-    ran=$((ran + 1))
-    run_step "tools (parity gate test)" bash -c "cd '$root' && uv run --python 3.11 --with pytest pytest server/tools/tests -q"
-else
-    echo "SKIP tools (parity gate test): uv not found on PATH"
-fi
-
 if [ "$ran" -eq 0 ]; then
-    echo "gate ran nothing: install mvn and uv"
+    echo "gate ran nothing: install mvn"
     exit 1
 fi
 

@@ -47,7 +47,7 @@ git -C "$repo" checkout -q dev
 
 without_tools
 out="$(run)" && code=0 || code=$?
-check "missing tools refused" 1 "$code" "$out" "needs mvn and uv"
+check "missing tools refused" 1 "$code" "$out" "needs mvn"
 with_tools
 
 git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "work on dev"

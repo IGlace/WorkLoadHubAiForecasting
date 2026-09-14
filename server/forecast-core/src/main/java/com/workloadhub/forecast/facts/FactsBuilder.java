@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.facts;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.api.MemberDayForecast;
 import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.calendar.ForecastWindow;
@@ -17,7 +18,6 @@ import com.workloadhub.forecast.features.WeeklySeries;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
 import com.workloadhub.forecast.planned.PlannedWork;
-import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
 import java.time.LocalDate;
@@ -152,7 +152,7 @@ public final class FactsBuilder {
         List<Object> teamCapacity = new ArrayList<>();
         for (TeamCapacityRow r : data.teamCapacity()) {
             if (r.teamId().equals(out.teamId()) && horizonWeeks.contains(r.weekStart())) {
-                teamCapacity.add(map("week", str(r.weekStart()), "total", round2(r.totalCapacity()), "allocated", round2(r.allocated())));
+                teamCapacity.add(map("week", str(r.weekStart()), "total", Numbers.round2(r.totalCapacity()), "allocated", Numbers.round2(r.allocated())));
             }
         }
         Map<UUID, double[]> byProject = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
@@ -168,11 +168,11 @@ public final class FactsBuilder {
         }
         List<Object> backlog = new ArrayList<>();
         byProject.forEach((pid, acc) -> backlog.add(map("project_id", str(pid), "project_key", projects.containsKey(pid) ? projects.get(pid).key() : null,
-                "tasks", tasksByProject.get(pid).size(), "estimated_hours", round2(acc[0]), "hours_in_window", round2(acc[1]),
-                "hours_after_window", round2(acc[2]))));
+                "tasks", tasksByProject.get(pid).size(), "estimated_hours", Numbers.round2(acc[0]), "hours_in_window", Numbers.round2(acc[1]),
+                "hours_after_window", Numbers.round2(acc[2]))));
         return map("id", str(out.teamId()), "name", team == null ? null : team.name(), "parent_team_id", team == null ? null : str(team.parentId()),
                 "manager_id", team == null ? null : str(team.managerId()), "totals", totals, "team_capacity", teamCapacity,
-                "planned_backlog", map("candidates", out.planned().candidateCount(), "candidate_hours", round2(out.planned().candidateHours()),
+                "planned_backlog", map("candidates", out.planned().candidateCount(), "candidate_hours", Numbers.round2(out.planned().candidateHours()),
                         "projects", backlog));
     }
 
@@ -200,7 +200,7 @@ public final class FactsBuilder {
             }
             forecast.add(map("window", r.windowIndex(), "start", str(r.windowStart()), "end", str(r.windowEnd()), "demand", r.demandHrs(), "low", r.lowHrs(),
                     "high", r.highHrs(), "capacity", r.capacityHrs(), "overload", r.overloadHrs(), "open_hours", r.openHrs(), "new_hours", r.newHrs(),
-                    "planned_hours", r.plannedHrs(), "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", round2(due)));
+                    "planned_hours", r.plannedHrs(), "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", Numbers.round2(due)));
         }
         List<Object> dayList = new ArrayList<>();
         for (MemberDayForecast d : days) {
@@ -212,8 +212,8 @@ public final class FactsBuilder {
         List<Object> openTasks = new ArrayList<>();
         for (TaskFacts f : open) {
             openTasks.add(map("key", f.task().key(), "title", f.task().title(), "type", f.task().typeName(), "family", f.family().label(),
-                    "priority", f.task().priority(), "estimated_hours", round2(f.estimate()),
-                    "remaining_hours", f.remaining() == null ? null : round2(f.remaining()), "due_date", str(f.task().dueDate()),
+                    "priority", f.task().priority(), "estimated_hours", Numbers.round2(f.estimate()),
+                    "remaining_hours", f.remaining() == null ? null : Numbers.round2(f.remaining()), "due_date", str(f.task().dueDate()),
                     "overdue", f.task().dueDate() != null && f.task().dueDate().isBefore(p.asOf()),
                     "project_key", key(projects, f.task().projectId()), "in_progress", f.inProgress()));
         }
@@ -225,14 +225,14 @@ public final class FactsBuilder {
         }
         List<Object> loggedWeeks = new ArrayList<>();
         for (LocalDate w : Weeks.between(p.origin().minusWeeks(LOGGED_WEEKS - 1), p.origin())) {
-            loggedWeeks.add(map("week", str(w), "hours", round2(logged.getOrDefault(w, 0.0))));
+            loggedWeeks.add(map("week", str(w), "hours", Numbers.round2(logged.getOrDefault(w, 0.0))));
         }
         List<Object> planned = new ArrayList<>();
         for (PlannedWork.Piece piece : out.planned().pieces()) {
             if (piece.member().equals(m.id())) {
                 planned.add(map("key", piece.key(), "title", piece.title(), "project_key", key(projects, piece.projectId()), "type", piece.family().label(),
-                        "estimated_hours", round2(piece.estimate()), "share", round2(piece.share()), "expected_date", str(piece.expectedDate()),
-                        "expected_window", piece.expectedWindow() == null ? "after_window" : piece.expectedWindow(), "hours_in_window", round2(piece.hoursInWindow())));
+                        "estimated_hours", Numbers.round2(piece.estimate()), "share", Numbers.round2(piece.share()), "expected_date", str(piece.expectedDate()),
+                        "expected_window", piece.expectedWindow() == null ? "after_window" : piece.expectedWindow(), "hours_in_window", Numbers.round2(piece.hoursInWindow())));
             }
         }
         List<Object> roles = new ArrayList<>();
@@ -248,7 +248,7 @@ public final class FactsBuilder {
             own.forEach(f -> types.merge(f.task().typeName(), 1, Integer::sum));
             List<Object> dominant = types.entrySet().stream().sorted((a, b) -> b.getValue() != a.getValue().intValue() ? b.getValue() - a.getValue() : a.getKey().compareTo(b.getKey()))
                     .limit(3).map(t -> (Object) map("type", t.getKey(), "count", t.getValue())).toList();
-            roles.add(map("project_key", key(projects, e.getKey()), "share", round2((double) own.size() / e.getValue().size()), "dominant_types", dominant, "phase", "active"));
+            roles.add(map("project_key", key(projects, e.getKey()), "share", Numbers.round2((double) own.size() / e.getValue().size()), "dominant_types", dominant, "phase", "active"));
         }
         Map<String, Integer> recentMix = new TreeMap<>();
         LocalDate mixStart = Weeks.mondayOf(p.asOf()).minusWeeks(HISTORY_WEEKS);
@@ -298,7 +298,7 @@ public final class FactsBuilder {
         Map<String, Object> horizons = new LinkedHashMap<>();
         for (int h : p.horizons()) {
             double[] q = p.bandOffsets().get(h);
-            horizons.put(String.valueOf(h), map("low_offset", round2(q[0]), "high_offset", round2(q[1])));
+            horizons.put(String.valueOf(h), map("low_offset", Numbers.round2(q[0]), "high_offset", Numbers.round2(q[1])));
         }
         Map<String, Object> mase = new TreeMap<>();
         p.backtest().meanMaseByModel().forEach((k, v) -> mase.put(k, finite(v)));
@@ -353,9 +353,5 @@ public final class FactsBuilder {
 
     static double round1(double v) {
         return Math.round(v * 10.0) / 10.0;
-    }
-
-    static double round2(double v) {
-        return ForecastRunner.round2(v);
     }
 }

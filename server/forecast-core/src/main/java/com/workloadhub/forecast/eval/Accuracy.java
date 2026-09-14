@@ -1,11 +1,11 @@
 package com.workloadhub.forecast.eval;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.api.AccuracyResult;
 import com.workloadhub.forecast.api.AccuracyRow;
 import com.workloadhub.forecast.api.AccuracyScore;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.MemberDayForecast;
-import com.workloadhub.forecast.backtest.Backtest;
 import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.features.MemberDay;
@@ -133,7 +133,7 @@ public final class Accuracy {
             mNaive[i] = scorable.get(i)[2];
         }
         double[] pr = Metrics.overloadPrecisionRecall(actualOver, forecastOver);
-        double mase = maseN == 0 ? Double.NaN : Backtest.mase(my, mp, mNaive);
+        double mase = maseN == 0 ? Double.NaN : Numbers.mase(my, mp, mNaive);
         return new AccuracyScore(scope, key, n, Metrics.mae(y, p), Metrics.bias(y, p), mase, maseN, pr[0], pr[1]);
     }
 }

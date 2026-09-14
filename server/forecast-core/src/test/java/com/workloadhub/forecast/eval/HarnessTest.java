@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.backtest.Backtest;
 import com.workloadhub.forecast.capacity.CapacityRule;
@@ -57,7 +58,7 @@ class HarnessTest {
         assertEquals(Set.of(Backtest.FLOOR, XgboostArrival.NAME), result.demand().stream().map(DemandRow::model).collect(java.util.stream.Collectors.toSet()));
         assertEquals(2, result.demand().stream().map(DemandRow::teamId).distinct().count());
         for (DemandRow r : result.demand()) {
-            assertEquals(r.forecast(), ForecastRunner.round2(r.openHours() + r.newHours() + r.plannedHours()), 1e-9);
+            assertEquals(r.forecast(), Numbers.round2(r.openHours() + r.newHours() + r.plannedHours()), 1e-9);
             assertTrue(r.truth() >= 0 && r.capacity() >= 0);
             assertTrue(r.windowStart().equals(r.origin().plusWeeks(1).plusDays(1)) || r.windowStart().equals(r.origin().plusWeeks(2).plusDays(1)),
                     "the replay runs on the Monday after the origin, so its windows start on Tuesdays");

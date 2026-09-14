@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.capacity;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
@@ -74,7 +75,7 @@ public final class CapacityRule {
     public double absenceHours(UUID member, LocalDate monday, ForecastData data, WorkingCalendar cal) {
         Optional<CapacityRow> row = rowFor(member, monday, data);
         if (row.isPresent()) {
-            return round2(row.get().absence());
+            return Numbers.round2(row.get().absence());
         }
         LocalDate end = monday.plusDays(6);
         NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
@@ -87,17 +88,17 @@ public final class CapacityRule {
                 sum += e.getValue();
             }
         }
-        return round2(sum);
+        return Numbers.round2(sum);
     }
 
     public double capacity(MemberRow member, LocalDate monday, ForecastData data, WorkingCalendar cal) {
         Optional<CapacityRow> row = rowFor(member.id(), monday, data);
         if (row.isPresent()) {
-            return round2(row.get().available());
+            return Numbers.round2(row.get().available());
         }
         double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
         double hours = base * cal.workingDaysInWeek(monday) / WORKING_DAYS_PER_WEEK - absenceHours(member.id(), monday, data, cal);
-        return round2(Math.max(0.0, hours));
+        return Numbers.round2(Math.max(0.0, hours));
     }
 
     /**
@@ -113,16 +114,16 @@ public final class CapacityRule {
         Optional<CapacityRow> row = rowFor(member.id(), monday, data);
         if (row.isPresent()) {
             int working = cal.workingDaysInWeek(monday);
-            return working == 0 ? 0.0 : round2(Math.max(0.0, row.get().available() / working));
+            return working == 0 ? 0.0 : Numbers.round2(Math.max(0.0, row.get().available() / working));
         }
         double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
-        return round2(Math.max(0.0, base / WORKING_DAYS_PER_WEEK - dayAbsenceHours(member.id(), day, data)));
+        return Numbers.round2(Math.max(0.0, base / WORKING_DAYS_PER_WEEK - dayAbsenceHours(member.id(), day, data)));
     }
 
     /** The member's absence hours recorded on that day. */
     public double dayAbsenceHours(UUID member, LocalDate day, ForecastData data) {
         NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
-        return byDay == null ? 0.0 : round2(byDay.getOrDefault(day, 0.0));
+        return byDay == null ? 0.0 : Numbers.round2(byDay.getOrDefault(day, 0.0));
     }
 
     /** Days a member is away for the whole day: absences of at least a full day's hours. */
@@ -134,9 +135,5 @@ public final class CapacityRule {
             }
         }
         return out;
-    }
-
-    static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
     }
 }

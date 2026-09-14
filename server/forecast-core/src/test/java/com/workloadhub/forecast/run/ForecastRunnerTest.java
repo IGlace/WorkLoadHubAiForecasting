@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.MemberDayForecast;
 import com.workloadhub.forecast.api.MemberWindowForecast;
@@ -98,8 +99,8 @@ class ForecastRunnerTest {
         assertEquals(out.members().size() * 2, rows.size());
         assertEquals(out.members().size() * 10, out.memberDays().size());
         for (MemberWindowForecast r : rows) {
-            assertEquals(r.demandHrs(), ForecastRunner.round2(r.openHrs() + r.newHrs() + r.plannedHrs()), 1e-9);
-            assertEquals(r.overloadHrs(), ForecastRunner.round2(Math.max(0, r.demandHrs() - r.capacityHrs())), 1e-9);
+            assertEquals(r.demandHrs(), Numbers.round2(r.openHrs() + r.newHrs() + r.plannedHrs()), 1e-9);
+            assertEquals(r.overloadHrs(), Numbers.round2(Math.max(0, r.demandHrs() - r.capacityHrs())), 1e-9);
             assertTrue(r.lowHrs() <= r.demandHrs() + 1e-9 && r.demandHrs() <= r.highHrs() + 1e-9);
             assertTrue(r.lowHrs() >= r.openHrs() + r.plannedHrs() - 1e-9, "the band never cuts into placed or planned work");
             assertTrue(r.capacityHrs() >= 0 && r.workingDays() >= 0 && r.workingDays() <= 5);
@@ -116,8 +117,8 @@ class ForecastRunnerTest {
             assertEquals(r.demandHrs(), days.stream().mapToDouble(MemberDayForecast::demandHrs).sum(), 0.05);
             assertEquals(r.workingDays(), days.stream().filter(MemberDayForecast::workingDay).count());
             for (MemberDayForecast d : days) {
-                assertEquals(d.demandHrs(), ForecastRunner.round2(d.openHrs() + d.newHrs() + d.plannedHrs()), 1e-9);
-                assertEquals(d.overloadHrs(), ForecastRunner.round2(Math.max(0, d.demandHrs() - d.capacityHrs())), 1e-9);
+                assertEquals(d.demandHrs(), Numbers.round2(d.openHrs() + d.newHrs() + d.plannedHrs()), 1e-9);
+                assertEquals(d.overloadHrs(), Numbers.round2(Math.max(0, d.demandHrs() - d.capacityHrs())), 1e-9);
                 assertTrue(d.workingDay() || d.capacityHrs() == 0.0, "no capacity on a holiday");
             }
         }

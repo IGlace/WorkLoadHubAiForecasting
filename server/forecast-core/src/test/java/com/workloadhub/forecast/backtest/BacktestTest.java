@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.features.FeatureMatrix;
 import com.workloadhub.forecast.features.Features;
 import com.workloadhub.forecast.model.ArrivalModel;
@@ -38,8 +39,8 @@ class BacktestTest {
 
     @Test
     void maseIsTheErrorRatioAgainstTheNaiveAndNaNWhenTheNaiveIsPerfect() {
-        assertEquals(0.5, Backtest.mase(new double[] {1, 2, 3}, new double[] {1.5, 2.5, 3.5}, new double[] {2, 3, 4}), 1e-9);
-        assertTrue(Double.isNaN(Backtest.mase(new double[] {1, 2}, new double[] {1, 3}, new double[] {1, 2})));
+        assertEquals(0.5, Numbers.mase(new double[] {1, 2, 3}, new double[] {1.5, 2.5, 3.5}, new double[] {2, 3, 4}), 1e-9);
+        assertTrue(Double.isNaN(Numbers.mase(new double[] {1, 2}, new double[] {1, 3}, new double[] {1, 2})));
     }
 
     @Test
