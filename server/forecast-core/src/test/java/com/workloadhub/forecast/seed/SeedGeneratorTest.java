@@ -124,7 +124,8 @@ class SeedGeneratorTest {
         }
         for (var e : perDay.entrySet()) {
             for (var d : e.getValue().entrySet()) {
-                assertTrue(d.getValue() <= 8.0 + 1e-9, "more than 8 h on " + d.getKey());
+                // presence caps logged hours at AbsencePlanner.HOURS_PER_DAY (44 h / 5 days), not a bare 8 h day
+                assertTrue(d.getValue() <= AbsencePlanner.HOURS_PER_DAY + 1e-9, "more than a day's hours on " + d.getKey());
                 assertFalse(absentDays.contains(e.getKey() + "|" + d.getKey()), "log on an absence day");
             }
         }
@@ -164,7 +165,8 @@ class SeedGeneratorTest {
             double abs = (Double) r.get("absence_hrs");
             double avail = (Double) r.get("available_hrs");
             LocalDate monday = LocalDate.parse((String) r.get("week_start"));
-            double expected = Math.max(0.0, 40.0 * cal.workingDays(monday) / 5.0 - abs);
+            // the application's own formula: CapacityWriter.BASE_HOURS spread over the week's working days, minus absence
+            double expected = Math.max(0.0, CapacityWriter.BASE_HOURS * cal.workingDays(monday) / 5.0 - abs);
             assertEquals(expected, avail, 1e-9, "available_hrs for " + r.get("user_id") + "@" + monday);
             available.put(r.get("user_id") + "|" + r.get("week_start"), avail);
         }

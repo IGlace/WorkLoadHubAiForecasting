@@ -81,6 +81,16 @@ class CapacityRuleTest {
     }
 
     @Test
+    void aMemberWithNoCapacityRowFallsBackToFortyFourHours() {
+        ForecastData d = data(List.of(), List.of());
+        WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
+        CapacityRule rule = new CapacityRule(44.0);
+        // A member with no user_capacity row at all, in a week with five working days and no absence.
+        assertEquals(44.0, rule.capacity(d.members().get(0), LocalDate.of(2026, 3, 16), d, cal), 1e-9);
+        assertEquals(8.8, rule.dayCapacity(d.members().get(0), LocalDate.of(2026, 3, 16), d, cal), 1e-9);
+    }
+
+    @Test
     void dayCapacityIsZeroOffWorkingDaysAndBaseOverFiveMinusTheDaysAbsence() {
         ForecastData d = data(List.of(new CapacityRow(M, LocalDate.of(2026, 3, 2), 36, 0, 36)),
                 List.of(new AbsenceRow(M, LocalDate.of(2026, 4, 28), 4), new AbsenceRow(M, LocalDate.of(2026, 4, 29), 20)));

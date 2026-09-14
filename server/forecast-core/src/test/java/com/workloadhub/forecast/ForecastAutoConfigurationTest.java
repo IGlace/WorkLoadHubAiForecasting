@@ -49,7 +49,7 @@ class ForecastAutoConfigurationTest {
                     assertEquals(Dialect.SQLITE, ctx.getBean(Dialect.class));
                     assertNotNull(ctx.getBean(GitHubTokenStore.class));
                     ForecastProperties p = ctx.getBean(ForecastProperties.class);
-                    assertEquals(40.0, p.getDefaultWeeklyHours());
+                    assertEquals(44.0, p.getDefaultWeeklyHours());
                     assertTrue(p.getFlyway().isEnabled());
                     // migrations ran: the users table has the token column
                     var jdbc = org.springframework.jdbc.core.simple.JdbcClient.create(DS);

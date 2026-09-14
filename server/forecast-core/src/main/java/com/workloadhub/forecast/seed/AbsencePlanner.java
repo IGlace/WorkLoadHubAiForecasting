@@ -10,11 +10,14 @@ import java.util.TreeSet;
 /** Vacation blocks, sick days and the resulting presence per day for one person. */
 public final class AbsencePlanner {
 
+    /** A present working day, requirement C1: a 44-hour week over five days. */
+    public static final double HOURS_PER_DAY = 8.8;
+
     public record Plan(Set<LocalDate> absentDays, List<LinkedHashMap<String, Object>> absenceRows,
             List<LinkedHashMap<String, Object>> leaveRows, SeedCalendar calendar) {
 
         public double hoursPresent(Person p, LocalDate day) {
-            return calendar.isWorkingDay(day) && p.employedOn(day) && !absentDays.contains(day) ? 8.0 : 0.0;
+            return calendar.isWorkingDay(day) && p.employedOn(day) && !absentDays.contains(day) ? HOURS_PER_DAY : 0.0;
         }
 
         public double absenceHours(LocalDate monday) {
@@ -24,7 +27,7 @@ public final class AbsencePlanner {
                     n++;
                 }
             }
-            return 8.0 * n;
+            return HOURS_PER_DAY * n;
         }
     }
 
@@ -101,14 +104,14 @@ public final class AbsencePlanner {
             a.put("date", d.toString());
             a.put("note", note);
             a.put("type", absenceType);
-            a.put("hours", 8.0);
+            a.put("hours", HOURS_PER_DAY);
             a.put("user_id", p.id().toString());
             a.put("created_at", created);
             a.put("updated_at", created);
             absenceRows.add(a);
         }
         LinkedHashMap<String, Object> l = new LinkedHashMap<>();
-        l.put("absence_hours", 8.0 * days.size());
+        l.put("absence_hours", HOURS_PER_DAY * days.size());
         l.put("begin_time", null);
         l.put("end_date", days.get(days.size() - 1).toString());
         l.put("end_time", null);

@@ -8,7 +8,7 @@ public class ForecastProperties {
 
     private String tokenKey;
     private String workDir = System.getProperty("user.home") + "/.workloadhub-forecast";
-    private double defaultWeeklyHours = 40.0;
+    private double defaultWeeklyHours = 44.0;
     private int runThreads = 2;
     private final PlannedWork plannedWork = new PlannedWork();
     private final Copilot copilot = new Copilot();

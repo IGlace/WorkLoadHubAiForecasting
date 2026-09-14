@@ -53,8 +53,8 @@ class AbsencePlannerTest {
         LocalDate anyAbsent = plan.absentDays().iterator().next();
         assertEquals(0.0, plan.hoursPresent(p, anyAbsent));
         LocalDate monday = SeedConfig.mondayOf(anyAbsent);
-        assertTrue(plan.absenceHours(monday) >= 8.0);
+        assertTrue(plan.absenceHours(monday) >= AbsencePlanner.HOURS_PER_DAY);
         long presentDays = cal.workingDaysOf(monday).stream().filter(d -> plan.hoursPresent(p, d) > 0).count();
-        assertEquals(8.0 * (cal.workingDays(monday) - presentDays), plan.absenceHours(monday), 1e-9);
+        assertEquals(AbsencePlanner.HOURS_PER_DAY * (cal.workingDays(monday) - presentDays), plan.absenceHours(monday), 1e-9);
     }
 }

@@ -8,6 +8,7 @@ import com.workloadhub.forecast.facts.FactsBuilder;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
+import com.workloadhub.forecast.seed.CapacityWriter;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
@@ -25,7 +26,7 @@ public final class SeededFacts {
         if (json == null) {
             ForecastData data = SeededData.data();
             UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
-            ForecastRunner runner = new ForecastRunner(new CapacityRule(40), true);
+            ForecastRunner runner = new ForecastRunner(new CapacityRule(CapacityWriter.BASE_HOURS), true);
             Prepared prepared = runner.prepare(data, SeededData.asOf(), "seasonal_naive", (phase, percent, message) -> { });
             TeamOutcome outcome = runner.forTeam(prepared, team, null);
             json = FactsBuilder.toJson(FactsBuilder.build(outcome, RUN_ID, LocalDateTime.of(2026, 9, 6, 12, 0)));

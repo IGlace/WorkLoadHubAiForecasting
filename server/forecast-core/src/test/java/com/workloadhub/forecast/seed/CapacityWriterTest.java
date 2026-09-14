@@ -13,6 +13,14 @@ import org.junit.jupiter.api.Test;
 class CapacityWriterTest {
 
     @Test
+    void theWeekIsFortyFourHoursAcrossFiveDays() {
+        assertEquals(44.0, CapacityWriter.BASE_HOURS, 1e-9);
+        assertEquals(8.8, AbsencePlanner.HOURS_PER_DAY, 1e-9);
+        assertEquals(CapacityWriter.BASE_HOURS / 5.0, AbsencePlanner.HOURS_PER_DAY, 1e-9,
+                "requirement C1: a 44-hour week is 8.8 hours on each of five working days");
+    }
+
+    @Test
     void userCapacityRowsFollowTheFormulaForEveryEmployedWeek() {
         SeedConfig cfg = new SeedConfig(52, LocalDate.of(2026, 9, 6), 1, false, 0);
         SeedCalendar cal = AbsencePlannerTest.cal();
@@ -26,7 +34,7 @@ class CapacityWriterTest {
             double base = (Double) r.get("base_capacity_hrs");
             double absence = (Double) r.get("absence_hrs");
             double available = (Double) r.get("available_hrs");
-            assertEquals(40.0, base);
+            assertEquals(CapacityWriter.BASE_HOURS, base);
             assertEquals(plan.absenceHours(monday), absence, 1e-9);
             assertEquals(base * cal.workingDays(monday) / 5.0 - absence, available, 1e-9);
             assertTrue(available >= 0);

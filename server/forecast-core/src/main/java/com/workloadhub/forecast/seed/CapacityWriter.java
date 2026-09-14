@@ -11,7 +11,7 @@ import java.util.function.ToDoubleBiFunction;
 /** user_capacity and team_capacity rows, one per week, as the application computes them. */
 public final class CapacityWriter {
 
-    public static final double BASE_HOURS = 40.0;
+    public static final double BASE_HOURS = 44.0;
 
     private CapacityWriter() {
     }
