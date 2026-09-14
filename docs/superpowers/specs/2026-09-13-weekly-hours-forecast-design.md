@@ -518,7 +518,9 @@ row and `mase_by_model` replaced by `mean_mae`.
 
 `FactsBuilder.LIMITATIONS` is rewritten: predicted hours are spread over a week's working days by the member's
 logged-hours weekday shares; days already past are not re-forecast; the forecast is of hours logged, so a
-member who logs less than they work is forecast to work less.
+member who logs less than they work is forecast to work less; and it is a forecast of what someone will get
+through rather than of what is waiting for them, which is why `backlog_excess_hrs` and `due_excess_hrs` are
+reported beside it.
 
 ## 13. Product skills
 
@@ -642,8 +644,9 @@ thin-history run forecasts with a null `mae`, `confidence` `thin_history` and an
 `backlog_excess_hrs` is positive exactly when open remaining hours exceed the summed capacity of the windows
 up to and including that one, and is non-increasing across a run's windows; `due_excess_hrs` is positive
 exactly when that window's `due_hours` exceeds that window's capacity; a member in `deadline_pressed` has a
-positive `due_excess_hrs` in at least one window;
-`CapacityRule` falls back to 44 hours when a member has no capacity row.
+positive `due_excess_hrs` in at least one window; a matrix built at two windows, handed to a backtest asking
+for horizon 7, fails with a message naming the missing horizon rather than reading a column that is not there
+(section 3.2); and `CapacityRule` falls back to 44 hours when a member has no capacity row.
 
 `XgboostHoursTest` replaces the `SeasonalNaive` comparison at `XgboostArrivalTest:69` with a two-line baseline
 in the test — each member's mean of the training target — which the booster must beat on a planted-signal
