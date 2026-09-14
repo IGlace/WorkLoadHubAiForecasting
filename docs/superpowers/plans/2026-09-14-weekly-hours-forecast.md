@@ -731,7 +731,11 @@ There is an existing assertion in this class, at about line 340, that logged hou
 - [ ] **Step 10: Run the gate and absorb the fallout**
 
 Run: `cd server && mvn -B -q verify` (600000 ms).
-Expected: failures again, in the same way task 2 produced them, because every seeded number has moved. Work through them with the same three-way test from task 2 step 7. `SeedGeneratorTest`'s determinism properties must still pass unchanged — if one fails, the new draws were not made in a fixed order and that is a real defect.
+Expected: failures, in the same way task 2 produced them, because seeded numbers move. Task 2's own
+fallout was **five assertions, not the hundred-odd this plan first guessed**: roughly 175 to 200 tests
+*depend on* seeded data, but few assert on an exact figure, so most absorb a change silently. Expect
+tens rather than hundreds here, and treat a suspiciously small number as a question about whether some
+suite is too loose to notice, not as good news. Work through them with the same three-way test from task 2 step 7. `SeedGeneratorTest`'s determinism properties must still pass unchanged — if one fails, the new draws were not made in a fixed order and that is a real defect.
 
 - [ ] **Step 11: Commit**
 
