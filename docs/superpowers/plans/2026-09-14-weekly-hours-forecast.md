@@ -1543,8 +1543,22 @@ The XGBoost native library can be missing, and `XgboostHours.fit` throws `ModelU
 
 - [ ] **Step 7: Run the gate**
 
-Run: `cd server && mvn -B -q verify` (600000 ms).
-Expected: failures only in `facts` and `ai`, which task 7 closes.
+Run: `cd server && mvn -B -q verify` (600000 ms — the tool's maximum; a larger value is silently
+backgrounded).
+
+**Correction, learned during execution.** This step originally expected "failures only in `facts` and
+`ai`, which task 7 closes", and that expectation was impossible. `FactsBuilder` is a **main source in
+the same Maven module** as everything else, so a compile error there blocks the whole reactor — you
+cannot have "the module compiles" and "facts stays broken for the next task" at once. The task 6/7
+boundary as this plan drew it is not enforceable at the Java module level. So this task must leave
+`FactsBuilder` COMPILING, even though task 7 owns the contract's content: make the minimum change that
+compiles against the reshaped records, and leave the key-by-key redesign to task 7.
+
+Expected after that: the module compiles, and three tests fail — two in `FactsBuilderTest` (the
+contract still carries removed keys, task 7's work) and one in `ExperimentFlowTest` (the experiment
+driver still passes retired model flags, task 11's work). `SampleHostIntegrationTest` is **this task's**
+to fix, not a later one's: it posts a forced model and asserts on a champion, both of which this task
+deletes.
 
 - [ ] **Step 8: Commit**
 
