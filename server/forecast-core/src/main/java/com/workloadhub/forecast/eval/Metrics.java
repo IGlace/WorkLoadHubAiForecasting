@@ -1,7 +1,5 @@
 package com.workloadhub.forecast.eval;
 
-import java.util.Map;
-
 /** Pure metric functions over equal-length arrays; NaN on empty input. */
 public final class Metrics {
 
@@ -22,45 +20,6 @@ public final class Metrics {
             s += p[i] - y[i];
         }
         return s / y.length;
-    }
-
-    public static double coverage(double[] y, double[] low, double[] high) {
-        if (y.length == 0) {
-            return Double.NaN;
-        }
-        int in = 0;
-        for (int i = 0; i < y.length; i++) {
-            if (low[i] <= y[i] && y[i] <= high[i]) {
-                in++;
-            }
-        }
-        return (double) in / y.length;
-    }
-
-    /** Mean over quantiles of the scaled pinball loss, as the GIFT-Eval benchmark defines it. */
-    public static double weightedQuantileLoss(double[] y, Map<Double, double[]> quantiles) {
-        if (y.length == 0 || quantiles.isEmpty()) {
-            return Double.NaN;
-        }
-        double scale = 0;
-        for (double v : y) {
-            scale += Math.abs(v) / y.length;
-        }
-        if (scale == 0) {
-            return Double.NaN;
-        }
-        double total = 0;
-        for (Map.Entry<Double, double[]> e : quantiles.entrySet()) {
-            double q = e.getKey();
-            double[] p = e.getValue();
-            double loss = 0;
-            for (int i = 0; i < y.length; i++) {
-                double d = y[i] - p[i];
-                loss += Math.max(q * d, (q - 1.0) * d) / y.length;
-            }
-            total += 2.0 * loss;
-        }
-        return total / quantiles.size() / scale;
     }
 
     public static double[] overloadPrecisionRecall(boolean[] trueOver, boolean[] predOver) {

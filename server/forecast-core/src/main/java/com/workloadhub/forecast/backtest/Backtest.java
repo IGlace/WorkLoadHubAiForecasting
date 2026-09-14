@@ -9,7 +9,6 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -25,11 +24,7 @@ public final class Backtest {
     public record Score(LocalDate origin, int horizon, double mae) {
     }
 
-    public record Residual(LocalDate origin, double y, double residual) {
-    }
-
-    public record Result(List<Score> scores, Map<Integer, double[]> residuals, Map<Integer, List<Residual>> residualRows,
-            double seconds, double meanActualHours) {
+    public record Result(List<Score> scores, Map<Integer, double[]> residuals, double seconds, double meanActualHours) {
 
         public double meanMae() {
             double s = 0;
@@ -48,12 +43,6 @@ public final class Backtest {
             double[] found = residuals.get(h);
             return found == null ? new double[0] : found;
         }
-
-        /** The per-origin residual rows at one horizon, or an empty list when unknown. */
-        public List<Residual> residualRows(int h) {
-            List<Residual> found = residualRows.get(h);
-            return found == null ? List.of() : found;
-        }
     }
 
     private Backtest() {
@@ -70,12 +59,8 @@ public final class Backtest {
     }
 
     public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek, int maxHorizon) {
-        return origins(lastCompleteWeek, firstWeek, ORIGIN_COUNT, maxHorizon);
-    }
-
-    public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek, int count, int maxHorizon) {
         List<LocalDate> out = new ArrayList<>();
-        for (int k = count; k >= 1; k--) {
+        for (int k = ORIGIN_COUNT; k >= 1; k--) {
             LocalDate origin = lastCompleteWeek.minusWeeks((long) k * ORIGIN_STEP_WEEKS);
             if (ChronoUnit.WEEKS.between(firstWeek, origin) >= minHistoryWeeks(maxHorizon)) {
                 out.add(origin);
@@ -94,7 +79,6 @@ public final class Backtest {
         int maxH = Arrays.stream(horizons).max().orElse(1);
         List<Score> scores = new ArrayList<>();
         Map<Integer, List<Double>> residuals = new TreeMap<>();
-        Map<Integer, List<Residual>> residualRows = new TreeMap<>();
         double seconds = 0;
         double actualSum = 0;
         int actualCount = 0;
@@ -118,10 +102,8 @@ public final class Backtest {
                     seconds += (System.nanoTime() - predictStarted) / 1e9;
                     scores.add(new Score(origin, h, Numbers.mae(y, yHat)));
                     List<Double> pool = residuals.computeIfAbsent(h, k -> new ArrayList<>());
-                    List<Residual> rowPool = residualRows.computeIfAbsent(h, k -> new ArrayList<>());
                     for (int i = 0; i < y.length; i++) {
                         pool.add(y[i] - yHat[i]);
-                        rowPool.add(new Residual(origin, y[i], y[i] - yHat[i]));
                         actualSum += y[i];
                         actualCount++;
                     }
@@ -130,10 +112,8 @@ public final class Backtest {
         }
         Map<Integer, double[]> pooled = new TreeMap<>();
         residuals.forEach((h, list) -> pooled.put(h, list.stream().mapToDouble(Double::doubleValue).toArray()));
-        Map<Integer, List<Residual>> frozenRows = new LinkedHashMap<>();
-        residualRows.forEach((h, list) -> frozenRows.put(h, List.copyOf(list)));
         double meanActual = actualCount == 0 ? Double.NaN : actualSum / actualCount;
-        return new Result(List.copyOf(scores), pooled, frozenRows, seconds, meanActual);
+        return new Result(List.copyOf(scores), pooled, seconds, meanActual);
     }
 
     /** NumPy's default (linear) quantiles at 0.1 and 0.9. */
