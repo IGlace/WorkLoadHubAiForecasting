@@ -27,7 +27,7 @@ public final class WorkQueue {
 
     public record Result(List<LinkedHashMap<String, Object>> taskRows, List<LinkedHashMap<String, Object>> historyRows,
             List<LinkedHashMap<String, Object>> timeLogRows, Map<UUID, Long> nextTaskNumber,
-            Map<UUID, Map<LocalDate, Double>> assignedHours) {
+            Map<UUID, Map<LocalDate, Double>> assignedHours, Map<UUID, Double> workedHours) {
     }
 
     private static final int MAX_ACTIVE = 3;
@@ -87,6 +87,11 @@ public final class WorkQueue {
     private final List<LinkedHashMap<String, Object>> historyRows = new ArrayList<>();
     private final List<LinkedHashMap<String, Object>> timeLogRows = new ArrayList<>();
     private final Map<UUID, Map<LocalDate, Double>> assignedHours = new TreeMap<>();
+    /** Per member, the sum of `give` across every {@link #logDay} allocation: the hours actually WORKED,
+     * before {@link WorkStyle#logged} scales it down by discipline. Exists so tests can tell the recorded
+     * (exported) hours apart from the worked hours discipline actually scales, without conflating that gap
+     * with the separate estimate/actual ratio. */
+    private final Map<UUID, Double> workedHours = new TreeMap<>();
     private final List<Team> teams;
     private final List<Project> projects;
 
@@ -119,7 +124,7 @@ public final class WorkQueue {
         for (Person p : counted) {
             q.simulate(p);
         }
-        return new Result(q.taskRows, q.historyRows, q.timeLogRows, q.nextNumber, q.assignedHours);
+        return new Result(q.taskRows, q.historyRows, q.timeLogRows, q.nextNumber, q.assignedHours, q.workedHours);
     }
 
     private void createEpics() {
@@ -447,6 +452,7 @@ public final class WorkQueue {
                 start(p, w, day.atTime(9, 0));
             }
             timeLogRows.add(Rows.timeLog(rnd.uuid(), w.id, p.id(), Numbers.round2(style.logged(give)), day, "Work on " + w.row.get("key")));
+            workedHours.merge(p.id(), give, Double::sum);
             w.logged += give;
             left -= give;
             w.row.put("remaining_estimate_hrs", Math.max(0.0, w.estimate - w.logged));

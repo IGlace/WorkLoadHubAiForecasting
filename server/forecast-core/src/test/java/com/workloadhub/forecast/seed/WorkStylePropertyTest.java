@@ -34,4 +34,18 @@ class WorkStylePropertyTest {
         assertTrue(s.overtimeChance() < 1.0, "a member who always runs long is not a member, it is a constant");
         assertTrue(s.overtimeFactor() > 1.0);
     }
+
+    @Property(tries = 2000)
+    void noWeekdayWeightEverExceedsTheCapAndTheWeekStillSumsToFive(@ForAll @LongRange(min = 1, max = 1_000_000) long seed) {
+        // Renormalising five weights to sum to 5 does not, by itself, stop one of them absorbing most of
+        // the week (the other four can sit at their 0.4 floor): capAndRedistribute must bring every one
+        // of them back under MAX_WEEKDAY_WEIGHT without moving the week's total off 5.
+        double[] w = WorkStyle.draw(new SeedRandom(seed)).weekdayWeights();
+        double sum = 0;
+        for (double v : w) {
+            assertTrue(v <= WorkStyle.MAX_WEEKDAY_WEIGHT + 1e-9, "a weekday weight exceeded the cap: " + v);
+            sum += v;
+        }
+        assertEquals(5.0, sum, 1e-9, "capping and redistributing must not change the week's total weight");
+    }
 }

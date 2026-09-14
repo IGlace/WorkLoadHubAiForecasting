@@ -361,9 +361,12 @@ class WorkQueueTest {
             String[] parts = e.getKey().split("\\|");
             Person p = byId.get(UUID.fromString(parts[0]));
             LocalDate day = LocalDate.parse(parts[1]);
-            double bound = w.plans().get(p.id()).hoursPresent(p, day) * WorkStyle.MAX_OVERTIME_FACTOR;
+            // provably correct, not seed-dependent: WorkStyle.draw caps every weekday weight at
+            // MAX_WEEKDAY_WEIGHT (clip-and-redistribute, after renormalising), so this is a genuine
+            // per-day ceiling rather than one that merely happens not to be hit by this fixed seed.
+            double bound = w.plans().get(p.id()).hoursPresent(p, day) * WorkStyle.MAX_WEEKDAY_WEIGHT * WorkStyle.MAX_OVERTIME_FACTOR;
             assertTrue(e.getValue() <= bound + 1e-9,
-                    "logged hours exceed presence times the largest overtime factor for " + e.getKey());
+                    "logged hours exceed presence times the largest weekday weight times the largest overtime factor for " + e.getKey());
         }
 
         // (f) determinism: an independently rebuilt world from the same seed (Rhythm owns a mutable
@@ -453,37 +456,40 @@ class WorkQueueTest {
 
     @Test
     void loggedHoursFallShortOfWorkedHoursForSomeone() {
-        // Sum a member's logged hours against the estimated hours of their finished tasks: logging
-        // discipline (< 1 for almost every member) means what gets recorded is less than what the task
-        // represented, for at least one member.
-        ExportEnvelope env = realisticDataset();
-        Reference ref = Reference.from(env.rows("task_statuses"), env.rows("task_types"));
-        UUID done = ref.status("Done");
-        Map<String, LinkedHashMap<String, Object>> finishedByAssignee = new HashMap<>();
-        Map<String, Double> estimateByAssignee = new HashMap<>();
-        for (LinkedHashMap<String, Object> task : env.rows("tasks")) {
-            if (!done.toString().equals(task.get("task_status_id"))) {
-                continue;
-            }
-            Object estimate = task.get("original_estimate_hrs");
-            Object assignee = task.get("assignee_id");
-            if (estimate == null || assignee == null) {
-                continue;
-            }
-            finishedByAssignee.put((String) task.get("id"), task);
-            estimateByAssignee.merge((String) assignee, (Double) estimate, Double::sum);
+        // Compare recorded (time_logs) hours against WORKED hours (WorkQueue.Result.workedHours()), not
+        // against a task's original_estimate_hrs. Comparing against the estimate is a trap: the
+        // per-member estimation-bias `ratio` (drawn in simulate, clamped to [0.6, 1.6]) already decouples
+        // worked hours from the stated estimate on its own, so a member with ratio < 1 would show
+        // "logged < estimate" even with discipline sitting at a no-op logged(worked) = worked - that
+        // reintroduces exactly the ratio/discipline conflation the two were drawn independently to avoid.
+        // workedHours is what discipline actually scales, so it is the only comparison that pins the
+        // mechanism rather than a correlated but different one.
+        long seed = 9;
+        World w = world(seed);
+        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.teams(), w.projects(), w.rhythm(), w.ref(),
+                WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
+        Map<UUID, Double> loggedByMember = new HashMap<>();
+        Map<UUID, Integer> rowsByMember = new HashMap<>();
+        for (LinkedHashMap<String, Object> log : r.timeLogRows()) {
+            UUID user = UUID.fromString((String) log.get("user_id"));
+            loggedByMember.merge(user, (Double) log.get("hours"), Double::sum);
+            rowsByMember.merge(user, 1, Integer::sum);
         }
-        Map<String, Double> loggedByAssignee = new HashMap<>();
-        for (LinkedHashMap<String, Object> log : env.rows("time_logs")) {
-            LinkedHashMap<String, Object> task = finishedByAssignee.get(log.get("task_id"));
-            if (task == null) {
-                continue;
+        boolean someoneFallsShort = false;
+        for (var e : r.workedHours().entrySet()) {
+            double worked = e.getValue();
+            double logged = loggedByMember.getOrDefault(e.getKey(), 0.0);
+            // recorded can only ever be a fraction of worked (discipline in (0, 1]); each row is
+            // independently rounded to a cent, so allow that much slack per row, no more.
+            double roundingSlack = 0.005 * rowsByMember.getOrDefault(e.getKey(), 0);
+            assertTrue(logged <= worked + roundingSlack, "recorded more hours than were worked for " + e.getKey());
+            if (logged < worked - roundingSlack) {
+                someoneFallsShort = true;
             }
-            loggedByAssignee.merge((String) task.get("assignee_id"), (Double) log.get("hours"), Double::sum);
         }
-        boolean someoneFallsShort = estimateByAssignee.entrySet().stream()
-                .anyMatch(e -> loggedByAssignee.getOrDefault(e.getKey(), 0.0) < e.getValue());
         assertTrue(someoneFallsShort,
-                "no member's logged hours on their finished work fall short of the estimate, so logging discipline has no visible effect");
+                "no member's recorded hours fall short of their worked hours: logging discipline (< 1 for "
+                        + "almost every member) has no visible effect. This is exactly what the test would show "
+                        + "if WorkStyle.logged(worked) returned worked unchanged.");
     }
 }
