@@ -239,7 +239,6 @@ public final class FeatureBuilder {
     /** Per-member indexes: the member's tasks and their time logs, by week and by task. */
     static final class MemberContext {
         final List<TaskFacts> tasks;
-        private final Map<LocalDate, Double> loggedByWeek = new HashMap<>();
         private final Map<UUID, List<TimeLogRow>> logsByTask = new HashMap<>();
 
         MemberContext(MemberRow m, List<TaskFacts> tasks, ForecastData data) {
@@ -248,13 +247,8 @@ public final class FeatureBuilder {
                 if (!l.userId().equals(m.id())) {
                     continue;
                 }
-                loggedByWeek.merge(Weeks.mondayOf(l.day()), l.hours(), Double::sum);
                 logsByTask.computeIfAbsent(l.taskId(), k -> new ArrayList<>()).add(l);
             }
-        }
-
-        double loggedInWeek(LocalDate monday) {
-            return loggedByWeek.getOrDefault(monday, 0.0);
         }
 
         /** The member's hours on the task logged on or before the day. */

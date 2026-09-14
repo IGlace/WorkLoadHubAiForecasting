@@ -22,7 +22,6 @@ import java.util.UUID;
 public final class CapacityRule {
 
     public static final int WORKING_DAYS_PER_WEEK = 5;
-    public static final double FULL_DAY_HOURS = 8.0;
 
     private final double defaultWeeklyHours;
 
@@ -126,14 +125,42 @@ public final class CapacityRule {
         return byDay == null ? 0.0 : Numbers.round2(byDay.getOrDefault(day, 0.0));
     }
 
-    /** Days a member is away for the whole day: absences of at least a full day's hours. */
+    /**
+     * Days a member is away for the whole day: absences that meet or exceed that day's own capacity. Between
+     * this task and task 9, this has no caller — task 9's weekday split is the caller (ruling 18.4): without
+     * it, predicted hours land on a day of zero capacity and read as pure overload, for a day the application
+     * records no hours on at all.
+     */
     public static Set<LocalDate> offDays(UUID member, ForecastData data) {
+        // A full day off is one whose absence hours meet that day's capacity. A fixed 8.0 was wrong the moment
+        // the working day became 8.8 (requirement C1).
         Set<LocalDate> out = new TreeSet<>();
         for (AbsenceRow a : data.absences()) {
-            if (a.userId().equals(member) && a.hours() >= FULL_DAY_HOURS) {
+            if (a.userId().equals(member) && a.hours() >= dayCapacityHint(member, a.day(), data)) {
                 out.add(a.day());
             }
         }
         return out;
     }
+
+    /**
+     * A day's own capacity from the member's own weekly base (the latest {@code user_capacity} row on or
+     * before that week), spread over five days; {@link #DEFAULT_DAY_HOURS} — the canonical 44-hour week
+     * (requirement C1) over five days — when the member has no capacity row at all. No {@link ForecastData}
+     * index is built here: {@link #offDays} is static and runs once per absence row, not per member-week.
+     */
+    private static double dayCapacityHint(UUID member, LocalDate day, ForecastData data) {
+        LocalDate monday = Weeks.mondayOf(day);
+        CapacityRow latest = null;
+        for (CapacityRow c : data.capacity()) {
+            if (c.userId().equals(member) && !c.weekStart().isAfter(monday)
+                    && (latest == null || c.weekStart().isAfter(latest.weekStart()))) {
+                latest = c;
+            }
+        }
+        return latest != null ? latest.base() / WORKING_DAYS_PER_WEEK : DEFAULT_DAY_HOURS;
+    }
+
+    /** The canonical present working day, requirement C1: a 44-hour week over five days. */
+    private static final double DEFAULT_DAY_HOURS = 8.8;
 }

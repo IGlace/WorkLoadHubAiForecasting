@@ -20,6 +20,12 @@ public final class SyntheticMatrix {
     private SyntheticMatrix() {
     }
 
+    /** A level-plus-season signal over 70 weeks for 8 members, built for horizons 1..3: the shared fixture for
+     * the backtest and model suites, so an origin drawn from the middle of its range has every horizon's target. */
+    public static FeatureMatrix plantedSignal() {
+        return arrivals(8, 70, 3);
+    }
+
     public static FeatureMatrix arrivals(int members, int weeks, long seed) {
         Random rnd = new Random(seed);
         List<String> columns = Features.allColumns();

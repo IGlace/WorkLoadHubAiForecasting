@@ -13,7 +13,7 @@ import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-class XgboostArrivalTest {
+class XgboostHoursTest {
 
     static final FeatureMatrix M = SyntheticMatrix.arrivals(12, 70, 7);
     static final LocalDate ORIGIN = M.key(M.rowCount() - 1).week();
@@ -28,11 +28,27 @@ class XgboostArrivalTest {
         return s / y.length;
     }
 
+    private static double[] meanBaseline(FeatureMatrix train, FeatureMatrix rows, int horizon) {
+        double sum = 0;
+        int n = 0;
+        double[] targets = train.target(horizon);
+        for (int r = 0; r < targets.length; r++) {
+            double t = targets[r];
+            if (!Double.isNaN(t)) {
+                sum += t;
+                n++;
+            }
+        }
+        double mean = n == 0 ? 0.0 : sum / n;
+        double[] out = new double[rows.rowCount()];
+        java.util.Arrays.fill(out, mean);
+        return out;
+    }
+
     @Test
-    void beatsTheFloorOnAPlantedSeasonalSignalAndNeverPredictsBelowZero() {
-        try (XgboostArrival xgb = new XgboostArrival()) {
+    void beatsTheMeanBaselineOnAPlantedSeasonalSignalAndNeverPredictsBelowZero() {
+        try (XgboostHours xgb = new XgboostHours()) {
             xgb.fit(TRAIN, Features.HORIZONS);
-            SeasonalNaive naive = new SeasonalNaive().fit(TRAIN, Features.HORIZONS);
             for (int h : Features.HORIZONS) {
                 double[] y = TEST.target(h);
                 double[] p = xgb.predict(TEST, h);
@@ -41,8 +57,8 @@ class XgboostArrivalTest {
                     assertTrue(v >= 0.0);
                 }
                 double model = mae(y, p);
-                double floor = mae(y, naive.predict(TEST, h));
-                assertTrue(model < floor, "h" + h + ": xgboost " + model + " vs floor " + floor);
+                double baseline = mae(y, meanBaseline(TRAIN, TEST, h));
+                assertTrue(model < baseline, "h" + h + ": xgboost " + model + " vs mean baseline " + baseline);
             }
             assertFalse(xgb.columnsUsed(1).contains("open_tasks"), "all-NaN columns are dropped");
             assertTrue(xgb.columnsUsed(1).contains("lag1"));
@@ -53,31 +69,31 @@ class XgboostArrivalTest {
     @Test
     void isDeterministicAcrossFits() {
         double[] first;
-        try (XgboostArrival a = new XgboostArrival()) {
+        try (XgboostHours a = new XgboostHours()) {
             first = a.fit(TRAIN, new int[] {1}).predict(TEST, 1);
         }
-        try (XgboostArrival b = new XgboostArrival()) {
+        try (XgboostHours b = new XgboostHours()) {
             assertArrayEquals(first, b.fit(TRAIN, new int[] {1}).predict(TEST, 1), 1e-6);
         }
     }
 
     @Test
     void numericFallbackTrainsAndPredictsToo() {
-        try (XgboostArrival plain = new XgboostArrival(false)) {
+        try (XgboostHours plain = new XgboostHours(false)) {
             double[] p = plain.fit(TRAIN, new int[] {2}).predict(TEST, 2);
             assertEquals(TEST.rowCount(), p.length);
-            assertTrue(mae(TEST.target(2), p) < mae(TEST.target(2), new SeasonalNaive().fit(TRAIN, Features.HORIZONS).predict(TEST, 2)));
+            assertTrue(mae(TEST.target(2), p) < mae(TEST.target(2), meanBaseline(TRAIN, TEST, 2)));
         }
     }
 
     @Test
     void failsClearlyWithoutTrainingRowsOrAnUnfittedHorizon() {
         FeatureMatrix empty = TRAIN.filter(k -> false);
-        try (XgboostArrival xgb = new XgboostArrival()) {
+        try (XgboostHours xgb = new XgboostHours()) {
             assertThrows(ModelUnavailable.class, () -> xgb.fit(empty, new int[] {1}));
             xgb.fit(TRAIN, new int[] {1});
             assertThrows(IllegalStateException.class, () -> xgb.predict(TEST, 3));
         }
-        assertTrue(List.of(true, false).contains(XgboostArrival.categoricalSupported()));
+        assertTrue(List.of(true, false).contains(XgboostHours.categoricalSupported()));
     }
 }

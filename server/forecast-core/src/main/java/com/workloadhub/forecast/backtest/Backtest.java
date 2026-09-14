@@ -1,74 +1,58 @@
 package com.workloadhub.forecast.backtest;
 
 import com.workloadhub.forecast.Numbers;
+import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.features.FeatureMatrix;
-import com.workloadhub.forecast.model.ArrivalModel;
-import com.workloadhub.forecast.model.ModelUnavailable;
-import com.workloadhub.forecast.model.SeasonalNaive;
+import com.workloadhub.forecast.features.Features;
+import com.workloadhub.forecast.model.XgboostHours;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.function.Supplier;
 
-/** Rolling-origin tournament: every model against the seasonal-naive floor, MASE per origin and horizon. */
+/** Rolling-origin measurement: one booster fitted per origin, MAE in hours per origin and horizon. */
 public final class Backtest {
 
-    public static final String FLOOR = SeasonalNaive.NAME;
     public static final int ORIGIN_COUNT = 6;
     public static final int ORIGIN_STEP_WEEKS = 2;
     public static final int MIN_HISTORY_WEEKS = 13;
     static final double LOW_QUANTILE = 0.1;
     static final double HIGH_QUANTILE = 0.9;
 
-    public record Score(String model, LocalDate origin, int horizon, double mae, double mase) {
-    }
-
-    public record Champion(String model, double meanMase) {
+    public record Score(LocalDate origin, int horizon, double mae) {
     }
 
     public record Residual(LocalDate origin, double y, double residual) {
     }
 
-    public record Result(List<Score> scores, Map<String, Map<Integer, double[]>> residuals,
-            Map<String, Map<Integer, List<Residual>>> residualRows, Map<String, String> unavailable,
-            Map<String, Double> secondsPerModel) {
+    public record Result(List<Score> scores, Map<Integer, double[]> residuals, Map<Integer, List<Residual>> residualRows,
+            double seconds, double meanActualHours) {
 
-        public double meanMase(String model) {
-            return scores.stream().filter(s -> s.model().equals(model) && !Double.isNaN(s.mase()))
-                    .mapToDouble(Score::mase).average().orElse(Double.NaN);
+        public double meanMae() {
+            double s = 0;
+            int n = 0;
+            for (Score sc : scores) {
+                if (!Double.isNaN(sc.mae())) {
+                    s += sc.mae();
+                    n++;
+                }
+            }
+            return n == 0 ? Double.NaN : s / n;
         }
 
-        public Map<String, Double> meanMaseByModel() {
-            Map<String, Double> out = new TreeMap<>();
-            for (Score s : scores) {
-                out.computeIfAbsent(s.model(), this::meanMase);
-            }
-            return out;
-        }
-
-        /** The pooled residuals of one model at one horizon, or an empty array when either is unknown. */
-        public double[] residuals(String model, int h) {
-            Map<Integer, double[]> byHorizon = residuals.get(model);
-            if (byHorizon == null) {
-                return new double[0];
-            }
-            double[] found = byHorizon.get(h);
+        /** The pooled residuals at one horizon, or an empty array when unknown. */
+        public double[] residuals(int h) {
+            double[] found = residuals.get(h);
             return found == null ? new double[0] : found;
         }
 
-        /** The per-origin residual rows of one model at one horizon, or an empty list when either is unknown. */
-        public List<Residual> residualRows(String model, int h) {
-            Map<Integer, List<Residual>> byHorizon = residualRows.get(model);
-            if (byHorizon == null) {
-                return List.of();
-            }
-            List<Residual> found = byHorizon.get(h);
+        /** The per-origin residual rows at one horizon, or an empty list when unknown. */
+        public List<Residual> residualRows(int h) {
+            List<Residual> found = residualRows.get(h);
             return found == null ? List.of() : found;
         }
     }
@@ -91,115 +75,56 @@ public final class Backtest {
         return out;
     }
 
-    public static Result run(FeatureMatrix feat, Map<String, Supplier<ArrivalModel>> factories, List<LocalDate> origins, int[] horizons) {
-        // the floor must always be scored and pooled, even when the caller only asked for other models.
-        Map<String, Supplier<ArrivalModel>> withFloor = factories;
-        if (!factories.containsKey(FLOOR)) {
-            withFloor = new LinkedHashMap<>();
-            withFloor.put(FLOOR, SeasonalNaive::new);
-            withFloor.putAll(factories);
+    public static Result run(FeatureMatrix feat, List<LocalDate> origins, int[] horizons) {
+        for (int h : horizons) {
+            if (!feat.columns().contains(Features.target(h))) {
+                throw ForecastException.of("INVALID_REQUEST",
+                        "the feature matrix has no " + Features.target(h) + ": it was built for a different window count");
+            }
         }
         int maxH = Arrays.stream(horizons).max().orElse(1);
         List<Score> scores = new ArrayList<>();
-        Map<String, Map<Integer, List<Double>>> residuals = new LinkedHashMap<>();
-        Map<String, Map<Integer, List<Residual>>> residualRows = new LinkedHashMap<>();
-        Map<String, String> unavailable = new LinkedHashMap<>();
-        Map<String, Double> seconds = new LinkedHashMap<>();
+        Map<Integer, List<Double>> residuals = new TreeMap<>();
+        Map<Integer, List<Residual>> residualRows = new TreeMap<>();
+        double seconds = 0;
+        double actualSum = 0;
+        int actualCount = 0;
         for (LocalDate origin : origins) {
             FeatureMatrix train = feat.filter(k -> !k.week().isAfter(origin.minusWeeks(maxH)));
             FeatureMatrix test = feat.filter(k -> k.week().equals(origin));
             if (train.rowCount() == 0 || test.rowCount() == 0) {
                 continue;
             }
-            Map<String, ArrivalModel> fitted = new LinkedHashMap<>();
-            for (Map.Entry<String, Supplier<ArrivalModel>> e : withFloor.entrySet()) {
-                String name = e.getKey();
-                if (unavailable.containsKey(name)) {
-                    continue;
-                }
-                long started = System.nanoTime();
-                try {
-                    fitted.put(name, e.getValue().get().fit(train, horizons));
-                } catch (ModelUnavailable ex) {
-                    unavailable.put(name, ex.getMessage());
-                    continue;
-                }
-                seconds.merge(name, (System.nanoTime() - started) / 1e9, Double::sum);
-            }
-            ArrivalModel naive = new SeasonalNaive().fit(train, horizons);
-            for (int h : horizons) {
-                double[] y = test.target(h);
-                if (Arrays.stream(y).anyMatch(Double::isNaN)) {
-                    continue;
-                }
-                double[] yNaive = naive.predict(test, h);
-                for (Map.Entry<String, ArrivalModel> e : fitted.entrySet()) {
-                    long started = System.nanoTime();
-                    double[] yHat = e.getValue().predict(test, h);
-                    seconds.merge(e.getKey(), (System.nanoTime() - started) / 1e9, Double::sum);
-                    scores.add(new Score(e.getKey(), origin, h, Numbers.mae(y, yHat), Numbers.mase(y, yHat, yNaive)));
-                    List<Double> pool = residuals.computeIfAbsent(e.getKey(), k -> new TreeMap<>()).computeIfAbsent(h, k -> new ArrayList<>());
-                    List<Residual> rowPool = residualRows.computeIfAbsent(e.getKey(), k -> new TreeMap<>()).computeIfAbsent(h, k -> new ArrayList<>());
+            long started = System.nanoTime();
+            try (XgboostHours model = new XgboostHours()) {
+                model.fit(train, horizons);
+                seconds += (System.nanoTime() - started) / 1e9;
+                for (int h : horizons) {
+                    double[] y = test.target(h);
+                    if (Arrays.stream(y).anyMatch(Double::isNaN)) {
+                        continue;
+                    }
+                    long predictStarted = System.nanoTime();
+                    double[] yHat = model.predict(test, h);
+                    seconds += (System.nanoTime() - predictStarted) / 1e9;
+                    scores.add(new Score(origin, h, Numbers.mae(y, yHat)));
+                    List<Double> pool = residuals.computeIfAbsent(h, k -> new ArrayList<>());
+                    List<Residual> rowPool = residualRows.computeIfAbsent(h, k -> new ArrayList<>());
                     for (int i = 0; i < y.length; i++) {
                         pool.add(y[i] - yHat[i]);
                         rowPool.add(new Residual(origin, y[i], y[i] - yHat[i]));
-                    }
-                }
-            }
-            for (ArrivalModel m : fitted.values()) {
-                if (m instanceof AutoCloseable c) {
-                    try {
-                        c.close();
-                    } catch (Exception ignored) {
-                        // a booster that fails to dispose leaks a little native memory until the JVM exits
+                        actualSum += y[i];
+                        actualCount++;
                     }
                 }
             }
         }
-        scores.removeIf(s -> unavailable.containsKey(s.model()));
-        unavailable.keySet().forEach(residuals::remove);
-        unavailable.keySet().forEach(residualRows::remove);
-        unavailable.keySet().forEach(seconds::remove);
-        Map<String, Map<Integer, double[]>> pooled = new LinkedHashMap<>();
-        residuals.forEach((model, byH) -> {
-            Map<Integer, double[]> arrays = new TreeMap<>();
-            byH.forEach((h, list) -> arrays.put(h, list.stream().mapToDouble(Double::doubleValue).toArray()));
-            pooled.put(model, arrays);
-        });
-        Map<String, Map<Integer, List<Residual>>> frozenRows = new LinkedHashMap<>();
-        residualRows.forEach((model, byH) -> {
-            Map<Integer, List<Residual>> byHorizon = new TreeMap<>();
-            byH.forEach((h, list) -> byHorizon.put(h, List.copyOf(list)));
-            frozenRows.put(model, byHorizon);
-        });
-        return new Result(List.copyOf(scores), pooled, frozenRows, unavailable, seconds);
-    }
-
-    public static Champion selectChampion(List<Score> scores) {
-        Map<String, List<Double>> byModel = new TreeMap<>();
-        for (Score s : scores) {
-            if (!Double.isNaN(s.mase())) {
-                byModel.computeIfAbsent(s.model(), k -> new ArrayList<>()).add(s.mase());
-            }
-        }
-        if (byModel.isEmpty()) {
-            return new Champion(FLOOR, Double.NaN);
-        }
-        String best = null;
-        double bestMean = Double.POSITIVE_INFINITY;
-        Map<String, Double> means = new HashMap<>();
-        for (Map.Entry<String, List<Double>> e : byModel.entrySet()) {
-            double mean = e.getValue().stream().mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
-            means.put(e.getKey(), mean);
-            if (mean < bestMean) {
-                best = e.getKey();
-                bestMean = mean;
-            }
-        }
-        if (best.equals(FLOOR) || bestMean >= 1.0) {
-            return new Champion(FLOOR, means.getOrDefault(FLOOR, 1.0));
-        }
-        return new Champion(best, bestMean);
+        Map<Integer, double[]> pooled = new TreeMap<>();
+        residuals.forEach((h, list) -> pooled.put(h, list.stream().mapToDouble(Double::doubleValue).toArray()));
+        Map<Integer, List<Residual>> frozenRows = new LinkedHashMap<>();
+        residualRows.forEach((h, list) -> frozenRows.put(h, List.copyOf(list)));
+        double meanActual = actualCount == 0 ? Double.NaN : actualSum / actualCount;
+        return new Result(List.copyOf(scores), pooled, frozenRows, seconds, meanActual);
     }
 
     /** NumPy's default (linear) quantiles at 0.1 and 0.9. */

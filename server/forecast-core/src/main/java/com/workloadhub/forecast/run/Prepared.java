@@ -7,7 +7,6 @@ import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.features.FeatureMatrix;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
-import com.workloadhub.forecast.model.EffortModel;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -24,12 +23,10 @@ public record Prepared(
         FeatureMatrix features,
         List<LocalDate> backtestOrigins,
         Backtest.Result backtest,
-        String champion,
-        double championMase,
-        String forcedModel,
+        Double mae,
+        Double meanActualHours,
         Map<Integer, double[]> bandOffsets,
-        Map<MemberWeek, Double> predictedEst,
-        EffortModel effort,
+        Map<MemberWeek, Double> predictedHours,
         int historyWeeks,
         Map<String, Double> secondsByPhase) {
 }

@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
-/** The facts of one real forecast (seasonal-naive forced, planned work on) for the first team with members of {@link SeededData}. */
+/** The facts of one real forecast for the first team with members of {@link SeededData}. */
 public final class SeededFacts {
 
     public static final UUID RUN_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -26,9 +26,9 @@ public final class SeededFacts {
         if (json == null) {
             ForecastData data = SeededData.data();
             UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
-            ForecastRunner runner = new ForecastRunner(new CapacityRule(CapacityWriter.BASE_HOURS), true);
-            Prepared prepared = runner.prepare(data, SeededData.asOf(), "seasonal_naive", (phase, percent, message) -> { });
-            TeamOutcome outcome = runner.forTeam(prepared, team, null);
+            ForecastRunner runner = new ForecastRunner(new CapacityRule(CapacityWriter.BASE_HOURS));
+            Prepared prepared = runner.prepare(data, SeededData.asOf(), (phase, percent, message) -> { });
+            TeamOutcome outcome = runner.forTeam(prepared, team);
             json = FactsBuilder.toJson(FactsBuilder.build(outcome, RUN_ID, LocalDateTime.of(2026, 9, 6, 12, 0)));
         }
         return json;

@@ -11,8 +11,9 @@ import ml.dmlc.xgboost4j.java.DMatrix;
 import ml.dmlc.xgboost4j.java.XGBoost;
 import ml.dmlc.xgboost4j.java.XGBoostError;
 
-/** One Poisson booster per horizon over the feature columns, single-threaded and seeded. */
-public final class XgboostArrival implements ArrivalModel, AutoCloseable {
+/** Forecasts logged hours per member-week, one Poisson booster per horizon over the feature columns,
+ * single-threaded and seeded. */
+public final class XgboostHours implements AutoCloseable {
 
     public static final String NAME = "xgboost";
     static final int ROUNDS = 300;
@@ -22,15 +23,14 @@ public final class XgboostArrival implements ArrivalModel, AutoCloseable {
     private final Map<Integer, Booster> boosters = new HashMap<>();
     private final Map<Integer, List<String>> columns = new HashMap<>();
 
-    public XgboostArrival() {
+    public XgboostHours() {
         this(categoricalSupported());
     }
 
-    public XgboostArrival(boolean categorical) {
+    public XgboostHours(boolean categorical) {
         this.categorical = categorical;
     }
 
-    @Override
     public String name() {
         return NAME;
     }
@@ -80,8 +80,7 @@ public final class XgboostArrival implements ArrivalModel, AutoCloseable {
         return ok;
     }
 
-    @Override
-    public XgboostArrival fit(FeatureMatrix train, int[] horizons) {
+    public XgboostHours fit(FeatureMatrix train, int[] horizons) {
         for (int h : horizons) {
             FeatureMatrix rows = train.rowsWithKnown(Features.target(h));
             if (rows.rowCount() == 0) {
@@ -118,7 +117,6 @@ public final class XgboostArrival implements ArrivalModel, AutoCloseable {
         return this;
     }
 
-    @Override
     public double[] predict(FeatureMatrix rows, int horizon) {
         Booster b = boosters.get(horizon);
         if (b == null) {

@@ -2,29 +2,25 @@ package com.workloadhub.forecast.backtest;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.Numbers;
+import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.features.FeatureMatrix;
-import com.workloadhub.forecast.features.Features;
-import com.workloadhub.forecast.model.ArrivalModel;
-import com.workloadhub.forecast.model.ModelUnavailable;
-import com.workloadhub.forecast.model.SeasonalNaive;
-import com.workloadhub.forecast.model.XgboostArrival;
 import com.workloadhub.forecast.testing.SyntheticMatrix;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 class BacktestTest {
 
-    static final FeatureMatrix M = SyntheticMatrix.arrivals(8, 70, 3);
+    static final FeatureMatrix M = SyntheticMatrix.plantedSignal();
+    static final LocalDate FIRST_WEEK = M.key(0).week();
     static final LocalDate LAST = M.key(M.rowCount() - 1).week();
+    static final List<LocalDate> ALL_ORIGINS = Backtest.origins(LAST, FIRST_WEEK);
+    static final LocalDate ORIGIN_A = ALL_ORIGINS.get(2);
+    static final LocalDate ORIGIN_B = ALL_ORIGINS.get(3);
 
     @Test
     void originsStepBackTwoWeeksAndNeedThirteenWeeksOfHistory() {
@@ -44,108 +40,24 @@ class BacktestTest {
     }
 
     @Test
-    void scoresEveryModelAtEveryOriginAndHorizonAndPoolsResiduals() {
-        Map<String, Supplier<ArrivalModel>> factories = new LinkedHashMap<>();
-        factories.put(Backtest.FLOOR, SeasonalNaive::new);
-        factories.put(XgboostArrival.NAME, XgboostArrival::new);
-        List<LocalDate> origins = Backtest.origins(LAST, M.key(0).week()).subList(2, 5);   // targets at h3 stay inside the fixture
-        Backtest.Result r = Backtest.run(M, factories, origins, Features.HORIZONS);
-        assertEquals(2 * 3 * 3, r.scores().size());
+    void oneScorePerOriginAndHorizon() {
+        FeatureMatrix m = SyntheticMatrix.plantedSignal();
+        List<LocalDate> origins = List.of(ORIGIN_A, ORIGIN_B);
+        Backtest.Result r = Backtest.run(m, origins, new int[] {1, 2, 3});
+        assertEquals(6, r.scores().size(), "two origins by three horizons, no model dimension");
         for (Backtest.Score s : r.scores()) {
-            if (s.model().equals(Backtest.FLOOR)) {
-                assertEquals(1.0, s.mase(), 1e-9, "the floor scores 1 against itself");
-            }
-            assertTrue(s.mae() >= 0);
+            assertTrue(s.mae() >= 0.0, "MAE is in hours and never negative");
         }
-        assertTrue(r.meanMase(XgboostArrival.NAME) < 1.0, "planted signal: " + r.meanMase(XgboostArrival.NAME));
-        assertEquals(8 * 3, r.residuals().get(XgboostArrival.NAME).get(1).length, "8 members × 3 origins");
-        assertEquals(8 * 3, r.residualRows(XgboostArrival.NAME, 1).size());
-        assertTrue(r.residualRows(XgboostArrival.NAME, 1).stream().allMatch(row -> origins.contains(row.origin())));
-        assertTrue(r.unavailable().isEmpty());
-        assertTrue(r.secondsPerModel().get(XgboostArrival.NAME) > 0);
-        Backtest.Champion c = Backtest.selectChampion(r.scores());
-        assertEquals(XgboostArrival.NAME, c.model());
-        assertEquals(r.meanMase(XgboostArrival.NAME), c.meanMase(), 1e-12);
+        assertTrue(r.meanMae() >= 0.0);
+        assertTrue(r.meanActualHours() > 0.0, "the mean of the backtest targets, for scale beside the MAE");
     }
 
     @Test
-    void runInsertsTheFloorEvenWhenTheCallerLeftItOutOfFactories() {
-        Map<String, Supplier<ArrivalModel>> factories = new LinkedHashMap<>();
-        factories.put(XgboostArrival.NAME, XgboostArrival::new);
-        List<LocalDate> origins = Backtest.origins(LAST, M.key(0).week()).subList(2, 5);
-        Backtest.Result r = Backtest.run(M, factories, origins, Features.HORIZONS);
-        assertTrue(r.scores().stream().anyMatch(s -> s.model().equals(Backtest.FLOOR)), "the floor is scored");
-        assertTrue(r.residuals().containsKey(Backtest.FLOOR), "the floor's residuals are pooled");
-        assertTrue(r.residuals(Backtest.FLOOR, 1).length > 0);
-        assertEquals(0, r.residuals("nope", 1).length, "unknown model");
-        assertEquals(0, r.residuals(Backtest.FLOOR, 99).length, "unknown horizon");
-        Backtest.Champion c = Backtest.selectChampion(r.scores());
-        assertEquals(XgboostArrival.NAME, c.model(), "selectChampion still finds the planted signal");
-    }
-
-    @Test
-    void meanMaseByModelIsSortedByNameAndMatchesMeanMase() {
-        Map<String, Supplier<ArrivalModel>> factories = new LinkedHashMap<>();
-        factories.put(Backtest.FLOOR, SeasonalNaive::new);
-        factories.put(XgboostArrival.NAME, XgboostArrival::new);
-        List<LocalDate> origins = Backtest.origins(LAST, M.key(0).week()).subList(2, 5);
-        Backtest.Result r = Backtest.run(M, factories, origins, Features.HORIZONS);
-        Map<String, Double> byModel = r.meanMaseByModel();
-        assertEquals(new ArrayList<>(byModel.keySet()), byModel.keySet().stream().sorted().toList(), "sorted by name");
-        assertFalse(byModel.isEmpty());
-        for (Map.Entry<String, Double> e : byModel.entrySet()) {
-            assertEquals(r.meanMase(e.getKey()), e.getValue(), 1e-12, e.getKey());
-        }
-    }
-
-    @Test
-    void aModelUnavailableAtAnyOriginLosesEverything() {
-        ArrivalModel flaky = new ArrivalModel() {
-            int fits;
-
-            public String name() {
-                return "flaky";
-            }
-
-            public ArrivalModel fit(FeatureMatrix train, int[] horizons) {
-                if (++fits == 2) {
-                    throw new ModelUnavailable("gone at the second origin");
-                }
-                return this;
-            }
-
-            public double[] predict(FeatureMatrix rows, int h) {
-                return rows.column("roll_mean_4");
-            }
-        };
-        Map<String, Supplier<ArrivalModel>> factories = new LinkedHashMap<>();
-        factories.put(Backtest.FLOOR, SeasonalNaive::new);
-        factories.put("flaky", () -> flaky);
-        List<LocalDate> origins = Backtest.origins(LAST, M.key(0).week()).subList(3, 6);
-        Backtest.Result r = Backtest.run(M, factories, origins, new int[] {1});
-        assertEquals("gone at the second origin", r.unavailable().get("flaky"));
-        assertTrue(r.scores().stream().noneMatch(s -> s.model().equals("flaky")));
-        assertFalse(r.residuals().containsKey("flaky"));
-        assertFalse(r.residualRows().containsKey("flaky"), "the unavailable model's residual rows are purged too");
-        assertTrue(r.residualRows("flaky", 1).isEmpty());
-        assertEquals(origins.size(), r.residualRows(Backtest.FLOOR, 1).stream().map(Backtest.Residual::origin).distinct().count(),
-                "the floor keeps residual rows at every scored origin");
-        assertFalse(r.secondsPerModel().containsKey("flaky"));
-        assertEquals(Backtest.FLOOR, Backtest.selectChampion(r.scores()).model());
-    }
-
-    @Test
-    void championFallsBackToTheFloorWhenNothingBeatsIt() {
-        List<Backtest.Score> weak = List.of(
-                new Backtest.Score(Backtest.FLOOR, LAST, 1, 1, 1.0),
-                new Backtest.Score("x", LAST, 1, 2, 1.2),
-                new Backtest.Score("x", LAST, 2, 2, Double.NaN));
-        Backtest.Champion c = Backtest.selectChampion(weak);
-        assertEquals(Backtest.FLOOR, c.model());
-        assertEquals(1.0, c.meanMase());
-        assertEquals(Backtest.FLOOR, Backtest.selectChampion(List.of()).model());
-        assertTrue(Double.isNaN(Backtest.selectChampion(List.of()).meanMase()));
-        assertEquals("x", Backtest.selectChampion(List.of(new Backtest.Score("x", LAST, 1, 1, 0.8))).model());
+    void aHorizonWithoutItsTargetColumnFailsByName() {
+        FeatureMatrix narrow = SyntheticMatrix.plantedSignal();  // built for horizons 1..3
+        ForecastException e = assertThrows(ForecastException.class,
+                () -> Backtest.run(narrow, List.of(ORIGIN_A), new int[] {1, 7}));
+        assertTrue(e.getMessage().contains("target_h7"), "the message names the horizon that is missing");
     }
 
     @Test
