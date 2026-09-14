@@ -6,7 +6,7 @@ description: How to explain a member's forecast over the run's windows, capacity
 # Interpreting the forecast
 
 - Lead with the decision-relevant figure: overload hours per window, then demand versus capacity.
-- Capacity below 40 h in a window means holidays, an absence or the team's capacity plan; `working_days` and `absence_hours` on the row say which. Name the cause.
+- Capacity below 44 h in a window means holidays, an absence or the team's capacity plan; `working_days` and `absence_hours` on the row say which. Name the cause.
 - An interval (low, high) that spans more than half of capacity means the history is noisy; say the forecast is uncertain rather than quoting the band as fact.
 - Overdue open tasks are placed forward from the first forecast day; they inflate window one by design. Mention `overdue_open` (in patterns) or the overdue tasks when they drive the overload.
 - `due_hours` above capacity in a window means deadlines, not logging pace, are the pressure; say so.

@@ -119,6 +119,26 @@ public final class CapacityRule {
         return Numbers.round2(Math.max(0.0, base / WORKING_DAYS_PER_WEEK - dayAbsenceHours(member.id(), day, data)));
     }
 
+    /**
+     * That day's capacity <em>before</em> the day's own absence is taken off: the figure an absence is measured
+     * against to decide whether it takes the whole day (design 2026-09-13, section 5 step 1, "that day's own
+     * capacity"). Comparing against {@link #dayCapacity} instead would be circular — that figure has already
+     * subtracted the very absence being judged, halving the threshold.
+     */
+    private double grossDayCapacity(MemberRow member, LocalDate day, ForecastData data, WorkingCalendar cal) {
+        if (!cal.isWorkingDay(day)) {
+            return 0.0;
+        }
+        LocalDate monday = Weeks.mondayOf(day);
+        Optional<CapacityRow> row = rowFor(member.id(), monday, data);
+        if (row.isPresent()) {
+            int working = cal.workingDaysInWeek(monday);
+            return working == 0 ? 0.0 : Numbers.round2(Math.max(0.0, row.get().base() / working));
+        }
+        double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
+        return Numbers.round2(Math.max(0.0, base / WORKING_DAYS_PER_WEEK));
+    }
+
     /** The member's absence hours recorded on that day. */
     public double dayAbsenceHours(UUID member, LocalDate day, ForecastData data) {
         NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
@@ -131,12 +151,20 @@ public final class CapacityRule {
      * <p>Its caller is the weekday split in {@code ForecastRunner}: predicted hours must not land on a day the
      * member is not there, because the day's capacity is zero and every hour on it would read as pure overload
      * — and by the 2026-09-13 ruling 18.4 no hour is ever logged on such a day.
+     *
+     * <p>The day's hours are read from the absence index, so a member's absences cost one lookup rather than a
+     * scan of every absence row in the data set, and two rows on one day are judged by their sum. They are
+     * compared with {@link #grossDayCapacity}, never with {@link #dayCapacity}, which has already taken them off.
      */
     public Set<LocalDate> offDays(UUID member, ForecastData data, MemberRow row, WorkingCalendar cal) {
         Set<LocalDate> out = new TreeSet<>();
-        for (AbsenceRow a : data.absences()) {
-            if (a.userId().equals(member) && a.hours() >= dayCapacity(row, a.day(), data, cal)) {
-                out.add(a.day());
+        NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
+        if (byDay == null) {
+            return out;
+        }
+        for (Map.Entry<LocalDate, Double> e : byDay.entrySet()) {
+            if (e.getValue() >= grossDayCapacity(row, e.getKey(), data, cal)) {
+                out.add(e.getKey());
             }
         }
         return out;

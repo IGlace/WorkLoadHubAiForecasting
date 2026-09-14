@@ -36,11 +36,14 @@ final class FactsTools {
                         true, this::memberPatterns),
                 new ToolSpec("get_member_open_tasks", "Open tasks of one member with keys, estimates, due dates, overdue flags and project keys.", true,
                         this::memberOpenTasks),
-                new ToolSpec("get_member_capacity", "Capacity, demand and overload per forecast window and per day for one member, with working days and absence hours.", true,
+                new ToolSpec("get_member_capacity", "Capacity, demand, overload and the two pressure figures (backlog_excess_hrs, due_excess_hrs)"
+                        + " per forecast window and per day for one member, with working days and absence hours.", true,
                         this::memberCapacity),
                 new ToolSpec("get_project_timelines", "Projects of the team with status, open and backlog task counts and the first due date, plus the forecast windows.",
                         false, id -> projectTimelines()),
-                new ToolSpec("get_rebalancing_candidates", "Members with overload and members with spare capacity over the two windows.", false,
+                new ToolSpec("get_rebalancing_candidates", "The four lists of members to act on, over the run's windows: overloaded, underloaded"
+                        + " (spare capacity), backlog_pressed (open work the run does not absorb) and deadline_pressed (work due inside a window"
+                        + " beyond what the window holds).", false,
                         id -> rebalancingCandidates()),
                 new ToolSpec("get_likely_work", "Per member, the likely-work signals: project roles held on live projects and the recent task-type mix.",
                         false, id -> likelyWork()));
@@ -108,9 +111,13 @@ final class FactsTools {
         }
         List<Object> windows = new ArrayList<>();
         for (JsonNode row : m.path("forecast")) {
+            // The two pressure figures travel with overload (design 2026-09-13, section 8.2): this is the tool
+            // that serves overload per window, and whf-forecast-interpretation tells Copilot to read the three
+            // together — a zero overload beside an above-zero backlog_excess_hrs is not a member who is fine.
             windows.add(map("window", plain(row.path("window")), "start", row.path("start").asText(), "end", row.path("end").asText(),
                     "capacity", plain(row.path("capacity")), "demand", plain(row.path("demand")), "overload", plain(row.path("overload")),
-                    "working_days", plain(row.path("working_days")), "absence_hours", plain(row.path("absence_hours"))));
+                    "working_days", plain(row.path("working_days")), "absence_hours", plain(row.path("absence_hours")),
+                    "backlog_excess_hrs", plain(row.path("backlog_excess_hrs")), "due_excess_hrs", plain(row.path("due_excess_hrs"))));
         }
         return map("member_id", id, "name", m.path("name").asText(), "windows", windows, "days", plain(m.path("days")));
     }
@@ -119,9 +126,16 @@ final class FactsTools {
         return map("windows", plain(facts.path("run").path("windows")), "projects", plain(facts.path("projects")));
     }
 
+    /**
+     * The whole {@code rebalancing_candidates} node, as {@code get_run_overview} already serves it: whitelisting
+     * keys here dropped {@code backlog_pressed} and {@code deadline_pressed} at the tool boundary (design
+     * 2026-09-13, ruling 18.5), while whf-rebalancing-advice tells Copilot that {@code deadline_pressed} is the
+     * strongest case for moving work.
+     */
+    @SuppressWarnings("unchecked")
     Map<String, Object> rebalancingCandidates() {
-        return map("overloaded", plain(facts.path("rebalancing_candidates").path("overloaded")),
-                "underloaded", plain(facts.path("rebalancing_candidates").path("underloaded")));
+        Map<String, Object> node = (Map<String, Object>) plain(facts.path("rebalancing_candidates"));
+        return node == null ? map() : node;
     }
 
     Map<String, Object> likelyWork() {

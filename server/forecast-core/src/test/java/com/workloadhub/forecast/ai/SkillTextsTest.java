@@ -32,7 +32,9 @@ class SkillTextsTest {
         assertTrue(all.contains("backlog_excess_hrs") && all.contains("due_excess_hrs") && all.contains("overdue_hrs"),
                 "the pressure facts a forecast of logged hours cannot show on its own (design 2026-09-13, section 8)");
         assertTrue(all.contains("backlog_pressed") && all.contains("deadline_pressed"), "the two rebalancing_candidates lists the pressure facts feed");
-        assertTrue(all.contains("40 h"), "the Java module's default capacity");
+        assertTrue(all.contains("logged_weekday_shares"), "the weekday shape a predicted week is split by");
+        assertTrue(all.contains("44 h") && all.contains("8.8 h"), "the Java module's default capacity (ForecastProperties.defaultWeeklyHours)");
+        assertTrue(!all.contains("40 h"), "the old 40 h default is gone from the skills");
         assertTrue(all.contains("window") && all.contains("five weekdays"), "the rolling horizon vocabulary");
         assertTrue(!all.contains("expected_week") && !all.contains("two-week forecast") && !all.contains("per member and week"), "the weekly horizon is gone");
     }

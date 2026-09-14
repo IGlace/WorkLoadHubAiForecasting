@@ -16,8 +16,8 @@ import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.features.WeeklySeries;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
+import com.workloadhub.forecast.lifecycle.OpenWork;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
-import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
 import java.time.LocalDate;
@@ -174,8 +174,9 @@ public final class FactsBuilder {
         List<Object> forecast = new ArrayList<>();
         for (MemberWindowForecast r : rows) {
             // The same helper ForecastRunner reads back for due_excess_hrs (design 2026-09-13, section 8.2): one
-            // definition of the sum, so due_hours here and due_excess_hrs on the row can never contradict each other.
-            double due = ForecastRunner.dueHours(open, r.windowStart(), r.windowEnd());
+            // definition of the sum, and one rounding of it, so due_hours here and due_excess_hrs on the row can
+            // never contradict each other.
+            double due = OpenWork.dueHours(open, r.windowStart(), r.windowEnd());
             forecast.add(map("window", r.windowIndex(), "start", str(r.windowStart()), "end", str(r.windowEnd()), "demand", r.demandHrs(), "low", r.lowHrs(),
                     "high", r.highHrs(), "capacity", r.capacityHrs(), "overload", r.overloadHrs(),
                     "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", Numbers.round2(due),

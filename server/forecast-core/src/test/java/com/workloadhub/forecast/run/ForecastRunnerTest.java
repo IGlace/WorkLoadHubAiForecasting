@@ -288,8 +288,26 @@ class ForecastRunnerTest {
     @Test
     void aFullAbsenceDayTakesNoHours() {
         offDays = Set.of(tuesday);
-        // The same, with Tuesday a full-day absence.
+        // The same, with Tuesday a full-day absence: its 0.3 share leaves the denominator, so the other four
+        // days carry the whole 20 hours between them rather than the week losing Tuesday's share.
         assertEquals(0.0, dayHours(tuesday), 1e-6);
+        assertEquals(20.0, dayHours(monday) + dayHours(wednesday) + dayHours(thursday) + dayHours(friday), 1e-6);
+    }
+
+    @Test
+    void aDayAlreadyPastDropsItsHoursInsteadOfRedistributingThem() {
+        // The same member and week, with the horizon starting on the Wednesday: Monday and Tuesday are behind
+        // the run day and are not re-forecast. Unlike a holiday or an absence, their shares stay in the
+        // denominator, so Wednesday to Friday keep their own 0.2, 0.1 and 0.0 of the week and the 14 hours of
+        // the two past days are dropped. Filtering [first, last] before the denominator instead would silently
+        // turn redistribution on for days already past.
+        Map<LocalDate, Double> days = ForecastRunner.splitWeek(20.0, shares, monday, cal, offDays, wednesday, monday.plusDays(30));
+        assertEquals(Set.of(wednesday, thursday, friday), days.keySet());
+        assertEquals(4.0, days.get(wednesday), 1e-6);
+        assertEquals(2.0, days.get(thursday), 1e-6);
+        assertEquals(0.0, days.get(friday), 1e-6);
+        assertEquals(6.0, days.values().stream().mapToDouble(Double::doubleValue).sum(), 1e-6,
+                "the 14 hours of Monday and Tuesday are gone, not spread over the rest of the week");
     }
 
     @Test

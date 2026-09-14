@@ -13,12 +13,13 @@ import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.Ids;
 import com.workloadhub.forecast.data.rows.MemberRow;
-import com.workloadhub.forecast.facts.Patterns;
 import com.workloadhub.forecast.features.FeatureBuilder;
 import com.workloadhub.forecast.features.FeatureMatrix;
 import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
+import com.workloadhub.forecast.lifecycle.LoggedWeekdayShares;
+import com.workloadhub.forecast.lifecycle.OpenWork;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
 import com.workloadhub.forecast.model.XgboostHours;
 import java.time.LocalDate;
@@ -68,37 +69,18 @@ public final class ForecastRunner {
 
     public static Band band(double demand, double q10, double q90, double capacity) {
         double d = Numbers.round2(Math.max(0.0, demand));
-        return new Band(d, Numbers.round2(Math.max(0.0, d + q10)), Numbers.round2(d + q90),
-                Numbers.round2(Math.max(0.0, d - capacity)));
+        return new Band(d, Numbers.round2(Math.max(0.0, d + q10)), Numbers.round2(d + q90), excess(d, capacity));
     }
 
     /**
-     * Remaining hours of a member's open tasks (design 2026-09-13, section 8.2): the queue a forecast of logged
-     * hours cannot show. The one definition of the sum, so {@code Patterns.open_est_hours} and this class's
-     * {@code backlog_excess_hrs} can never drift apart by summing it twice.
+     * How far {@code a} exceeds {@code b}, never below zero and rounded last: the one definition of
+     * {@code overload}, {@code backlog_excess_hrs} and {@code due_excess_hrs}, which are the same arithmetic on
+     * different pairs (design 2026-09-13, section 8.2).
+     *
+     * <p>It reports a gap; it never caps anything. Demand is never cut to fit capacity.
      */
-    public static double openEstHours(List<TaskFacts> open) {
-        double sum = 0;
-        for (TaskFacts f : open) {
-            sum += f.remaining() != null ? f.remaining() : f.estimate();
-        }
-        return sum;
-    }
-
-    /**
-     * Remaining hours of a member's open tasks falling due inside {@code [start, end]} (design 2026-09-13,
-     * section 8.2): the one definition {@code FactsBuilder}'s {@code due_hours} and this class's
-     * {@code due_excess_hrs} both read, so a narrative comparing the two can never contradict itself.
-     */
-    public static double dueHours(List<TaskFacts> open, LocalDate start, LocalDate end) {
-        double sum = 0;
-        for (TaskFacts f : open) {
-            LocalDate d = f.task().dueDate();
-            if (d != null && !d.isBefore(start) && !d.isAfter(end)) {
-                sum += f.remaining() != null ? f.remaining() : f.estimate();
-            }
-        }
-        return sum;
+    public static double excess(double a, double b) {
+        return Numbers.round2(Math.max(0.0, a - b));
     }
 
     /**
@@ -202,7 +184,7 @@ public final class ForecastRunner {
         Map<UUID, Set<LocalDate>> offDaysByMember = new HashMap<>();
         Map<UUID, List<TaskFacts>> openTasksByMember = new HashMap<>();
         for (MemberRow m : members) {
-            sharesByMember.put(m.id(), Patterns.of(m.id(), p.lifecycle(), data, p.asOf()).loggedWeekdayShares());
+            sharesByMember.put(m.id(), LoggedWeekdayShares.of(m.id(), data, p.asOf()));
             offDaysByMember.put(m.id(), capacityRule.offDays(m.id(), data, m, p.calendar()));
             openTasksByMember.put(m.id(), p.lifecycle().assignedTo(m.id()).stream().filter(f -> !f.done()).toList());
         }
@@ -219,7 +201,7 @@ public final class ForecastRunner {
         List<MemberDayForecast> dayRows = new ArrayList<>();
         for (MemberRow m : members) {
             List<TaskFacts> open = openTasksByMember.get(m.id());
-            double openEst = openEstHours(open);
+            double openEst = OpenWork.openEstHours(open);
             double runningDemand = 0;
             for (ForecastWindow w : windows) {
                 double demandSum = 0;
@@ -257,9 +239,11 @@ public final class ForecastRunner {
                 // what is left of the open work once the windows so far are forecast, and what is due inside this
                 // window beyond what it holds.
                 runningDemand += b.demand();
-                double dueHrs = dueHours(open, w.start(), w.end());
-                double backlogExcess = Numbers.round2(Math.max(0.0, openEst - runningDemand));
-                double dueExcess = Numbers.round2(Math.max(0.0, dueHrs - roundedCapacity));
+                // Rounded here, once: FactsBuilder reports the same sum as due_hours rounded to two decimals, so
+                // taking the excess of the unrounded figure would let the two disagree by a hundredth of an hour.
+                double dueHrs = Numbers.round2(OpenWork.dueHours(open, w.start(), w.end()));
+                double backlogExcess = excess(openEst, runningDemand);
+                double dueExcess = excess(dueHrs, roundedCapacity);
                 windowRows.add(new MemberWindowForecast(m.id(), w.index(), w.start(), w.end(), b.demand(), b.low(),
                         b.high(), roundedCapacity, b.overload(), workingDays, Numbers.round2(absence), backlogExcess, dueExcess));
             }

@@ -47,13 +47,44 @@ class FactsToolsTest {
         assertEquals(Set.of("member_id", "name", "windows", "days"), capacity.keySet());
         List<Map<String, Object>> windows = (List<Map<String, Object>>) capacity.get("windows");
         assertEquals(2, windows.size());
-        assertEquals(Set.of("window", "start", "end", "capacity", "demand", "overload", "working_days", "absence_hours"), windows.get(0).keySet());
+        assertEquals(Set.of("window", "start", "end", "capacity", "demand", "overload", "working_days", "absence_hours",
+                "backlog_excess_hrs", "due_excess_hrs"), windows.get(0).keySet(),
+                "the tool that serves overload per window serves the two pressure figures beside it (design 2026-09-13, section 8.2)");
         assertEquals(Set.of("windows", "projects"), TOOLS.projectTimelines().keySet());
-        assertEquals(Set.of("overloaded", "underloaded"), TOOLS.rebalancingCandidates().keySet());
+        assertEquals(Set.of("overloaded", "underloaded", "backlog_pressed", "deadline_pressed"), TOOLS.rebalancingCandidates().keySet(),
+                "all four lists reach Copilot, not the two the tool used to whitelist (ruling 18.5)");
         Map<String, Object> likely = TOOLS.likelyWork();
         assertEquals(Set.of("members"), likely.keySet());
         List<Map<String, Object>> likelyMembers = (List<Map<String, Object>>) likely.get("members");
         assertEquals(Set.of("id", "name", "project_roles", "recent_mix"), likelyMembers.get(0).keySet());
+    }
+
+    @Test
+    void theRebalancingToolServesTheSameNodeTheOverviewDoes() {
+        assertEquals(TOOLS.runOverview().get("rebalancing_candidates"), TOOLS.rebalancingCandidates(),
+                "one node, served whole by both tools");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theCapacityWindowsCarryTheFactsPressureFigures() {
+        List<Map<String, Object>> windows = (List<Map<String, Object>>) TOOLS.memberCapacity(FIRST).get("windows");
+        JsonNode factRows = FACTS.path("members").get(0).path("forecast");
+        for (int i = 0; i < windows.size(); i++) {
+            assertEquals(factRows.get(i).path("backlog_excess_hrs").asDouble(),
+                    ((Number) windows.get(i).get("backlog_excess_hrs")).doubleValue(), 0.0);
+            assertEquals(factRows.get(i).path("due_excess_hrs").asDouble(),
+                    ((Number) windows.get(i).get("due_excess_hrs")).doubleValue(), 0.0);
+        }
+    }
+
+    @Test
+    void theRebalancingToolsDescriptionNamesTheFourListsAndNoFixedWindowCount() {
+        String d = TOOLS.specs().stream().filter(s -> s.name().equals("get_rebalancing_candidates")).findFirst().orElseThrow().description();
+        for (String list : List.of("overloaded", "underloaded", "backlog_pressed", "deadline_pressed")) {
+            assertTrue(d.contains(list), list);
+        }
+        assertTrue(!d.contains("two windows"), "the window count is a setting (whf.forecast.windows), not two");
     }
 
     @Test

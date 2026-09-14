@@ -329,7 +329,7 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   produced it; and **the effort/planned-work decomposition**, gone with `EffortModel`, `PlannedWork` and
   `HourPlacement` — the booster now predicts logged hours per member-week directly and a week's prediction is
   spread across its own weekdays by the member's logged-hours weekday shares, not placed by an open/new/planned
-  split. The review's seven rulings are its section 18: the history gate scales as `10 + maxHorizon`;
+  split. The review's twelve rulings are its section 18: the history gate scales as `10 + maxHorizon`;
   `backlog_excess_hrs` is cumulative over the windows so far rather than per window; the per-horizon feature
   columns are sized from the window count, so `Features.HORIZONS` stops being the constant `{1,2,3}` and a
   matrix is tied to the count it was built with; no hour is ever logged on a weekend, holiday or absence day,

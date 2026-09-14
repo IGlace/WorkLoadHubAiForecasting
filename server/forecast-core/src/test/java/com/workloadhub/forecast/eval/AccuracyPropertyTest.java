@@ -23,7 +23,7 @@ import net.jqwik.api.constraints.DoubleRange;
 import net.jqwik.api.constraints.IntRange;
 import net.jqwik.api.constraints.Size;
 
-class AccuracyProperties {
+class AccuracyPropertyTest {
 
     static final UUID TEAM = UUID.fromString("40000000-0000-0000-0000-000000000001");
     static final UUID RUN = UUID.fromString("50000000-0000-0000-0000-000000000001");

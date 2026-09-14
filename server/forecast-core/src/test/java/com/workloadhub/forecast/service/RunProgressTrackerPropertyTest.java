@@ -14,7 +14,7 @@ import net.jqwik.api.Property;
 import net.jqwik.api.constraints.IntRange;
 
 /** The rotation is arithmetic on the clock: whatever the elapsed time, the label is the phrase of that slot. */
-class RunProgressTrackerProperties {
+class RunProgressTrackerPropertyTest {
 
     @Property
     void theAskingLabelIsThePhraseOfTheFourSecondSlotTheClockIsIn(@ForAll @IntRange(min = 0, max = 99_999) int elapsedSeconds) {

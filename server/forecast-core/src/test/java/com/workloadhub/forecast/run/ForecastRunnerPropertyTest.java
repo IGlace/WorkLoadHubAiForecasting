@@ -3,7 +3,6 @@ package com.workloadhub.forecast.run;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import java.time.LocalDate;
 import java.util.List;
@@ -31,6 +30,7 @@ class ForecastRunnerPropertyTest {
         assertTrue(b.low() <= b.demand() + 1e-9);
         assertTrue(b.demand() <= b.high() + 1e-9);
         assertTrue(b.overload() >= 0.0);
+        assertEquals(ForecastRunner.excess(b.demand(), capacity), b.overload(), 0.0, "the band's overload is excess(), not a second formula");
         // The formula rounds LAST, so "zero exactly when demand <= capacity" is false: a demand of
         // capacity + 0.004 rounds its overload to 0.0. The property has to carry the rounding.
         if (b.overload() > 0.0) {
@@ -84,8 +84,10 @@ class ForecastRunnerPropertyTest {
             @ForAll @DoubleRange(min = 0, max = 300) double cumulativeDemand,
             @ForAll @DoubleRange(min = 0, max = 200) double dueHours,
             @ForAll @DoubleRange(min = 0, max = 100) double capacity) {
-        double backlog = Numbers.round2(Math.max(0.0, openEst - cumulativeDemand));
-        double due = Numbers.round2(Math.max(0.0, dueHours - capacity));
+        // The production helper itself: backlog_excess_hrs and due_excess_hrs are excess() on different pairs,
+        // so this property fails if the formula in ForecastRunner changes, not only if the test's copy does.
+        double backlog = ForecastRunner.excess(openEst, cumulativeDemand);
+        double due = ForecastRunner.excess(dueHours, capacity);
         assertTrue(backlog >= 0.0);
         assertTrue(due >= 0.0);
         // The formula rounds LAST, so "positive exactly when A exceeds B" is false: an excess of 0.004

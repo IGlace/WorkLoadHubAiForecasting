@@ -87,6 +87,17 @@ class HarnessTest {
         return data.tasks().stream().map(t -> t.createdDate().toLocalDate()).max(java.time.LocalDate::compareTo).orElseThrow().toString();
     }
 
+    /** Level A takes its horizons from the config, Level B from the runner: a mismatch would report two forecasts as one. */
+    @Test
+    void aConfigAskingForMoreWindowsThanTheRunnerForecastsIsRejected() {
+        CapacityRule rule = new CapacityRule(40);
+        Harness harness = new Harness(new ForecastRunner(rule, 2), rule);
+        ForecastException e = assertThrows(ForecastException.class,
+                () -> harness.evaluate(data, new EvalConfig(SeededData.asOf(), 1, List.of(), 4)));
+        assertEquals("INVALID_REQUEST", e.code());
+        assertTrue(e.getMessage().contains("4") && e.getMessage().contains("2"), e.getMessage());
+    }
+
     @Test
     void windowsOutOfRangeIsRejected() {
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class,

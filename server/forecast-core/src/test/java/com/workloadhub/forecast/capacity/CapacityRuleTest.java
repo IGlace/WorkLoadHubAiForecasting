@@ -110,6 +110,35 @@ class CapacityRuleTest {
     }
 
     @Test
+    void aHalfDayAbsenceIsNotAnOffDay() {
+        // The same fixture as above: the latest base is 36 h, so a gross day is 7.2 h. The 4 h absence of
+        // 28 April leaves 3.2 h of that day standing and must not take it; the 20 h of 29 April takes the
+        // whole of it. Judged against the *net* day capacity — which has already subtracted the very absence
+        // being judged, halving the threshold — both days would come out off.
+        ForecastData d = data(List.of(new CapacityRow(M, LocalDate.of(2026, 3, 2), 36, 0, 36)),
+                List.of(new AbsenceRow(M, LocalDate.of(2026, 4, 28), 4), new AbsenceRow(M, LocalDate.of(2026, 4, 29), 20)));
+        WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
+        CapacityRule rule = new CapacityRule(40);
+        MemberRow m = d.members().get(0);
+        assertEquals(3.2, rule.dayCapacity(m, LocalDate.of(2026, 4, 28), d, cal), 1e-9, "the day still holds 3.2 h");
+        assertEquals(java.util.Set.of(LocalDate.of(2026, 4, 29)), rule.offDays(M, d, m, cal));
+    }
+
+    @Test
+    void anAbsenceIsJudgedAgainstTheWeekRowsGrossDayNotItsAvailableHours() {
+        // The row-present branch, the same way round: base 40 h over the week's four working days (Labour Day
+        // on the Friday) is a gross day of 10 h, so an 8 h absence does not take the day, while 10 h does.
+        // Against available/working = 6 h, the 8 h absence would wrongly read as a whole day off.
+        ForecastData d = data(List.of(new CapacityRow(M, LocalDate.of(2026, 4, 27), 40, 8, 24)),
+                List.of(new AbsenceRow(M, LocalDate.of(2026, 4, 28), 8), new AbsenceRow(M, LocalDate.of(2026, 4, 30), 10)));
+        WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
+        CapacityRule rule = new CapacityRule(40);
+        MemberRow m = d.members().get(0);
+        assertEquals(6.0, rule.dayCapacity(m, LocalDate.of(2026, 4, 28), d, cal), 1e-9, "the row's available hours per working day");
+        assertEquals(java.util.Set.of(LocalDate.of(2026, 4, 30)), rule.offDays(M, d, m, cal));
+    }
+
+    @Test
     void theApplicationsOwnWeekRowIsSpreadOverTheWeeksWorkingDays() {
         ForecastData d = data(List.of(new CapacityRow(M, LocalDate.of(2026, 4, 27), 40, 8, 24)), List.of());
         WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());

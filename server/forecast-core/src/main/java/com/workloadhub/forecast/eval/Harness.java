@@ -51,6 +51,14 @@ public final class Harness {
         long started = System.nanoTime();
         EvalConfig config = configIn.asOf() != null ? configIn
                 : new EvalConfig(lastCreated(data).orElseGet(LocalDate::now), configIn.origins(), configIn.teams(), configIn.windows());
+        // Both levels must measure the same forecast: Level A takes its horizons from config.windows() while
+        // Level B is the injected runner, which computes every run at its own whf.forecast.windows. A caller
+        // asking for a count the runner does not have would get a report whose header says one number and whose
+        // demand rows stop at another; the driver escapes by construction, a host through the public API does not.
+        if (config.windows() != runner.windows()) {
+            throw ForecastException.of("INVALID_REQUEST", "evaluation asks for " + config.windows()
+                    + " windows but the runner forecasts " + runner.windows());
+        }
         LocalDate origin = Weeks.lastCompleteWeek(config.asOf());
         Lifecycle lc = Lifecycle.derive(data);
         WorkingCalendar cal = WorkingCalendar.fromHolidays(data.holidays());

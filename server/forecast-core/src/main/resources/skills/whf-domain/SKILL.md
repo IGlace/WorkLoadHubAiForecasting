@@ -15,7 +15,7 @@ description: Vocabulary and data dictionary of the WorkloadHub forecast facts. U
 ## Forecast rows (`forecast`, per member and window)
 - The row identifies its window by `window` (1, 2, ...), `start` and `end` (ISO dates).
 - **demand**: the hours a member is predicted to log in the window, never capped by capacity.
-- **capacity**: available hours after holidays, absences and the team's capacity plan (default 40 h per week, 8 h per working day, summed over the window's working days); `working_days` and `absence_hours` say why it is lower.
+- **capacity**: available hours after holidays, absences and the team's capacity plan (default 44 h per week, 8.8 h per working day, summed over the window's working days); `working_days` and `absence_hours` say why it is lower.
 - **overload**: max(0, demand minus capacity). Demand is never cut to fit capacity.
 - **low / high**: an interval around demand from the model's backtest residuals; wide bands mean an unstable history.
 - **due_hours**: remaining hours of the member's open tasks that fall due inside the window.
