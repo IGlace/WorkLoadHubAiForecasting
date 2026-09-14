@@ -21,11 +21,14 @@ app with a Python service) is archived at the tag `archive/python-desktop-v1`.
   forecast. The export it was written from holds credentials and personal data and is never committed.
 - `docs/requirements/requirements-v1.md` and `docs/requirements/2026-09-03-discovery-qa.md`: scope, roles and
   the owner's answers, still the source of truth for scope questions.
-- `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`: **designed, awaiting review, not
-  implemented.** It retargets the forecast at logged hours, deletes `EffortModel`, `PlannedWork`,
-  `SeasonalNaive` and the champion machinery, makes the window count configurable and corrects the capacity
-  default to 44 h. Read it before changing anything in `model/`, `planned/`, `backtest/` or the facts
-  contract; it supersedes `2026-09-12-single-model-simplification-design.md`, which is history.
+- `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`: **reviewed by the owner on 2026-09-14
+  and ready for an implementation plan; nothing of it is implemented.** It retargets the forecast at logged
+  hours, deletes `EffortModel`, `PlannedWork`, `SeasonalNaive` and the champion machinery, makes the window
+  count configurable, corrects the capacity default to 44 h, and adds two deterministic pressure facts. Its
+  section 18 holds the seven rulings of that review and is the first thing to read; each one cites the
+  section it changes. Read the document before changing anything in `model/`, `planned/`, `backtest/`,
+  `features/` or the facts contract; it supersedes `2026-09-12-single-model-simplification-design.md`, which
+  is history.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
 - `server/README.md`: build, running experiments, the seed, the parity check, using the module from the
@@ -55,8 +58,14 @@ arrival hours while `accuracy()` scores logged hours, so it is retargeted at log
 everything that existed to bridge the two — `EffortModel`, `PlannedWork`, `HourPlacement`, the open/new/planned
 split — goes, along with `SeasonalNaive` and the champion machinery of the superseded single-model design; the
 window count becomes `whf.forecast.windows` (default 2, one to six) and the capacity default is corrected to
-44 h. **Designed and awaiting the owner's review; nothing of it is implemented.** Until it lands, the code
-still forecasts arrival hours and the parity procedure it retires is still in the tree.
+44 h. The owner reviewed it on 2026-09-14 (its section 18): the two points it left open were settled, a
+contradiction was found and fixed — the per-horizon feature columns must be sized from the window count, so
+`Features.HORIZONS` stops being a constant — and its worst-stated cost was overturned, because WorkloadHub
+puts no cap on logging, so overtime is recorded and overload survives the retarget. That review also added a
+second pressure fact: work due inside a window beyond what the window holds, with the members it presses, so
+Copilot can state the gap in hours and advise rebalancing. **Reviewed and ready for a plan; nothing of it is
+implemented.** Until it lands, the code still forecasts arrival hours and the parity procedure it retires is
+still in the tree.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
 real export through the seed and the parity procedure, then the server's own integration code, against the
 sample host.

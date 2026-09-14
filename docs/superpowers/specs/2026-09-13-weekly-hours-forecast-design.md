@@ -1,7 +1,8 @@
 # Weekly hours forecast design
 
-Date: 2026-09-13. Status: designed in chat with the owner on 2026-09-13 (eight rulings in section 1); written
-for review, two points still open (section 18).
+Date: 2026-09-13, reviewed 2026-09-14. Status: designed in chat with the owner on 2026-09-13 (eight rulings in
+section 1) and **reviewed by the owner on 2026-09-14**, which closed the two open points and took four further
+rulings, all in section 18. Ready for an implementation plan.
 
 **Supersedes `2026-09-12-single-model-simplification-design.md`.** That spec was approved but never
 implemented; every ruling in it still holds and is carried forward here, so this document is the only one to
@@ -99,6 +100,13 @@ public double[] est(UUID member);      // kept: all estimated arrival hours, now
 reading — the member logged nothing — and it matches `Truth`, which reports the same weeks as absent from its
 map and zero when asked. Weeks before a member's start are already excluded by `startIndex`.
 
+**Every logged hour falls on a weekday** (owner, 2026-09-14, section 18.4): WorkloadHub does not record hours
+on a Saturday, a Sunday, a public holiday or a day the member is absent. A working week is five days and a
+44-hour week is 8.8 hours on each of them. So the week's sum needs no day filter — summing every `time_logs`
+row of the week is already a sum over working days — and `Truth` stays exactly as it is. If such a row ever
+did appear, it would join its week's total and be spread over that week's working days by section 5, which is
+the sane fallback; no code special-cases it.
+
 ### 3.1 Features that change
 
 `ownHistory` currently builds `lag{1,2,3,4,8,13}`, `roll_mean_{4,8,13}` and `roll_std_{4,8,13}` from the
@@ -119,11 +127,37 @@ and is added back under an honest name:
 | `due_hrs_h{h}`, `working_days_h{h}`, `absence_hrs_h{h}`, `available_hrs_h{h}` | per horizon | unchanged, and now more directly relevant: `available_hrs_h{h}` is the ceiling on what a member can log |
 | `fresh_hours`, `est_hours` (stored series values) | stored per row | **deleted** — `Features.FRESH` was read only by `SeasonalNaive`, and `lag1` is by definition the row's own week |
 
-The shared column count stays 42 (four removed, four added) and `featureColumns(h)` stays 46, so nothing about
-the matrix's shape changes. `Features.FRESH` and `Features.EST` are deleted; `SyntheticMatrix` (the test
-helper that writes them) is updated.
+The **shared** column count stays 42 (four removed, four added). `Features.FRESH` and `Features.EST` are
+deleted; `SyntheticMatrix` (the test helper that writes them) is updated. `Features.EST` is already dead code
+— written at `FeatureBuilder:93` and read by nothing in production — so it costs nothing to remove.
 
 `Features.HISTORY_WEEKS` stays 65.
+
+### 3.2 The horizon columns are not fixed, and `Features.HORIZONS` must follow the window count
+
+An earlier draft of this section claimed "nothing about the matrix's shape changes". That is true of the
+shared columns and **false** of the per-horizon ones. `Features.HORIZONS` is the hardcoded array `{1, 2, 3}`
+(`Features.java:9`), and section 4 makes the maximum horizon `windows + 1`, which reaches 7 at six windows.
+Five column families are per horizon — `target_h{h}`, `due_hrs_h{h}`, `working_days_h{h}`, `absence_hrs_h{h}`
+and `available_hrs_h{h}` — so a six-window run needs 35 of them where a two-window run needs 15.
+
+**Ruling (owner, 2026-09-14, section 18.3): the horizon columns are sized from the configured window count.**
+`Features.HORIZONS` stops being a constant and becomes a function of that count, as do `allColumns()` and
+`featureColumns(h)`. At the default of two windows the matrix is byte-for-byte what it is today, which keeps
+the change honest; at six it is wider, and a run pays only for the horizons it asked for. The consequence,
+stated so nobody trips on it: **a feature matrix built under one window count cannot be reused under
+another**, so the harness, the experiment driver and every test that builds a matrix must pass the same count
+they run with. No new field is needed to police this: a matrix already names its columns, so `Backtest`
+checks that every horizon it is asked for has its `target_h{h}` column present and fails with a message
+naming the missing horizon, rather than silently reading a column that is not there.
+
+**The existing lag columns are off by one and stay that way.** `ownHistory` computes `j = i - (lag - 1)`
+(`FeatureBuilder:129`), so `lag1` is the row's *own* week, not the week before it. This is leakage-safe
+because every target is a strictly later week, and `logged_hours_lag1` uses the same convention
+(`FeatureBuilder:288`), which is why the two coincide and the four `logged_hours_*` columns can go. The new
+`arrival_hrs_lag1..4` **follow the same convention**, so that one meaning of "lag 1" holds across the matrix.
+The alternative — one true lag beside five off-by-one ones — is worse. `Features` gains a comment saying so,
+because the next reader will otherwise assume the plain reading.
 
 ## 4. Choosing how many windows to forecast
 
@@ -174,8 +208,10 @@ today; six give 7. The minimum horizon is 1 or 2 depending on the run day, so a 
 (`Backtest:126`). With six windows `maxH` is 7 rather than 3, so a fixed `MIN_HISTORY_WEEKS = 13` would leave
 only 6 trainable weeks at the earliest origin instead of 10.
 
-**Proposed** (open for the review, section 18): `MIN_HISTORY_WEEKS` becomes `10 + maxHorizon` — 13 at two
-windows, exactly today's value, and 17 at six. `Backtest.origins` takes the maximum horizon:
+**Ruled** (owner, 2026-09-14, section 18.1): `MIN_HISTORY_WEEKS` becomes `10 + maxHorizon` — 13 at two
+windows, exactly today's value, and 17 at six. The usable training span stays constant at every setting; the
+cost is that a six-window run needs about 19 weeks of history before it scores anything, and is marked
+`thin_history` until then. `Backtest.origins` takes the maximum horizon:
 
 ```java
 public static List<LocalDate> origins(LocalDate lastCompleteWeek, LocalDate firstWeek, int maxHorizon);
@@ -275,7 +311,7 @@ public record MemberDayForecast(UUID userId, LocalDate day, int windowIndex, dou
 
 public record MemberWindowForecast(UUID userId, int windowIndex, LocalDate windowStart, LocalDate windowEnd,
         double demandHrs, double lowHrs, double highHrs, double capacityHrs, double overloadHrs, int workingDays,
-        double absenceHrs, double backlogExcessHrs) {}
+        double absenceHrs, double backlogExcessHrs, double dueExcessHrs) {}
 
 public record CurrentDayForecast(UUID teamId, UUID userId, LocalDate day, UUID runId, double demandHrs,
         double capacityHrs, double overloadHrs, LocalDateTime forecastAt) {}
@@ -291,29 +327,65 @@ public record RunResult(RunSummary run, List<BacktestScore> scores, List<MemberW
         List<MemberDayForecast> memberDays, String factsJson) {}
 ```
 
-`backlogExcessHrs` is section 8. `RunResult` drops `maseByModel` and `unavailable`; `ModelScore` is renamed
-`BacktestScore` because neither `model` nor `mase` survives in it.
+`backlogExcessHrs` and `dueExcessHrs` are section 8. `RunResult` drops `maseByModel` and `unavailable`;
+`ModelScore` is renamed `BacktestScore` because neither `model` nor `mase` survives in it.
 
-## 8. Backlog pressure, so overload does not go quiet
+## 8. Pressure the forecast itself cannot show
 
-A logged-hours target is censored by what a person can physically work: nobody logs 60 hours in a 44-hour week,
-so a model trained on logged hours will rarely predict above capacity and `overload` will rarely fire. The
-arithmetic still obeys the hard rule — demand is not capped, `overload = max(0, demand − capacity)` — but the
-signal the feature exists to give would fade.
+This section was written to rescue `overload` from a target that would silence it. That premise did not
+survive the review: WorkloadHub puts no cap on logging, so overtime is recorded as it happens, a model
+trained on logged hours can predict above capacity, and `overload = max(0, demand − capacity)` keeps firing
+(ruling 18.6, and section 19 item 1, which the first draft got wrong).
 
-The owner's ruling is a **separate deterministic backlog-pressure fact**, computed from facts that already
-exist, so every number a narrative could state stays verifiable by `NumberVerifier`:
+What the forecast still cannot show is the **queue behind the person**. A prediction of hours logged says what
+someone will get through, never how much is waiting: a member handed far more work than a window holds logs a
+long week, not the whole pile, so demand reports the overrun and says nothing about the backlog that caused
+it. Two facts cover that gap, both deterministic and both computed from facts that already exist, so every
+number a narrative could state stays verifiable by `NumberVerifier`:
 
-- Each member's window row gains `backlog_excess_hrs = round2(max(0, open_est_hours − capacity_hrs))`, where
-  `open_est_hours` is the member's open remaining hours already reported in `patterns` and `capacity_hrs` is
-  the window's capacity. It answers "does this person hold more open work than this window can absorb", which
-  a censored demand forecast cannot.
-- `rebalancing_candidates` gains a `backlog_pressed` list beside `overloaded` and `underloaded`, holding the
-  members whose `backlog_excess_hrs` is above zero in any window.
+### 8.1 Two pressures, two facts
 
-No new source data, no new model, no ratio or threshold invented. `whf-forecast-interpretation` gains the
-rule: when `overload` is zero but `backlog_excess_hrs` is not, say the member is not predicted to exceed their
-hours but is carrying more open work than the window can absorb.
+The owner's review (2026-09-14) separated two things the first draft had run together. **Undated pressure** is
+holding more open work than the coming windows can get through. **Dated pressure** is work that must finish
+inside a particular window whatever else happens, which is precisely the trigger for a team leader to move
+hours off that member and onto someone with room. Both are deterministic, both are computed from facts that
+already exist, and neither invents a ratio or a threshold.
+
+**Undated: `backlog_excess_hrs`, cumulative** (ruling, section 18.2). Each member's window row gains
+
+```
+backlog_excess_hrs(k) = round2(max(0, open_est_hours − Σ capacity_hrs(1..k)))
+```
+
+where `open_est_hours` is the member's open remaining hours already reported in `patterns`. The capacity is
+**cumulative over windows 1 to k**, not window k's alone. The first draft compared the same open backlog with
+each window separately, which prints one number repeatedly — six nearly identical figures at six windows — and
+invites a reader to add them up. Cumulative asks "is there more open work here than the next k windows can
+take", falls as the windows absorb it, and reaches zero at the window where the backlog finally fits.
+
+**Dated: `due_excess_hrs`, per window** (ruling, section 18.5). Each member's window row also gains
+
+```
+due_excess_hrs = round2(max(0, due_hours − capacity_hrs))
+```
+
+against that window's own capacity, because a deadline belongs to its window and does not roll forward.
+`due_hours` — the remaining hours of the member's open tasks falling due inside the window — is already built
+(`FactsBuilder:203`) and `whf-forecast-interpretation` already tells Copilot that `due_hours` above capacity
+means deadlines are the pressure. What it cannot do today is say **by how much**: `NumberVerifier` checks every
+number in the narrative against the facts it was given, so a gap Copilot subtracts for itself matches no fact
+and is reported `UNVERIFIED`. Computing the subtraction here makes the sentence that matters most to a team
+leader both sayable and verified.
+
+**Both feed rebalancing.** `rebalancing_candidates` gains two lists beside `overloaded` and `underloaded`:
+`backlog_pressed`, the members whose `backlog_excess_hrs` is above zero in any window, and `deadline_pressed`,
+those whose `due_excess_hrs` is above zero in any window. `whf-rebalancing-advice` reads the second as the
+strongest case for moving work: the hours cannot be deferred, so either they move or the deadline slips.
+
+`whf-forecast-interpretation` gains two rules. When `overload` is zero but `backlog_excess_hrs` is not, the
+member is not predicted to exceed their hours yet holds more open work than the coming windows can absorb.
+When `due_excess_hrs` is above zero, say how many hours more are due in that window than it holds, and name
+rebalancing as the answer.
 
 ## 9. The backtest, MAE and thin history
 
@@ -384,7 +456,7 @@ One migration, `V4__weekly_hours.sql`, in both `db/forecast/postgresql/` and `db
 
 - `forecast_runs`: drop `forced_model`, `champion_model`, `champion_mase`; add `mae double precision` / `REAL`.
 - `forecast_member_windows`: drop `open_hrs`, `new_hrs`, `planned_hrs`; add
-  `backlog_excess_hrs double precision NOT NULL`.
+  `backlog_excess_hrs double precision NOT NULL` and `due_excess_hrs double precision NOT NULL`.
 - `forecast_member_days` and `forecast_current_days`: drop `open_hrs`, `new_hrs`, `planned_hrs`.
 
 `JdbcRunStore` follows in its INSERTs, SELECT lists, `finish(...)` and row mappers.
@@ -412,8 +484,9 @@ Removed from the facts, with their producers:
 
 Added or changed:
 
-- Member `forecast` rows gain `backlog_excess_hrs` (section 8).
-- `rebalancing_candidates` gains `backlog_pressed` (section 8).
+- Member `forecast` rows gain `backlog_excess_hrs` and `due_excess_hrs` (section 8). `due_hours` stays as it
+  is; the new key is the gap, not a replacement.
+- `rebalancing_candidates` gains `backlog_pressed` and `deadline_pressed` (section 8).
 - `patterns` gains `logged_weekday_shares` (section 5).
 - `history_13w` reports `{week, logged_hours, arrival_hours, tasks}` — the member's own history of the
   quantity now being forecast, with arrivals kept beside it as context.
@@ -454,10 +527,14 @@ member who logs less than they work is forecast to work less.
 - `whf-domain`: the **demand** bullet loses the open/new/planned decomposition and becomes "predicted hours a
   member will log in the window, never capped"; the **champion** bullet becomes a **model** bullet naming
   `xgboost`, its target, `mae` beside `mean_actual_hours` and `confidence`; the window sentence says a run
-  covers between one and six contiguous windows and that `model.windows` says how many; `backlog_excess_hrs`
-  and `backlog_pressed` are documented; `planned_basis` and `planned_backlog` go.
-- `whf-forecast-interpretation`: the "where the demand comes from" rule is replaced by the backlog-pressure
-  rule of section 8; the "below 1.0 is reliable" rule is replaced by stating `mae` next to
+  covers between one and six contiguous windows and that `model.windows` says how many; `backlog_excess_hrs`,
+  `due_excess_hrs`, `backlog_pressed` and `deadline_pressed` are documented, the first as cumulative over the
+  windows so far and the second as that window's own; `planned_basis` and `planned_backlog` go.
+- `whf-rebalancing-advice`: `deadline_pressed` is named as the strongest case for moving work, because those
+  hours cannot be deferred — either they move or the deadline slips — and `due_excess_hrs` says how many.
+  `backlog_pressed` stays the weaker, undated case.
+- `whf-forecast-interpretation`: the "where the demand comes from" rule is replaced by the two
+  pressure rules of section 8.1; the "below 1.0 is reliable" rule is replaced by stating `mae` next to
   `mean_actual_hours` and letting the reader judge, never calling the forecast good or bad; a
   `thin_history` run is described plainly as unscored; `due_hours` above capacity keeps its rule.
 - `whf-likely-work`: the planned-allocation source and its `high` confidence rule go. The top confidence
@@ -483,7 +560,10 @@ requested" line.
 `server/tools/Experiment.java`: `eval` drops `--models` and gains `--windows N` (1 to 6, default 2), refusing
 anything outside the range with the same message the auto-configuration uses. `server/tools/experiment.sh`
 follows in its header comment. This is the one place the window count is not a property, because the driver is
-not a host and has no property source — flagged in section 18.
+not a host and has no property source; confirmed at the 2026-09-14 review (section 18.6) as a consequence of
+ruling 4 rather than an exception to it. Since section 3.2 ties a matrix to the count it was built with, the
+flag also decides the matrix the driver builds, and `eval` rebuilds rather than reusing one built at another
+count.
 
 `server/examples/HostExample.java`: the `getRun` section stops printing the champion, the per-model MASE and
 the unavailable map and prints `mae`, `mean_actual_hours` and `confidence`; the run-list section follows; the
@@ -559,7 +639,10 @@ retarget happened.
 range; a run at `windows = 6` produces 30 day rows and 6 window rows per member and fits 7 horizons; a
 thin-history run forecasts with a null `mae`, `confidence` `thin_history` and an interval basis of
 `"none: no scored origins"`; a run whose booster cannot fit ends `FAILED` with the `ModelUnavailable` message;
-`backlog_excess_hrs` is positive exactly when open remaining hours exceed the window's capacity;
+`backlog_excess_hrs` is positive exactly when open remaining hours exceed the summed capacity of the windows
+up to and including that one, and is non-increasing across a run's windows; `due_excess_hrs` is positive
+exactly when that window's `due_hours` exceeds that window's capacity; a member in `deadline_pressed` has a
+positive `due_excess_hrs` in at least one window;
 `CapacityRule` falls back to 44 hours when a member has no capacity row.
 
 `XgboostHoursTest` replaces the `SeasonalNaive` comparison at `XgboostArrivalTest:69` with a two-line baseline
@@ -573,36 +656,60 @@ fixture. Same protection, no production class.
 and the narration fixtures hardcoding a champion (`NarrativeContractTest:53`, `NumberVerifierTest:26`,
 `PromptsTest:21`).
 
-## 18. Open for this review
+## 18. The owner's review, 2026-09-14
 
-Two points were not put to the owner before this document was written:
+The two open points were closed and four more rulings were taken, two of them prompted by findings that
+contradicted this document. They are numbered here and cited from the sections they change.
 
-1. **`MIN_HISTORY_WEEKS = 10 + maxHorizon`** (section 4.2). The alternative is to leave it at 13 and accept
-   that a six-window run trains on 6 weeks at its earliest origin. The derivation keeps the usable training
-   span constant at the cost of needing about 19 weeks of history before a six-window run scores anything.
-2. **`--windows N` on the experiment driver** (section 14). Ruling 4 made the window count a property only;
-   the driver has no property source, so it needs a flag or it can only ever evaluate the default. Presented
-   as a consequence of the driver not being a host, not as a re-opening of the ruling.
+1. **`MIN_HISTORY_WEEKS = 10 + maxHorizon`** (section 4.2). Confirmed as proposed. The usable training span
+   stays constant at every window count; a six-window run needs about 19 weeks of history before it scores.
+2. **`backlog_excess_hrs` is cumulative** (section 8.1). Window *k* measures open work against the summed
+   capacity of windows 1 to *k*, not against window *k* alone, so the figure falls as the windows absorb the
+   backlog instead of repeating itself once per window.
+3. **The horizon columns are sized from the window count** (section 3.2). Raised during the review: this
+   document had claimed the matrix shape does not change, which is false once the maximum horizon reaches 7.
+   `Features.HORIZONS` becomes a function of the configured count. A matrix is tied to the count it was built
+   with and cannot be reused under another.
+4. **No hour is ever logged on a non-working day** (section 3). The application records no time on weekends,
+   public holidays or absence days: a working week is five days and a 44-hour week is 8.8 hours on each. The
+   week's target therefore needs no day filter and `Truth` is unchanged.
+5. **The deadline gap becomes a fact, and its members are listed** (section 8.1). `due_excess_hrs` per window,
+   and `deadline_pressed` in `rebalancing_candidates`. Work that must finish inside a window at the cost of
+   overloading someone is the case a team leader has to act on, so the narrative must be able to state the
+   gap in hours and have it verify, and rebalancing advice must be able to find those members directly.
+6. **Overtime is recordable, so overload survives the retarget** (section 19). Nothing in WorkloadHub stops a
+   member logging more hours than their capacity. The concern that a logged-hours target would silence
+   overload was the first draft's largest stated cost and it was overstated; section 19 is rewritten.
+7. **`--windows N` on the experiment driver** (section 14). Confirmed, as a consequence of the driver having
+   no property source rather than an exception to ruling 4.
 
 ## 19. What this costs, accepted
 
-Stated plainly so the review can weigh them:
+Stated plainly, and revised where the 2026-09-14 review overturned an item:
 
-1. **Overload goes quieter, and the 44-hour default makes it quieter still.** Logged hours are censored by
-   what a person can work; a model trained on them will rarely predict above a 44-hour capacity. Section 8 is
-   the mitigation and it now carries essentially the whole overload story rather than sharing it.
+1. **Overload keeps working; this was the first draft's worst-stated cost.** That draft argued logged hours
+   are censored by what a person can physically work, so a model trained on them would rarely predict above
+   capacity and `overload` would fade. The premise is wrong (ruling 18.6): WorkloadHub does not cap logging,
+   a member can record ten hours in a day or fifty in a week, and overtime therefore appears in the training
+   data as it actually happens. A forecast of logged hours can predict above capacity because people log
+   above capacity. What remains true, and much smaller, is that the target is bounded by what a person
+   *does*, not by what is asked of them: someone handed 70 hours of work in a 44-hour window logs their long
+   week, not the full 70, so the forecast shows a real overrun rather than the size of the queue behind it.
+   Section 8.1 is what covers the queue, and it is a complement now rather than the rescue the draft made it.
 2. **The forecast inherits logging discipline.** A member who works 40 hours and logs 25 is forecast to log
    25. The module cannot tell under-logging from under-working, and the narrative must not pretend otherwise:
    `data_quality.unlogged_tasks` already flags the tasks, and `limitations` now says it in words. This is the
    sharpest edge of the retarget and it is the direct consequence of measuring what is recorded.
 3. **The demand breakdown is gone.** A narrative can no longer say "most of this is work already on their
-   plate". `open_est_hours`, `due_hours` and `backlog_excess_hrs` recover part of it; the per-window
+   plate". `open_est_hours`, `due_hours`, `backlog_excess_hrs` and `due_excess_hrs` recover part of it; the per-window
    attribution does not come back.
 4. **"Likely work" weakens.** Without the planned allocation, no task can be named as probably landing on a
    member, and the skill's top confidence drops from `high` to `medium`.
-5. **Six windows cost real time.** Up to 7 boosters per backtest origin instead of 3 — about 42 fits per run
-   against 18 — four more feature columns per horizon, a 7-week hold-out and roughly 19 weeks of history
-   before anything scores.
+5. **Six windows cost real time and a wider matrix.** Up to 7 boosters per backtest origin instead of 3 —
+   about 42 fits per run against 18 — a 7-week hold-out and roughly 19 weeks of history before anything
+   scores. Section 3.2 adds the matrix cost the first draft missed: five column families are per horizon, so
+   six windows build 35 horizon columns where two build 15, and a matrix built at one count cannot be reused
+   at another. The default stays at two windows, where none of this is paid.
 6. **A breaking API and schema change**, and the four costs the superseded spec already recorded and the owner
    accepted: no scale-free backtest score, no independent cross-check once parity retires, a weaker booster
    regression test, and no graceful degradation when the XGBoost native library is missing.

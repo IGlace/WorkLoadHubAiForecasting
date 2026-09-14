@@ -306,20 +306,29 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
-- **Weekly hours forecast (2026-09-13).** Spec
-  `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`, **designed and awaiting review, not
-  implemented**. It supersedes the single-model simplification below and is the only document to implement
-  from. Rulings: the booster's target becomes logged hours per member-week, so training and measurement are
-  the same quantity; `EffortModel` and everything serving it are deleted, `HourPlacement` and the
+- **Weekly hours forecast (2026-09-13, reviewed 2026-09-14).** Spec
+  `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`, **reviewed and ready for a plan, not
+  implemented**. The review's seven rulings are its section 18: the history gate scales as `10 + maxHorizon`;
+  `backlog_excess_hrs` is cumulative over the windows so far rather than per window; the per-horizon feature
+  columns are sized from the window count, so `Features.HORIZONS` stops being the constant `{1,2,3}` and a
+  matrix is tied to the count it was built with; no hour is ever logged on a weekend, holiday or absence day,
+  so the target needs no day filter; a second pressure fact `due_excess_hrs` and a `deadline_pressed` list are
+  added, because work that must finish inside a window is what makes a leader rebalance and Copilot can only
+  state the gap if the gap is itself a fact; overtime is recordable, so overload survives the retarget and the
+  spec's largest stated cost was wrong; the experiment driver gets `--windows N`.
+
+  It supersedes the single-model simplification below and is the only document to implement from. The
+  2026-09-13 rulings behind it: the booster's target becomes logged hours per member-week, so training and
+  measurement are the same quantity; `EffortModel` and everything serving it are deleted, `HourPlacement` and the
   open/new/planned split with them; `PlannedWork` becomes a feature rather than an addend and
   `PlannedWork.allocate` goes; the window count becomes the property `whf.forecast.windows`, default 2, one to
   six, with `RunRequest` unchanged at `(teamId, requestedBy)`; a week's hours land on its weekdays by the
   member's logged-hours weekday shares, a new series computed from `time_logs`; `XgboostArrival` is renamed
   `XgboostHours`; the default weekly capacity becomes 44 h, as requirement C1 has always said. Accepted costs:
-  overload goes quieter because logged hours are censored by what a person can work, answered by a separate
-  deterministic `backlog_excess_hrs` fact; the forecast inherits logging discipline; the demand breakdown and
-  part of "likely work" are lost. Two points are open for the review (spec section 18): the
-  `MIN_HISTORY_WEEKS` derivation and a `--windows` flag on the experiment driver.
+  the forecast inherits logging discipline; the demand breakdown and part of "likely work" are lost. The cost
+  this list used to carry first — that overload would go quiet because logged hours are censored by what a
+  person can work — was withdrawn at the review: logging is not capped, so overtime is in the data and
+  overload still fires. Both points the spec left open are settled.
 - **Single-model simplification (2026-09-12).** Spec
   `docs/superpowers/specs/2026-09-12-single-model-simplification-design.md`, **superseded on 2026-09-13 by the
   entry above**; approved but never implemented, so read it as history. Its rulings are carried forward there,
