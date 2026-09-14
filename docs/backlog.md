@@ -306,6 +306,43 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Open after the weekly hours forecast landed (2026-09-14).** The plan's combined review raised these
+  and the fix wave deliberately left them to the owner. The review itself is summarised in the closing
+  notes of `docs/superpowers/plans/2026-09-14-weekly-hours-forecast.md`.
+  - **`backlog_pressed` and `deadline_pressed` carry bare member names**, while `overloaded` and
+    `underloaded` in the same `rebalancing_candidates` object carry `{member_id, name}`. Two reasons to
+    change them beyond consistency: `NumberVerifier` scopes per-member facts by `m.path("id")`, so a
+    name-only list gives Copilot no id to scope a verified number by; and `fullName()` is not unique, so
+    two members of one name collapse into one entry and the leader cannot tell which to act on.
+  - **Level B of the evaluation report has no naive baseline.** `open_only_mae` was dropped because it
+    read `DemandRow::openHours`, deleted with the open/new/planned split, and the 2026-09-13 design names
+    no replacement. Level B now reports `mae`, `bias`, `overload_precision` and `overload_recall` with
+    nothing to compare `mae` against. Last week's logged hours per member-week is the obvious candidate.
+  - **`CapacityRule.grossDayCapacity` divides by the week's working days when a capacity row exists and
+    by five when none does.** That mirrors the existing shape of `dayCapacity`, whose two branches
+    already disagree on the divisor, so each branch was kept internally consistent rather than the
+    established shape changed in a fix wave. Worth settling if the divisor is ever unified.
+  - Three MINOR review items, none of them a wrong number: `ForecastRunnerTest` has two `@BeforeAll`
+    methods (independent today); `ForecastMigrationsTest` asserts neither the V4 nor the V5 columns; and
+    `CLAUDE.md` and this file recorded the plan as landed and green in the same commit the review had not
+    yet passed.
+
+- **Never aggregate `server/forecast-core/target/surefire-reports/*.txt` (2026-09-14).** In a test class
+  that mixes JUnit `@Test` with jqwik `@Property`, both engines write `<class>.txt` and the second
+  overwrites the first, so the class reports only one engine's count — `CapacityRuleTest` has seven
+  `@Test` and one `@Property` and its `.txt` says "Tests run: 1". Nine classes are mixed. Summing the text
+  reports gives 375 where the truth is 408. Sum `TEST-*.xml` instead (`tests=`, `failures=`, `errors=`,
+  `skipped=` on the root element). This misled the 2026-09-14 execution twice. Not a defect to fix, a
+  measurement rule to follow.
+
+- **Name a jqwik property file `*PropertyTest.java`, never `*Properties.java` (2026-09-14).**
+  `eval/AccuracyProperties.java` (5 properties) and `service/RunProgressTrackerProperties.java` (1)
+  matched none of surefire's default includes (`Test*`, `*Test`, `*Tests`, `*TestCase`) and had **never
+  run, at any revision** — six properties reported green while dead, against the project rule that
+  mandates jqwik for arithmetic invariants. Renamed in the fix wave; all six passed on their first real
+  execution, so the code was right and nothing had been checking it. Do not widen `<includes>`; follow
+  the convention the other property files already use.
+
 - **The evaluation harness applies a shorter history gate than a run does (2026-09-14). Important; go back to
   this.** `eval/Harness` sets `maxHorizon = windows` and passes it to `Backtest.origins`, while a real forecast
   uses `Horizon.maxHorizon(origin, windows)`, which is `windows + 1`. With `minHistoryWeeks(maxHorizon) =

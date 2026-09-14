@@ -2330,3 +2330,77 @@ one the spec assumed, so reverting the schema means dropping `V5` and `V4` — o
 experiment database with `init-db`, since no deployment holds data these tables lose.
 
 **What comes next, after this lands:** the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the real export through the seed, then the server's own integration code against the sample host.
+
+---
+
+## Closing notes — what actually happened (2026-09-14)
+
+All eleven tasks landed on `dev`, then one combined review over the last three, then one fix wave. Final
+state: `1a93de2`, gate **421 tests, 0 failures, 0 errors, 13 skipped**, `main` not yet fast-forwarded.
+
+**Commits:** `d5bb321` (1) · `c57bed4` (2) · `b32e487` (3) · `fbb2d89` (4) · `b5ddd44` (5) · `815e0ee`
+(6) · `149d160` (7) · `773c98f` (8) · `aaf95bf` (9) · `4ebb9a1` (10) · `b6e83f5` (11) · `1a93de2` (fix
+wave).
+
+**Deviation from the plan's own process.** Tasks 1 to 8 ran with a review per task, as written. For 9, 10
+and 11 the owner ruled on 2026-09-14 that they should run back to back with no review between them and
+one combined review over all three. That is what happened, and the fix wave closed it.
+
+### What the combined review found
+
+Three CRITICAL, six IMPORTANT, six MINOR. The three that mattered:
+
+1. **A planned half-day absence deleted the whole day from the forecast.** `CapacityRule.offDays`
+   compared an absence against `dayCapacity`, whose no-row branch had **already subtracted that same
+   absence**, so the test collapsed from `h >= base/5` to `h >= base/10` — 4.4 h at the 44-hour default.
+   Task 9's replacement of the static `dayCapacityHint` introduced it. The broken branch is the normal
+   one for the horizon, because future weeks rarely carry an exact `user_capacity` row, and those are
+   exactly the weeks `offDays` is asked about. Fixed by a private `grossDayCapacity` that subtracts no
+   absence in either branch.
+2. **`get_rebalancing_candidates` dropped both new pressure lists.** `FactsTools` whitelisted two keys
+   where `FactsBuilder` emits four, while the skill task 10 wrote told Copilot that `deadline_pressed` is
+   the strongest case for moving work. Ruling 18.5 was unimplemented and `FactsToolsTest` pinned the
+   defect. Fixed by returning the whole node, with a test asserting it equals `get_run_overview`'s so a
+   future whitelist cannot re-diverge.
+3. **`get_member_capacity` omitted both pressure figures** while task 11's own deviation note on the
+   narration design claimed it carried them. Fixed, which made the note true.
+
+Also: the product skills still told Copilot the default capacity was 40 h and 8 h a day, and
+`SkillTextsTest` **asserted the wrong value** — the test that exists to pin the skills to the Java facts
+was pinning a falsehood.
+
+### Two lessons worth carrying to the next plan
+
+**Never aggregate `surefire-reports/*.txt`.** In a class mixing JUnit `@Test` with jqwik `@Property`,
+both engines write `<class>.txt` and the second overwrites the first. Nine classes are mixed:
+`CapacityRuleTest` has seven `@Test` and one `@Property` and its `.txt` says "Tests run: 1". Summing the
+text reports gives 375 where the truth is 408. Sum `TEST-*.xml` instead. This cost real time twice, once
+inside a task report and once in a clean verification run that appeared to contradict the review.
+
+**Six jqwik properties had never run, at any revision.** `eval/AccuracyProperties.java` (5) and
+`service/RunProgressTrackerProperties.java` (1) matched none of surefire's default includes
+(`Test*`, `*Test`, `*Tests`, `*TestCase`). Renamed to `*PropertyTest.java` in the fix wave; all six
+passed on their first real execution, so `Accuracy` and the progress rotation were correct all along and
+nothing had been checking them. **Name a property file `*PropertyTest.java`, never `*Properties.java`.**
+
+### Rulings taken during execution, beyond the five above
+
+6. `Numbers` was created in the root package (task 1) so `mae`/`mase` could be shared without closing an
+   `eval` → `backtest` package cycle. The same instinct was then violated twice and repaired in the fix
+   wave: task 9 made `run` import `facts.Patterns`, task 10 made `facts` call `ForecastRunner`, and the
+   two together were a mutual *class* dependency. Both edges are gone — `lifecycle/OpenWork.java` and
+   `lifecycle/LoggedWeekdayShares.java` — and `grep "forecast.facts"` over `run/` and `lifecycle/`
+   returns nothing.
+7. `DemandRow` loses its `model` column as well as `ScoreRow` (task 11). The brief named only `ScoreRow`;
+   spec section 14 names both and says "Both headers change". The spec won.
+8. `Report`'s Level B `open_only_mae` column was dropped rather than given an invented baseline, because
+   the column read `DemandRow::openHours`, which task 5 deleted. Recorded in the backlog as a debt.
+9. `HostExample.java` uses `JsonNode.asString(String)` where the rest of the tree uses `asText`. This is
+   Jackson 3, where `asString` replaced `asText`; HostExample is the only file using the defaulting
+   overload at all, and the non-deprecated API belongs in the file whose purpose is showing a host how to
+   integrate.
+
+### Left open, deliberately — see `docs/backlog.md`, "Java migration"
+
+The harness history gate; `{member_id, name}` on the two pressed lists; Level B's missing naive baseline;
+the `grossDayCapacity` row-present divisor; and three MINOR items from the review.

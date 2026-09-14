@@ -76,6 +76,12 @@ window count is `whf.forecast.windows` (1 to 6, default 2), capacity defaults to
 (`server/tools/parity.sh`, `parity_compare.py`, `server/tools/tests/`) is retired —
 `docs/eval/2026-09-10-java-parity-synthetic/` stays as a record of the run that produced it, with a note that
 the procedure is gone.
+The last three tasks ran back to back at the owner's request, then one combined review over all three,
+then one fix wave (`1a93de2`): it corrected a half-day absence that deleted a whole day from the forecast,
+opened the two pressure lists to the tool Copilot actually calls, put 44 h and 8.8 h in the product skills
+where a test had been pinning 40 h, broke a `run`/`facts` cycle, and renamed two jqwik files that surefire
+had never been collecting. The gate stands at 421 tests, 0 failures, 13 skipped. `main` has not been
+fast-forwarded yet. The plan's closing notes record the rest; `docs/backlog.md` holds what was left open.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
 real export through the seed, then the server's own integration code, against the sample host.
 The standing workflow for a plan:
@@ -122,9 +128,14 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 ## Toolchain
 
 - Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java.
-- The gate is one step: `cd server && mvn -B -q verify` (about six minutes without Docker; PostgreSQL tests
-  run through Testcontainers when Docker is present, else skip with a message). `bash scripts/check.sh` and
-  `pwsh scripts/check.ps1` run it, and running one of them by hand is the only gate there is.
+- The gate is one step: `cd server && mvn -B -q verify` (about seventeen minutes without Docker as of
+  2026-09-14, and growing with the suite; PostgreSQL tests run through Testcontainers when Docker is
+  present, else skip with a message). `bash scripts/check.sh` and `pwsh scripts/check.ps1` run it, and
+  running one of them by hand is the only gate there is. **Read the result from
+  `forecast-core/target/surefire-reports/TEST-*.xml`, never by summing the `*.txt` files**: a class that
+  mixes JUnit `@Test` with jqwik `@Property` has both engines write the same `.txt` and the second
+  overwrites the first, so the text total is short by about thirty. Wipe the report directory before a run
+  you intend to trust.
   `.github/workflows/ci.yml` describes the same step but is paused: on 2026-09-14 the owner asked for no
   CI until the work has progressed much further, so only `workflow_dispatch` is left and no push starts a
   run. Keep the three in step anyway, and restore the `push` and `pull_request` triggers, which the file
