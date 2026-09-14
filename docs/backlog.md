@@ -1,7 +1,7 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04, last updated 2026-09-12; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-13; update this file when an item lands.
 
 Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
 the archived first version only — including the whole "Verification on Windows" section below. Their
@@ -302,8 +302,25 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Weekly hours forecast (2026-09-13).** Spec
+  `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`, **designed and awaiting review, not
+  implemented**. It supersedes the single-model simplification below and is the only document to implement
+  from. Rulings: the booster's target becomes logged hours per member-week, so training and measurement are
+  the same quantity; `EffortModel` and everything serving it are deleted, `HourPlacement` and the
+  open/new/planned split with them; `PlannedWork` becomes a feature rather than an addend and
+  `PlannedWork.allocate` goes; the window count becomes the property `whf.forecast.windows`, default 2, one to
+  six, with `RunRequest` unchanged at `(teamId, requestedBy)`; a week's hours land on its weekdays by the
+  member's logged-hours weekday shares, a new series computed from `time_logs`; `XgboostArrival` is renamed
+  `XgboostHours`; the default weekly capacity becomes 44 h, as requirement C1 has always said. Accepted costs:
+  overload goes quieter because logged hours are censored by what a person can work, answered by a separate
+  deterministic `backlog_excess_hrs` fact; the forecast inherits logging discipline; the demand breakdown and
+  part of "likely work" are lost. Two points are open for the review (spec section 18): the
+  `MIN_HISTORY_WEEKS` derivation and a `--windows` flag on the experiment driver.
 - **Single-model simplification (2026-09-12).** Spec
-  `docs/superpowers/specs/2026-09-12-single-model-simplification-design.md`. Rulings: `SeasonalNaive` is deleted
+  `docs/superpowers/specs/2026-09-12-single-model-simplification-design.md`, **superseded on 2026-09-13 by the
+  entry above**; approved but never implemented, so read it as history. Its rulings are carried forward there,
+  with two changed: `TeamOutcome.plannedWorkEnabled` and the `planned_basis` fact go with `PlannedWork`, and
+  `mean_actual_hours` becomes the mean of logged hours rather than arrival hours. Rulings: `SeasonalNaive` is deleted
   outright, not demoted to a MASE yardstick, so the backtest score becomes MAE in hours reported next to
   `mean_actual_hours` for scale; the parity procedure is retired entirely rather than retargeted, which empties
   `server/tools/tests/` and makes the gate `mvn verify` alone with no `uv` precondition; a team with too little
