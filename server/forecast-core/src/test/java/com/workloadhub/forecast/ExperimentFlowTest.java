@@ -78,9 +78,8 @@ class ExperimentFlowTest {
 
     /**
      * The reason the driver exists: seed, load, score. A small synthetic population and two origins keep it to a few
-     * seconds while still going through {@code ForecastService.evaluate} and writing the three files
-     * {@code tools/parity.sh} reads afterwards — including {@code summary.md}, whose first line that script parses
-     * the as-of date out of.
+     * seconds while still going through {@code ForecastService.evaluate} and writing the three files it produces:
+     * {@code scores.csv}, {@code demand.csv} and {@code summary.md}, whose first line carries the as-of date.
      */
     @Test
     void evalScoresTheDatabaseAndWritesTheHarnessFiles(@TempDir Path dir) throws Exception {
@@ -92,15 +91,16 @@ class ExperimentFlowTest {
         assertOk(experiment("import", "--db", db.toString(), seeded.toString()), "Imported");
 
         Path out = dir.resolve("eval");
-        assertOk(experiment("eval", "--db", db.toString(), "--as-of", "2026-09-06", "--origins", "2", "--models", "seasonal_naive",
-                "--out", out.toString()), "seasonal_naive");
+        assertOk(experiment("eval", "--db", db.toString(), "--as-of", "2026-09-06", "--origins", "2", "--windows", "2",
+                "--out", out.toString()), "2 windows");
         assertTrue(Files.exists(out.resolve("scores.csv")) && Files.exists(out.resolve("demand.csv")) && Files.exists(out.resolve("summary.md")),
                 () -> "scores.csv, demand.csv and summary.md in " + out);
         assertTrue(Files.readString(out.resolve("summary.md")).startsWith("# Forecast evaluation, as of 2026-09-06"),
-                "tools/parity.sh reads the as-of date off the first line");
+                "the first line the old parity procedure used to parse the as-of date off");
 
         assertEquals(2, experiment("eval", "--db", db.toString(), "--teams", "no-such-team", "--out", out.toString()).exit(), "an unknown team");
-        assertEquals(2, experiment("eval", "--db", db.toString(), "--models", "gbm", "--out", out.toString()).exit(), "an unknown model");
+        assertEquals(2, experiment("eval", "--db", db.toString(), "--windows", "0", "--out", out.toString()).exit(), "windows out of range");
+        assertEquals(2, experiment("eval", "--db", db.toString(), "--windows", "7", "--out", out.toString()).exit(), "windows out of range");
     }
 
     /** A mistyped command or option is a bad request, not a stack trace and not a silent no-op. */

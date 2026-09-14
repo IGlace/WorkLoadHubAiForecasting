@@ -55,6 +55,16 @@ All from `eval.Metrics` and `backtest.Backtest`, unchanged:
 > implementation substituted zero hours for a missing prior-week log, which the section never said and which
 > made MASE depend on how sparse the logs are rather than on the forecast.
 
+Deviation, 2026-09-14: "the seasonal-naive floor" no longer names a model class. The weekly-hours-forecast
+design deletes `SeasonalNaive` and the champion machinery it was the floor of (that design, section 6), but
+this MASE was never wired to either: `Accuracy` computes its own baseline inline, the truth of the same
+weekday seven days earlier read straight from `logged`, never through `SeasonalNaive` or any model. That
+independence is what the newer design's section 19.1 restores as the interpretation once the forecast itself
+is retargeted at logged hours: `accuracy(teamId, from, to)` still compares a forecast against a truth that is
+now the same series the model was trained to predict, so this MASE keeps meaning "how much better than
+copying last week" with nothing else to reconcile it against. The wording "the seasonal-naive floor" above is
+history; read it as "the same-weekday-last-week baseline".
+
 ## 5. Public API (Java interface only)
 
 ```java

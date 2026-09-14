@@ -8,8 +8,8 @@ import java.util.UUID;
  * window's days. {@code backlogExcessHrs} and {@code dueExcessHrs} are the pressure figures of that same
  * replayed window (design 2026-09-13, section 8), carried through so {@code demand.csv} can be read against
  * the pressure the run found; {@code openHours}, {@code newHours} and {@code plannedHours} went with the
- * open/new/planned split task 5 retired.
+ * open/new/planned split task 5 retired. There is one model, so no model column.
  */
-public record DemandRow(String model, LocalDate origin, UUID teamId, UUID memberId, int windowIndex, LocalDate windowStart, LocalDate windowEnd,
+public record DemandRow(LocalDate origin, UUID teamId, UUID memberId, int windowIndex, LocalDate windowStart, LocalDate windowEnd,
         double forecast, double truth, double capacity, double backlogExcessHrs, double dueExcessHrs) {
 }

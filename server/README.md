@@ -1,10 +1,11 @@
 # WorkloadHub forecast: the Java module
 
 One Maven module, `forecast-core`: the library the WorkloadHub Spring Boot application adds as a
-dependency. Experiments — building a SQLite database and scoring models on it — are driven by
+dependency. Experiments — building a SQLite database and scoring the model on it — are driven by
 `tools/experiment.sh`, which is not a module but a single Java file the launcher compiles on the spot.
 Design:
-`docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`.
+`docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`,
+`docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`.
 
 ## Prerequisites
 
@@ -118,8 +119,8 @@ $X seed --synthetic --users 40 --weeks 26 --seed 7 --end 2026-09-06 --out /tmp/s
 # 5. dump a database back to JSON
 $X export --db ~/whf/workloadhub.db /tmp/dump.json
 
-# 6. score every model on it
-$X eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal_naive --out ~/whf/eval
+# 6. score the model on it
+$X eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --windows 2 --out ~/whf/eval
 ```
 
 | command | options | what it does |
@@ -128,12 +129,11 @@ $X eval --db ~/whf/workloadhub.db --as-of 2026-09-06 --models xgboost,seasonal_n
 | `import` | `[--db] <file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
 | `export` | `[--db] <file>` | Writes the database's WorkloadHub tables as a JSON export. |
 | `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. |
-| `eval` | `[--as-of] [--db] [--origins 6] [--models a,b] [--teams a,b] [--out dir]` | Scores every model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--models`/`--teams` default to all. |
+| `eval` | `[--as-of] [--db] [--origins 6] [--windows 2] [--teams a,b] [--out dir]` | Scores the model at every origin (arrival level) and replays whole runs per team (demand level); writes `scores.csv`, `demand.csv` and `summary.md` in `--out` (default `./eval/<as-of>`). `--as-of` defaults to the latest task creation date; `--origins` are two weeks apart; `--windows` is the window count (1 to 6, default 2) — since a feature matrix is tied to the count it was built with, `eval` always rebuilds one at the count given; `--teams` defaults to all. |
 
-Those five are the whole of it: they build an experiment database and score models on it, which is what the
-parity check needs (`tools/parity.sh` calls `init-db`, `import` and `eval`). Everything a *host* does —
-starting a run and polling its progress, reading the run, the current forecast, the run list, accuracy,
-`copilotStatus` and a narration — is in `examples/HostExample.java`, run through
+Those five are the whole of it: they build an experiment database and score the model on it. Everything a
+*host* does — starting a run and polling its progress, reading the run, the current forecast, the run list,
+accuracy, `copilotStatus` and a narration — is in `examples/HostExample.java`, run through
 `examples/run-host-example.sh` ("Integrating from the server's own code" below).
 
 `tools/experiment.sh` runs `tools/Experiment.java` the same way: Java 21's single-file source launcher
@@ -141,10 +141,11 @@ starting a run and polling its progress, reading the run, the current forecast, 
 `tools/core-classpath.sh`, which compiles the module first if the sources are newer. There is no second
 Maven module and no jar — until 2026-09-12 there was one, `forecast-cli`, wrapping picocli around core
 classes that are all public anyway. File arguments are resolved against your working directory. `eval`
-boots the module's auto-configuration over a SQLite `DataSource` and calls `ForecastService.evaluate`, so
-it scores the engine a host gets rather than a copy assembled for the occasion; the other four verbs call
-`forecast-core` classes directly and need no Spring context. `ExperimentFlowTest` in `forecast-core` drives
-the whole file as a subprocess, so it is covered by `mvn verify` like anything else.
+boots the module's auto-configuration over a SQLite `DataSource`, with `whf.forecast.windows` set to
+`--windows`, and calls `ForecastService.evaluate`, so it scores the engine a host gets rather than a copy
+assembled for the occasion; the other four verbs call `forecast-core` classes directly and need no Spring
+context. `ExperimentFlowTest` in `forecast-core` drives the whole file as a subprocess, so it is covered by
+`mvn verify` like anything else.
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
@@ -184,9 +185,9 @@ is `@ConditionalOnMissingBean`: a host that declares its own replaces it.
 |---|---|---|
 | `whf.token-key` | unset | Base64 AES-256 key (32 bytes) for the tokens on `users.github_token`. Unset means no token can be stored or read: narration fails with `TOKEN_KEY_MISSING`. |
 | `whf.work-dir` | `${user.home}/.workloadhub-forecast` | The module's own directory; the Copilot home is `<work-dir>/copilot`. **It must be writable by the user the server runs as** (a service account often has no home directory: set it explicitly). |
-| `whf.default-weekly-hours` | `40.0` | Weekly capacity of a member with no override, spread over the working days. |
+| `whf.default-weekly-hours` | `44.0` | Weekly capacity of a member with no override, spread over the working days. |
 | `whf.run-threads` | `2` | Size of the pool that runs forecasts; it does not bound narrations. |
-| `whf.planned-work.enabled` | `true` | Allocates backlog work to members; `false` leaves demand to open and predicted work only. |
+| `whf.forecast.windows` | `2` | The rolling horizon's window count, 1 to 6, each window five weekdays; refused outside that range at start-up. |
 | `whf.copilot.model` | `""` (blank) | The model each narration asks for; blank means the account default. A request may override it. |
 | `whf.copilot.cli-path` | `""` (blank) | Path to an installed Copilot CLI; blank means the in-process runtime. |
 | `whf.copilot.timeout-seconds` | `300` | How long one `ask` may take before the narration ends as `FAILED` with reason `timeout`. |
@@ -196,8 +197,10 @@ is `@ConditionalOnMissingBean`: a host that declares its own replaces it.
 
 The run day is today by the `java.time.Clock` bean; the auto-configuration registers
 `Clock.systemDefaultZone()` unless the host provides one (a fixed clock in tests, a zoned clock in
-production). A forecast covers the ten weekdays after the run day in two windows of five
-(`docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`).
+production). A forecast covers a rolling horizon of `whf.forecast.windows` five-weekday windows after the
+run day, two by default
+(`docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`,
+`docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md` section 4).
 
 ### Integrating from the server's own code
 
@@ -218,9 +221,9 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
   | `MEMBER` | none | the teams they belong to |
   | `VIEWER`, `CENTER_MANAGER` | none | any team |
 
-- **A run**: check the role, `startRun(new RunRequest(teamId, userId, null, null))`, let the page poll
+- **A run**: check the role, `startRun(new RunRequest(teamId, userId))`, let the page poll
   `progress(runId)` and show `label` in the user's language until `DONE` or `FAILED`, then read `getRun(runId)`
-  and `currentForecast(teamId, from, to)` (per member and day, two windows of five weekdays). Persist
+  and `currentForecast(teamId, from, to)` (per member and day, over the rolling horizon). Persist
   `(runId, teamId, requestedBy)` in your own table when you start a run: `getRun` answers only for `DONE` runs
   and `listRuns` needs the team, so after a restart that row is what lets you authorize a poll of the
   interrupted run (the sample facade's in-memory map is a test convenience).
@@ -260,7 +263,7 @@ Paths are relative to `whf.web.base-path`. Authorisation is the host's: `request
 
 | route | body in | out |
 |---|---|---|
-| `POST /runs` | `RunRequestBody` (`teamId`, `requestedBy`, `forcedModel`, `plannedWork`; an `asOf` field is refused with 400) | 202, `{"id": "<uuid>"}` |
+| `POST /runs` | `RunRequestBody` (`teamId`, `requestedBy`; an `asOf` field is refused with 400) | 202, `{"id": "<uuid>"}` |
 | `GET /runs/{id}` | | 200, `RunResult` (the run, its member windows and days, scores and facts) |
 | `GET /teams/{teamId}/runs?limit=20` | | 200, `RunSummary[]`, newest first |
 | `GET /teams/{teamId}/current?from=YYYY-MM-DD&to=YYYY-MM-DD` | | 200, `CurrentDayForecast[]` per member and day (defaults: today and today + 20 days) |
@@ -369,50 +372,3 @@ marked `skipPermission(true)`, and the handler behind them approves only a reque
 narration through — the tools skip permission — but it means the handler's assumption about the runtime is
 wrong: report it.
 Sessions never resume; each narration is one client and one session, closed at the end.
-
-## Parity check
-
-`server/tools/parity.sh EXPORT_JSON OUT_DIR ARCHIVE_DIR [AS_OF]` runs the Java and Python harnesses on the same
-WorkloadHub export and compares them, where `ARCHIVE_DIR` is a checkout of the tag
-`archive/python-desktop-v1` (`git worktree add ../whf-archive archive/python-desktop-v1`), which holds the
-Python service: `forecast init-db`, `import` and `eval --models xgboost,seasonal_naive`
-into `OUT_DIR/java`, then, from `ARCHIVE_DIR/service`, `uv run whf import-workloadhub` and
-`uv run whf eval --models gbm,seasonal_naive` into `OUT_DIR/python`, then
-`server/tools/parity_compare.py` on the two `scores.csv` files. When `AS_OF` is omitted, it is read back from
-the Java summary's first line (`forecast eval` computes it as the latest task date), so both harnesses score
-the same origins.
-
-The Python import keeps fresh arrivals only (`--arrivals fresh`, the default): only tasks assigned within two
-days of creation count as arrivals, which is the series the Java pipeline forecasts, so the two harnesses are
-scoring the same thing rather than the Python harness's usual `est_hours` series.
-
-The gate itself (design section 13): the booster's mean MASE over horizons 1 and 2, every origin, agrees within
-0.10 between the two harnesses, and both sides pick the same champion (booster when its mean MASE is below
-1.0, else the seasonal-naive floor). It is measured at the arrival level (the global backtest over every
-counted member), not per team. `parity_compare.py` exits 0 on a pass, 1 on a fail, 2 on a usage error, and
-`--out` writes the Markdown report.
-
-The first synthetic result (36 users, 52 weeks, seed 11, as of 2026-09-06) is in
-[`docs/eval/2026-09-10-java-parity-synthetic/parity.md`](../docs/eval/2026-09-10-java-parity-synthetic/parity.md),
-alongside both harnesses' `summary.md`. It was produced with:
-
-```bash
-bash tools/experiment.sh seed --synthetic --users 36 --weeks 52 --seed 11 --end 2026-09-06 --out <file>
-tools/parity.sh <file> <out> ../../whf-archive 2026-09-06
-```
-
-(On the day, the first command was `java -jar forecast-cli/target/workloadhub-forecast-cli-*.jar seed …`;
-the module is gone and the seed is the same code, so the result still reproduces. Its `summary.md` records
-`forecast-cli: 0.1.0` in its versions for the same reason.)
-
-Never run the procedure on the real export inside the repository: point `OUT_DIR` outside git and keep the
-real-mode result in the owner's own folder.
-
-Since 2026-09-10 the Java harness's `demand.csv` is per member-window while the archived Python harness's is
-per member-week; the gate compares `scores.csv` only.
-
-The gate's own test, `server/tools/tests/test_parity_compare.py`, runs `parity_compare.py` as a subprocess against
-hand-built `scores.csv` fixtures (pass, tolerance-exceeded, champions-differ, no-booster-rows and
-exactly-at-the-tolerance-boundary). It is the one Python test left in the repository and runs from the root with
-`uv run --python 3.11 --with pytest pytest server/tools/tests`, and in `scripts/check.ps1` and `scripts/check.sh`.
-`parity_compare.py` and `translate-schema.py` stay standalone, standard-library scripts.

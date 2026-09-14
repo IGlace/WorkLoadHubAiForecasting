@@ -34,7 +34,6 @@ import com.workloadhub.forecast.eval.Harness;
 import com.workloadhub.forecast.eval.ScoreRow;
 import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.features.MemberDay;
-import com.workloadhub.forecast.model.XgboostHours;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.store.AesGcmCipher;
 import com.workloadhub.forecast.store.Dialect;
@@ -426,13 +425,13 @@ class DefaultForecastServiceTest {
     }
 
     /**
-     * The point of evaluation on the service is that it measures the engine the host runs. If it ever diverged from
-     * the harness called directly on the same runner, the parity gate against the archived Python harness would be
-     * measuring something other than the module. {@code seconds} is wall-clock and is excluded.
+     * The point of evaluation on the service is that it measures the engine the host runs: if it ever diverged from
+     * the harness called directly on the same runner, an evaluation would be measuring something other than the
+     * module. {@code seconds} is wall-clock and is excluded.
      */
     @Test
     void evaluateBacktestsThroughTheServicesOwnRunner() {
-        EvalConfig config = new EvalConfig(SeededData.asOf(), 1, List.of(XgboostHours.NAME), List.of(team));
+        EvalConfig config = new EvalConfig(SeededData.asOf(), 1, List.of(team), 2);
         EvalResult viaService = service.evaluate(config);
         CapacityRule rule = new CapacityRule(40);
         EvalResult direct = new Harness(new ForecastRunner(rule, 2), rule).evaluate(SeededData.data(), config);
@@ -443,9 +442,9 @@ class DefaultForecastServiceTest {
 
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> service.evaluate(null)).code());
         assertEquals("INVALID_REQUEST",
-                assertThrows(ForecastException.class, () -> service.evaluate(new EvalConfig(SeededData.asOf(), 0, List.of(), List.of()))).code());
+                assertThrows(ForecastException.class, () -> service.evaluate(new EvalConfig(SeededData.asOf(), 0, List.of(), 2))).code());
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class,
-                () -> service.evaluate(new EvalConfig(SeededData.asOf(), 1, List.of(), List.of(UUID.randomUUID())))).code());
+                () -> service.evaluate(new EvalConfig(SeededData.asOf(), 1, List.of(UUID.randomUUID()), 2))).code());
     }
 
     private static List<ScoreRow> scored(EvalResult result) {

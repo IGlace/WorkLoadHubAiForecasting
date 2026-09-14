@@ -5,7 +5,7 @@
 #   bash server/tools/experiment.sh init-db --db /data/workloadhub.db
 #   bash server/tools/experiment.sh seed --synthetic --users 40 --out /tmp/seed.json
 #   bash server/tools/experiment.sh import --db /data/workloadhub.db /tmp/seed.json
-#   bash server/tools/experiment.sh eval --db /data/workloadhub.db --models xgboost,seasonal_naive
+#   bash server/tools/experiment.sh eval --db /data/workloadhub.db --windows 2
 #
 # Run it inside the development container (`bash scripts/devbox.sh shell`): that is where Java, Maven and
 # XGBoost's libgomp are. File arguments are resolved against your working directory, not the repository.

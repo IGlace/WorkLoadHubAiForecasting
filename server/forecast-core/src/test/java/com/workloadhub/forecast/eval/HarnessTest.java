@@ -9,7 +9,6 @@ import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
-import com.workloadhub.forecast.model.XgboostHours;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.testing.SeededData;
 import java.util.List;
@@ -29,7 +28,7 @@ class HarnessTest {
         CapacityRule rule = new CapacityRule(40);
         List<UUID> teams = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).limit(2).toList();
         result = new Harness(new ForecastRunner(rule, 2), rule)
-                .evaluate(data, new EvalConfig(SeededData.asOf(), 2, List.of(), teams));
+                .evaluate(data, new EvalConfig(SeededData.asOf(), 2, teams, 2));
     }
 
     @Test
@@ -38,7 +37,7 @@ class HarnessTest {
         Set<String> metrics = Set.of("mae", "coverage80", "wql", "seconds");
         for (int h : new int[] {1, 2}) {
             for (var origin : result.origins()) {
-                Set<String> got = result.scores().stream().filter(s -> s.model().equals(XgboostHours.NAME) && s.horizon() == h && s.origin().equals(origin))
+                Set<String> got = result.scores().stream().filter(s -> s.horizon() == h && s.origin().equals(origin))
                         .map(ScoreRow::metric).collect(java.util.stream.Collectors.toSet());
                 assertEquals(metrics, got, "h" + h + " " + origin);
             }
@@ -49,7 +48,6 @@ class HarnessTest {
     @Test
     void demandLevelReplaysEveryOriginAndTeam() {
         assertFalse(result.demand().isEmpty());
-        assertEquals(Set.of(XgboostHours.NAME), result.demand().stream().map(DemandRow::model).collect(java.util.stream.Collectors.toSet()));
         assertEquals(2, result.demand().stream().map(DemandRow::teamId).distinct().count());
         for (DemandRow r : result.demand()) {
             assertTrue(r.forecast() >= 0);
@@ -58,7 +56,6 @@ class HarnessTest {
                     "the replay runs on the Monday after the origin, so its windows start on Tuesdays");
             assertTrue(r.windowIndex() == 1 || r.windowIndex() == 2);
         }
-        assertTrue(result.skipped().isEmpty());
         assertEquals(Truth.SOURCE, result.truthSource());
         assertTrue(result.elapsedSeconds() > 0);
     }
@@ -80,10 +77,10 @@ class HarnessTest {
     void aNullAsOfBecomesTheLatestTaskCreationDate() {
         CapacityRule rule = new CapacityRule(40);
         EvalResult defaulted = new Harness(new ForecastRunner(rule, 2), rule)
-                .evaluate(data, new EvalConfig(null, 1, List.of(XgboostHours.NAME), List.of()));
+                .evaluate(data, new EvalConfig(null, 1, List.of(), 2));
         assertEquals(lastCreated(), defaulted.resolved().asOf().toString());
         assertEquals(1, defaulted.resolved().origins());
-        assertEquals(List.of(XgboostHours.NAME), defaulted.resolved().models());
+        assertEquals(2, defaulted.resolved().windows());
     }
 
     private static String lastCreated() {
@@ -91,8 +88,10 @@ class HarnessTest {
     }
 
     @Test
-    void unknownModelIsRejected() {
-        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> new Harness(new ForecastRunner(new CapacityRule(40), 2), new CapacityRule(40))
-                .evaluate(data, new EvalConfig(SeededData.asOf(), 1, List.of("gbm"), List.of()))).code());
+    void windowsOutOfRangeIsRejected() {
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class,
+                () -> new EvalConfig(SeededData.asOf(), 1, List.of(), 0)).code());
+        assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class,
+                () -> new EvalConfig(SeededData.asOf(), 1, List.of(), 7)).code());
     }
 }

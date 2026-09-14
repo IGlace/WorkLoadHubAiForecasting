@@ -62,6 +62,17 @@ public final class Horizon {
   horizons, the champion is selected on them, and the interval offsets are computed per horizon as today.
 - `Weeks.forecastWeeks` is removed.
 
+Deviation, 2026-09-14: the window count is no longer the constant `Horizon.WINDOWS = 2`. The weekly-hours-
+forecast design makes it a setting, `whf.forecast.windows` (`Horizon.MIN_WINDOWS = 1` to `Horizon.MAX_WINDOWS
+= 6`, default 2), refused outside that range at start-up; `Horizon.windows(LocalDate, int)` and
+`Horizon.maxHorizon(LocalDate, int)` take the count as a parameter in place of the constant, and
+`Features.HORIZONS` — a fixed `{1, 2, 3}` above — is likewise gone: `Features.horizons(int windows)` sizes the
+per-horizon column families from the configured count (a matrix built at one count cannot be reused at
+another), settled at the 2026-09-14 review of that design (its section 18, ruling 3) after finding this
+document's own claim that "the matrix shape does not change" false once the maximum horizon reaches 7. The
+experiment driver's `eval` is the one place the count is a flag rather than a property, because the driver
+has no property source of its own (`--windows N`, weekly-hours-forecast design, section 14).
+
 ## 4. Demand per day
 
 New key `com.workloadhub.forecast.run.MemberDay(UUID member, LocalDate day)` (comparable like `MemberWeek`).
@@ -222,6 +233,15 @@ and the absence of `expected_week`.
   `model,origin,team_id,member_id,window,window_start,window_end,forecast,truth,capacity,open_hours,new_hours,planned_hours`;
   `summary.md`'s demand section says "per member-window". The Python service's `demand.csv` is no longer
   comparable row for row; the parity document says so.
+
+Deviation, 2026-09-14: this whole picture is superseded. The parity procedure named above is retired
+(weekly-hours-forecast design, section 16), so there is no Python gate left to keep `scores.csv` comparable
+with; `Harness.HORIZONS` is derived from `EvalConfig.windows()` instead of the fixed `{1, 2}`; `ScoreRow` and
+`DemandRow` drop their `model` column, since there is one model; and `demand.csv`'s
+`open_hours,new_hours,planned_hours` are gone with the open/new/planned split, replaced by
+`backlog_excess_hrs,due_excess_hrs` — the pressure a forecast of logged hours cannot show on its own (design
+section 8). `EvalConfig` gains the `windows` field this section's `Harness.HORIZONS = {1, 2}` used to hide
+(section 14 of the same design).
 
 ## 11. Tests (TDD, jqwik properties for the arithmetic)
 

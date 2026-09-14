@@ -1,5 +1,6 @@
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.ForecastService;
+import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.data.ExportEnvelope;
 import com.workloadhub.forecast.data.ExportExporter;
 import com.workloadhub.forecast.data.ExportFiles;
@@ -78,12 +79,14 @@ public final class Experiment {
                        synthetic directory. Real mode (no --synthetic) needs --export and refuses to
                        write inside a git repository without --force: its output holds personal data.
 
-              eval     --db FILE [--as-of ISO_DATE] [--origins N] [--models a,b] [--teams a,b]
+              eval     --db FILE [--as-of ISO_DATE] [--origins N] [--windows N] [--teams a,b]
                        [--out DIR]
-                       Score every model at every origin (arrival level) and replay whole runs per team
-                       (demand level); writes scores.csv, demand.csv and summary.md. --teams takes names
-                       or ids. Without --as-of, the latest task creation date. Default --out is
-                       ./eval/<as-of>.
+                       Score the booster at every origin (arrival level) and replay whole runs per team
+                       (demand level); writes scores.csv, demand.csv and summary.md. --windows is the
+                       window count (1 to 6, default 2); since a feature matrix is tied to the count it
+                       was built with, eval always rebuilds one at the count given rather than reuse one
+                       built at another. --teams takes names or ids. Without --as-of, the latest task
+                       creation date. Default --out is ./eval/<as-of>.
 
             The default database is ./workloadhub.db. Run this inside the development container
             (bash scripts/devbox.sh shell): that is where Java, Maven and XGBoost's libgomp are.
@@ -118,7 +121,7 @@ public final class Experiment {
                 case "export" -> export(Args.parse(rest, Set.of("db"), Set.of()));
                 case "seed" -> seed(Args.parse(rest, Set.of("out", "export", "users", "weeks", "end", "seed", "format"),
                         Set.of("synthetic", "force")));
-                case "eval" -> eval(Args.parse(rest, Set.of("db", "as-of", "origins", "models", "teams", "out"), Set.of()));
+                case "eval" -> eval(Args.parse(rest, Set.of("db", "as-of", "origins", "windows", "teams", "out"), Set.of()));
                 default -> {
                     System.err.println("error: unknown command '" + command + "'\n");
                     System.err.println(USAGE);
@@ -228,17 +231,20 @@ public final class Experiment {
      */
     private static int eval(Args args) throws Exception {
         args.noFiles();
-        List<String> models = split(args.string("models", ""));
         LocalDate asOf = args.date("as-of");
         int origins = args.number("origins", 6);
-        try (ConfigurableApplicationContext ctx = boot(args.db())) {
+        int windows = args.number("windows", 2);
+        if (windows < Horizon.MIN_WINDOWS || windows > Horizon.MAX_WINDOWS) {
+            throw new Bad("whf.forecast.windows must be between " + Horizon.MIN_WINDOWS + " and " + Horizon.MAX_WINDOWS + ", but was " + windows);
+        }
+        try (ConfigurableApplicationContext ctx = boot(args.db(), windows)) {
             List<UUID> teams = new ArrayList<>();
             for (String team : split(args.string("teams", ""))) {
                 teams.add(resolveTeam(ctx.getBean(JdbcClient.class), ctx.getBean(Dialect.class), team));
             }
             System.out.println("Evaluating as of " + (asOf == null ? "the latest task creation date" : asOf) + " with " + origins
-                    + " origins, models " + (models.isEmpty() ? "all" : models) + ", teams " + (teams.isEmpty() ? "all" : teams.size()));
-            EvalResult result = ctx.getBean(ForecastService.class).evaluate(new EvalConfig(asOf, origins, models, teams));
+                    + " origins, " + windows + " windows, teams " + (teams.isEmpty() ? "all" : teams.size()));
+            EvalResult result = ctx.getBean(ForecastService.class).evaluate(new EvalConfig(asOf, origins, teams, windows));
             Path outDir = args.has("out") ? Path.of(args.value("out")) : Path.of("eval", result.resolved().asOf().toString());
             Report.write(result, Report.versions(), outDir);
             System.out.println(Report.levelA(result));
@@ -262,7 +268,12 @@ public final class Experiment {
         }
     }
 
-    private static ConfigurableApplicationContext boot(Path db) {
+    /**
+     * A feature matrix is tied to the window count it was built with (design 2026-09-13, section 3.2), so
+     * {@code eval} always boots a fresh context at the requested count rather than reuse one built at another;
+     * {@code whf.forecast.windows} here is what {@code ForecastAutoConfiguration} reads to size the runner.
+     */
+    private static ConfigurableApplicationContext boot(Path db, int windows) {
         Module.file = db;
         return new SpringApplicationBuilder(Module.class)
                 .web(WebApplicationType.NONE)
@@ -270,7 +281,8 @@ public final class Experiment {
                 // the module's beans come from its auto-configuration import file, never from scanning, so the
                 // warning about a @EnableAutoConfiguration class in the default package is about nothing here
                 .properties(Map.of("logging.level.root", "WARN",
-                        "logging.level.org.springframework.boot.autoconfigure.AutoConfigurationPackages", "ERROR"))
+                        "logging.level.org.springframework.boot.autoconfigure.AutoConfigurationPackages", "ERROR",
+                        "whf.forecast.windows", String.valueOf(windows)))
                 .run();
     }
 

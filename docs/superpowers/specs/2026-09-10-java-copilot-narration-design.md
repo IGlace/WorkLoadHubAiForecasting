@@ -179,6 +179,19 @@ JSON of the run (never the database). Member tools take `member_id` (string, the
 Tool results are `Map`/`List` values converted from the facts tree; numbers keep the facts' values
 exactly, so a number the model copies from a tool result is a number the verifier will find.
 
+> Amended on 2026-09-14: the facts contract retargets at logged hours (weekly-hours-forecast design). `model`
+> is `{name: "xgboost", target: "logged hours per member-week", mae, mean_actual_hours, confidence, ...}` —
+> there is no champion, no per-model MASE and no `forcedModel` any more. `get_planned_work` and
+> `team.planned_backlog` are gone with the planned-work allocation; `get_likely_work` (`member_id`, `name`,
+> `likely_work`) takes `get_planned_work`'s ninth-tool place, reading project roles and the recent task-type
+> mix rather than a backlog allocation, and its top `confidence` is `medium`, not `high` (design section 19.4:
+> without a planned allocation, no task can be named as probably landing on a member). `get_run_overview` and
+> `get_member_capacity` gain the pressure facts a forecast of logged hours cannot show on its own (design
+> section 8): `backlog_excess_hrs` (cumulative across windows) and `due_excess_hrs` per window on every
+> member-window row, `overdue_hrs` per member, and two new lists in `rebalancing_candidates` —
+> `backlog_pressed` and `deadline_pressed` — naming the members `backlog_excess_hrs` and `due_excess_hrs`
+> press, alongside the existing `overloaded` and `underloaded`.
+
 ## 6. Contract and validation
 
 > Amended on 2026-09-10: the horizon is two windows of five weekdays; the facts carry `run.windows`, per-window forecast rows and a member-level `days` list, the tools return `windows` (and `days` for capacity), and the contract fields are `window` (a window's first day, ISO 8601); see `docs/superpowers/specs/2026-09-10-rolling-forecast-windows-design.md`, sections 8 and 9.

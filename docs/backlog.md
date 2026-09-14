@@ -1,7 +1,7 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04, last updated 2026-09-13; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-14; update this file when an item lands.
 
 Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
 the archived first version only — including the whole "Verification on Windows" section below. Their
@@ -319,9 +319,17 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   or the divergence is documented as intended and `evaluate()` says which gate it used. Landed unresolved with
   task 8 of `docs/superpowers/plans/2026-09-14-weekly-hours-forecast.md`.
 
-- **Weekly hours forecast (2026-09-13, reviewed 2026-09-14).** Spec
-  `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`, **reviewed and ready for a plan, not
-  implemented**. The review's seven rulings are its section 18: the history gate scales as `10 + maxHorizon`;
+- **Weekly hours forecast (2026-09-13, reviewed 2026-09-14) — landed on `dev` 2026-09-14.** Spec
+  `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`, implemented as
+  `docs/superpowers/plans/2026-09-14-weekly-hours-forecast.md`, eleven tasks, one branch, gate green. Closes
+  three open questions for good: **the two-model question** (one booster, no champion, no `SeasonalNaive`,
+  confirmed at the 2026-09-14 review rather than reopened); **the parity procedure**, retired outright —
+  `server/tools/parity.sh`, `parity_compare.py` and `server/tools/tests/` are deleted, the gate is `mvn -B -q
+  verify` alone, and `docs/eval/2026-09-10-java-parity-synthetic/` is kept only as a record of the run that
+  produced it; and **the effort/planned-work decomposition**, gone with `EffortModel`, `PlannedWork` and
+  `HourPlacement` — the booster now predicts logged hours per member-week directly and a week's prediction is
+  spread across its own weekdays by the member's logged-hours weekday shares, not placed by an open/new/planned
+  split. The review's seven rulings are its section 18: the history gate scales as `10 + maxHorizon`;
   `backlog_excess_hrs` is cumulative over the windows so far rather than per window; the per-horizon feature
   columns are sized from the window count, so `Features.HORIZONS` stops being the constant `{1,2,3}` and a
   matrix is tied to the count it was built with; no hour is ever logged on a weekend, holiday or absence day,

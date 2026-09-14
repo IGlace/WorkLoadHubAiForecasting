@@ -15,8 +15,6 @@ import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.Truncation;
-import com.workloadhub.forecast.model.ModelUnavailable;
-import com.workloadhub.forecast.model.XgboostHours;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
@@ -34,9 +32,10 @@ import java.util.stream.IntStream;
  * Two-level evaluation: arrival accuracy of the single booster, and demand accuracy of the whole pipeline.
  *
  * <p>The model tournament this class used to run is gone with the tournament itself (design 2026-09-13): there is
- * one model, {@link XgboostHours#NAME}, so the {@code model} column of every row it produces is that one constant.
- * Task 11 finishes the retarget of this class (dropping the model column outright, giving it the configurable
- * window count); until then this is the minimal shape that compiles and measures the one model there is.
+ * one model, so no row this class produces carries a model column any more, and a caller cannot ask to evaluate one
+ * model over another — {@code ModelUnavailable} (the native library missing, or too few training rows) is no
+ * longer caught and reported as "skipped"; it propagates, because there is nothing left to fall back to
+ * (design section 19.6, an accepted cost).
  */
 public final class Harness {
 
@@ -50,39 +49,26 @@ public final class Harness {
 
     public EvalResult evaluate(ForecastData data, EvalConfig configIn) {
         long started = System.nanoTime();
-        for (String name : configIn.models()) {
-            if (!XgboostHours.NAME.equals(name)) {
-                throw ForecastException.invalidRequest("unknown model " + name + "; known: [" + XgboostHours.NAME + "]");
-            }
-        }
         EvalConfig config = configIn.asOf() != null ? configIn
-                : new EvalConfig(lastCreated(data).orElseGet(LocalDate::now), configIn.origins(), configIn.models(), configIn.teams());
+                : new EvalConfig(lastCreated(data).orElseGet(LocalDate::now), configIn.origins(), configIn.teams(), configIn.windows());
         LocalDate origin = Weeks.lastCompleteWeek(config.asOf());
         Lifecycle lc = Lifecycle.derive(data);
         WorkingCalendar cal = WorkingCalendar.fromHolidays(data.holidays());
-        int windows = runner.windows();
+        int windows = config.windows();
         // The horizons this evaluation scores: one per window (1..windows), the shape HORIZONS = {1, 2} always
         // had at the old fixed window count of two. This is narrower than Features.horizons(windows), which pads
         // to windows + 1 for the feature matrix a live run needs; the evaluation harness has no such run-day
         // edge case to cover, and padding it here starves leave-one-out coverage at the extra horizon with few
-        // origins (task 11 revisits this harness's shape; task 8 only stops it assuming windows is always two).
+        // origins.
         int[] horizons = IntStream.rangeClosed(1, windows).toArray();
         int maxHorizon = windows;
         FeatureMatrix features = new FeatureBuilder(data, lc, cal, rule, windows).build(data.members(), origin);
         LocalDate firstWeek = features.keys().stream().map(MemberWeek::week).min(LocalDate::compareTo).orElse(origin);
         List<LocalDate> origins = features.rowCount() == 0 ? List.of() : Backtest.origins(origin, firstWeek, config.origins(), maxHorizon);
-        Map<String, String> skipped = new LinkedHashMap<>();
-        List<ScoreRow> scores;
-        Backtest.Result bt;
-        try {
-            bt = Backtest.run(features, origins, horizons);
-            scores = arrivalLevel(bt, horizons);
-        } catch (ModelUnavailable e) {
-            skipped.put(XgboostHours.NAME, e.getMessage());
-            scores = List.of();
-        }
-        List<DemandRow> demand = demandLevel(data, origins, config.teams(), skipped);
-        return new EvalResult(scores, demand, skipped, Truth.SOURCE, (System.nanoTime() - started) / 1e9, origins, config, fingerprint(data));
+        Backtest.Result bt = Backtest.run(features, origins, horizons);
+        List<ScoreRow> scores = arrivalLevel(bt, horizons);
+        List<DemandRow> demand = demandLevel(data, origins, config.teams());
+        return new EvalResult(scores, demand, Truth.SOURCE, (System.nanoTime() - started) / 1e9, origins, config, fingerprint(data));
     }
 
     /** What the evaluation ran against, for the report's reproducibility section. */
@@ -106,7 +92,7 @@ public final class Harness {
     static List<ScoreRow> arrivalLevel(Backtest.Result bt, int[] horizons) {
         List<ScoreRow> rows = new ArrayList<>();
         for (Backtest.Score s : bt.scores()) {
-            rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "mae", s.mae()));
+            rows.add(new ScoreRow(s.horizon(), s.origin(), "mae", s.mae()));
             List<Backtest.Residual> all = bt.residualRows(s.horizon());
             double[] others = all.stream().filter(r -> !r.origin().equals(s.origin())).mapToDouble(Backtest.Residual::residual).toArray();
             List<Backtest.Residual> mine = all.stream().filter(r -> r.origin().equals(s.origin())).toList();
@@ -125,32 +111,23 @@ public final class Harness {
                 coverage = Metrics.coverage(y, low, high);
                 wql = Metrics.weightedQuantileLoss(y, Map.of(0.1, low, 0.5, point, 0.9, high));
             }
-            rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "coverage80", coverage));
-            rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "wql", wql));
-            rows.add(new ScoreRow(XgboostHours.NAME, s.horizon(), s.origin(), "seconds", s.horizon() == horizons[0] ? bt.seconds() / Math.max(1, bt.scores().size() / horizons.length) : Double.NaN));
+            rows.add(new ScoreRow(s.horizon(), s.origin(), "coverage80", coverage));
+            rows.add(new ScoreRow(s.horizon(), s.origin(), "wql", wql));
+            rows.add(new ScoreRow(s.horizon(), s.origin(), "seconds", s.horizon() == horizons[0] ? bt.seconds() / Math.max(1, bt.scores().size() / horizons.length) : Double.NaN));
         }
         return rows;
     }
 
-    private List<DemandRow> demandLevel(ForecastData data, List<LocalDate> origins, List<UUID> teamsIn, Map<String, String> skipped) {
+    private List<DemandRow> demandLevel(ForecastData data, List<LocalDate> origins, List<UUID> teamsIn) {
         SortedMap<MemberDay, Double> truth = Truth.realisedHoursByDay(data);
         List<DemandRow> rows = new ArrayList<>();
-        if (skipped.containsKey(XgboostHours.NAME)) {
-            return rows;
-        }
         List<UUID> teams = teamsIn.isEmpty()
                 ? data.teams().stream().map(TeamRow::id).filter(t -> !data.membersOfTeam(t).isEmpty()).sorted((a, b) -> a.toString().compareTo(b.toString())).toList()
                 : teamsIn;
         for (LocalDate origin : origins) {
             LocalDate asOf = origin.plusWeeks(1);
             ForecastData replay = Truncation.at(data, asOf);
-            Prepared prepared;
-            try {
-                prepared = runner.prepare(replay, asOf, ForecastRunner.ProgressListener.NONE);
-            } catch (ModelUnavailable e) {
-                skipped.put(XgboostHours.NAME, e.getMessage());
-                continue;
-            }
+            Prepared prepared = runner.prepare(replay, asOf, ForecastRunner.ProgressListener.NONE);
             for (UUID team : teams) {
                 TeamOutcome outcome;
                 try {
@@ -167,13 +144,10 @@ public final class Harness {
                     for (LocalDate d : window.weekdays()) {
                         realised += truth.getOrDefault(new MemberDay(w.userId(), d), 0.0);
                     }
-                    rows.add(new DemandRow(XgboostHours.NAME, origin, team, w.userId(), w.windowIndex(), w.windowStart(), w.windowEnd(), w.demandHrs(),
+                    rows.add(new DemandRow(origin, team, w.userId(), w.windowIndex(), w.windowStart(), w.windowEnd(), w.demandHrs(),
                             Math.round(realised * 1e6) / 1e6, w.capacityHrs(), w.backlogExcessHrs(), w.dueExcessHrs()));
                 }
             }
-        }
-        if (skipped.containsKey(XgboostHours.NAME)) {
-            rows.clear();
         }
         return rows;
     }

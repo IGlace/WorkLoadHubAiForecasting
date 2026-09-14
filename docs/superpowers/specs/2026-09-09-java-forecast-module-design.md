@@ -367,6 +367,15 @@ seed ... --format sql --out seeded.sql
 9. Synthetic mode leaves no value from the input's `full_name`, `email`, `username`, `password`,
    `object_id` columns anywhere in the output.
 
+Deviation, 2026-09-14: invariant 1's "no member logs more than 8 h on a day" against a 40-hour capacity row
+no longer holds. The weekly-hours-forecast design retargets the forecast at logged hours (section 3), which
+made a seeded population arithmetically incapable of ever showing overload: a member could never log past 8 h
+on a day against a 40-hour week, so an 8-hour-capped day and a 40-hour capacity base could not exercise
+overtime. The seed generator now writes an 8.8-hour day against a 44-hour capacity base, a per-member weekday
+profile, a logging-discipline factor independent of the estimate ratio, and a minority of members and weeks
+that genuinely run over (design section 22). `--synthetic` and real mode both carry it; the invariant that
+replaces it is stated in the newer design's own testing section.
+
 ## 5. Data access and domain rules
 
 Repositories read the WorkloadHub tables for one team and a time window into plain records:
@@ -423,6 +432,13 @@ on the matrix. `featureColumns(h)` returns the ordered names for one horizon. Ev
 computable from the database alone at prediction time; a test asserts it by building the matrix for
 the as-of week and checking no column is entirely NaN except `lag13` on short histories.
 
+Deviation, 2026-09-14: the target is logged hours per member-week, not fresh arrival hours, and the horizons
+are no longer the fixed set {1, 2, 3}. The weekly-hours-forecast design makes the window count configurable
+(`whf.forecast.windows`, 1 to 6) and, since the review of 2026-09-14 (its section 18, ruling 3), the
+per-horizon column families are sized from that count: `Features.horizons(int)` computes the horizon set
+instead of a constant, so a matrix built at one window count cannot be reused at another (design sections 3.2
+and 4).
+
 ## 7. Models
 
 `ArrivalModel` has `fit(FeatureMatrix, horizons)` and `predict(FeatureMatrix, h)` returning hours
@@ -464,6 +480,13 @@ XGBoost when its mean MASE is below 1.0, else the floor, and the run records bot
 force a model (`forcedModel`), which restricts the tournament to that model and the floor and uses
 the forced one regardless of its score.
 
+Deviation, 2026-09-14: there is no champion any more. `SeasonalNaive` and the champion machinery it existed
+to be measured against are deleted; one XGBoost booster is trained and scored, `mase` and `beats_naive` go
+from the backtest report along with `forcedModel`, and `mae`, `coverage80` and `wql` are what a run and an
+evaluation report (weekly-hours-forecast design, section 9, and its section 18 ruling closing the two-model
+question for good). The accuracy comparison of forecasts against logged hours (2026-09-11 design) keeps its
+own MASE, scored against a naive baseline computed from logged history rather than the retired tournament.
+
 ## 9. The run pipeline
 
 > Amended on 2026-09-10: the horizon is two windows of five weekdays from the first weekday after the
@@ -502,6 +525,15 @@ accepts that only the persisted state is visible.
 > Amended on 2026-09-11: progress no longer carries the thinking and answer text; it carries a bilingual
 > `ProgressLabel` that rotates through a few phrases every four seconds while a step lasts. See the host
 > integration design, section 4.1.
+
+Deviation, 2026-09-14: steps 3 to 5 (open hours, new hours, planned hours) are gone. The booster now predicts
+logged hours per member-week directly, so there is no open/new/planned split to place on days, no
+`EffortModel`, no `HourPlacement` and no planned-work allocation or `whf.planned-work.enabled`; a week's
+predicted hours are spread across its own weekdays by the rule the weekly-hours-forecast design gives in
+section 5. Step 6 adds two pressure facts a forecast of logged hours cannot show on its own —
+`backlog_excess_hrs` (cumulative across windows) and `due_excess_hrs` per window, plus `overdue_hrs` per
+member — because demand is still never capped by capacity, but capacity no longer bounds what the model can
+predict either (design sections 8 and 19).
 
 ## 10. Copilot narration
 
@@ -601,6 +633,14 @@ error the quota fields are null and the status says why.
 > `EvalConfig.asOf()` means the latest task creation date, which only the harness can see;
 > `EvalResult.resolved()` reports the date it chose. It exists because the experiment driver has no reason to
 > assemble a second copy of the engine to measure (section 12's third amendment).
+
+> Amended on 2026-09-14: `RunRequest(teamId, requestedBy)` — no `forcedModel` and no `plannedWork`, since
+> there is one model and no planned-work allocation to switch off. `EvalConfig` gains a fourth field,
+> `windows`, validated in its compact constructor against `Horizon.MIN_WINDOWS`/`MAX_WINDOWS` (1 to 6): the
+> harness builds its own feature matrix outside Spring and has no other way to learn
+> `whf.forecast.windows`, and a public entry point refuses what the auto-configuration refuses rather than
+> defaulting an invalid count. `default-weekly-hours` defaults to 44, not 40, and `planned-work.enabled` is
+> gone from the properties table below (weekly-hours-forecast design, section 18).
 
 ```java
 public interface ForecastService {
@@ -712,6 +752,15 @@ never touches PostgreSQL: production access goes through the host.
 - **Gate**: `mvn -B verify` in `server/` runs everything under three minutes without Docker;
   `scripts/check.sh` wraps it; `.github/workflows/ci.yml` runs it on `ubuntu-latest` for pushes to
   `dev` and `main` with Docker present.
+
+Deviation, 2026-09-14: the parity procedure is retired — `server/tools/parity.sh`, `parity_compare.py` and
+`server/tools/tests/` are deleted (weekly-hours-forecast design, section 16), so there is no independent
+cross-check against the archived Python harness any more, and the gate is `mvn -B -q verify` alone, one step.
+The properties, demand and champion tests that asserted `demand = open + new + planned` and a champion
+selection are gone with the open/new/planned split and the tournament (sections 8 and 9 above); the
+deleted-suite list is in the newer design's own section 17. `EffortModelTest`, `EffortModelPropertyTest`,
+`PlannedWorkTest`, `PlannedWorkPropertyTest`, `HourPlacementTest`, `SeasonalNaiveTest` and `ModelRegistryTest`
+are gone entirely; `BacktestTest` keeps its non-champion cases.
 
 ## 14. Migration and archival
 

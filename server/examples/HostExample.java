@@ -3,19 +3,20 @@ package com.workloadhub.forecast.examples;
 import com.workloadhub.forecast.api.AccuracyResult;
 import com.workloadhub.forecast.api.AccuracyRow;
 import com.workloadhub.forecast.api.AccuracyScore;
+import com.workloadhub.forecast.api.BacktestScore;
 import com.workloadhub.forecast.api.CopilotStatus;
 import com.workloadhub.forecast.api.CurrentDayForecast;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.api.GitHubTokenStore;
 import com.workloadhub.forecast.api.MemberWindowForecast;
-import com.workloadhub.forecast.api.ModelScore;
 import com.workloadhub.forecast.api.NarrativeRequest;
 import com.workloadhub.forecast.api.NarrativeResult;
 import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunSummary;
+import com.workloadhub.forecast.data.ExportFiles;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -37,6 +38,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.sqlite.SQLiteDataSource;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Every call the WorkloadHub server makes into this module, in one runnable file.
@@ -116,8 +118,10 @@ public class HostExample {
                         // without it a token can neither be saved nor read, which is all narration needs.
                         "whf.run-threads", "1",
                         "whf.token-key", System.getenv().getOrDefault("WHF_TOKEN_KEY", ""),
-                        "whf.default-weekly-hours", "44",
-                        "whf.planned-work.enabled", "true",
+                        // The rolling horizon: how many five-weekday windows a run forecasts, 1 to 6 (design
+                        // 2026-09-13, section 4). This is the default already, set here only to show where a
+                        // host would choose a different one.
+                        "whf.forecast.windows", "2",
                         // The module owns its own tables and migrates them at start-up. A host that runs the
                         // module's migrations itself sets this to false instead.
                         "whf.flyway.enabled", "true",
@@ -224,14 +228,12 @@ public class HostExample {
          * POST /teams/{id}/forecast-runs. {@code startRun} returns at once with the run's id and computes on the
          * module's own executor; the browser then polls {@code progress} — a run is a minute or two of work.
          * {@code requestedBy} is the authenticated user, and may be null; the host records (runId, teamId,
-         * requestedBy) in its own table, so a restart can still authorize a poll. The third argument forces a
-         * model ({@code "xgboost"} or {@code "seasonal_naive"}, null to let the backtest choose) and the fourth
-         * switches the planned-work allocation off for this run (null keeps {@code whf.planned-work.enabled}).
+         * requestedBy) in its own table, so a restart can still authorize a poll.
          */
         private UUID startAndWait(UUID team) throws InterruptedException {
             UUID runId;
             try {
-                runId = service.startRun(new RunRequest(team, user, null, null));
+                runId = service.startRun(new RunRequest(team, user));
             } catch (ForecastException e) {
                 // Every failure of this module arrives as one of these, with a code a controller maps to a status:
                 // *_NOT_FOUND to 404, INVALID_REQUEST to 400, the rest (TOKEN_MISSING, COPILOT_UNAVAILABLE,
@@ -262,25 +264,23 @@ public class HostExample {
         }
 
         /**
-         * GET /forecast-runs/{id}. The whole run: the champion model and its backtest score, the per-model
-         * scores, whatever model was unavailable and why, the two five-weekday windows per member, the per-day
-         * rows behind them, and the exact facts the narrator is allowed to see.
+         * GET /forecast-runs/{id}. The whole run: the booster's backtest MAE, the per-origin scores behind it,
+         * the windows of the rolling horizon per member, the per-day rows behind them, and the exact facts the
+         * narrator is allowed to see.
          *
          * <p>The model is trained and scored once over the whole history, then applied per team, so two teams
-         * forecast on the same day report the same champion and the same MASE; only the windows below are the
-         * team's own. A MASE of 1.0 for {@code seasonal_naive} is not a coincidence either: MASE is that model's
-         * error taken as the unit, so anything under 1 beats "the same as last week".
+         * forecast on the same day report the same MAE; only the windows below are the team's own.
+         * {@code mean_actual_hours} and {@code confidence} live only in the facts JSON — {@link RunSummary}
+         * carries {@code mae} alone, which is why {@link #listRuns} below cannot show them.
          */
-        private void result(UUID runId) {
+        private void result(UUID runId) throws Exception {
             RunResult r = service.getRun(runId);
             RunSummary run = r.run();
-            System.out.printf("%ngetRun: champion %s, MASE %s, status %s, %d member-windows, %d member-days%n",
-                    run.championModel(), run.championMase(), run.status(), r.memberWindows().size(), r.memberDays().size());
-            for (Map.Entry<String, Double> e : r.maseByModel().entrySet()) {
-                System.out.printf("  model %-16s mean MASE %.3f%n", e.getKey(), e.getValue());
-            }
-            r.unavailable().forEach((model, why) -> System.out.println("  unavailable " + model + ": " + why));
-            List<ModelScore> scores = r.scores();
+            JsonNode model = ExportFiles.mapper().readTree(r.factsJson()).path("model");
+            System.out.printf("%ngetRun: mae %s, mean_actual_hours %s, confidence %s, status %s, %d member-windows, %d member-days%n",
+                    run.mae(), model.path("mean_actual_hours").asString("null"), model.path("confidence").asString("null"), run.status(),
+                    r.memberWindows().size(), r.memberDays().size());
+            List<BacktestScore> scores = r.scores();
             System.out.println("  " + scores.size() + " backtest scores, e.g. " + (scores.isEmpty() ? "none" : scores.get(0)));
 
             // The overload the product exists for. Demand is never capped by capacity: overload is the excess.
@@ -326,13 +326,17 @@ public class HostExample {
             }
         }
 
-        /** GET /teams/{id}/forecast-runs?limit. The run history a leader sees; the limit is clamped by the module. */
+        /**
+         * GET /teams/{id}/forecast-runs?limit. The run history a leader sees; the limit is clamped by the module.
+         * {@code mae} is the only model figure a {@link RunSummary} carries — {@code mean_actual_hours} and
+         * {@code confidence} live only in the facts JSON of one run's own {@link RunResult}, read in
+         * {@link #result}, not in this list.
+         */
         private void listRuns(UUID team) {
             List<RunSummary> runs = service.listRuns(team, 5);
             System.out.printf("%nlistRuns: %d%n", runs.size());
             for (RunSummary s : runs) {
-                System.out.printf("  %s  as-of %s  %-6s  %-14s  MASE %s  %s%n", s.id(), s.asOf(), s.status(), s.championModel(), s.championMase(),
-                        s.finishedAt());
+                System.out.printf("  %s  as-of %s  %-6s  mae %s  %s%n", s.id(), s.asOf(), s.status(), s.mae(), s.finishedAt());
             }
         }
 

@@ -20,27 +20,26 @@ class ReportTest {
         UUID team = UUID.randomUUID();
         UUID member = UUID.randomUUID();
         EvalResult result = new EvalResult(
-                List.of(new ScoreRow("xgboost", 1, origin, "mase", 0.8), new ScoreRow("xgboost", 1, origin, "seconds", 1.5),
-                        new ScoreRow("xgboost", 2, origin, "mase", 0.9), new ScoreRow("xgboost", 2, origin, "seconds", Double.NaN),
-                        new ScoreRow("seasonal_naive", 1, origin, "mase", 1.0)),
-                List.of(new DemandRow("xgboost", origin, team, member, 1, origin.plusWeeks(1).plusDays(1), origin.plusWeeks(2), 30, 28, 40, 90, 0),
-                        new DemandRow("xgboost", origin, team, member, 2, origin.plusWeeks(2).plusDays(1), origin.plusWeeks(3), 45, 30, 40, 65, 5)),
-                Map.of(), Truth.SOURCE, 3.2, List.of(origin),
-                new EvalConfig(LocalDate.of(2026, 9, 6), 1, List.of(), List.of()), Map.of("tasks", "2"));
+                List.of(new ScoreRow(1, origin, "mae", 0.8), new ScoreRow(1, origin, "seconds", 1.5),
+                        new ScoreRow(2, origin, "mae", 0.9), new ScoreRow(2, origin, "seconds", Double.NaN)),
+                List.of(new DemandRow(origin, team, member, 1, origin.plusWeeks(1).plusDays(1), origin.plusWeeks(2), 30, 28, 40, 90, 0),
+                        new DemandRow(origin, team, member, 2, origin.plusWeeks(2).plusDays(1), origin.plusWeeks(3), 45, 30, 40, 65, 5)),
+                Truth.SOURCE, 3.2, List.of(origin),
+                new EvalConfig(LocalDate.of(2026, 9, 6), 1, List.of(), 2), Map.of("tasks", "2"));
         Report.write(result, Map.of("java", "21"), dir);
         List<String> scores = Files.readAllLines(dir.resolve("scores.csv"));
-        assertEquals("model,horizon,origin,metric,value", scores.get(0));
-        assertEquals("xgboost,1,2026-08-17,mase,0.8", scores.get(1));
-        assertTrue(scores.stream().anyMatch(l -> l.equals("xgboost,2,2026-08-17,seconds,")), "NaN is an empty cell");
+        assertEquals("horizon,origin,metric,value", scores.get(0));
+        assertEquals("1,2026-08-17,mae,0.8", scores.get(1));
+        assertTrue(scores.stream().anyMatch(l -> l.equals("2,2026-08-17,seconds,")), "NaN is an empty cell");
         List<String> demand = Files.readAllLines(dir.resolve("demand.csv"));
-        assertEquals("model,origin,team_id,member_id,window,window_start,window_end,forecast,truth,capacity,backlog_excess_hrs,due_excess_hrs", demand.get(0));
+        assertEquals("origin,team_id,member_id,window,window_start,window_end,forecast,truth,capacity,backlog_excess_hrs,due_excess_hrs", demand.get(0));
         assertEquals(3, demand.size());
         String summary = Files.readString(dir.resolve("summary.md"));
         assertTrue(summary.startsWith("# Forecast evaluation, as of 2026-09-06"));
-        assertTrue(summary.contains("| xgboost | 1 |") && summary.contains("| seasonal_naive | 1 |"));
+        assertTrue(summary.contains("| 1 |") && summary.contains("| 2 |"));
         assertTrue(summary.contains("## Level B") && summary.contains("overload_precision"));
         assertTrue(summary.contains("- tasks: 2") && summary.contains("- java: 21"));
-        assertTrue(summary.contains("| xgboost | 8.500 |"), "demand MAE (2 + 15) / 2 in Level B");
+        assertTrue(summary.contains("| 8.500 |"), "demand MAE (2 + 15) / 2 in Level B");
     }
 
     /**

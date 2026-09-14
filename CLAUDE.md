@@ -2,8 +2,9 @@
 
 A Java 21 module for the WorkloadHub Spring Boot server (Linux; development on Windows, in the container
 `scripts/devbox.sh` keeps running) that
-forecasts each team member's work hours for the next two weeks from the team's task history in the
-application's own PostgreSQL database, compares them with capacity (40 h/week default over the working days,
+forecasts each team member's logged work hours for a rolling horizon (one to six windows of five weekdays,
+two by default) from the team's task history in the
+application's own PostgreSQL database, compares them with capacity (44 h/week default over the working days,
 holidays, absences and the team's capacity plan), and uses each user's own GitHub Copilot seat to explain
 patterns, warn about overload and suggest rebalancing. The host calls a Java interface or an optional REST
 surface; a single-file Java driver runs the same code on SQLite for experiments. The first version (a Windows desktop
@@ -21,28 +22,27 @@ app with a Python service) is archived at the tag `archive/python-desktop-v1`.
   forecast. The export it was written from holds credentials and personal data and is never committed.
 - `docs/requirements/requirements-v1.md` and `docs/requirements/2026-09-03-discovery-qa.md`: scope, roles and
   the owner's answers, still the source of truth for scope questions.
-- `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`: **reviewed by the owner on 2026-09-14
-  and ready for an implementation plan; nothing of it is implemented.** It retargets the forecast at logged
-  hours, deletes `EffortModel`, `PlannedWork`, `SeasonalNaive` and the champion machinery, makes the window
-  count configurable, corrects the capacity default to 44 h, adds the pressure facts a forecast cannot show,
-  and changes the seed generator, which today cannot produce overtime at all. Its section 18 holds the twelve
-  rulings of that review and is the first thing to read; each one cites the section it changes. Section 23
-  gives the task order. Read the document before changing anything in `model/`, `planned/`, `backtest/`,
-  `features/` or the facts contract; it supersedes `2026-09-12-single-model-simplification-design.md`, which
-  is history.
+- `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`: **implemented, landed on 2026-09-14.**
+  It retargets the forecast at logged hours, deleted `EffortModel`, `PlannedWork`, `SeasonalNaive` and the
+  champion machinery, made the window count configurable, corrected the capacity default to 44 h, added the
+  pressure facts a forecast cannot show, and changed the seed generator, which used to be unable to produce
+  overtime at all. Its section 18 holds the twelve rulings of the owner's review and is the first thing to
+  read; each one cites the section it changes. Section 23 gave the task order. Read the document before
+  changing anything in `model/`, `backtest/`, `features/` or the facts contract; it supersedes
+  `2026-09-12-single-model-simplification-design.md`, which is history.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
-- `server/README.md`: build, running experiments, the seed, the parity check, using the module from the
-  server, narrating with Copilot.
+- `server/README.md`: build, running experiments, the seed, using the module from the server, narrating with
+  Copilot.
 - Documents dated before 2026-09-09 describe the archived version; each carries a note saying so.
 
-## Where the project stands (2026-09-13)
+## Where the project stands (2026-09-14)
 
 Plans 1 to 4 landed on `dev` and `main` (foundation and seed; pipeline core; run, eval and parity; Copilot
 narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Then the
 rolling forecast windows (`docs/superpowers/plans/2026-09-10-rolling-forecast-windows.md`): a run starts the
-first weekday after the run day, covers ten weekdays in two windows, is computed per day and keeps a per-day
-current forecast. Then the host integration design
+first weekday after the run day, covers a rolling horizon of five-weekday windows, is computed per day and
+keeps a per-day current forecast. Then the host integration design
 (`docs/superpowers/specs/2026-09-11-host-integration-design.md`): progress labels, start-up reconciliation and
 a Java-interface sample host; the server's own code is written in the WorkloadHub repository. Then the
 accuracy evaluation (`docs/superpowers/specs/2026-09-11-accuracy-evaluation-design.md`): `accuracy(teamId,
@@ -67,13 +67,17 @@ second pressure fact: work due inside a window beyond what the window holds, wit
 Copilot can state the gap in hours and advise rebalancing, plus `overdue_hrs` for work already late. The
 backlog figure is measured against predicted demand rather than capacity, because the forecast is an analysis
 a leader reads rather than a fact, and the narrative is there to catch what it misses. The seed generator
-changes with it (section 22): a seeded member can never log past 8 hours in a day against a 40-hour capacity
-row, so under the retarget overload would be arithmetically unreachable on seeded data. It stays one plan
-(section 23). **Reviewed and ready for a plan; nothing of it is implemented.** Until it lands, the code still
-forecasts arrival hours and the parity procedure it retires is still in the tree.
+changed with it (section 22): a seeded member could never log past 8 hours in a day against a 40-hour capacity
+row, so under the retarget overload would have been arithmetically unreachable on seeded data. It stayed one
+plan (section 23), executed as eleven tasks and landed on `dev` on 2026-09-14: the model now forecasts logged
+hours per member-week, `EffortModel`, `PlannedWork`, `SeasonalNaive` and the champion machinery are gone, the
+window count is `whf.forecast.windows` (1 to 6, default 2), capacity defaults to 44 h, the pressure facts
+(`backlog_excess_hrs`, `due_excess_hrs`, `overdue_hrs`) are in the facts contract, and the old parity procedure
+(`server/tools/parity.sh`, `parity_compare.py`, `server/tools/tests/`) is retired —
+`docs/eval/2026-09-10-java-parity-synthetic/` stays as a record of the run that produced it, with a note that
+the procedure is gone.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
-real export through the seed and the parity procedure, then the server's own integration code, against the
-sample host.
+real export through the seed, then the server's own integration code, against the sample host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, the gate green by hand in the development container, then fast-forward `main`.
@@ -107,7 +111,7 @@ fix wave, the gate green by hand in the development container, then fast-forward
 server/    Java 21 module: `forecast-core`, the library the host adds and the only artifact. Two single-file
            programs are run by the launcher, not built: `server/examples/HostExample.java` (what a host does
            through `ForecastService`) and `server/tools/Experiment.java` (experiments on SQLite: init-db,
-           import, export, seed, eval). `server/tools/` also holds the parity scripts and their one Python test
+           import, export, seed, eval)
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
            dev), `test-release.sh` (the release script's self-test), `devbox.sh` (the development
@@ -118,11 +122,10 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 ## Toolchain
 
 - Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java.
-- The gate: `cd server && mvn -B -q verify` (about six minutes without Docker; PostgreSQL tests run through
-  Testcontainers when Docker is present, else skip with a message) plus the parity tool's test,
-  `uv run --python 3.11 --with pytest pytest server/tools/tests`. `bash scripts/check.sh` and
-  `pwsh scripts/check.ps1` run both, and running one of them by hand is the only gate there is.
-  `.github/workflows/ci.yml` describes the same steps but is paused: on 2026-09-14 the owner asked for no
+- The gate is one step: `cd server && mvn -B -q verify` (about six minutes without Docker; PostgreSQL tests
+  run through Testcontainers when Docker is present, else skip with a message). `bash scripts/check.sh` and
+  `pwsh scripts/check.ps1` run it, and running one of them by hand is the only gate there is.
+  `.github/workflows/ci.yml` describes the same step but is paused: on 2026-09-14 the owner asked for no
   CI until the work has progressed much further, so only `workflow_dispatch` is left and no push starts a
   run. Keep the three in step anyway, and restore the `push` and `pull_request` triggers, which the file
   carries as a comment, when the owner asks for CI back.
@@ -136,9 +139,9 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
   whole tree as modified.
 - `bash scripts/release.sh` or `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to `dev`;
   either is the only thing that can refuse a bad release, because git has no pre-merge hook for a
-  fast-forward. Both refuse to run unless mvn and uv are on PATH, so the whole gate runs; neither pushes.
+  fast-forward. Both refuse to run unless mvn is on PATH, so the whole gate runs; neither pushes.
   `bash scripts/test-release.sh` checks the bash one on a throwaway repository. On this
-  machine the bash one runs inside the development container, not in WSL: that is where mvn and uv are,
+  machine the bash one runs inside the development container, not in WSL: that is where mvn is,
   and `test-release.sh` passes there. A real release from there has not been done yet.
 - Copilot: the SDK runs an in-process runtime, unpacked once to `~/.copilot/runtime-cache`; tokens need
   `whf.token-key` (the sample host reads it from `WHF_TOKEN_KEY`). The live path is checked by hand, through
@@ -170,10 +173,10 @@ technical-writer. Index in `.claude/agents/README.md`.
   receives fast-forward merges from `dev` once a plan or fix batch is reviewed and every suite is green.
   `archive/python-desktop-v1` is a **tag**, not a branch: the branch lived only on the deleted remote, so the
   tag is now the only name for the frozen Python desktop version. `git worktree add ../whf-archive
-  archive/python-desktop-v1` checks it out, which is what `server/tools/parity.sh` wants.
+  archive/python-desktop-v1` checks it out.
 - Commit messages: imperative subject, short body explaining why.
-- Domain vocabulary: department (a team without a manager), team (team leader), member; demand (open, new and
-  planned hours), capacity, overload; arrival model, effort model, champion model, backtest; narrative, facts,
-  contract, verification; window (five weekdays; a run covers two, starting the first weekday after the run
-  day), current forecast (the latest run's value per member and day).
+- Domain vocabulary: department (a team without a manager), team (team leader), member; demand, capacity,
+  overload; the model and its target (logged hours per member-week), backtest; narrative, facts, contract,
+  verification; window (five weekdays; a run covers one to six, two by default, starting the first weekday
+  after the run day), current forecast (the latest run's value per member and day).
 - Dates are ISO 8601; weeks start on Monday; working days are Monday to Friday.

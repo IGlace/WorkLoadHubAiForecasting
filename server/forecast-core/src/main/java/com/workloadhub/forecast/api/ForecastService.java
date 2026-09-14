@@ -23,7 +23,7 @@ public interface ForecastService {
     AccuracyResult accuracy(UUID teamId, LocalDate from, LocalDate to);
 
     /**
-     * Backtests the models against history: arrival accuracy per model and horizon, and demand accuracy of whole
+     * Backtests the model against history: arrival accuracy per horizon, and demand accuracy of whole
      * replayed runs per team (spec section 13). This reads history and writes nothing, so it never touches a run.
      * A null {@link EvalConfig#asOf()} means the latest task creation date; {@link EvalResult#resolved()} says which.
      */
