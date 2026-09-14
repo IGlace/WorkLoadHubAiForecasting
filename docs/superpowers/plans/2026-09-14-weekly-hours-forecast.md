@@ -912,15 +912,15 @@ class RetargetTest {
         FeatureMatrix m = new FeatureBuilder(data, lc, cal, rule).build(members, origin);
         int row = m.keys().indexOf(new MemberWeek(member.id(), origin.minusWeeks(4)));
         assertTrue(row >= 0);
-        assertEquals(10.0, m.values()[row][m.index().get(Features.target(1))], 1e-6,
+        assertEquals(10.0, m.get(row, Features.target(1)), 1e-6,
                 "target_h1 is the logged hours of the following week, not its estimates");
-        assertEquals(20.0, m.values()[row][m.index().get("arrival_hrs_lag1")], 1e-6,
+        assertEquals(20.0, m.get(row, "arrival_hrs_lag1"), 1e-6,
                 "the estimates are still available, as an explanatory column");
     }
 }
 ```
 
-Replace the first comment with the real fixture. Use `FeatureMatrix`'s real accessors — check their names before writing; the sketch above assumes `keys()`, `values()` and `index()`, and if they differ, use the real ones.
+Replace the first comment with the real fixture. `FeatureMatrix`'s accessors are `get(int row, String column)`, `keys()`, `key(int)`, `columnIndex(String)`, `column(String)`, `target(int)`, `rowCount()` and `columns()` — there is no `values()` or `index()`.
 
 - [ ] **Step 7: Run it and watch it fail**
 
@@ -946,7 +946,9 @@ Delete the two constants and their use in `allColumns()`:
 
 and the two lines `c.add(FRESH); c.add(EST);` at the end of `allColumns()`.
 
-The shared count stays 42: four out, four in. `Features.EST` is already dead — written and read by nothing — so it costs nothing. `Features.FRESH` was read only by `SeasonalNaive`, which task 5 deletes; until then the compiler will point at it, and **that is expected**: leave `SeasonalNaive` reading `lag1` for now with a one-line comment saying task 5 deletes the class, rather than inventing a replacement.
+The shared count stays 42: four out, four in. `Features.EST` is already dead — written and read by nothing — so it costs nothing.
+
+`Features.FRESH` was read only by `SeasonalNaive` (at about line 25), which task 5 deletes. **Repoint it at `"lag1"` in this task**, with a one-line comment saying the class is deleted in task 5, so this task ends with the module still compiling as far as the model package. Do not leave the compile error standing for a task and a half: the alternative buys nothing and hides any other break behind it.
 
 Add the comment the next reader needs, above `LAGS`:
 
@@ -1213,8 +1215,9 @@ In `XgboostHoursTest`, the comparison at about line 69 is against `SeasonalNaive
     private static double[] meanBaseline(FeatureMatrix train, FeatureMatrix rows, int horizon) {
         double sum = 0;
         int n = 0;
-        for (int r = 0; r < train.rowCount(); r++) {
-            double t = train.values()[r][train.index().get(Features.target(horizon))];
+        double[] targets = train.target(horizon);
+        for (int r = 0; r < targets.length; r++) {
+            double t = targets[r];
             if (!Double.isNaN(t)) {
                 sum += t;
                 n++;
