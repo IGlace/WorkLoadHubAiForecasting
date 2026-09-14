@@ -19,9 +19,14 @@ description: Vocabulary and data dictionary of the WorkloadHub forecast facts. U
 - **overload**: max(0, demand minus capacity). Demand is never cut to fit capacity.
 - **low / high**: an interval around demand from the model's backtest residuals; wide bands mean an unstable history.
 - **due_hours**: remaining hours of the member's open tasks that fall due inside the window.
+- **backlog_excess_hrs**: what is left of the member's open queue once the windows so far (this one and every earlier one in the run) are forecast — `open_est_hours` minus the run's own cumulative demand, never below zero. It falls as the run's windows absorb the backlog, never rises, and the last window is the strictest reading: above zero there means the backlog does not fit inside the whole run. It reads the forecast rather than checking it: an optimistic forecast makes the leftover look smaller, so a member whose demand is under-predicted can be pressed without this number showing it. `capacity_hrs` is still on the row for a reader who wants the plain arithmetic remainder instead.
+- **due_excess_hrs**: `due_hours` minus this window's own `capacity`, never below zero. A deadline belongs to its window and does not roll forward, so this is a per-window figure, unlike `backlog_excess_hrs`.
 
 ## Member facts
-`history_13w` (weekly logged hours, arrival hours and task counts), `logged_hours_4w` (hours logged per week), `unlogged_tasks` (finished tasks with no time logged; their actual hours were estimated), `reopened_tasks`, `patterns` (see whf-pattern-discovery), `likely_work` (see whf-likely-work). Each member also carries `days`, one entry per weekday of the horizon (`day`, `window`, `demand`, `capacity`, `overload`, `working_day`); a window's figures are the sums of its days, rounded.
+`history_13w` (weekly logged hours, arrival hours and task counts), `logged_hours_4w` (hours logged per week), `unlogged_tasks` (finished tasks with no time logged; their actual hours were estimated), `reopened_tasks`, `patterns` (see whf-pattern-discovery, including `overdue_hrs`: remaining hours of the member's open tasks already past their due date at the run day — a member fact, not tied to any one window), `likely_work` (see whf-likely-work). Each member also carries `days`, one entry per weekday of the horizon (`day`, `window`, `demand`, `capacity`, `overload`, `working_day`); a window's figures are the sums of its days, rounded.
+
+## Rebalancing candidates
+Beside `overloaded` and `underloaded`, `rebalancing_candidates` carries two more lists of member names: `backlog_pressed` (above-zero `backlog_excess_hrs` in the run's last window) and `deadline_pressed` (above-zero `due_excess_hrs` in any window).
 
 ## Team and run facts
 `team.totals` (demand and capacity per window), `team.team_capacity` (the team's own capacity plan: total and allocated), `projects` (key, name, status, open and backlog task counts, first due date), `pending_holidays` (declared but unconfirmed), `data_quality` (unresolved assignments, unlogged tasks, history weeks), `run.windows` (`index`, `start`, `end`, `working_days`).

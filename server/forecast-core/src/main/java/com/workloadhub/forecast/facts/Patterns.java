@@ -7,6 +7,7 @@ import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.Mode;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
+import com.workloadhub.forecast.run.ForecastRunner;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -123,24 +124,29 @@ public final class Patterns {
         Map<String, Double> cycleByFamily = new TreeMap<>();
         cyclesByFamily.forEach((k, v) -> cycleByFamily.put(k, median(v)));
         int open = 0;
-        double openHours = 0;
         int overdue = 0;
+        double overdueHours = 0;
+        List<TaskFacts> openTasks = new ArrayList<>();
         for (TaskFacts f : mine) {
             if (f.done()) {
                 continue;
             }
             open++;
-            openHours += f.remaining() != null ? f.remaining() : f.estimate();
+            openTasks.add(f);
             if (f.task().dueDate() != null && f.task().dueDate().isBefore(asOf)) {
                 overdue++;
+                overdueHours += f.remaining() != null ? f.remaining() : f.estimate();
             }
         }
+        // openEstHours is the same sum ForecastRunner reads back for backlog_excess_hrs (design 2026-09-13,
+        // section 8.2): one static helper, called from both, so the two figures can never drift apart.
+        double openEstHours = ForecastRunner.openEstHours(openTasks);
         return new MemberPattern(member, n, hours13, hours13 / WINDOW_WEEKS, round3(slope(weekly)),
                 n == 0 ? null : (double) manual / n, n == 0 ? null : (double) self / n, n == 0 ? null : (double) project / n,
                 weekdayTotal == 0 ? null : WEEKDAYS.get(top), weekdayShares, loggedWeekdayShares,
                 ratios.isEmpty() ? null : median(ratios), cycles.isEmpty() ? null : median(cycles), cycleByFamily,
                 lateness.isEmpty() ? null : median(lateness), lateness.isEmpty() ? null : lateness.stream().filter(l -> l > 0).count() / (double) lateness.size(),
-                n == 0 ? null : (double) withProject / n, hoursByProject, open, openHours, overdue);
+                n == 0 ? null : (double) withProject / n, hoursByProject, open, openEstHours, overdue, overdueHours);
     }
 
     /** Least-squares slope of values over 0..n−1. */

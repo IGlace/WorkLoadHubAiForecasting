@@ -29,6 +29,9 @@ class SkillTextsTest {
                 "old and retired model names are gone");
         assertTrue(all.contains("mae") && all.contains("mean_actual_hours") && all.contains("thin_history"), "the model block's own vocabulary");
         assertTrue(all.contains("likely_work") && all.contains("due_hours"));
+        assertTrue(all.contains("backlog_excess_hrs") && all.contains("due_excess_hrs") && all.contains("overdue_hrs"),
+                "the pressure facts a forecast of logged hours cannot show on its own (design 2026-09-13, section 8)");
+        assertTrue(all.contains("backlog_pressed") && all.contains("deadline_pressed"), "the two rebalancing_candidates lists the pressure facts feed");
         assertTrue(all.contains("40 h"), "the Java module's default capacity");
         assertTrue(all.contains("window") && all.contains("five weekdays"), "the rolling horizon vocabulary");
         assertTrue(!all.contains("expected_week") && !all.contains("two-week forecast") && !all.contains("per member and week"), "the weekly horizon is gone");

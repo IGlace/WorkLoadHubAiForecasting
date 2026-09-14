@@ -17,6 +17,7 @@ import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.features.WeeklySeries;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
 import com.workloadhub.forecast.lifecycle.TaskFacts;
+import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
 import java.time.LocalDate;
@@ -172,16 +173,13 @@ public final class FactsBuilder {
         List<TaskFacts> open = mine.stream().filter(f -> !f.done()).toList();
         List<Object> forecast = new ArrayList<>();
         for (MemberWindowForecast r : rows) {
-            double due = 0;
-            for (TaskFacts f : open) {
-                LocalDate d = f.task().dueDate();
-                if (d != null && !d.isBefore(r.windowStart()) && !d.isAfter(r.windowEnd())) {
-                    due += f.remaining() != null ? f.remaining() : f.estimate();
-                }
-            }
+            // The same helper ForecastRunner reads back for due_excess_hrs (design 2026-09-13, section 8.2): one
+            // definition of the sum, so due_hours here and due_excess_hrs on the row can never contradict each other.
+            double due = ForecastRunner.dueHours(open, r.windowStart(), r.windowEnd());
             forecast.add(map("window", r.windowIndex(), "start", str(r.windowStart()), "end", str(r.windowEnd()), "demand", r.demandHrs(), "low", r.lowHrs(),
                     "high", r.highHrs(), "capacity", r.capacityHrs(), "overload", r.overloadHrs(),
-                    "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", Numbers.round2(due)));
+                    "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", Numbers.round2(due),
+                    "backlog_excess_hrs", r.backlogExcessHrs(), "due_excess_hrs", r.dueExcessHrs()));
         }
         List<Object> dayList = new ArrayList<>();
         for (MemberDayForecast d : days) {
@@ -291,11 +289,14 @@ public final class FactsBuilder {
     private static Map<String, Object> rebalancing(TeamOutcome out, Map<UUID, List<MemberWindowForecast>> rowsByMember) {
         List<Object> overloaded = new ArrayList<>();
         List<Object> underloaded = new ArrayList<>();
+        List<Object> backlogPressed = new ArrayList<>();
+        List<Object> deadlinePressed = new ArrayList<>();
         for (MemberRow m : out.members()) {
             double demand = 0;
             double capacity = 0;
             double overload = 0;
-            for (MemberWindowForecast r : rowsByMember.getOrDefault(m.id(), List.of())) {
+            List<MemberWindowForecast> rows = rowsByMember.getOrDefault(m.id(), List.of());
+            for (MemberWindowForecast r : rows) {
                 demand += r.demandHrs();
                 capacity += r.capacityHrs();
                 overload += r.overloadHrs();
@@ -306,8 +307,17 @@ public final class FactsBuilder {
             if (capacity > 0 && demand < UNDERLOAD_RATIO * capacity) {
                 underloaded.add(map("member_id", str(m.id()), "name", m.fullName(), "spare_hours", round1(capacity - demand)));
             }
+            // backlog_excess_hrs is non-increasing across a run's windows (design 2026-09-13, section 8.1), so
+            // the last window is the strictest test: it is above zero there exactly when the backlog does not
+            // fit inside the whole run. due_excess_hrs is per window, so any window above zero is enough to act on.
+            if (!rows.isEmpty() && rows.get(rows.size() - 1).backlogExcessHrs() > 0) {
+                backlogPressed.add(m.fullName());
+            }
+            if (rows.stream().anyMatch(r -> r.dueExcessHrs() > 0)) {
+                deadlinePressed.add(m.fullName());
+            }
         }
-        return map("overloaded", overloaded, "underloaded", underloaded);
+        return map("overloaded", overloaded, "underloaded", underloaded, "backlog_pressed", backlogPressed, "deadline_pressed", deadlinePressed);
     }
 
     static Map<String, Object> map(Object... kv) {

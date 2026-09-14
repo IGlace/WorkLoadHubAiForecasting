@@ -19,13 +19,19 @@ import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.HolidayRow;
+import com.workloadhub.forecast.data.rows.MemberRow;
+import com.workloadhub.forecast.data.rows.TaskRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
+import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Truncation;
 import com.workloadhub.forecast.testing.SeededData;
+import com.workloadhub.forecast.testing.TestData;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -137,6 +143,62 @@ class ForecastRunnerTest {
     @Test
     void unknownOrEmptyTeamIsRejected() {
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> runner.forTeam(prepared, UUID.randomUUID())).code());
+    }
+
+    // Design 2026-09-13, section 8: a member holding 120 hours of open work (60 of it due inside window 1,
+    // whose capacity is 44, and 7 already overdue at the run day), forecast by hand at 30 hours in window 1
+    // and 25 in window 2 so the pressure arithmetic can be checked exactly rather than through a fitted model.
+    static List<MemberWindowForecast> pressureWindows;
+
+    @BeforeAll
+    static void preparePressureFixture() {
+        MemberRow ana = TestData.member("ana", TestData.TEAM);
+        LocalDate asOf = LocalDate.of(2026, 9, 6);                                    // Sunday: window 1 starts Monday 2026-09-07
+        TaskRow dueInWindowOne = TestData.task("due", ana.id(), LocalDateTime.of(2026, 8, 1, 9, 0), 60)
+                .withDue(LocalDate.of(2026, 9, 10)).withRemaining(60.0);
+        TaskRow noDueDate = TestData.task("nodue", ana.id(), LocalDateTime.of(2026, 8, 1, 9, 0), 53)
+                .withRemaining(53.0);
+        TaskRow overdue = TestData.task("overdue", ana.id(), LocalDateTime.of(2026, 8, 1, 9, 0), 7)
+                .withDue(LocalDate.of(2026, 9, 3)).withRemaining(7.0);
+        ForecastData data = TestData.data(List.of(ana), List.of(dueInWindowOne, noDueDate, overdue), List.of(), List.of());
+        ForecastRunner pressureRunner = new ForecastRunner(new CapacityRule(44), 2);
+        Prepared base = pressureRunner.prepare(data, asOf, ForecastRunner.ProgressListener.NONE);
+        // The model is bypassed: predictedHours is replaced with the two figures the fixture is built around,
+        // so window 1 and window 2 demand are exactly 30.0 and 25.0 rather than whatever a fitted booster
+        // would produce on three hand-built tasks.
+        Map<MemberWeek, Double> predicted = new TreeMap<>();
+        predicted.put(new MemberWeek(ana.id(), base.origin().plusWeeks(base.horizons()[0])), 30.0);
+        predicted.put(new MemberWeek(ana.id(), base.origin().plusWeeks(base.horizons()[1])), 25.0);
+        Prepared fixture = new Prepared(base.data(), base.lifecycle(), base.calendar(), base.asOf(), base.origin(), base.windows(), base.horizons(),
+                base.features(), base.backtestOrigins(), base.backtest(), base.mae(), base.meanActualHours(), base.bandOffsets(), predicted,
+                base.historyWeeks(), base.secondsByPhase());
+        pressureWindows = pressureRunner.forTeam(fixture, TestData.TEAM).memberWindows();
+    }
+
+    private static MemberWindowForecast window(int index) {
+        return pressureWindows.stream().filter(w -> w.windowIndex() == index).findFirst().orElseThrow();
+    }
+
+    @Test
+    void theBacklogFigureIsWhatIsLeftAfterTheForecast() {
+        assertEquals(90.0, window(1).backlogExcessHrs(), 1e-6, "120 - 30");
+        assertEquals(65.0, window(2).backlogExcessHrs(), 1e-6, "120 - (30 + 25), cumulative");
+    }
+
+    @Test
+    void theBacklogFigureNeverGrowsAcrossAWindow() {
+        double previous = Double.MAX_VALUE;
+        for (MemberWindowForecast w : pressureWindows) {
+            assertTrue(w.backlogExcessHrs() <= previous + 1e-9);
+            previous = w.backlogExcessHrs();
+        }
+    }
+
+    @Test
+    void theDeadlineGapIsPerWindowAgainstThatWindowsCapacity() {
+        // 60 hours due inside window 1, whose capacity is 44.
+        assertEquals(16.0, window(1).dueExcessHrs(), 1e-6);
+        assertEquals(0.0, window(2).dueExcessHrs(), 1e-6, "a deadline belongs to its window and does not roll forward");
     }
 
     @Test

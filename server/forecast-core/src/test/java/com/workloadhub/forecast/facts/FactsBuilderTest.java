@@ -12,6 +12,7 @@ import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
+import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Truncation;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -223,5 +225,44 @@ class FactsBuilderTest {
         List<?> dominant = (List<?>) role.get("dominant_types");
         assertEquals(1, dominant.size());
         assertEquals(Map.of("type", "Task", "count", 1), dominant.get(0));
+    }
+
+    // Design 2026-09-13, section 8.1: two members whose pressure is real but different in kind, so the two
+    // lists are proven independent rather than both trivially true off one shared row. "pressed" holds 200
+    // hours of open work with no deadline and a demand forecast far under it, so the backlog outlasts the run;
+    // "late" holds one 60-hour task due inside window 1 (capacity 44) but its whole backlog is absorbed by the
+    // run's own demand, so it is deadline-pressed and not backlog-pressed. Demand is pinned by hand, as in
+    // ForecastRunnerTest, so the two figures land where the fixture says rather than wherever a fitted model
+    // would put them.
+    @Test
+    void theTwoListsNameTheMembersToActOn() {
+        MemberRow pressed = TestData.member("pressed", TestData.TEAM);
+        MemberRow late = TestData.member("late", TestData.TEAM);
+        LocalDateTime created = LocalDate.of(2026, 8, 1).atTime(9, 0);
+        TaskRow backlogA = TestData.task("backlog-a", pressed.id(), created, 100).withRemaining(100.0);
+        TaskRow backlogB = TestData.task("backlog-b", pressed.id(), created, 100).withRemaining(100.0);
+        TaskRow dueTask = TestData.task("due", late.id(), created, 60).withDue(LocalDate.of(2026, 9, 10)).withRemaining(60.0);
+        LocalDate asOf = LocalDate.of(2026, 9, 6);                                    // Sunday: window 1 starts Monday 2026-09-07
+        ForecastData data = TestData.data(List.of(pressed, late), List.of(backlogA, backlogB, dueTask), List.of(), List.of());
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(44), 2);
+        Prepared base = runner.prepare(data, asOf, ForecastRunner.ProgressListener.NONE);
+        Map<MemberWeek, Double> demand = new TreeMap<>();
+        demand.put(new MemberWeek(pressed.id(), base.origin().plusWeeks(base.horizons()[0])), 10.0);
+        demand.put(new MemberWeek(pressed.id(), base.origin().plusWeeks(base.horizons()[1])), 10.0);
+        demand.put(new MemberWeek(late.id(), base.origin().plusWeeks(base.horizons()[0])), 30.0);
+        demand.put(new MemberWeek(late.id(), base.origin().plusWeeks(base.horizons()[1])), 30.0);
+        Prepared fixture = new Prepared(base.data(), base.lifecycle(), base.calendar(), base.asOf(), base.origin(), base.windows(), base.horizons(),
+                base.features(), base.backtestOrigins(), base.backtest(), base.mae(), base.meanActualHours(), base.bandOffsets(), demand,
+                base.historyWeeks(), base.secondsByPhase());
+        TeamOutcome outcome = runner.forTeam(fixture, TestData.TEAM);
+        Map<String, Object> facts = FactsBuilder.build(outcome, UUID.fromString("00000000-0000-0000-0000-000000000005"),
+                LocalDateTime.of(2026, 9, 6, 12, 0));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> candidates = (Map<String, Object>) facts.get("rebalancing_candidates");
+        assertTrue(((List<?>) candidates.get("backlog_pressed")).contains(pressed.fullName()));
+        assertFalse(((List<?>) candidates.get("backlog_pressed")).contains(late.fullName()), "late's backlog is absorbed by the run's own demand");
+        assertTrue(((List<?>) candidates.get("deadline_pressed")).contains(late.fullName()));
+        assertFalse(((List<?>) candidates.get("deadline_pressed")).contains(pressed.fullName()), "pressed has no due date at all");
     }
 }

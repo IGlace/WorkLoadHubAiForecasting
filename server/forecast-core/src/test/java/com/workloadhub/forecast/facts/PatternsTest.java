@@ -65,7 +65,20 @@ class PatternsTest {
         assertEquals(4, p.openTasks());
         assertEquals(58.0, p.openEstHours(), 1e-9);
         assertEquals(ANA.id().toString(), p.toMap().get("member_id"), "member ids are strings in the facts");
-        assertEquals(21, p.toMap().size());
+        assertEquals(0.0, p.overdueHrs(), 1e-9, "none of the open tasks are overdue");
+        assertEquals(22, p.toMap().size());
+    }
+
+    @Test
+    void overdueHoursAreAMemberFactNotAWindowFact() {
+        // A task 3 days past its due date with 7 remaining hours.
+        TaskRow overdue = TestData.task("late", ANA.id(), LocalDate.of(2026, 8, 1).atTime(9, 0), 10)
+                .withDue(AS_OF.minusDays(3)).withRemaining(7.0);
+        ForecastData data = TestData.data(List.of(ANA), List.of(overdue), List.of(), List.of());
+        MemberPattern p = Patterns.of(ANA.id(), Lifecycle.derive(data), data, AS_OF);
+        assertEquals(1, p.overdueOpen());
+        assertEquals(7.0, p.overdueHrs(), 1e-9);
+        assertEquals(7.0, p.openEstHours(), 1e-9, "the same task, remaining hours not estimate");
     }
 
     @Test

@@ -10,7 +10,7 @@ public record MemberPattern(UUID memberId, int tasks13w, double hours13w, double
         Double shareSelfPicked, Double shareProject, String topWeekday, List<Double> weekdayShares, List<Double> loggedWeekdayShares,
         Double estimateRatioMedian, Double cycleDaysMedian,
         Map<String, Double> cycleDaysByFamily, Double latenessDaysMedian, Double shareLate, Double shareWithProject, Map<String, Double> hoursByProject,
-        int openTasks, double openEstHours, int overdueOpen) {
+        int openTasks, double openEstHours, int overdueOpen, double overdueHrs) {
 
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -35,6 +35,7 @@ public record MemberPattern(UUID memberId, int tasks13w, double hours13w, double
         m.put("open_tasks", openTasks);
         m.put("open_est_hours", openEstHours);
         m.put("overdue_open", overdueOpen);
+        m.put("overdue_hrs", overdueHrs);
         return m;
     }
 }

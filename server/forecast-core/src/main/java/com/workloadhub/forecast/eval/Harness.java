@@ -167,10 +167,8 @@ public final class Harness {
                     for (LocalDate d : window.weekdays()) {
                         realised += truth.getOrDefault(new MemberDay(w.userId(), d), 0.0);
                     }
-                    // openHours/newHours/plannedHours no longer exist (design 2026-09-13): the demand forecast is
-                    // one figure now. Kept as zero placeholders until task 10 drops the columns from this record.
                     rows.add(new DemandRow(XgboostHours.NAME, origin, team, w.userId(), w.windowIndex(), w.windowStart(), w.windowEnd(), w.demandHrs(),
-                            Math.round(realised * 1e6) / 1e6, w.capacityHrs(), 0.0, 0.0, 0.0));
+                            Math.round(realised * 1e6) / 1e6, w.capacityHrs(), w.backlogExcessHrs(), w.dueExcessHrs()));
                 }
             }
         }

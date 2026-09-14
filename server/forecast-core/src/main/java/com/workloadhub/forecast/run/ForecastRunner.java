@@ -19,6 +19,7 @@ import com.workloadhub.forecast.features.FeatureMatrix;
 import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
+import com.workloadhub.forecast.lifecycle.TaskFacts;
 import com.workloadhub.forecast.model.XgboostHours;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -69,6 +70,35 @@ public final class ForecastRunner {
         double d = Numbers.round2(Math.max(0.0, demand));
         return new Band(d, Numbers.round2(Math.max(0.0, d + q10)), Numbers.round2(d + q90),
                 Numbers.round2(Math.max(0.0, d - capacity)));
+    }
+
+    /**
+     * Remaining hours of a member's open tasks (design 2026-09-13, section 8.2): the queue a forecast of logged
+     * hours cannot show. The one definition of the sum, so {@code Patterns.open_est_hours} and this class's
+     * {@code backlog_excess_hrs} can never drift apart by summing it twice.
+     */
+    public static double openEstHours(List<TaskFacts> open) {
+        double sum = 0;
+        for (TaskFacts f : open) {
+            sum += f.remaining() != null ? f.remaining() : f.estimate();
+        }
+        return sum;
+    }
+
+    /**
+     * Remaining hours of a member's open tasks falling due inside {@code [start, end]} (design 2026-09-13,
+     * section 8.2): the one definition {@code FactsBuilder}'s {@code due_hours} and this class's
+     * {@code due_excess_hrs} both read, so a narrative comparing the two can never contradict itself.
+     */
+    public static double dueHours(List<TaskFacts> open, LocalDate start, LocalDate end) {
+        double sum = 0;
+        for (TaskFacts f : open) {
+            LocalDate d = f.task().dueDate();
+            if (d != null && !d.isBefore(start) && !d.isAfter(end)) {
+                sum += f.remaining() != null ? f.remaining() : f.estimate();
+            }
+        }
+        return sum;
     }
 
     /**
@@ -170,9 +200,11 @@ public final class ForecastRunner {
         // week, while a day already past simply drops its hours instead.
         Map<UUID, List<Double>> sharesByMember = new HashMap<>();
         Map<UUID, Set<LocalDate>> offDaysByMember = new HashMap<>();
+        Map<UUID, List<TaskFacts>> openTasksByMember = new HashMap<>();
         for (MemberRow m : members) {
             sharesByMember.put(m.id(), Patterns.of(m.id(), p.lifecycle(), data, p.asOf()).loggedWeekdayShares());
             offDaysByMember.put(m.id(), capacityRule.offDays(m.id(), data, m, p.calendar()));
+            openTasksByMember.put(m.id(), p.lifecycle().assignedTo(m.id()).stream().filter(f -> !f.done()).toList());
         }
         SortedMap<MemberDay, Double> demandByDay = new TreeMap<>();
         p.predictedHours().forEach((k, v) -> {
@@ -186,6 +218,9 @@ public final class ForecastRunner {
         List<MemberWindowForecast> windowRows = new ArrayList<>();
         List<MemberDayForecast> dayRows = new ArrayList<>();
         for (MemberRow m : members) {
+            List<TaskFacts> open = openTasksByMember.get(m.id());
+            double openEst = openEstHours(open);
+            double runningDemand = 0;
             for (ForecastWindow w : windows) {
                 double demandSum = 0;
                 double capacity = 0;
@@ -215,9 +250,18 @@ public final class ForecastRunner {
                         q90 += q[1] / w.weekdays().size();
                     }
                 }
-                Band b = band(demandSum, q10, q90, Numbers.round2(capacity));
+                double roundedCapacity = Numbers.round2(capacity);
+                Band b = band(demandSum, q10, q90, roundedCapacity);
+                // Both read after the band (design 2026-09-13, section 8.2): backlogExcess needs this window's
+                // final demand figure, and both are the queue a forecast of logged hours cannot show on its own —
+                // what is left of the open work once the windows so far are forecast, and what is due inside this
+                // window beyond what it holds.
+                runningDemand += b.demand();
+                double dueHrs = dueHours(open, w.start(), w.end());
+                double backlogExcess = Numbers.round2(Math.max(0.0, openEst - runningDemand));
+                double dueExcess = Numbers.round2(Math.max(0.0, dueHrs - roundedCapacity));
                 windowRows.add(new MemberWindowForecast(m.id(), w.index(), w.start(), w.end(), b.demand(), b.low(),
-                        b.high(), Numbers.round2(capacity), b.overload(), workingDays, Numbers.round2(absence)));
+                        b.high(), roundedCapacity, b.overload(), workingDays, Numbers.round2(absence), backlogExcess, dueExcess));
             }
         }
         windowRows.sort(Comparator.comparing(MemberWindowForecast::userId, Ids.UUID_ORDER).thenComparingInt(MemberWindowForecast::windowIndex));

@@ -40,8 +40,8 @@ class JdbcRunStoreTest {
 
     static List<MemberWindowForecast> windows() {
         return List.of(
-                new MemberWindowForecast(USER, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 17.5, 15, 20, 40, 0, 5, 0),
-                new MemberWindowForecast(USER, 2, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 18), 10, 10, 12, 32, 0, 4, 8));
+                new MemberWindowForecast(USER, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 17.5, 15, 20, 40, 0, 5, 0, 12.5, 3),
+                new MemberWindowForecast(USER, 2, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 18), 10, 10, 12, 32, 0, 4, 8, 4, 0));
     }
 
     /** Ten days of one member for a run made on {@code asOf}, every day carrying {@code demand} so a later run's values are recognisable. */
@@ -104,7 +104,7 @@ class JdbcRunStoreTest {
         List<MemberWindowForecast> out = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             UUID user = UUID.nameUUIDFromBytes(("user-" + i).getBytes(StandardCharsets.UTF_8));
-            out.add(new MemberWindowForecast(user, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 3, 2, 5, 40, 0, 5, 0));
+            out.add(new MemberWindowForecast(user, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 3, 2, 5, 40, 0, 5, 0, 0, 0));
         }
         out.sort((a, b) -> a.userId().toString().compareTo(b.userId().toString()));
         return out;

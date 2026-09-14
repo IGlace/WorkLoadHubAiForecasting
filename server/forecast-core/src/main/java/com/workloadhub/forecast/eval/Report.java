@@ -92,12 +92,12 @@ public final class Report {
         }
         Files.writeString(outDir.resolve("scores.csv"), scores.toString(), StandardCharsets.UTF_8);
         StringBuilder demand = new StringBuilder(
-                "model,origin,team_id,member_id,window,window_start,window_end,forecast,truth,capacity,open_hours,new_hours,planned_hours\n");
+                "model,origin,team_id,member_id,window,window_start,window_end,forecast,truth,capacity,backlog_excess_hrs,due_excess_hrs\n");
         for (DemandRow r : result.demand()) {
             demand.append(r.model()).append(',').append(r.origin()).append(',').append(r.teamId()).append(',').append(r.memberId()).append(',')
                     .append(r.windowIndex()).append(',').append(r.windowStart()).append(',').append(r.windowEnd())
-                    .append(',').append(csv(r.forecast())).append(',').append(csv(r.truth())).append(',').append(csv(r.capacity())).append(',').append(csv(r.openHours()))
-                    .append(',').append(csv(r.newHours())).append(',').append(csv(r.plannedHours())).append('\n');
+                    .append(',').append(csv(r.forecast())).append(',').append(csv(r.truth())).append(',').append(csv(r.capacity()))
+                    .append(',').append(csv(r.backlogExcessHrs())).append(',').append(csv(r.dueExcessHrs())).append('\n');
         }
         Files.writeString(outDir.resolve("demand.csv"), demand.toString(), StandardCharsets.UTF_8);
         Files.writeString(outDir.resolve("summary.md"), summary(result, versions), StandardCharsets.UTF_8);
@@ -175,11 +175,14 @@ public final class Report {
         if (byModel.isEmpty()) {
             return "(no rows)\n";
         }
-        StringBuilder sb = new StringBuilder("| model | mae | bias | open_only_mae | overload_precision | overload_recall | rows |\n|---|---|---|---|---|---|---|\n");
+        // open_only_mae compared the forecast against a naive "predict the open backlog" baseline; that baseline
+        // was DemandRow.openHours, which went with the open/new/planned split (task 5). No replacement baseline
+        // is defined by the 2026-09-13 design, so the column is dropped rather than fed a figure that would not
+        // mean what its header claims.
+        StringBuilder sb = new StringBuilder("| model | mae | bias | overload_precision | overload_recall | rows |\n|---|---|---|---|---|---|\n");
         byModel.forEach((model, rows) -> {
             double[] y = rows.stream().mapToDouble(DemandRow::truth).toArray();
             double[] p = rows.stream().mapToDouble(DemandRow::forecast).toArray();
-            double[] open = rows.stream().mapToDouble(DemandRow::openHours).toArray();
             boolean[] trueOver = new boolean[rows.size()];
             boolean[] predOver = new boolean[rows.size()];
             for (int i = 0; i < rows.size(); i++) {
@@ -188,7 +191,7 @@ public final class Report {
             }
             double[] pr = Metrics.overloadPrecisionRecall(trueOver, predOver);
             sb.append("| ").append(model).append(" | ").append(fmt(Metrics.mae(y, p))).append(" | ").append(fmt(Metrics.bias(y, p))).append(" | ")
-                    .append(fmt(Metrics.mae(y, open))).append(" | ").append(fmt(pr[0])).append(" | ").append(fmt(pr[1])).append(" | ").append(rows.size()).append(" |\n");
+                    .append(fmt(pr[0])).append(" | ").append(fmt(pr[1])).append(" | ").append(rows.size()).append(" |\n");
         });
         return sb.toString();
     }

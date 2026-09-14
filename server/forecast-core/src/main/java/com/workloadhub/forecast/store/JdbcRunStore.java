@@ -101,14 +101,15 @@ public final class JdbcRunStore {
     /** Batches of {@link #BATCH} rows, same typed placeholders and binding order as a single-row insert. */
     private void insertWindows(UUID runId, List<MemberWindowForecast> rows) {
         String insert = "INSERT INTO forecast_member_windows (run_id, user_id, window_index, window_start, window_end,"
-                + " demand_hrs, low_hrs, high_hrs, capacity_hrs, overload_hrs, working_days, absence_hrs) VALUES (" + ph("uuid") + ", " + ph("uuid")
-                + ", ?, " + ph("date") + ", " + ph("date") + ", ?, ?, ?, ?, ?, ?, ?)";
+                + " demand_hrs, low_hrs, high_hrs, capacity_hrs, overload_hrs, working_days, absence_hrs, backlog_excess_hrs, due_excess_hrs) VALUES ("
+                + ph("uuid") + ", " + ph("uuid") + ", ?, " + ph("date") + ", " + ph("date") + ", ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         for (int start = 0; start < rows.size(); start += BATCH) {
             List<MemberWindowForecast> chunk = rows.subList(start, Math.min(start + BATCH, rows.size()));
             List<Object[]> args = new ArrayList<>(chunk.size());
             for (MemberWindowForecast r : chunk) {
                 args.add(new Object[] {runId.toString(), r.userId().toString(), r.windowIndex(), r.windowStart().toString(), r.windowEnd().toString(),
-                        r.demandHrs(), r.lowHrs(), r.highHrs(), r.capacityHrs(), r.overloadHrs(), r.workingDays(), r.absenceHrs()});
+                        r.demandHrs(), r.lowHrs(), r.highHrs(), r.capacityHrs(), r.overloadHrs(), r.workingDays(), r.absenceHrs(),
+                        r.backlogExcessHrs(), r.dueExcessHrs()});
             }
             jdbcTemplate.batchUpdate(insert, args);
         }
@@ -160,11 +161,13 @@ public final class JdbcRunStore {
     public List<MemberWindowForecast> memberWindows(UUID runId) {
         List<MemberWindowForecast> out = new ArrayList<>();
         for (Map<String, Object> r : jdbc.sql("SELECT user_id, window_index, window_start, window_end, demand_hrs, low_hrs,"
-                + " high_hrs, capacity_hrs, overload_hrs, working_days, absence_hrs FROM forecast_member_windows WHERE run_id = " + ph("uuid")
+                + " high_hrs, capacity_hrs, overload_hrs, working_days, absence_hrs, backlog_excess_hrs, due_excess_hrs"
+                + " FROM forecast_member_windows WHERE run_id = " + ph("uuid")
                 + " ORDER BY user_id, window_index").param(runId.toString()).query().listOfRows()) {
             out.add(new MemberWindowForecast(UUID.fromString(str(r, "user_id")), (int) num(r, "window_index"), date(r, "window_start"), date(r, "window_end"),
                     num(r, "demand_hrs"), num(r, "low_hrs"), num(r, "high_hrs"),
-                    num(r, "capacity_hrs"), num(r, "overload_hrs"), (int) num(r, "working_days"), num(r, "absence_hrs")));
+                    num(r, "capacity_hrs"), num(r, "overload_hrs"), (int) num(r, "working_days"), num(r, "absence_hrs"),
+                    num(r, "backlog_excess_hrs"), num(r, "due_excess_hrs")));
         }
         out.sort((a, b) -> a.userId().toString().equals(b.userId().toString()) ? Integer.compare(a.windowIndex(), b.windowIndex())
                 : a.userId().toString().compareTo(b.userId().toString()));

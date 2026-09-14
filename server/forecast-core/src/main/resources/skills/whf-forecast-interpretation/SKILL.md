@@ -10,6 +10,8 @@ description: How to explain a member's forecast over the run's windows, capacity
 - An interval (low, high) that spans more than half of capacity means the history is noisy; say the forecast is uncertain rather than quoting the band as fact.
 - Overdue open tasks are placed forward from the first forecast day; they inflate window one by design. Mention `overdue_open` (in patterns) or the overdue tasks when they drive the overload.
 - `due_hours` above capacity in a window means deadlines, not logging pace, are the pressure; say so.
+- When `overload` is zero but `backlog_excess_hrs` is not, the member is not predicted to exceed their hours yet still holds more open work than the coming windows can absorb; say so rather than calling the member's week fine.
+- When `due_excess_hrs` is above zero, say how many hours more are due in that window than it holds, and name rebalancing as the answer.
 - A single day in `days` whose demand is well above its capacity is worth naming when the window total hides it: say the day (ISO date) and the two figures as given.
 - Model quality: state `mae` next to `mean_actual_hours` and let the reader judge; never call the forecast "good" or "bad", and never compute a ratio yourself. A `thin_history` confidence means the run has too little scored history: say plainly that the forecast is unscored, rather than quoting a `mae` that is not there.
 - Never round, sum, subtract or convert numbers yourself. If a derived figure is not in the facts, describe the relationship in words.

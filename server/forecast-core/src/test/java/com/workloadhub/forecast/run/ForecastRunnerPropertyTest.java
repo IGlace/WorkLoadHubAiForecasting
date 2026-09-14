@@ -3,6 +3,7 @@ package com.workloadhub.forecast.run;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import java.time.LocalDate;
 import java.util.List;
@@ -72,6 +73,28 @@ class ForecastRunnerPropertyTest {
         assertEquals(prediction, sum, 1e-6, "a week wholly inside the horizon keeps all its hours");
         for (LocalDate d : NON_WORKING_DAYS) {
             assertEquals(0.0, days.getOrDefault(d, 0.0), 0.0, "a non-working day receives nothing");
+        }
+    }
+
+    // Design 2026-09-13, section 8.2: backlog_excess_hrs and due_excess_hrs share the same "round last"
+    // shape as overload (band()) above, so the same rounding trap applies to both.
+    @Property(tries = 500)
+    void thePressureFiguresAreNonNegativeAndRoundLast(
+            @ForAll @DoubleRange(min = 0, max = 300) double openEst,
+            @ForAll @DoubleRange(min = 0, max = 300) double cumulativeDemand,
+            @ForAll @DoubleRange(min = 0, max = 200) double dueHours,
+            @ForAll @DoubleRange(min = 0, max = 100) double capacity) {
+        double backlog = Numbers.round2(Math.max(0.0, openEst - cumulativeDemand));
+        double due = Numbers.round2(Math.max(0.0, dueHours - capacity));
+        assertTrue(backlog >= 0.0);
+        assertTrue(due >= 0.0);
+        // The formula rounds LAST, so "positive exactly when A exceeds B" is false: an excess of 0.004
+        // rounds to 0.0. The property has to carry the rounding, or jqwik finds the counterexample.
+        if (backlog > 0.0) {
+            assertTrue(openEst > cumulativeDemand + 0.004);
+        }
+        if (due > 0.0) {
+            assertTrue(dueHours > capacity + 0.004);
         }
     }
 }
