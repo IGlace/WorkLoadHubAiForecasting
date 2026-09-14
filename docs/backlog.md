@@ -306,6 +306,19 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **The evaluation harness applies a shorter history gate than a run does (2026-09-14). Important; go back to
+  this.** `eval/Harness` sets `maxHorizon = windows` and passes it to `Backtest.origins`, while a real forecast
+  uses `Horizon.maxHorizon(origin, windows)`, which is `windows + 1`. With `minHistoryWeeks(maxHorizon) =
+  10 + maxHorizon`, the harness admits a team on twelve weeks of history where a run demands thirteen. Each
+  context is internally coherent — the harness scores horizons `1..windows` and a run scores `1..windows + 1`,
+  so each gate matches the hold-out it actually uses — which is why this is a design question and not a bug to
+  patch blindly. The question is whether `evaluate()` should score the same population of teams that a run will
+  forecast. As it stands it can report an accuracy figure for a team production then refuses to score, and the
+  two numbers a leader sees come from different admission rules. Decide deliberately: either the harness takes
+  the run's gate (one population, at the cost of discarding a team the harness could legitimately have scored),
+  or the divergence is documented as intended and `evaluate()` says which gate it used. Landed unresolved with
+  task 8 of `docs/superpowers/plans/2026-09-14-weekly-hours-forecast.md`.
+
 - **Weekly hours forecast (2026-09-13, reviewed 2026-09-14).** Spec
   `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`, **reviewed and ready for a plan, not
   implemented**. The review's seven rulings are its section 18: the history gate scales as `10 + maxHorizon`;
