@@ -729,3 +729,49 @@ A reviewer should be able to confirm each of these directly:
 - `ForecastRunner.prepare` still calls `Backtest.run` and `Backtest.intervalBounds`; `MemberWindowForecast` still carries `lowHrs` and `highHrs`; the facts still carry `mae`, `mean_actual_hours` and `interval.basis`.
 - No migration changed: `git diff --stat main -- server/forecast-core/src/main/resources/db` is empty.
 - The gate is green and `CLAUDE.md` names the measured count.
+
+---
+
+## Closing notes — what actually happened (2026-09-14)
+
+All six tasks landed on `dev`, then one whole-branch review, then one fix wave. Final state after the fix
+wave: gate **409 tests, 0 failures, 0 errors, 13 skipped**, `main` not yet fast-forwarded.
+
+**Commits:** `9f6833b` (1) · `92a0d7b` (3) · `ad3fd55` (2) · `8e6613f` (4) · `2e5a264` (5) · `b4c6755` (6).
+
+**The plan's own task order was wrong.** Task 3 had to land before Task 2, against the order stated above.
+`AccuracyReport` (Task 3's file) called `Report.csv` and `Report.fmt` unqualified, same package as `Report`
+itself, so no import line existed for Task 2 step 5's grep to catch. Deleting `Report.java` while
+`AccuracyReport.java` still stood broke the build. The pre-flight conflict scan had called T2/T3 "clean
+either order" — that call was wrong; it checked for a shared file and missed the unqualified same-package
+call. Resumed the Task 2 implementer with authority to commit Task 3's deletions first (as Task 3's own
+commit), then Task 2's. **Lesson: a same-package reference needs a bare-name search, not a qualified-reference
+grep** — `grep "eval\.Report"` finds nothing when the caller sits in `eval` too.
+
+**The plan missed three prose sites naming the removed command.** Beyond the deleted files, `eval` survived
+in three places the plan's file lists never named: two comments inside `server/tools/Experiment.java` (the
+class javadoc's "the five things..." and the "---- the five commands ----" section marker), fixed during
+Task 5; and `server/tools/experiment.sh` (its header comment and worked example), fixed in the review's fix
+wave, after the final review caught it as finding I-1.
+
+**The gate:** 409 tests, 0 failures, 0 errors, 13 skipped, down from 421. The drop reconciles exactly:
+`HarnessTest` (6) + `ReportTest` (2) + `AccuracyReportTest` (1) + three trimmed cases (the `coverage`
+assertion in `MetricsTest`, `weightedQuantileLossMatchesTheDefinition`, and `evaluateBacktestsThroughThe
+ServicesOwnRunner` in `DefaultForecastServiceTest`) = 12; 421 − 12 = 409.
+
+**Left deliberately alone, and why:**
+
+- Historical plans under `docs/superpowers/plans/` and one older superseded spec still name the removed
+  classes (`EvalConfig`, `Harness`, `Report`, …) in past tense. They are records of work done, not promises
+  of live capability, and the house convention keeps history readable as written — so they stay.
+- Commit trailers on this branch name Sonnet 5 on the implementation commits (`9f6833b`, `92a0d7b`,
+  `ad3fd55`, `8e6613f`, `2e5a264`, `b4c6755`) and Opus 5 on the controller's own commits. Both are truthful —
+  each names the model that actually authored the commit — and the session URL is identical either way, so
+  no rewrite was made.
+
+**Review findings and the fix wave:** the whole-branch review found no Critical issues and confirmed the
+live forecast path unchanged; it raised six findings (I-1 through M-3), all fixed in one follow-up wave —
+`server/tools/experiment.sh`'s stale `eval` references (I-1), these closing notes (I-2), the two overbroad
+"history" banners in the 2026-09-09 module design spec (I-3), the now-dead
+`ForecastRunner.capacityRule()` (M-1), the present-tense sentence in `CLAUDE.md` (M-2), and this spec's
+missing reading-list entry (M-3).

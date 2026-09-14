@@ -30,6 +30,11 @@ app with a Python service) is archived at the tag `archive/python-desktop-v1`.
   read; each one cites the section it changes. Section 23 gave the task order. Read the document before
   changing anything in `model/`, `backtest/`, `features/` or the facts contract; it supersedes
   `2026-09-12-single-model-simplification-design.md`, which is history.
+- `docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`: **implemented, landed on 2026-09-14.**
+  Records the removal of the offline evaluation harness — `ForecastService.evaluate(EvalConfig)`, `Harness`,
+  `Report` and the driver's `eval` command — once the features were settled and the model locked, leaving
+  `accuracy(teamId, from, to)` as the module's only evaluation surface. The per-run backtest inside
+  `ForecastRunner.prepare` stayed: it still produces every run's prediction intervals and `mae`.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
 - `server/README.md`: build, running experiments, the seed, using the module from the server, narrating with
@@ -52,7 +57,7 @@ everything a host does is shown by `server/examples/HostExample.java` instead. T
 too: those five commands were 408 lines wrapping public `forecast-core` classes, so they are now one
 single-file Java program, `server/tools/Experiment.java`, run by `server/tools/experiment.sh` the way the
 sample host is run; and evaluation became a module feature, `ForecastService.evaluate(EvalConfig)`, which is
-the path the driver's `eval` takes.
+the path the driver's `eval` takes (removed on 2026-09-14; see below).
 Then, on 2026-09-13, the weekly hours forecast design
 (`docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`): the booster trains on fresh estimated
 arrival hours while `accuracy()` scores logged hours, so it is retargeted at logged hours per member-week and

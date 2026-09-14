@@ -620,9 +620,10 @@ error the quota fields are null and the status says why.
 > Removed on 2026-09-14. The offline evaluation harness this section (11. Public API) describes —
 > `ForecastService.evaluate(EvalConfig)`, `Harness`, `Report` and the driver's `eval` command — was deleted
 > once the features were settled and the model locked
-> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). Read this section as history. The
-> per-run backtest it shares vocabulary with is still there and still feeds every run's intervals and `mae`;
-> `accuracy(teamId, from, to)` is unchanged.
+> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). Only `evaluate(EvalConfig)` is gone:
+> the parts of this section describing `evaluate` and the harness are history; the rest stands — the other
+> nine methods of the interface are the live contract. The per-run backtest it shares vocabulary with is
+> still there and still feeds every run's intervals and `mae`; `accuracy(teamId, from, to)` is unchanged.
 
 > Amended on 2026-09-10: `RunRequest` has no `asOf` (the run day is the server's clock), `RunResult`
 > carries member windows and days, and `currentForecast(teamId, from, to)` reads the per-day current
@@ -740,9 +741,11 @@ never touches PostgreSQL: production access goes through the host.
 > Removed on 2026-09-14. The offline evaluation harness this section (13. Testing) describes —
 > `ForecastService.evaluate(EvalConfig)`, `Harness`, `Report` and the driver's `eval` command — was deleted
 > once the features were settled and the model locked
-> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). Read this section as history. The
-> per-run backtest it shares vocabulary with is still there and still feeds every run's intervals and `mae`;
-> `accuracy(teamId, from, to)` is unchanged.
+> (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`). Only the parts of this section
+> describing `evaluate` and the harness are history; the rest stands, including the jqwik property tests
+> and the rest of the testing regime, which are still the live rules. The per-run backtest it shares
+> vocabulary with is still there and still feeds every run's intervals and `mae`; `accuracy(teamId, from,
+> to)` is unchanged.
 
 - **Unit and property tests**: JUnit 5 and jqwik. Properties are stated in section 4.8 for the seed
   and, for the forecast: demand equals open + new + planned per member and week; overload is

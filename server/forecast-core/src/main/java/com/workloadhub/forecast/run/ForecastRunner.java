@@ -57,11 +57,6 @@ public final class ForecastRunner {
         this.windows = windows;
     }
 
-    /** The rule this runner computes capacity with, so an evaluation measures the runner as configured. */
-    public CapacityRule capacityRule() {
-        return capacityRule;
-    }
-
     /** The window count (whf.forecast.windows) this runner computes every run at. */
     public int windows() {
         return windows;
