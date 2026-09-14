@@ -77,9 +77,11 @@ fix wave, the gate green by hand in the development container, then fast-forward
   Copilot, and store the exact facts sent for audit (`forecast_facts`).
 - Test-driven development for every change; jqwik property tests for arithmetic invariants. No test talks to
   Copilot or extracts the SDK's runtime.
-- There is no remote. The owner deleted `origin` on 2026-09-12, so this clone is the only copy and nothing
-  is pushed. Never propose a push, a pull request, or "CI will catch it"; the gate is run by hand in the
-  development container. Do not re-add a remote unless the owner asks.
+- The `origin` remote is back since 2026-09-14 (`IGlace/WorkLoadHubAiForecasting`); the owner deleted it on
+  2026-09-12 and restored it. `dev` is pushed there. CI is paused on it by the owner's decision of
+  2026-09-14, so never say "CI will catch it": the gate is `bash scripts/check.sh` run by hand in the
+  development container before anything is pushed. The tag `archive/python-desktop-v1` is not on the remote
+  yet; only the owner can push it.
 - English and French are both fully supported in the narrative; a user may switch freely. No third language.
   The experiment driver's own messages and help are English only, and it does not narrate; the sample host
   asks for one language or the other (`run-host-example.sh --lang en|fr`).
@@ -106,8 +108,10 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
   Testcontainers when Docker is present, else skip with a message) plus the parity tool's test,
   `uv run --python 3.11 --with pytest pytest server/tools/tests`. `bash scripts/check.sh` and
   `pwsh scripts/check.ps1` run both, and running one of them by hand is the only gate there is.
-  `.github/workflows/ci.yml` describes the same steps but cannot fire with no remote; keep the three in
-  step anyway, so it works again if a remote ever returns.
+  `.github/workflows/ci.yml` describes the same steps but is paused: on 2026-09-14 the owner asked for no
+  CI until the work has progressed much further, so only `workflow_dispatch` is left and no push starts a
+  run. Keep the three in step anyway, and restore the `push` and `pull_request` triggers, which the file
+  carries as a comment, when the owner asks for CI back.
 - With no JDK on the machine, work inside the development container: `bash scripts/devbox.sh shell`. It
   keeps an Ubuntu box running with the toolchain and this repository bind-mounted at `/work`, so the gate
   and the experiment driver run there exactly as on Linux, with the engine's socket mounted so the PostgreSQL tests

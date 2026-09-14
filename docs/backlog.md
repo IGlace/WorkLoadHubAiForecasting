@@ -13,10 +13,14 @@ waiting on anyone; the frozen version receives no new features.
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
 item, so a later reader knows whether something is waiting, accepted as it is, or deliberately dropped.
 
-State on 2026-09-12: the owner deleted the `origin` remote, so this clone is the only copy. Nothing is
-pushed and `.github/workflows/ci.yml` cannot fire; the gate is `bash scripts/check.sh` run by hand in the
-development container. The CLI was trimmed the same day to the five commands that build and score an
-experiment database.
+State on 2026-09-14: the `origin` remote is back and `dev` is pushed to it, but CI is paused at the owner's
+request until the work has progressed much further: `.github/workflows/ci.yml` keeps only
+`workflow_dispatch`, so no push starts a run and the gate remains `bash scripts/check.sh` run by hand in
+the development container.
+
+State on 2026-09-12: the owner deleted the `origin` remote, so this clone was the only copy. Nothing was
+pushed and `.github/workflows/ci.yml` could not fire. The CLI was trimmed the same day to the five commands
+that build and score an experiment database.
 
 State on 2026-09-06: the owner's local work (39 commits) was verified and pushed back to the GitHub remote, `dev` and `main` level again (the remote is gone as of 2026-09-12, above).
 

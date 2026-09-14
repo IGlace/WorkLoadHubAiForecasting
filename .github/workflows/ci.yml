@@ -1,15 +1,19 @@
 # The same gate as scripts/check.ps1 and scripts/check.sh: the Java module and the parity gate's test.
 # Keep the three in step when any of them changes.
 #
-# This workflow does not run: the owner deleted the `origin` remote on 2026-09-12, so there is no GitHub
-# to fire it. It is kept, and kept in step, so it works again if a remote ever returns. Until then the gate
-# is `bash scripts/check.sh` run by hand in the development container (CLAUDE.md, "Toolchain").
+# Paused on 2026-09-14 at the owner's request: the weekly hours forecast design is about to rewrite
+# `model/`, `planned/` and `backtest/`, so a run per push would only report a gate the work has not
+# reached yet. Only `workflow_dispatch` is left, so the workflow can still be started by hand from the
+# Actions tab. Until it is restored the gate is `bash scripts/check.sh` run by hand in the development
+# container (CLAUDE.md, "Toolchain").
+#
+# To restore, put these two triggers back above `workflow_dispatch`:
+#   push:
+#     branches: [main, dev]
+#   pull_request:
 name: CI
 
 on:
-  push:
-    branches: [main, dev]
-  pull_request:
   workflow_dispatch:
 
 jobs:
