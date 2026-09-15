@@ -227,4 +227,24 @@ class NumberVerifierTest {
                 "{\"run_summary\": \"Team demand is 9.1234 h.\", \"members\": []}"), ROUNDING_FACTS);
         assertFalse(r.ok());
     }
+
+    @Test
+    void aOneDecimalCitationMustMatchAtItsOwnPrecisionNotTheFactsNearestInteger() {
+        // round0(12.4) and round0(12.347) are both 12.0 -- if matches() checked round0(cited) directly (an
+        // earlier draft of this fix did), this would wrongly verify. 12.4 is materially wrong at its own
+        // one-decimal precision (the fact rounds to 12.3 there) and must stay unverified regardless of what
+        // it shares with the fact at integer precision.
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 12.4 h.\", \"members\": []}"), ROUNDING_FACTS);
+        assertFalse(r.ok(), "12.4 rounds to 12.0 at integer precision, same as the fact -- but must not verify on that alone");
+    }
+
+    @Test
+    void decimalsOfAThousandsSeparatedNumberCountsOnlyTheFractionalDigits() {
+        // Blindly normalising ',' to '.' before finding the decimal point would misread "1,200.5" as
+        // "1.200.5" and find the wrong dot, computing 5 decimals instead of 1.
+        List<NumberVerifier.NumberToken> tokens = NumberVerifier.numbersWithUnits("1,200.5 h logged.");
+        assertEquals(1, tokens.size());
+        assertEquals(1, tokens.get(0).decimals());
+    }
 }

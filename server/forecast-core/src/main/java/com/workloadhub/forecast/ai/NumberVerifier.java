@@ -110,6 +110,22 @@ final class NumberVerifier {
         return Double.parseDouble(m.group(1) + digits + (decimals == null ? "" : "." + decimals));
     }
 
+    /**
+     * The count of digits after the decimal point, reusing {@link #THOUSANDS}'s own grouping so a
+     * thousands-separated token like "1,200.5" is not misread by blindly normalising commas to dots first
+     * (which would turn it into "1.200.5" and find the wrong dot).
+     */
+    private static int decimalsOf(String token) {
+        Matcher t = THOUSANDS.matcher(token);
+        if (t.matches()) {
+            String decimals = t.group(4);
+            return decimals == null ? 0 : decimals.length();
+        }
+        String normalized = token.replace(',', '.');
+        int dot = normalized.indexOf('.');
+        return dot < 0 ? 0 : normalized.length() - dot - 1;
+    }
+
     /** Every number in the text, each paired with whether it is written as a number of hours. */
     static List<NumberToken> numbersWithUnits(String text) {
         String cleaned = PERCENT.matcher(TIME.matcher(TASK_KEY.matcher(DATE.matcher(text).replaceAll(" ")).replaceAll(" ")).replaceAll(" ")).replaceAll(" ");
@@ -119,9 +135,7 @@ final class NumberVerifier {
             Matcher unit = HOURS_UNIT.matcher(cleaned);
             unit.region(m.end(), cleaned.length());
             String token = m.group();
-            int dot = token.replace(',', '.').indexOf('.');
-            int decimals = dot < 0 ? 0 : token.length() - dot - 1;
-            out.add(new NumberToken(parseNumber(token), unit.lookingAt(), decimals));
+            out.add(new NumberToken(parseNumber(token), unit.lookingAt(), decimalsOf(token)));
         }
         return out;
     }
@@ -236,12 +250,19 @@ final class NumberVerifier {
     }
 
     /**
-     * Three tests in order: round1 equality, round0 equality, then equality at the cited number's own
-     * precision. The first two reproduce today's behaviour exactly, so nothing that verifies today can stop
-     * verifying; the third is a fallback reached only before declaring UNVERIFIED, so this is a pure widening.
+     * Two tests in order: round1 equality, then equality at the cited number's own precision. The first
+     * reproduces today's behaviour exactly (today's own check is {@code allowed.contains(round1(v))}, nothing
+     * more -- {@code allowed} already carries both round1(fact) and round0(fact), so a cited integer matching
+     * a fact's nearest-integer rounding already works today through round1(cited) landing on that stored
+     * round0(fact) value; no separate round0(cited) test is needed to reproduce it, and adding one is NOT a
+     * pure widening: citing "12.4" against a fact of 12.347 must stay unverified (12.4 is materially wrong at
+     * its own one-decimal precision), but round0(12.4) == round0(12.347) == 12.0 would wrongly verify it if
+     * checked directly. The second test is the new fallback, reached only before declaring UNVERIFIED,
+     * comparing the cited value against facts' RAW (unrounded) values rounded to the cited number's own
+     * precision -- this is the actual pure widening the design wants.
      */
     private static boolean matches(double cited, int decimals, Set<Double> allowed) {
-        if (allowed.contains(round1(cited)) || allowed.contains(round0(cited))) {
+        if (allowed.contains(round1(cited))) {
             return true;
         }
         if (decimals <= 1) {
