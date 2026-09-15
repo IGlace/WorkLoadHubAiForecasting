@@ -372,6 +372,10 @@ public class HostExample {
          * NARRATED, NARRATION_FAILED) and finally {@code narrative(runId, language)} for the stored text.
          */
         private void copilot(UUID runId, boolean narrate, String language) {
+            String token = System.getenv("WHF_EXAMPLE_GH_TOKEN");
+            if (token != null && !token.isBlank()) {
+                tokens.save(user, token.trim());      // the host does this once, from its settings page
+            }
             CopilotStatus status = service.copilotStatus(user);
             System.out.printf("%ncopilotStatus(%s): token %s, runtime %s (%s), authenticated %s, login %s%n  %s%n", name(user), status.hasToken(),
                     status.runtimeAvailable(), status.runtimeVersion(), status.authenticated(), status.login(), status.message());
@@ -383,10 +387,6 @@ public class HostExample {
             if (!narrate) {
                 System.out.println("  (pass --narrate to call the model; it needs WHF_TOKEN_KEY and a token saved for this user)");
                 return;
-            }
-            String token = System.getenv("WHF_EXAMPLE_GH_TOKEN");
-            if (token != null && !token.isBlank()) {
-                tokens.save(user, token.trim());      // the host does this once, from its settings page
             }
             NarrativeResult result = service.narrate(new NarrativeRequest(runId, user, language, null));
             System.out.printf("narrate -> %s in %d attempts, %d tool calls%n", result.status(), result.attempts(), result.toolCalls());
