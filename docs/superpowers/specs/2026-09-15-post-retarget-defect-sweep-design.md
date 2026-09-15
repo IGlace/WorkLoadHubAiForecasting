@@ -7,6 +7,22 @@ Amended the same day, after an audit of the seed generator found a second cause 
 the weekly work supply was never raised to match the 44 h capacity. Task 1 split into 1a (the seed
 generator) and 1b (the database); sections 1, 2, 3, 9, 11, 12 and 13 changed with it.
 
+Amended again on 2026-09-15, from the whole-branch review that closed out the plan built from this spec.
+Three statements below were found false by execution rather than by re-reading: section 3.1's claim that
+only two places name `WorkFamily.weeklyHours` missed a third (`RhythmTest.java`, found only when it failed
+the gate after the constants changed — see the plan's Task 1a, Step 4b); section 4.1's literal instruction
+to widen the `NUMBER` lookbehind to `(?<![\w.])` in both alternatives, if followed as written, breaks the
+existing `numbersGluedToAWordAreExtracted` test and stops checking numbers glued to words, which is exactly
+the weakening this section's own risk warning cautions against — the plan's Task 2 deviates from this
+instruction and guards the sign only, leaving the digit lookbehind untouched (see the plan's "Deviation from
+the spec" note); and every occurrence below of "the mid thirties" describing the population-wide mean
+member-week is corrected to "high twenties to low thirties", the figure actually measured
+(`WorkFamilyPropertyTest`'s fixture and the rebuilt database both land around 28-29 h) — the higher figure
+conflated a typical individual full-time non-leader member's own logged hours (~36-37h, this section's own
+per-member arithmetic) with the population-wide mean, which the same arithmetic never claimed to be: team
+leaders logging at half rate, season dips, ramp-up weeks and absences pull the population mean well below
+any single member's typical figure.
+
 ## 1. Why
 
 A live run of `server/examples/run-host-example.sh --team 448b095d-e164-4785-a5fa-431760ea941c --narrate
@@ -119,9 +135,14 @@ Three properties of the existing code make this a safe lever rather than a tunin
   change is what makes `backlog_excess_hrs` and `due_excess_hrs` non-zero — the facts tasks 2 and 3 need in
   order to be observable at all.
 
-Nothing else reads `weeklyHours`. Only two places name it: `Rhythm.java:71`, and the `@CsvSource` at
-`WorkFamilyTest.java:46`, which pins `CALIBRATION, 12, 32`, `COORDINATION, 6, 16` and `SUPPORT, 4, 20` — all
-three of the families this task changes, so the test changes with the constants.
+Nothing else reads `weeklyHours` in production code. Three places name it, not two as first thought here:
+`Rhythm.java:71`; the `@CsvSource` at `WorkFamilyTest.java:46`, which pins `CALIBRATION, 12, 32`,
+`COORDINATION, 6, 16` and `SUPPORT, 4, 20`; and `RhythmTest.java`'s
+`targetIsBaseTimesFactorsAndLeadersAreHalved`, which also hardcodes `CALIBRATION.weeklyHours` (32) as a
+literal bound check on `Rhythm.base(...)` — found only when execution ran it against the corrected
+constants and it failed the gate (plan Task 1a, Step 4b). All three of the families `WorkFamilyTest` pins are
+among the ones this task changes, and `RhythmTest`'s fixture person is built directly from
+`WorkFamily.CALIBRATION`, so all three tests change with the constants.
 
 #### The guard
 
@@ -198,9 +219,14 @@ numbering is referenced from sections 9 and 11.2 and does not change.
      SELECT user_id, strftime('%Y-%W', log_date) wk, sum(hours) h
      FROM time_logs GROUP BY user_id, wk) WHERE h > 44.0;
    ```
-   Both counts must be above zero, and the mean member-week must land in the mid thirties. The old database
-   returns 0 above 8.0 h across 1591 member-days, and 0 above 44 h across 480 member-weeks at a mean of
-   22.9 h. This assertion is what proves task 1a landed in the data rather than only in the tests.
+   Both counts must be above zero. The `mean_week` this query computes is filtered to `h > 44.0`, so it is
+   necessarily above 44 by construction and not a meaningful check on its own; also run the *unfiltered*
+   population mean (the same query without its outer `WHERE h > 44.0`) and expect it in the high twenties to
+   low thirties, not the mid thirties — the population mean is pulled down from a typical full-time member's
+   own ~36-37h (this section's per-member arithmetic, above) by team leaders logging at half rate, season
+   dips, ramp-up weeks and absences. The old database returns 0 above 8.0 h across 1591 member-days, and 0
+   above 44 h across 480 member-weeks at an unfiltered population mean of 22.9 h. This assertion is what
+   proves task 1a landed in the data rather than only in the tests.
 
 3. Teams large enough:
    ```sql
@@ -239,6 +265,25 @@ All six `UNVERIFIED` items in the observed run were verifier artifacts. Three in
 letter or an underscore therefore still opens a number.
 
 Change the lookbehind in both alternatives to `(?<![\w.])`.
+
+**Amended 2026-09-15 (whole-branch review): the actual landed fix deviates from this instruction.** Followed
+literally, widening the *digit* lookbehind to `(?<![\w.])` also blocks a number glued to a *word* (not just a
+hyphenated code), breaking the existing test `NumberVerifierTest.numbersGluedToAWordAreExtracted`
+(`MASE0.91` → 0.91, `demand52.5h` → 52.5 would stop being read at all) — the exact weakening this section's
+own risk warning below cautions against. The two problems actually being fixed (the false minus signs from
+`EE2-59` and `hours_per_week_13w`) are both caused only by the **hyphen** alternative's sign-guard, not by the
+digit lookbehind. The landed fix (plan Task 2) guards the sign alone, in both alternatives, via
+`(?:(?<![\w.])-)?` before the digit, and leaves the digit lookbehind exactly as it was, `(?<![\d.])`:
+
+```java
+private static final Pattern NUMBER = Pattern.compile(
+        "(?:(?<![\\w.])-)?(?<![\\d.])\\d{1,3}(?:[ ,]\\d{3})+(?:[.,]\\d+)?(?![\\w.]*\\d)"
+                + "|(?:(?<![\\w.])-)?(?<![\\d.])\\d+(?:[.,]\\d+)?(?![\\w.]*\\d)");
+```
+
+This preserves word-glued number extraction while still removing both observed false minus signs. The
+measured output below (from following this section's original instruction literally) does not reflect what
+was actually implemented; see the plan's "Deviation from the spec" note under Task 2 for the full argument.
 
 Measured on the observed narrative, the current pattern yields:
 
@@ -439,9 +484,10 @@ Four statements, each verified against the repository or the remote.
    since task 1b leaves the good database at the default path. The sentence states the mechanism rather than
    a guaranteed distribution — the distribution is what task 1's assertion 3 measures.
 
-   The section also gains the figure a reader can check their own seed against: a mean member-week in the
-   mid thirties against the 44 h capacity, with some weeks above it. A seed averaging in the twenties is the
-   pre-2026-09-15 supply (section 3.1) and the database is wrong.
+   The section also gains the figure a reader can check their own seed against: a population mean
+   member-week in the high twenties to low thirties against the 44 h capacity, with some weeks well above
+   it. A seed averaging in the low twenties predates the 2026-09-15 weekly-supply correction and the
+   database is wrong.
 
 2. **`docs/backlog.md:9-10`** calls `archive/python-desktop-v1` a tag and gives
    `git worktree add ../whf-archive archive/python-desktop-v1`.
@@ -555,8 +601,9 @@ sweep is not finished, whatever the gate says.
    fallback-only formulation in 4.3, which cannot un-verify anything that verifies today, and by the
    mandatory negative tests in 4.4. If a negative test cannot be made to fail, stop: the widening is wider
    than intended.
-2. **Task 1a changes what every future experiment measures.** Raising the weekly supply moves the mean
-   member-week from ~23 h to the mid thirties, so any figure quoted from a seeded database before this
+2. **Task 1a changes what every future experiment measures.** Raising the weekly supply moves the population
+   mean member-week from ~23 h to the high twenties to low thirties, so any figure quoted from a seeded
+   database before this
    change — including `docs/eval/2026-09-10-java-parity-synthetic/` — describes a different population.
    That record is already annotated as historical and is not re-run; the plan adds a line saying the supply
    changed on this date, so a future reader does not compare across it. The ceiling cannot run away

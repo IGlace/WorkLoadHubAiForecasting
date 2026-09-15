@@ -34,8 +34,11 @@ final class NumberVerifier {
     private static final Pattern TIME = Pattern.compile("\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b");
     private static final Pattern PERCENT = Pattern.compile("-?\\d+(?:[.,]\\d+)?\\s*%");
     /** A task or team key such as EE2-59 or WEB-3: masked out before numbers are read, so its own digits never
-     * pass as a fact. */
-    private static final Pattern TASK_KEY = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\\b");
+     * pass as a fact. The trailing {@code (?![.,]\d)} refuses to match when the key is immediately followed by
+     * a decimal continuation -- e.g. "MASE-0" inside "MASE-0.821" -- so it cannot swallow the integer part of a
+     * real figure and leave the fractional part (".821") behind, which the {@link #NUMBER} pattern's own digit
+     * lookbehind then refuses to open. */
+    private static final Pattern TASK_KEY = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\\b(?![.,]\\d)");
     /** Thousands-separated tokens first, so "1,200" and "1 200,5" are not read as a decimal comma. The sign is
      * only accepted when not preceded by a letter, digit or dot: a hyphenated code or label (EE2-59,
      * week-30) must not read as a false minus sign, but a genuine "bias -1.228" still does. */
@@ -82,19 +85,25 @@ final class NumberVerifier {
         return BigDecimal.valueOf(v).setScale(1, RoundingMode.HALF_UP).doubleValue() + 0.0;
     }
 
+    /** The roundings a raw fact value is checked against: round1 (HALF_EVEN), its HALF_UP tie reading when
+     * that differs, round0, and the raw value itself. Shared by {@link #walk} (JSON-node facts) and
+     * {@link #raw} (varargs), so the four-line block is written once. */
+    private static void addRoundings(double v, Set<Double> out) {
+        out.add(round1(v));
+        double up = roundHalfUpAt1(v);
+        if (up != round1(v)) {
+            out.add(up);
+        }
+        out.add(round0(v));
+        out.add(v);
+    }
+
     private static void walk(JsonNode node, Set<Double> out) {
         if (node == null) {
             return;
         }
         if (node.isNumber()) {
-            double v = node.asDouble();
-            out.add(round1(v));
-            double up = roundHalfUpAt1(v);
-            if (up != round1(v)) {
-                out.add(up);
-            }
-            out.add(round0(v));
-            out.add(v);
+            addRoundings(node.asDouble(), out);
         } else if (node.isObject()) {
             node.properties().forEach(e -> walk(e.getValue(), out));
         } else if (node.isArray()) {
@@ -198,24 +207,38 @@ final class NumberVerifier {
     private static Set<Double> raw(double... values) {
         Set<Double> out = new HashSet<>();
         for (double v : values) {
-            out.add(round1(v));
-            double up = roundHalfUpAt1(v);
-            if (up != round1(v)) {
-                out.add(up);
-            }
-            out.add(round0(v));
-            out.add(v);
+            addRoundings(v, out);
         }
         return out;
     }
 
+    /** Each member's name as the FACTS record it -- the authoritative name -- keyed by member id. Never the
+     * narrative's own {@code name} field, which is free text the language model itself wrote and is not
+     * validated against anything: masking on that string would let a crafted name (e.g. one with a fabricated
+     * number glued to its end) delete that number from its own scoped fields before verification ever runs. */
+    private static Map<String, String> factNames(JsonNode facts) {
+        Map<String, String> names = new HashMap<>();
+        for (JsonNode m : facts.path("members")) {
+            if (m.isObject() && m.path("id").isTextual() && m.path("name").isTextual()) {
+                names.put(m.path("id").asText(), m.path("name").asText());
+            }
+        }
+        return names;
+    }
+
+    /** Masks the member's own name out of their own scoped text before numbers are read. Uses a regex, not a
+     * plain literal replace, so a name ending in digits cannot consume part of a longer number that merely
+     * starts with it -- e.g. "Karim Fassi 23" must not swallow the leading "23" of "Karim Fassi 235.5 h". The
+     * negative lookahead refuses to match when the name is immediately followed by a digit or a dot. */
     private static String maskOwnName(String text, String name) {
-        return name == null || name.isBlank() ? text : text.replace(name, " ");
+        return name == null || name.isBlank() ? text
+                : Pattern.compile(Pattern.quote(name) + "(?![\\d.])").matcher(text).replaceAll(" ");
     }
 
     private static List<Field> textFields(Narrative n, JsonNode facts) {
         Set<Double> shared = sharedNumbers(facts);
         Map<String, Set<Double>> perMember = memberNumbers(facts);
+        Map<String, String> memberFactNames = factNames(facts);
         Set<Double> everything = new HashSet<>(shared);
         perMember.values().forEach(everything::addAll);
         java.util.function.Function<String, Set<Double>> memberScope = id -> union(shared, perMember.getOrDefault(id, Set.of()));
@@ -226,20 +249,21 @@ final class NumberVerifier {
         for (int i = 0; i < n.members().size(); i++) {
             Member m = n.members().get(i);
             Set<Double> allowed = memberScope.apply(m.memberId());
+            String factName = memberFactNames.get(m.memberId());
             String p = "members[" + i + "]";
-            fields.add(new Field(p + ".summary", maskOwnName(m.summary(), m.name()), allowed));
+            fields.add(new Field(p + ".summary", maskOwnName(m.summary(), factName), allowed));
             for (int j = 0; j < m.warnings().size(); j++) {
-                fields.add(new Field(p + ".warnings[" + j + "]", maskOwnName(m.warnings().get(j), m.name()), allowed));
+                fields.add(new Field(p + ".warnings[" + j + "]", maskOwnName(m.warnings().get(j), factName), allowed));
             }
             for (int j = 0; j < m.patterns().size(); j++) {
                 PatternFinding pf = m.patterns().get(j);
-                fields.add(new Field(p + ".patterns[" + j + "].statement", maskOwnName(pf.statement(), m.name()), allowed));
-                fields.add(new Field(p + ".patterns[" + j + "].evidence", maskOwnName(pf.evidence(), m.name()), allowed));
+                fields.add(new Field(p + ".patterns[" + j + "].statement", maskOwnName(pf.statement(), factName), allowed));
+                fields.add(new Field(p + ".patterns[" + j + "].evidence", maskOwnName(pf.evidence(), factName), allowed));
             }
             for (int j = 0; j < m.likelyWork().size(); j++) {
                 LikelyWork lw = m.likelyWork().get(j);
-                fields.add(new Field(p + ".likely_work[" + j + "].statement", maskOwnName(lw.statement(), m.name()), allowed));
-                fields.add(new Field(p + ".likely_work[" + j + "].evidence", maskOwnName(lw.evidence(), m.name()), allowed));
+                fields.add(new Field(p + ".likely_work[" + j + "].statement", maskOwnName(lw.statement(), factName), allowed));
+                fields.add(new Field(p + ".likely_work[" + j + "].evidence", maskOwnName(lw.evidence(), factName), allowed));
             }
         }
         for (int i = 0; i < n.teamRisks().size(); i++) {

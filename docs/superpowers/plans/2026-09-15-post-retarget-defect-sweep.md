@@ -30,8 +30,9 @@ argues from that spec and departs from it once, explicitly, in Task 2 (see "Devi
   `TEST-*.xml`, never by summing `*.txt` (a class mixing JUnit `@Test` with jqwik `@Property` has the second
   engine overwrite the first's `.txt`).
 - Baseline to beat: 409 tests, 0 failures, 13 skipped.
-- `git commit` here runs the whole gate as a pre-commit hook: give every commit a generous timeout and never
-  pass `--no-verify`.
+- No pre-commit hook exists in this repo — run the gate yourself before committing; `git commit` itself is
+  fast. Still give every commit a generous timeout (some steps in this plan run the gate immediately before
+  committing) and never pass `--no-verify`.
 - Ask before committing and before pushing; do not push `main`.
 
 ---
@@ -1101,8 +1102,9 @@ bypass. HostExample.java is compiled by the source launcher and not by
 Maven, so this is checked by hand, not by the gate."
 ```
 
-(Bash timeout: at least 400000 ms — the pre-commit hook still runs the Maven gate for the rest of the repo
-even though this file is outside it.)
+(No pre-commit hook exists in this repo — run the gate yourself before committing; `git commit` itself is
+fast. Bash timeout: at least 400000 ms regardless, since this task's own hand-check and the gate run before
+the commit, not as part of it.)
 
 ---
 
@@ -1340,7 +1342,8 @@ CLAUDE.md's 'main has not been fast-forwarded yet' is stale since both
 branches sit at 765aa9f."
 ```
 
-(Bash timeout: at least 400000 ms — even a docs-only commit runs the pre-commit gate.)
+(No pre-commit hook exists in this repo — run the gate yourself before committing; `git commit` itself is
+fast, docs-only or not.)
 
 ---
 

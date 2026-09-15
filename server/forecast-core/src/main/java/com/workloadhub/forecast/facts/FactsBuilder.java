@@ -311,9 +311,12 @@ public final class FactsBuilder {
             // backlog_excess_hrs is non-increasing across a run's windows (design 2026-09-13, section 8.1), so
             // the last window is the strictest test: it is above zero there exactly when the backlog does not
             // fit inside the whole run. due_excess_hrs is per window, so any window above zero is enough to act on.
-            if (!rows.isEmpty() && rows.get(rows.size() - 1).backlogExcessHrs() > 0) {
-                backlogPressed.add(map("member_id", str(m.id()), "name", m.fullName(),
-                        "backlog_excess_hrs", round1(rows.get(rows.size() - 1).backlogExcessHrs())));
+            if (!rows.isEmpty()) {
+                double lastBacklogExcess = rows.get(rows.size() - 1).backlogExcessHrs();
+                if (lastBacklogExcess > 0) {
+                    backlogPressed.add(map("member_id", str(m.id()), "name", m.fullName(),
+                            "backlog_excess_hrs", round1(lastBacklogExcess)));
+                }
             }
             double maxDueExcess = rows.stream().mapToDouble(MemberWindowForecast::dueExcessHrs).max().orElse(0.0);
             if (maxDueExcess > 0) {

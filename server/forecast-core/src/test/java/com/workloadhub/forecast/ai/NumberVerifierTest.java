@@ -130,6 +130,16 @@ class NumberVerifierTest {
     }
 
     @Test
+    void aTaskKeyDoesNotSwallowTheIntegerPartOfADecimalFigure() {
+        // Without the trailing (?![.,]\d) guard, TASK_KEY matches "MASE-0" whole (0 is a valid [A-Z0-9]
+        // segment), masking it to " " and leaving ".821" behind -- which the NUMBER pattern's own digit
+        // lookbehind then refuses to open, silently dropping the figure. The guard makes TASK_KEY refuse to
+        // match at all here, leaving "MASE-0.821" for the NUMBER pattern, which already knows to read a
+        // digit-glued-to-a-letter number (see numbersGluedToAWordAreExtracted).
+        assertEquals(List.of(0.821), NumberVerifier.numbersInText("MASE-0.821 is the score."));
+    }
+
+    @Test
     void aTaskKeyDoesNotConsumeAFollowingIsoDate() {
         // TASK_KEY sits after DATE in the pre-clean chain, so an ISO date is already masked; this pins the order.
         assertEquals(List.of(52.0), NumberVerifier.numbersInText("WEB-3 due 2026-09-07, demand 52.0 h."));
@@ -291,5 +301,42 @@ class NumberVerifierTest {
                 + "\"patterns\": [], \"warnings\": []}]}";
         Report r = NumberVerifier.verify(NarrativeContract.parse(json), facts);
         assertFalse(r.ok(), "99.0 is fabricated and must still be caught even next to the member's own name");
+    }
+
+    @Test
+    void theNameMaskUsesTheFactsNameNotTheNarrativesOwn() {
+        JsonNode facts = ExportFiles.mapper().readTree("""
+                {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
+                """.formatted(A));
+        // The model writes a different, crafted "name" for the same member, with a fabricated number (52.5)
+        // glued onto the end of it. If masking still used this narrative-supplied string (the old,
+        // model-sourced behaviour), the whole phrase "Hind Haddad 24 52.5" would be stripped as one literal
+        // match before any number is even read, and the fabrication would sail through unchecked -- a hole in
+        // the permanent rule that every number Copilot writes is verified. Masking against the FACT name
+        // ("Hind Haddad 24") instead strips only that, leaving "52.5" in the text to be checked and rejected.
+        String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Hind Haddad 24 52.5\", "
+                + "\"risk_level\": \"low\", \"summary\": \"Hind Haddad 24 52.5 h of overload expected.\", "
+                + "\"patterns\": [], \"warnings\": []}]}";
+        Report r = NumberVerifier.verify(NarrativeContract.parse(json), facts);
+        assertFalse(r.ok(), "52.5 is fabricated and must still be caught even though the model glued it onto its own crafted name");
+        assertTrue(r.unverified().stream().anyMatch(u -> u.contains("52.5")), r.unverified().toString());
+    }
+
+    @Test
+    void theNameMaskDoesNotConsumePartOfALongerNumberAfterTheName() {
+        JsonNode facts = ExportFiles.mapper().readTree("""
+                {"run": {}, "members": [{"id": "%s", "name": "Karim Fassi 23", "forecast": [{"window": 1, "demand": 29.1}]}]}
+                """.formatted(A));
+        // A plain String.replace of "Karim Fassi 23" would match as a literal prefix of "Karim Fassi 235.5"
+        // and strip it, leaving "5.5" behind -- a different, wrong number silently substituted for the real
+        // one. The word-boundary guard must refuse to match here at all (the name is immediately followed by
+        // a digit), leaving "235.5" intact for verification.
+        String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Karim Fassi 23\", "
+                + "\"risk_level\": \"low\", \"summary\": \"Karim Fassi 235.5 h logged this week.\", "
+                + "\"patterns\": [], \"warnings\": []}]}";
+        Report r = NumberVerifier.verify(NarrativeContract.parse(json), facts);
+        assertFalse(r.ok(), "235.5 is fabricated (the fact is 29.1) and must be checked as itself, not truncated to 5.5");
+        assertTrue(r.unverified().stream().anyMatch(u -> u.contains("235.5")), r.unverified().toString());
+        assertFalse(r.unverified().stream().anyMatch(u -> u.contains("5.5") && !u.contains("235.5")), r.unverified().toString());
     }
 }
