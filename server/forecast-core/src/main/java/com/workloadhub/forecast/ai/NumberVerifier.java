@@ -78,6 +78,10 @@ final class NumberVerifier {
         return BigDecimal.valueOf(v).setScale(0, RoundingMode.HALF_EVEN).doubleValue() + 0.0;
     }
 
+    static double roundHalfUpAt1(double v) {
+        return BigDecimal.valueOf(v).setScale(1, RoundingMode.HALF_UP).doubleValue() + 0.0;
+    }
+
     private static void walk(JsonNode node, Set<Double> out) {
         if (node == null) {
             return;
@@ -85,6 +89,10 @@ final class NumberVerifier {
         if (node.isNumber()) {
             double v = node.asDouble();
             out.add(round1(v));
+            double up = roundHalfUpAt1(v);
+            if (up != round1(v)) {
+                out.add(up);
+            }
             out.add(round0(v));
             out.add(v);
         } else if (node.isObject()) {
@@ -191,10 +199,18 @@ final class NumberVerifier {
         Set<Double> out = new HashSet<>();
         for (double v : values) {
             out.add(round1(v));
+            double up = roundHalfUpAt1(v);
+            if (up != round1(v)) {
+                out.add(up);
+            }
             out.add(round0(v));
             out.add(v);
         }
         return out;
+    }
+
+    private static String maskOwnName(String text, String name) {
+        return name == null || name.isBlank() ? text : text.replace(name, " ");
     }
 
     private static List<Field> textFields(Narrative n, JsonNode facts) {
@@ -211,19 +227,19 @@ final class NumberVerifier {
             Member m = n.members().get(i);
             Set<Double> allowed = memberScope.apply(m.memberId());
             String p = "members[" + i + "]";
-            fields.add(new Field(p + ".summary", m.summary(), allowed));
+            fields.add(new Field(p + ".summary", maskOwnName(m.summary(), m.name()), allowed));
             for (int j = 0; j < m.warnings().size(); j++) {
-                fields.add(new Field(p + ".warnings[" + j + "]", m.warnings().get(j), allowed));
+                fields.add(new Field(p + ".warnings[" + j + "]", maskOwnName(m.warnings().get(j), m.name()), allowed));
             }
             for (int j = 0; j < m.patterns().size(); j++) {
                 PatternFinding pf = m.patterns().get(j);
-                fields.add(new Field(p + ".patterns[" + j + "].statement", pf.statement(), allowed));
-                fields.add(new Field(p + ".patterns[" + j + "].evidence", pf.evidence(), allowed));
+                fields.add(new Field(p + ".patterns[" + j + "].statement", maskOwnName(pf.statement(), m.name()), allowed));
+                fields.add(new Field(p + ".patterns[" + j + "].evidence", maskOwnName(pf.evidence(), m.name()), allowed));
             }
             for (int j = 0; j < m.likelyWork().size(); j++) {
                 LikelyWork lw = m.likelyWork().get(j);
-                fields.add(new Field(p + ".likely_work[" + j + "].statement", lw.statement(), allowed));
-                fields.add(new Field(p + ".likely_work[" + j + "].evidence", lw.evidence(), allowed));
+                fields.add(new Field(p + ".likely_work[" + j + "].statement", maskOwnName(lw.statement(), m.name()), allowed));
+                fields.add(new Field(p + ".likely_work[" + j + "].evidence", maskOwnName(lw.evidence(), m.name()), allowed));
             }
         }
         for (int i = 0; i < n.teamRisks().size(); i++) {

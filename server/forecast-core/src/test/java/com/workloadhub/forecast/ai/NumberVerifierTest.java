@@ -247,4 +247,49 @@ class NumberVerifierTest {
         assertEquals(1, tokens.size());
         assertEquals(1, tokens.get(0).decimals());
     }
+
+    @Test
+    void aFactAtAnExactRoundingTieVerifiesUnderEitherConvention() {
+        // 35.05 is exactly the HALF_EVEN/HALF_UP tie; round1's HALF_EVEN gives 35.0, but "35.1" (the
+        // ordinary round-half-up reading) is an equally correct description of the same raw value.
+        JsonNode facts = ExportFiles.mapper().readTree(
+                "{\"run\": {}, \"team\": {\"totals\": [{\"window\": 1, \"start\": \"2026-09-07\", \"demand\": 35.05}]}, \"members\": []}");
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 35.1 h.\", \"members\": []}"), facts);
+        assertTrue(r.ok(), r.unverified().toString());
+    }
+
+    @Test
+    void aFabricationNearATieIsStillUnverified() {
+        JsonNode facts = ExportFiles.mapper().readTree(
+                "{\"run\": {}, \"team\": {\"totals\": [{\"window\": 1, \"start\": \"2026-09-07\", \"demand\": 35.05}]}, \"members\": []}");
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 35.3 h.\", \"members\": []}"), facts);
+        assertFalse(r.ok());
+    }
+
+    @Test
+    void aNumberInsideAMembersOwnNameIsNotReadAsACitation() {
+        JsonNode facts = ExportFiles.mapper().readTree("""
+                {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
+                """.formatted(A));
+        String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Hind Haddad 24\", "
+                + "\"risk_level\": \"low\", \"summary\": \"fine\", "
+                + "\"likely_work\": [{\"statement\": \"Hind Haddad 24 will probably keep handling CT2-MAP bugs.\", "
+                + "\"evidence\": \"CT2-MAP\", \"confidence\": \"low\"}]}]}";
+        Report r = NumberVerifier.verify(NarrativeContract.parse(json), facts);
+        assertTrue(r.ok(), r.unverified().toString());
+    }
+
+    @Test
+    void aFabricatedNumberAfterAMembersNameIsStillCaught() {
+        JsonNode facts = ExportFiles.mapper().readTree("""
+                {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
+                """.formatted(A));
+        String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Hind Haddad 24\", "
+                + "\"risk_level\": \"low\", \"summary\": \"Hind Haddad 24 has 99.0 h of spare capacity.\", "
+                + "\"patterns\": [], \"warnings\": []}]}";
+        Report r = NumberVerifier.verify(NarrativeContract.parse(json), facts);
+        assertFalse(r.ok(), "99.0 is fabricated and must still be caught even next to the member's own name");
+    }
 }
