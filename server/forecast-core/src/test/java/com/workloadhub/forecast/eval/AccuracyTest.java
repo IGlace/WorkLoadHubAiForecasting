@@ -128,14 +128,10 @@ class AccuracyTest {
     }
 
     @Test
-    void anEmptyRangeGivesNaNScoresAndNoRows() {
+    void anEmptyRangeGivesNoScoresAndNoRows() {
         AccuracyResult r = Accuracy.evaluate(TEAM, MON, TUE, SAT, List.of(), List.of(), new TreeMap<>());
         assertTrue(r.current().isEmpty());
-        assertEquals(1, r.scores().size(), "the team score is always there");
-        assertEquals(0, r.scores().get(0).n());
-        assertTrue(Double.isNaN(r.scores().get(0).mae()));
-        assertEquals(0, r.scores().get(0).maseN());
-        assertTrue(Double.isNaN(r.scores().get(0).mase()));
+        assertTrue(r.scores().isEmpty(), "nothing was scored, so there is no team row either");
         assertEquals(0, r.nonWorkingDays());
     }
 

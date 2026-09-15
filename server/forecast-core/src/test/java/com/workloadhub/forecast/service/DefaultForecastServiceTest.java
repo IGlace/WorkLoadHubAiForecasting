@@ -394,7 +394,7 @@ class DefaultForecastServiceTest {
         assertEquals(LocalDate.of(2026, 9, 5), service.accuracy(activeTeam, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)).to(), "clamped to yesterday");
         AccuracyResult future = service.accuracy(activeTeam, LocalDate.of(2026, 9, 6), LocalDate.of(2026, 9, 30));
         assertTrue(future.current().isEmpty(), "nothing has passed yet");
-        assertEquals(0, future.scores().get(0).n());
+        assertTrue(future.scores().isEmpty(), "nothing was scored, so there is no team row either");
         int members = (int) r.memberDays().stream().map(d -> d.userId()).distinct().count();
         assertTrue(acc.nonWorkingDays() > 0, "the seed puts a public holiday in those two weeks");
         assertEquals(members * 10, acc.current().size() + acc.nonWorkingDays(),

@@ -67,7 +67,9 @@ public final class Accuracy {
         }
         rows.sort((a, b) -> a.userId().equals(b.userId()) ? a.day().compareTo(b.day()) : Ids.UUID_ORDER.compare(a.userId(), b.userId()));
         List<AccuracyScore> scores = new ArrayList<>();
-        scores.add(score(TEAM, teamId.toString(), rows, logged));
+        if (!rows.isEmpty()) {
+            scores.add(score(TEAM, teamId.toString(), rows, logged));
+        }
         SortedMap<UUID, List<AccuracyRow>> byMember = new TreeMap<>(Ids.UUID_ORDER);
         for (AccuracyRow r : rows) {
             byMember.computeIfAbsent(r.userId(), k -> new ArrayList<>()).add(r);
