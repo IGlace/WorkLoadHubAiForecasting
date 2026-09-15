@@ -44,6 +44,8 @@ can exceed the corrected 44 h capacity. Spec section 3.1.
 **Files:**
 - Modify: `server/forecast-core/src/main/java/com/workloadhub/forecast/seed/WorkFamily.java:10-19`
 - Modify: `server/forecast-core/src/test/java/com/workloadhub/forecast/seed/WorkFamilyTest.java:46`
+- Modify: `server/forecast-core/src/test/java/com/workloadhub/forecast/seed/RhythmTest.java` (a third stale
+  reference the spec's own claim missed — see Step 4b)
 - Create: `server/forecast-core/src/test/java/com/workloadhub/forecast/seed/WorkFamilyPropertyTest.java`
 - Test (unchanged, expected to still pass): `server/forecast-core/src/test/java/com/workloadhub/forecast/seed/SeedGeneratorTest.java:141-147`
 
@@ -75,11 +77,15 @@ import net.jqwik.api.Property;
  * The seed's whole purpose (design 2026-09-15, section 3.1): a member-week can land above capacity and a
  * member-week can land well below it, both inside a single team, so overload and rebalancing are observable
  * at all. `SeedGeneratorTest.loggedHoursTrackAssignedEstimatesAndNeverExceedPresence` already proves the
- * upper bound (a member-week can never exceed `CapacityWriter.BASE_HOURS * WorkStyle.MAX_OVERTIME_FACTOR`);
- * this is the missing lower half. Fixture size: 120 users, 52 weeks, seed 7 — the same population task 1b
- * rebuilds the database from, because the narrow overload band (a median member near 84% of capacity, per
- * section 3.1's table) needs enough members and enough weeks to be reached reliably rather than by luck on
- * a small draw.
+ * upper bound; this is the missing lower half, checked as a population-level rate rather than a bare
+ * existence check: an event week (`Rhythm.EVENT_FACTOR` = 1.4) combined with a high personal factor (up to
+ * 1.3) can already push a single member-week over capacity even under the pre-2026-09-15 constants, so "at
+ * least one member-week above capacity" does not by itself discriminate a corrected seed from an
+ * uncorrected one. A corrected seed is expected to put a meaningful fraction of member-weeks over capacity,
+ * not one rare tail hit — the thresholds below come from the design's own arithmetic (section 3.1's table:
+ * typical logged hours moves from ~28h under the old constants to a median near 37h under the new ones),
+ * with margin on both sides. Fixture size: 120 users, 52 weeks, seed 7 — the same population task 1b
+ * rebuilds the database from.
  */
 class WorkFamilyPropertyTest {
 
@@ -99,28 +105,35 @@ class WorkFamilyPropertyTest {
             String week = SeedConfig.mondayOf(day).toString();
             perMemberWeek.computeIfAbsent(user, k -> new HashMap<>()).merge(week, (Double) l.get("hours"), Double::sum);
         }
+        int totalWeeks = 0;
+        int overCapacity = 0;
+        int underThreshold = 0;
+        double sum = 0;
         Set<String> overloadedTeams = new HashSet<>();
         Set<String> underloadedTeams = new HashSet<>();
-        boolean anyAbove = false;
-        boolean anyBelow = false;
         for (var e : perMemberWeek.entrySet()) {
             String team = teamOf.get(e.getKey());
             for (double hours : e.getValue().values()) {
+                totalWeeks++;
+                sum += hours;
                 if (hours > CapacityWriter.BASE_HOURS) {
-                    anyAbove = true;
+                    overCapacity++;
                     if (team != null) {
                         overloadedTeams.add(team);
                     }
                 } else if (hours < 0.7 * CapacityWriter.BASE_HOURS) {
-                    anyBelow = true;
+                    underThreshold++;
                     if (team != null) {
                         underloadedTeams.add(team);
                     }
                 }
             }
         }
-        assertTrue(anyAbove, "no member-week exceeded capacity — overload is unreachable");
-        assertTrue(anyBelow, "no member-week fell below 70% of capacity — underload is unreachable");
+        double mean = sum / totalWeeks;
+        double overRate = (double) overCapacity / totalWeeks;
+        assertTrue(mean > 27.5, "mean member-week " + mean + " h over " + totalWeeks + " weeks -- too close to the old ~23-28h supply");
+        assertTrue(overRate > 0.03, "only " + overCapacity + "/" + totalWeeks + " (" + overRate + ") member-weeks exceeded capacity -- not a systematic shift");
+        assertTrue(underThreshold > 0, "no member-week fell below 70% of capacity");
         overloadedTeams.retainAll(underloadedTeams);
         assertTrue(!overloadedTeams.isEmpty(), "no team held both an overloaded and an underloaded member-week");
     }
@@ -135,8 +148,13 @@ Inside the development container (`bash scripts/devbox.sh shell`):
 cd server && mvn -q -pl forecast-core test -Dtest=WorkFamilyPropertyTest
 ```
 
-Expected: FAIL — `anyAbove` is false (the current `weeklyHours` constants top out at 65% of capacity per the
-spec's table, section 3.1).
+Expected: FAIL — on the current `weeklyHours` constants, `mean` sits at 25.71 h, under the 27.5 h threshold
+(confirmed by measurement: this fixture is fully deterministic — fixed `SeedConfig` seed and population, no
+`@ForAll` inputs — so this is not a range, it is the exact number every run produces). Read the assertion
+failure message for the actual computed `mean` — it is printed as part of the failure — and record it in
+this task's report; if the assertion does *not* fail, stop and report BLOCKED with the actual number rather
+than adjusting the threshold yourself, since that would mean the threshold needs to be recalibrated, which is
+a plan decision, not an implementation one.
 
 - [ ] **Step 3: Correct the constants**
 
@@ -174,13 +192,38 @@ In `server/forecast-core/src/test/java/com/workloadhub/forecast/seed/WorkFamilyT
     }
 ```
 
+- [ ] **Step 4b: fix a third stale reference the spec missed — `RhythmTest`**
+
+The spec's section 3.1 claims "only two places name it: `Rhythm.java:71`, and the `@CsvSource` at
+`WorkFamilyTest.java:46`" — that claim is wrong. `RhythmTest.java`'s
+`targetIsBaseTimesFactorsAndLeadersAreHalved` test also hardcodes `CALIBRATION.weeklyHours` as a literal
+bound check, and it fails once Step 3 lands (it was written against the old value of 32). The test's own
+fixture person (`AbsencePlannerTest.person(...)`) is constructed directly as `WorkFamily.CALIBRATION`, so this
+is the same family this task changes from 32 to 42.
+
+In `server/forecast-core/src/test/java/com/workloadhub/forecast/seed/RhythmTest.java`, in
+`targetIsBaseTimesFactorsAndLeadersAreHalved`, change:
+
+```java
+        assertTrue(r.base(eng) >= 32 * 0.5 && r.base(eng) <= 32 * 1.3);
+```
+
+to:
+
+```java
+        assertTrue(r.base(eng) >= 42 * 0.5 && r.base(eng) <= 42 * 1.3);
+```
+
 - [ ] **Step 5: Run the property test and confirm it passes**
 
 ```bash
 cd server && mvn -q -pl forecast-core test -Dtest=WorkFamilyPropertyTest,WorkFamilyTest
 ```
 
-Expected: PASS.
+Expected: PASS — with the corrected constants, `mean` measures 29.15 h (comfortably above the 27.5 h
+threshold, ~1.65 h of margin) and `overRate` measures 6.55% (over twice the 3% floor: 248 of 3,789
+member-weeks). Record both numbers, and the team-overlap result, in the report — this is what proves the
+fix, not just a passing boolean.
 
 - [ ] **Step 6: Run `SeedGeneratorTest` and confirm the existing upper-bound test still passes unchanged**
 
@@ -205,6 +248,7 @@ Expected: PASS, count at or above the 409-test baseline (this task added one pro
 ```bash
 git add server/forecast-core/src/main/java/com/workloadhub/forecast/seed/WorkFamily.java \
         server/forecast-core/src/test/java/com/workloadhub/forecast/seed/WorkFamilyTest.java \
+        server/forecast-core/src/test/java/com/workloadhub/forecast/seed/RhythmTest.java \
         server/forecast-core/src/test/java/com/workloadhub/forecast/seed/WorkFamilyPropertyTest.java
 git commit -m "fix(seed): raise WorkFamily.weeklyHours to make overload reachable
 
@@ -212,10 +256,15 @@ The weekly work supply was never raised to match the 44 h capacity correction
 of 2026-09-13; a typical member sat at 65% of capacity, so overload was
 arithmetically unreachable on seeded data. Scaled per family so a median
 member lands near 84% instead, guarded by a new jqwik property test proving
-member-weeks span capacity in both directions within one team."
+member-weeks span capacity in both directions within one team.
+
+RhythmTest also pinned CALIBRATION's old weeklyHours (32) as a literal bound
+check -- a third stale reference the design's own claim of 'only two places'
+missed -- corrected alongside WorkFamilyTest's pinned values."
 ```
 
-(Bash timeout: at least 400000 ms — `git commit` runs the whole gate as a pre-commit hook.)
+(No pre-commit hook exists in this repo — run the gate yourself before committing; `git commit` itself is
+fast.)
 
 ---
 
