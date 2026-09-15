@@ -260,9 +260,15 @@ class FactsBuilderTest {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> candidates = (Map<String, Object>) facts.get("rebalancing_candidates");
-        assertTrue(((List<?>) candidates.get("backlog_pressed")).contains(pressed.fullName()));
-        assertFalse(((List<?>) candidates.get("backlog_pressed")).contains(late.fullName()), "late's backlog is absorbed by the run's own demand");
-        assertTrue(((List<?>) candidates.get("deadline_pressed")).contains(late.fullName()));
-        assertFalse(((List<?>) candidates.get("deadline_pressed")).contains(pressed.fullName()), "pressed has no due date at all");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> backlogPressed = (List<Map<String, Object>>) candidates.get("backlog_pressed");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> deadlinePressed = (List<Map<String, Object>>) candidates.get("deadline_pressed");
+        assertTrue(backlogPressed.stream().anyMatch(e -> pressed.fullName().equals(e.get("name")) && pressed.id().toString().equals(e.get("member_id"))));
+        assertFalse(backlogPressed.stream().anyMatch(e -> late.fullName().equals(e.get("name"))), "late's backlog is absorbed by the run's own demand");
+        assertTrue(deadlinePressed.stream().anyMatch(e -> late.fullName().equals(e.get("name")) && late.id().toString().equals(e.get("member_id"))));
+        assertFalse(deadlinePressed.stream().anyMatch(e -> pressed.fullName().equals(e.get("name"))), "pressed has no due date at all");
+        assertTrue(backlogPressed.stream().anyMatch(e -> e.get("backlog_excess_hrs") instanceof Double d && d > 0));
+        assertTrue(deadlinePressed.stream().anyMatch(e -> e.get("due_excess_hrs") instanceof Double d && d > 0));
     }
 }
