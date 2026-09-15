@@ -103,6 +103,39 @@ class NumberVerifierTest {
     }
 
     @Test
+    void aFalseMinusSignFromAHyphenatedWeekLabelIsNotProduced() {
+        // Lowercase, so TASK_KEY (which requires an uppercase start) does not mask it either: isolates 4.1.
+        // The bug is specifically a hyphen preceded by a LETTER: the current lookbehind (?<![\d.]) blocks a
+        // digit-preceded hyphen already (e.g. "8080-8443" already reads positive today), but lets a
+        // letter-preceded one open a false sign.
+        assertEquals(List.of(30.0), NumberVerifier.numbersInText("week-30 h logged."));
+    }
+
+    @Test
+    void aGenuineNegativeNumberIsStillRead() {
+        assertEquals(List.of(-1.228), NumberVerifier.numbersInText("bias -1.228"));
+    }
+
+    @Test
+    void aTeamCodesStrayDigitsAreRemovedByTheTaskKeyMask() {
+        // The spec's own observed case: EE2-59 matches TASK_KEY whole, so neither "2" nor "59" survives --
+        // the task-key mask, not the sign fix, is what removes them (4.1 alone would still read the "2").
+        assertEquals(List.of(), NumberVerifier.numbersInText("Team EE2-59 owns the task."));
+    }
+
+    @Test
+    void aTaskKeyIsMaskedBeforeItsDigitsAreRead() {
+        Report r = NumberVerifier.verify(narrative("See WEB-3 and CT2-14 for details. Overload of 12.0 h."), FACTS);
+        assertTrue(r.ok(), r.unverified().toString());
+    }
+
+    @Test
+    void aTaskKeyDoesNotConsumeAFollowingIsoDate() {
+        // TASK_KEY sits after DATE in the pre-clean chain, so an ISO date is already masked; this pins the order.
+        assertEquals(List.of(52.0), NumberVerifier.numbersInText("WEB-3 due 2026-09-07, demand 52.0 h."));
+    }
+
+    @Test
     void aMembersTextMayNotCiteAnotherMembersNumber() {
         Report r = NumberVerifier.verify(narrative("Demand is 20.5 h."), FACTS);
         assertFalse(r.ok());
@@ -154,5 +187,44 @@ class NumberVerifierTest {
                 + "{\"member_id\": \"" + B + "\", \"name\": \"B\", \"risk_level\": \"low\", \"summary\": \"fine\"}]}";
         Report r = NumberVerifier.verify(NarrativeContract.parse(json), FACTS);
         assertTrue(r.unverified().stream().anyMatch(u -> u.contains("members[0].likely_work[0].evidence") && u.contains("19.5")), r.unverified().toString());
+    }
+
+    static final JsonNode ROUNDING_FACTS = ExportFiles.mapper().readTree("""
+            {"run": {"id": "r", "windows": [{"index": 1, "start": "2026-09-07", "end": "2026-09-11"}], "generated_at": "2026-09-03T10:00:00", "horizons": [1, 2]},
+             "team": {"id": "t", "totals": [{"window": 1, "start": "2026-09-07", "demand": 12.347, "capacity": 88.0}]},
+             "members": []}
+            """);
+
+    @Test
+    void aTwoDecimalRenderingOfAFactNotStoredAtThatPrecisionIsVerified() {
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 12.35 h.\", \"members\": []}"), ROUNDING_FACTS);
+        assertTrue(r.ok(), r.unverified().toString());
+    }
+
+    @Test
+    void aFabricatedNumberAtAnyPrecisionIsStillUnverified() {
+        // 45.2 is far from every fact in ROUNDING_FACTS (12.347, 88.0) at every rounding: round1, round0 and
+        // its own 1-decimal precision all miss.
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 45.2 h.\", \"members\": []}"), ROUNDING_FACTS);
+        assertFalse(r.ok());
+    }
+
+    @Test
+    void aMembersTextStillCannotCiteAnotherMembersNumberAtAnyPrecision() {
+        Report r = NumberVerifier.verify(narrative("B logged 20.53 h."), FACTS);
+        assertFalse(r.ok(), "B's 20.5 h belongs to B's own scope, not A's");
+    }
+
+    @Test
+    void aHighPrecisionFabricationIsNotAcceptedByRoundingItDownToAFact() {
+        // 9.1234 does not round1- or round0-match 12.347, and rounding the true fact to 4 decimals
+        // (12.3470) does not equal 9.1234 either: the fallback test compares against the fact's own raw
+        // value at the cited precision, not the other way around, so a fabricated number with many decimals
+        // gets no more benefit of the doubt than a plain one.
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 9.1234 h.\", \"members\": []}"), ROUNDING_FACTS);
+        assertFalse(r.ok());
     }
 }

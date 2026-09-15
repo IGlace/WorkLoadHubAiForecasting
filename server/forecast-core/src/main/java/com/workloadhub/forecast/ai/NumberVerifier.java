@@ -33,15 +33,21 @@ final class NumberVerifier {
     private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern TIME = Pattern.compile("\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b");
     private static final Pattern PERCENT = Pattern.compile("-?\\d+(?:[.,]\\d+)?\\s*%");
-    /** Thousands-separated tokens first, so "1,200" and "1 200,5" are not read as a decimal comma. */
+    /** A task or team key such as EE2-59 or WEB-3: masked out before numbers are read, so its own digits never
+     * pass as a fact. */
+    private static final Pattern TASK_KEY = Pattern.compile("\\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\\b");
+    /** Thousands-separated tokens first, so "1,200" and "1 200,5" are not read as a decimal comma. The sign is
+     * only accepted when not preceded by a letter, digit or dot: a hyphenated code or label (EE2-59,
+     * week-30) must not read as a false minus sign, but a genuine "bias -1.228" still does. */
     private static final Pattern NUMBER = Pattern.compile(
-            "(?<![\\d.])-?\\d{1,3}(?:[ ,]\\d{3})+(?:[.,]\\d+)?(?![\\w.]*\\d)|(?<![\\d.])-?\\d+(?:[.,]\\d+)?(?![\\w.]*\\d)");
+            "(?:(?<![\\w.])-)?(?<![\\d.])\\d{1,3}(?:[ ,]\\d{3})+(?:[.,]\\d+)?(?![\\w.]*\\d)"
+                    + "|(?:(?<![\\w.])-)?(?<![\\d.])\\d+(?:[.,]\\d+)?(?![\\w.]*\\d)");
     private static final Pattern THOUSANDS = Pattern.compile("^(-?)(\\d{1,3}(?:[ ,]\\d{3})+)(?:([.,])(\\d+))?$");
     /** Longest spellings first, and a word boundary so "8 high-priority" stays a count. */
     private static final Pattern HOURS_UNIT = Pattern.compile("\\s*(?:hours|hour|heures|heure|hrs|hr|h)\\b", Pattern.CASE_INSENSITIVE);
     private static final Set<String> MEMBER_SCOPED_KEYS = Set.of("members", "rebalancing_candidates");
 
-    record NumberToken(double value, boolean hours) {
+    record NumberToken(double value, boolean hours, int decimals) {
     }
 
     record Report(int checked, List<String> unverified, Map<String, List<Double>> fields) {
@@ -80,6 +86,7 @@ final class NumberVerifier {
             double v = node.asDouble();
             out.add(round1(v));
             out.add(round0(v));
+            out.add(v);
         } else if (node.isObject()) {
             node.properties().forEach(e -> walk(e.getValue(), out));
         } else if (node.isArray()) {
@@ -105,13 +112,16 @@ final class NumberVerifier {
 
     /** Every number in the text, each paired with whether it is written as a number of hours. */
     static List<NumberToken> numbersWithUnits(String text) {
-        String cleaned = PERCENT.matcher(TIME.matcher(DATE.matcher(text).replaceAll(" ")).replaceAll(" ")).replaceAll(" ");
+        String cleaned = PERCENT.matcher(TIME.matcher(TASK_KEY.matcher(DATE.matcher(text).replaceAll(" ")).replaceAll(" ")).replaceAll(" ")).replaceAll(" ");
         List<NumberToken> out = new ArrayList<>();
         Matcher m = NUMBER.matcher(cleaned);
         while (m.find()) {
             Matcher unit = HOURS_UNIT.matcher(cleaned);
             unit.region(m.end(), cleaned.length());
-            out.add(new NumberToken(parseNumber(m.group()), unit.lookingAt()));
+            String token = m.group();
+            int dot = token.replace(',', '.').indexOf('.');
+            int decimals = dot < 0 ? 0 : token.length() - dot - 1;
+            out.add(new NumberToken(parseNumber(token), unit.lookingAt(), decimals));
         }
         return out;
     }
@@ -163,11 +173,12 @@ final class NumberVerifier {
         return out;
     }
 
-    private static Set<Double> rounded(double... values) {
+    private static Set<Double> raw(double... values) {
         Set<Double> out = new HashSet<>();
         for (double v : values) {
             out.add(round1(v));
             out.add(round0(v));
+            out.add(v);
         }
         return out;
     }
@@ -207,18 +218,42 @@ final class NumberVerifier {
         }
         for (int i = 0; i < n.rebalancing().size(); i++) {
             Move mv = n.rebalancing().get(i);
-            Set<Double> allowed = union(union(memberScope.apply(mv.fromMemberId()), memberScope.apply(mv.toMemberId())), rounded(mv.hours()));
+            Set<Double> allowed = union(union(memberScope.apply(mv.fromMemberId()), memberScope.apply(mv.toMemberId())), raw(mv.hours()));
             fields.add(new Field("rebalancing[" + i + "].reason", mv.reason(), allowed));
         }
         for (int i = 0; i < n.suggestedAdjustments().size(); i++) {
             Adjustment a = n.suggestedAdjustments().get(i);
-            Set<Double> allowed = union(memberScope.apply(a.memberId()), rounded(a.deltaHours(), Math.abs(a.deltaHours())));
+            Set<Double> allowed = union(memberScope.apply(a.memberId()), raw(a.deltaHours(), Math.abs(a.deltaHours())));
             fields.add(new Field("suggested_adjustments[" + i + "].reason", a.reason(), allowed));
         }
         return fields;
     }
 
     // ----- verification -------------------------------------------------------------------------
+
+    private static double roundTo(double v, int decimals) {
+        return BigDecimal.valueOf(v).setScale(decimals, RoundingMode.HALF_EVEN).doubleValue() + 0.0;
+    }
+
+    /**
+     * Three tests in order: round1 equality, round0 equality, then equality at the cited number's own
+     * precision. The first two reproduce today's behaviour exactly, so nothing that verifies today can stop
+     * verifying; the third is a fallback reached only before declaring UNVERIFIED, so this is a pure widening.
+     */
+    private static boolean matches(double cited, int decimals, Set<Double> allowed) {
+        if (allowed.contains(round1(cited)) || allowed.contains(round0(cited))) {
+            return true;
+        }
+        if (decimals <= 1) {
+            return false;
+        }
+        for (double fact : allowed) {
+            if (roundTo(fact, decimals) == cited) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     static Report verify(Narrative n, JsonNode facts) {
         Set<Double> known = factNumbers(facts);
@@ -237,10 +272,10 @@ final class NumberVerifier {
                 if (!t.hours() && v == Math.rint(v) && Math.abs(v) <= SMALL_INTEGER_ALLOWANCE) {
                     continue;
                 }
-                double r = round1(v);
-                if (f.allowed().contains(r)) {
+                if (matches(v, t.decimals(), f.allowed())) {
                     continue;
                 }
+                double r = round1(v);
                 String elsewhere = known.contains(r) ? " (it is a fact of this run, but not of this field)" : "";
                 unverified.add(f.path() + ": " + NarrativeContract.fmt(v) + " is not in the facts" + elsewhere);
             }
