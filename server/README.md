@@ -114,7 +114,14 @@ $X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --see
 $X import --db ~/whf/workloadhub.db ~/whf/seeded.json
 
 # 4. or a synthetic population with no personal data, for tests and demos
-$X seed --synthetic --users 40 --weeks 26 --seed 7 --end 2026-09-06 --out /tmp/synthetic.json
+# team size is emergent (ReferenceData.syntheticUsers: perDept = n / 9, capped at 10 members per team), so a
+# run needs roughly eighty users before any team reaches eight members -- a team of three can never show
+# rebalancing. Several teams tie for the largest size; not every one of them has a forecast-overloaded
+# member, so try more than one before concluding rebalancing isn't showing up. The population's mean
+# member-week should land in the high twenties to low thirties against the 44 h capacity, with some weeks
+# well above it; a seed averaging in the low twenties predates the 2026-09-15 weekly-supply correction and
+# is stale.
+$X seed --synthetic --users 120 --weeks 52 --seed 7 --end 2026-09-06 --out /tmp/synthetic.json
 
 # 5. dump a database back to JSON
 $X export --db ~/whf/workloadhub.db /tmp/dump.json

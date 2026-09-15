@@ -92,8 +92,9 @@ The last three tasks ran back to back at the owner's request, then one combined 
 then one fix wave (`1a93de2`): it corrected a half-day absence that deleted a whole day from the forecast,
 opened the two pressure lists to the tool Copilot actually calls, put 44 h and 8.8 h in the product skills
 where a test had been pinning 40 h, broke a `run`/`facts` cycle, and renamed two jqwik files that surefire
-had never been collecting. The gate stands at 409 tests, 0 failures, 13 skipped. `main` has not been
-fast-forwarded yet. The plan's closing notes record the rest; `docs/backlog.md` holds what was left open.
+had never been collecting. The gate stands at 409 tests, 0 failures, 13 skipped. `main` was fast-forwarded to
+`dev` afterward -- `git ls-remote --heads origin` shows both at `765aa9f`. The plan's closing notes record the
+rest; `docs/backlog.md` holds what was left open.
 Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
 real export through the seed, then the server's own integration code, against the sample host.
 The standing workflow for a plan:

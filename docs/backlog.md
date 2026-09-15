@@ -6,8 +6,8 @@ version 1. Dated 2026-09-04, last updated 2026-09-14; update this file when an i
 Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
 the archived first version only — including the whole "Verification on Windows" section below. Their
 commands (`pwsh scripts/build-installer.ps1`, `uv run pytest tests/test_ai_live.py` in `service/`,
-`whf eval`) exist only in a checkout of the tag `archive/python-desktop-v1`:
-`git worktree add ../whf-archive archive/python-desktop-v1`. Nothing there is on `dev`, and none of it is
+`whf eval`) exist only in a checkout of the branch `archive/python-desktop-v1`:
+`git fetch origin archive/python-desktop-v1 && git worktree add ../whf-archive origin/archive/python-desktop-v1`. Nothing there is on `dev`, and none of it is
 waiting on anyone; the frozen version receives no new features.
 
 The owner walked the whole list on 2026-09-04 and decided each item. The decision is recorded next to the
@@ -48,11 +48,12 @@ first install straight away; the installer now seeds the data itself, see "Lande
 - **The Python service and the desktop app archived** (2026-09-10): `archive/python-desktop-v1` held
   `service/`, `app/`, `installer/`, the notebook, the desktop scripts and hooks, and the
   Python and desktop skills and agents; `dev` and `main` carry the Java module and the documentation.
-  The branch of that name lived only on the remote deleted on 2026-09-12, so `archive/python-desktop-v1` is
-  now a **tag** at `3c6f836`, the last commit on `dev` that still holds those trees (`d985a56` removed them).
-  It differs from the old branch tip `5c69bf6` only in that `service/tests/test_parity_compare.py` had by then
-  moved to `server/tools/tests/` to stay in the live repository; the `whf` CLI the parity procedure runs is
-  identical. The parity
+  The branch survived the remote deletion of 2026-09-12 and the remote was restored on 2026-09-14, so
+  `archive/python-desktop-v1` **is a branch on the remote**, not a tag — `git ls-remote` shows
+  `refs/heads/archive/python-desktop-v1` at `5c69bf6`, and the repository has no tags at all. The distinguishing
+  detail this passage used to offer -- that a tag differed from `5c69bf6` only by
+  `service/tests/test_parity_compare.py` having moved to `server/tools/tests/` -- is now moot twice over: no
+  such tag exists, and the parity procedure including `server/tools/tests/` was retired on 2026-09-14. The parity
   procedure runs the Python side from a checkout of the archive (`server/tools/parity.sh ... ARCHIVE_DIR`), and
   the parity gate's test is the one Python test left. Spec
   `docs/superpowers/specs/2026-09-10-python-desktop-archival-design.md`.
