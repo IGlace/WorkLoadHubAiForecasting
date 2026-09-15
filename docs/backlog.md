@@ -317,6 +317,25 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   harness applies a shorter history gate than a run does" (its subject, `eval/Harness`, is gone, leaving
   `Backtest.minHistoryWeeks` with exactly one caller and nothing to diverge from).
 
+- **`NumberVerifier` cannot recognise correct derived arithmetic (2026-09-15).** Found by actually running
+  the post-retarget defect sweep's own end-to-end acceptance check with a real Copilot narration, after
+  landing that sweep's `NumberVerifier` fixes (task 2, then a live-check follow-up, task 2b): Copilot
+  correctly computes simple sums and differences of real, already-verified facts — "spare capacity 14.9h"
+  as a member's real capacity (44.0) minus their real demand (29.1); "85.5h" as the sum of two members'
+  `due_excess_hrs` (50.5 + 35.0) in a team-risk statement — and cites the result. The arithmetic is right,
+  but the derived value is never itself a JSON node the verifier's `walk()` visits, so it reports
+  `UNVERIFIED` on a true statement. This is architecturally distinct from every cause task 2/2b fixed (each
+  of those was a bug in matching a citation against **one** cited fact); this is about whether the verifier
+  should recognise arithmetic **across** facts at all, and needs its own design pass rather than a quick
+  patch: options include whitelisting specific derivations (e.g. capacity-minus-demand only), storing the
+  derived value as its own fact so Copilot cites something that already exists (e.g. a `spare_hours` field
+  per window, alongside the existing aggregate one in `rebalancing_candidates`), or instructing the
+  `whf-rebalancing-advice`/other skills to state only pre-computed facts and never derive their own
+  arithmetic. Whichever is chosen, the negative-test discipline task 2/2b were held to applies here too:
+  the fix must not become a general "any sum of two allowed numbers is allowed" widening, which would let a
+  narrator paper over a genuinely wrong number by finding some combination of real facts that happens to add
+  up to it.
+
 - **Open after the weekly hours forecast landed (2026-09-14).** The plan's combined review raised these
   and the fix wave deliberately left them to the owner. The review itself is summarised in the closing
   notes of `docs/superpowers/plans/2026-09-14-weekly-hours-forecast.md`.

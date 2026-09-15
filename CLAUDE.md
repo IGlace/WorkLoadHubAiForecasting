@@ -41,7 +41,7 @@ app with a Python service) is archived on the remote branch `archive/python-desk
   Copilot.
 - Documents dated before 2026-09-09 describe the archived version; each carries a note saying so.
 
-## Where the project stands (2026-09-14)
+## Where the project stands (2026-09-15)
 
 Plans 1 to 4 landed on `dev` and `main` (foundation and seed; pipeline core; run, eval and parity; Copilot
 narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Then the
@@ -95,8 +95,35 @@ where a test had been pinning 40 h, broke a `run`/`facts` cycle, and renamed two
 had never been collecting. The gate stands at 409 tests, 0 failures, 13 skipped. `main` was fast-forwarded to
 `dev` afterward -- `git ls-remote --heads origin` shows both at `765aa9f`. The plan's closing notes record the
 rest; `docs/backlog.md` holds what was left open.
-Next: the live Copilot check on a seeded database (`server/README.md`, "Narrating with Copilot"), then the
-real export through the seed, then the server's own integration code, against the sample host.
+Then, on 2026-09-15, the post-retarget defect sweep
+(`docs/superpowers/specs/2026-09-15-post-retarget-defect-sweep-design.md`,
+`docs/superpowers/plans/2026-09-15-post-retarget-defect-sweep.md`): a live run on 2026-09-14 had reported
+`overloaded members: none` and six false `UNVERIFIED` numbers, and the sweep fixed both together with three
+smaller cosmetic bugs. The seed's weekly work supply (`WorkFamily.weeklyHours`) was raised to match the 44 h
+capacity correction of 2026-09-13 — it had been sized for the pre-retarget world, and a stale database plus
+a still-unraised supply made overload arithmetically unreachable even after the seed was rebuilt; a jqwik
+property test now guards the population statistic that made this observable (mean member-week hours and the
+over-capacity rate, not bare existence, since a rare event-week tail hit could already clear capacity by
+chance under the old constants). `NumberVerifier` had three independent causes of false `UNVERIFIED`: a
+hyphen preceded by a letter read as a false minus sign, a task key's own digits read as facts, and a fact's
+one-decimal rounding missing its own two-decimal rendering — all fixed as a pure widening, proven by
+negative tests. `backlog_pressed` and `deadline_pressed` now carry `{member_id, name}` plus their own
+pressure figure instead of bare names, closing a standing backlog item. The horizon-hardcoded progress
+label, a token-status print-order bug in the sample host, and an all-NaN accuracy row over zero scored rows
+were also fixed. Four false documentation statements were corrected and two backlog entries naming
+already-deleted code were closed.
+The plan's own end-to-end acceptance check (a real Copilot narration, run with the owner's explicit go-ahead
+since it uses a live GitHub credential) found two more true `UNVERIFIED` numbers `NumberVerifier` still
+missed — a `HALF_EVEN`/`HALF_UP` rounding-tie disagreement and a member's own synthetic name's trailing
+number misread as a citation — fixed as a follow-up ("task 2b") with the same rigor. A second re-run then
+surfaced a third, architecturally different gap: Copilot correctly computing derived arithmetic (a
+difference or sum of two real facts) that is never itself a stored fact node, so the verifier has nothing to
+match it against. This is a design question, not a quick fix, and was deliberately left open rather than
+patched under time pressure — recorded in `docs/backlog.md`, "Java migration".
+The gate stands at 425 tests, 0 failures, 1 skipped (up from 409/0/13; the skip-count drop is Postgres tests
+newly running under this session's Docker-available devbox, not anything this sweep touched).
+Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
+server's own integration code, against the sample host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, the gate green by hand in the development container, then fast-forward `main`.
