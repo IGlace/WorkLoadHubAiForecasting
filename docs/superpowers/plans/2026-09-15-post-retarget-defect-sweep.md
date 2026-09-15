@@ -1405,6 +1405,265 @@ exactly one caller, now deleted, so there is nothing left to diverge from."
 
 ---
 
+### Task 2b: two more `NumberVerifier` false positives, found by the live acceptance check itself
+
+Not in the original spec — discovered by actually running section 11.2's end-to-end acceptance check against
+team `8caab1cf-ed99-48e7-8819-6bf63892c02d` with a real Copilot narration. The run reported `narrate ->
+UNVERIFIED`, 2 of 243 checked numbers flagged, neither a fabrication:
+
+1. **`members[1].summary: 35.1 is not in the facts`** — Nadia Guessous 22's true window-2 demand is `35.05`
+   (`Numbers.round2` in the run pipeline stores everything to 2 decimals). `round1(35.05)` under `HALF_EVEN`
+   is `35.0` (the tie breaks to the even neighbour); Copilot wrote `35.1`, the ordinary "round half up"
+   reading of the same raw value that most humans and most non-Java rounding conventions would produce. This
+   is not a fabrication — it is a genuinely correct description of `35.05` under a different, equally valid
+   rounding convention than the one `round1` happens to use, and it recurs systematically: any fact whose
+   raw value ends in exactly `.x5` at one more decimal than a citation will disagree between `HALF_EVEN` and
+   `HALF_UP` whenever the digit before the `5` is even (`Numbers.round2` guarantees exactly this shape is
+   common, since demand figures are stored to 2 decimals and Copilot routinely cites them to 1).
+2. **`members[5].likely_work[0].statement: 24 is not in the facts (it is a fact of this run, but not of this
+   field)`** — the statement is `"Hind Haddad 24 will probably keep handling CT2-MAP bugs and spikes."` The
+   `24` is not a fact citation at all — it is the trailing disambiguating number in the member's own
+   synthetic display name (`ReferenceData.name(made, rnd)`-style suffix), which Copilot naturally repeats
+   when addressing the member by their full name, exactly as it does in *every* `likely_work` statement
+   observed in this run (`"Karim Fassi 23 is likely to..."`, etc.). `NumberVerifier` has no way to know a
+   number glued to the end of a proper name is not a citation, and `SMALL_INTEGER_ALLOWANCE` (≤20) does not
+   cover it once the disambiguating suffix exceeds 20 — which a 120-member synthetic population reaches
+   routinely. This is likely a *more common* false-positive source in practice than any of the three causes
+   Task 2 fixed, since every member's full name is a candidate trigger, not just specific phrasings.
+
+**Files:**
+- Modify: `server/forecast-core/src/main/java/com/workloadhub/forecast/ai/NumberVerifier.java`
+- Modify: `server/forecast-core/src/test/java/com/workloadhub/forecast/ai/NumberVerifierTest.java`
+
+**Interfaces:**
+- Consumes: `NumberVerifier.walk`, `NumberVerifier.raw`, `NumberVerifier.textFields`, `NumberVerifier.Field`
+  (existing, from Task 2).
+- Produces: no new public/package interface; both fixes are internal to `verify()`'s field-by-field pass.
+
+#### Fix 1: accept the `HALF_UP` reading of a fact at a genuine rounding tie
+
+- [ ] **Step 1: Write the failing test**
+
+```java
+    @Test
+    void aFactAtAnExactRoundingTieVerifiesUnderEitherConvention() {
+        // 35.05 is exactly the HALF_EVEN/HALF_UP tie; round1's HALF_EVEN gives 35.0, but "35.1" (the
+        // ordinary round-half-up reading) is an equally correct description of the same raw value.
+        JsonNode facts = ExportFiles.mapper().readTree(
+                "{\"run\": {}, \"team\": {\"totals\": [{\"window\": 1, \"start\": \"2026-09-07\", \"demand\": 35.05}]}, \"members\": []}");
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 35.1 h.\", \"members\": []}"), facts);
+        assertTrue(r.ok(), r.unverified().toString());
+    }
+
+    @Test
+    void aFabricationNearATieIsStillUnverified() {
+        JsonNode facts = ExportFiles.mapper().readTree(
+                "{\"run\": {}, \"team\": {\"totals\": [{\"window\": 1, \"start\": \"2026-09-07\", \"demand\": 35.05}]}, \"members\": []}");
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 35.3 h.\", \"members\": []}"), facts);
+        assertFalse(r.ok());
+    }
+```
+
+- [ ] **Step 2: Run and confirm the first test fails**
+
+```bash
+cd server && mvn -q -pl forecast-core test -Dtest=NumberVerifierTest
+```
+
+Expected: FAIL on `aFactAtAnExactRoundingTieVerifiesUnderEitherConvention` (`round1(35.05)` is `35.0`, not in
+the set the cited `35.1` is checked against). The second test already passes (an unrelated fabrication) and
+serves as a guard that this fix does not become a general ±0.2h tolerance widening.
+
+- [ ] **Step 3: Add the HALF_UP-tie value wherever a fact is walked**
+
+In `NumberVerifier.java`, add a `roundHalfUpAt1(double v)` helper next to `round1`/`round0`:
+
+```java
+    static double roundHalfUpAt1(double v) {
+        return BigDecimal.valueOf(v).setScale(1, RoundingMode.HALF_UP).doubleValue() + 0.0;
+    }
+```
+
+In `walk` and `raw`, add this value to the set **only when it differs from `round1`** (i.e., only at a
+genuine tie — this must not add a value at every fact, only where `HALF_EVEN` and `HALF_UP` actually
+disagree):
+
+```java
+    private static void walk(JsonNode node, Set<Double> out) {
+        if (node == null) {
+            return;
+        }
+        if (node.isNumber()) {
+            double v = node.asDouble();
+            out.add(round1(v));
+            double up = roundHalfUpAt1(v);
+            if (up != round1(v)) {
+                out.add(up);
+            }
+            out.add(round0(v));
+            out.add(v);
+        } else if (node.isObject()) {
+            node.properties().forEach(e -> walk(e.getValue(), out));
+        } else if (node.isArray()) {
+            node.forEach(n -> walk(n, out));
+        }
+    }
+```
+
+Apply the identical addition to `raw(double... values)`.
+
+- [ ] **Step 4: Run and confirm both tests pass, plus the full suite**
+
+```bash
+cd server && mvn -q -pl forecast-core test -Dtest=NumberVerifierTest,NumberVerifierPropertyTest
+```
+
+Expected: PASS, including every existing test — this only ever *adds* one extra value to a fact's allowed
+set, and only at a real tie, so nothing that verifies today can stop verifying, and the added tolerance is
+bounded to exactly the tie case (never widens to ±0.2h or beyond: `35.3` in Step 1's second test is 0.25h
+from the tie and correctly still fails).
+
+#### Fix 2: a member's own name is not a number citation
+
+- [ ] **Step 5: Write the failing test**
+
+```java
+    @Test
+    void aNumberInsideAMembersOwnNameIsNotReadAsACitation() {
+        JsonNode facts = ExportFiles.mapper().readTree("""
+                {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
+                """.formatted(A));
+        String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Hind Haddad 24\", "
+                + "\"risk_level\": \"low\", \"summary\": \"fine\", "
+                + "\"likely_work\": [{\"statement\": \"Hind Haddad 24 will probably keep handling CT2-MAP bugs.\", "
+                + "\"evidence\": \"CT2-MAP\", \"confidence\": \"low\"}]}]}";
+        Report r = NumberVerifier.verify(NarrativeContract.parse(json), facts);
+        assertTrue(r.ok(), r.unverified().toString());
+    }
+
+    @Test
+    void aFabricatedNumberAfterAMembersNameIsStillCaught() {
+        JsonNode facts = ExportFiles.mapper().readTree("""
+                {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
+                """.formatted(A));
+        String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Hind Haddad 24\", "
+                + "\"risk_level\": \"low\", \"summary\": \"Hind Haddad 24 has 99.0 h of spare capacity.\", "
+                + "\"patterns\": [], \"warnings\": []}]}";
+        Report r = NumberVerifier.verify(NarrativeContract.parse(json), facts);
+        assertFalse(r.ok(), "99.0 is fabricated and must still be caught even next to the member's own name");
+    }
+```
+
+(`A` is `NumberVerifierTest.A`, the existing fixture constant.)
+
+- [ ] **Step 6: Run and confirm the first test fails**
+
+```bash
+cd server && mvn -q -pl forecast-core test -Dtest=NumberVerifierTest
+```
+
+Expected: FAIL — `24` (from the member's own name inside their `likely_work[0].statement`) is read as a
+citation and reported unverified.
+
+- [ ] **Step 7: Mask each member's own name before scanning their own text for numbers**
+
+In `textFields` (the method that builds each `Field`), each member-scoped field's text has its own `m.name()`
+masked out before number extraction runs. Add a small helper and apply it at the point each member field's
+text is captured:
+
+```java
+    private static String maskOwnName(String text, String name) {
+        return name == null || name.isBlank() ? text : text.replace(name, " ");
+    }
+```
+
+Apply it to the six member-own-text `Field` constructions inside `textFields`'s per-member loop. The current
+code (unchanged parts elided with `...`) is:
+
+```java
+        for (int i = 0; i < n.members().size(); i++) {
+            Member m = n.members().get(i);
+            Set<Double> allowed = memberScope.apply(m.memberId());
+            String p = "members[" + i + "]";
+            fields.add(new Field(p + ".summary", maskOwnName(m.summary(), m.name()), allowed));
+            for (int j = 0; j < m.warnings().size(); j++) {
+                fields.add(new Field(p + ".warnings[" + j + "]", maskOwnName(m.warnings().get(j), m.name()), allowed));
+            }
+            for (int j = 0; j < m.patterns().size(); j++) {
+                PatternFinding pf = m.patterns().get(j);
+                fields.add(new Field(p + ".patterns[" + j + "].statement", maskOwnName(pf.statement(), m.name()), allowed));
+                fields.add(new Field(p + ".patterns[" + j + "].evidence", maskOwnName(pf.evidence(), m.name()), allowed));
+            }
+            for (int j = 0; j < m.likelyWork().size(); j++) {
+                LikelyWork lw = m.likelyWork().get(j);
+                fields.add(new Field(p + ".likely_work[" + j + "].statement", maskOwnName(lw.statement(), m.name()), allowed));
+                fields.add(new Field(p + ".likely_work[" + j + "].evidence", maskOwnName(lw.evidence(), m.name()), allowed));
+            }
+        }
+```
+
+Only these six sites change (each `...text...` becomes `maskOwnName(...text..., m.name())`); nothing else in
+`textFields` changes. **Do not** mask team-level fields (`run_summary`, `model_notes`,
+`team_risks[i].detail`) or `rebalancing[i].reason`/`suggested_adjustments[i].reason`, since those may
+legitimately name a *different* member whose own number citations must still be checked normally — only the
+six sites above, each already scoped to one specific member's own text, get that one member's name masked.
+
+Use `String.replace`, an exact-substring match, not a regex — a member's display name has no regex
+metacharacters in this dataset, and a literal replace cannot accidentally consume anything the name doesn't
+literally contain.
+
+- [ ] **Step 8: Run and confirm both new tests pass, plus the full suite**
+
+```bash
+cd server && mvn -q -pl forecast-core test -Dtest=NumberVerifierTest,NumberVerifierPropertyTest
+```
+
+Expected: PASS. The second test (`aFabricatedNumberAfterAMembersNameIsStillCaught`) proves the mask does not
+swallow a genuinely fabricated number that merely happens to follow the member's name in text — only the
+exact name substring is removed, not anything after it.
+
+- [ ] **Step 9: Full module test run**
+
+```bash
+cd server && rm -rf forecast-core/target/surefire-reports && mvn -B -q verify
+```
+
+Expected: PASS.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add server/forecast-core/src/main/java/com/workloadhub/forecast/ai/NumberVerifier.java \
+        server/forecast-core/src/test/java/com/workloadhub/forecast/ai/NumberVerifierTest.java
+git commit -m "fix(ai): two more NumberVerifier false positives, found live
+
+The end-to-end acceptance check (section 11.2) ran a real Copilot narration
+and found two of 243 checked numbers wrongly flagged, neither a
+fabrication: a fact sitting exactly at the HALF_EVEN/HALF_UP rounding tie
+(35.05, cited as the equally valid 35.1), and a member's own name's
+trailing disambiguating number (Hind Haddad 24) read as a citation inside
+that member's own likely_work statement. Both fixes are narrow: the tie
+fix adds one extra allowed value per fact, only when the two rounding
+conventions actually disagree; the name fix masks only a member's own
+exact name substring inside that member's own scoped fields, never
+team-level text or other members' citations."
+```
+
+- [ ] **Step 11: Re-run the live acceptance check**
+
+```bash
+bash server/examples/run-host-example.sh --team 8caab1cf-ed99-48e7-8819-6bf63892c02d --narrate --lang en --end 2026-09-06
+```
+
+Expected: `narrate -> DONE` (not `UNVERIFIED`), or at minimum a verification report with zero `unverified`
+entries once decoded from the JSON. If new unverified items appear, they belong to a different cause and get
+the same treatment as this task: root-caused from the actual facts before deciding whether they are a
+fabrication (expected) or a fourth false positive (another follow-up).
+
+---
+
 ## After all eight tasks: end-to-end acceptance (spec section 11.2)
 
 Not a task with a commit of its own — the plan's acceptance gate, run once all of Tasks 1–8 are on `dev`.
