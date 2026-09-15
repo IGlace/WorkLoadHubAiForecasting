@@ -581,6 +581,26 @@ carrying this value in a team-scoped field, so the test does not depend on `FACT
                 "{\"run_summary\": \"Team demand is 9.1234 h.\", \"members\": []}"), ROUNDING_FACTS);
         assertFalse(r.ok());
     }
+
+    @Test
+    void aOneDecimalCitationMustMatchAtItsOwnPrecisionNotTheFactsNearestInteger() {
+        // round0(12.4) and round0(12.347) are both 12.0 -- if matches() checked round0(cited) directly (an
+        // earlier draft of this fix did), this would wrongly verify. 12.4 is materially wrong at its own
+        // one-decimal precision (the fact rounds to 12.3 there) and must stay unverified regardless of what
+        // it shares with the fact at integer precision.
+        Report r = NumberVerifier.verify(NarrativeContract.parse(
+                "{\"run_summary\": \"Team demand is 12.4 h.\", \"members\": []}"), ROUNDING_FACTS);
+        assertFalse(r.ok(), "12.4 rounds to 12.0 at integer precision, same as the fact -- but must not verify on that alone");
+    }
+
+    @Test
+    void decimalsOfAThousandsSeparatedNumberCountsOnlyTheFractionalDigits() {
+        // Blindly normalising ',' to '.' before finding the decimal point would misread "1,200.5" as
+        // "1.200.5" and find the wrong dot, computing 5 decimals instead of 1.
+        List<NumberVerifier.NumberToken> tokens = NumberVerifier.numbersWithUnits("1,200.5 h logged.");
+        assertEquals(1, tokens.size());
+        assertEquals(1, tokens.get(0).decimals());
+    }
 ```
 
 - [ ] **Step 6: Run and confirm it fails**
@@ -591,8 +611,15 @@ cd server && mvn -q -pl forecast-core test -Dtest=NumberVerifierTest
 
 Expected: FAIL on `aTwoDecimalRenderingOfAFactNotStoredAtThatPrecisionIsVerified` — `round1(12.347)` stores
 `12.3`; the cited `12.35` rounds under today's `round1` to `12.4`; `12.3 != 12.4`, so a true rendering of the
-fact is reported unverified. The other three tests already pass under today's code (they document the
-boundary the fix must not cross) and serve as regression guards once Step 7 lands.
+fact is reported unverified. FAIL also on `decimalsOfAThousandsSeparatedNumberCountsOnlyTheFractionalDigits`
+— `NumberToken` has no `decimals` field yet (compile error until Step 7 adds it; this is expected and is why
+this test is written now, ahead of the field it needs). The other four tests
+(`aFabricatedNumberAtAnyPrecisionIsStillUnverified`, `aMembersTextStillCannotCiteAnotherMembersNumberAtAnyPrecision`,
+`aHighPrecisionFabricationIsNotAcceptedByRoundingItDownToAFact`, `aOneDecimalCitationMustMatchAtItsOwnPrecisionNotTheFactsNearestInteger`)
+already pass under today's code (they document the boundary the fix must not cross) and serve as regression
+guards once Step 7 lands — in particular, the last one pins the exact widening a wrong implementation of
+`matches()` could reintroduce (checking `round0(cited)` directly), so it must still pass after Step 7, not
+just before it.
 
 - [ ] **Step 7: Implement the precision-aware match**
 
@@ -604,6 +631,22 @@ Add a `decimals` field to `NumberToken` and populate it in `numbersWithUnits`:
 ```
 
 ```java
+    /**
+     * The count of digits after the decimal point, reusing {@link #THOUSANDS}'s own grouping so a
+     * thousands-separated token like "1,200.5" is not misread by blindly normalising commas to dots first
+     * (which would turn it into "1.200.5" and find the wrong dot).
+     */
+    private static int decimalsOf(String token) {
+        Matcher t = THOUSANDS.matcher(token);
+        if (t.matches()) {
+            String decimals = t.group(4);
+            return decimals == null ? 0 : decimals.length();
+        }
+        String normalized = token.replace(',', '.');
+        int dot = normalized.indexOf('.');
+        return dot < 0 ? 0 : normalized.length() - dot - 1;
+    }
+
     static List<NumberToken> numbersWithUnits(String text) {
         String cleaned = PERCENT.matcher(TIME.matcher(TASK_KEY.matcher(DATE.matcher(text).replaceAll(" ")).replaceAll(" ")).replaceAll(" ")).replaceAll(" ");
         List<NumberToken> out = new ArrayList<>();
@@ -612,9 +655,7 @@ Add a `decimals` field to `NumberToken` and populate it in `numbersWithUnits`:
             Matcher unit = HOURS_UNIT.matcher(cleaned);
             unit.region(m.end(), cleaned.length());
             String token = m.group();
-            int dot = token.replace(',', '.').indexOf('.');
-            int decimals = dot < 0 ? 0 : token.length() - dot - 1;
-            out.add(new NumberToken(parseNumber(token), unit.lookingAt(), decimals));
+            out.add(new NumberToken(parseNumber(token), unit.lookingAt(), decimalsOf(token)));
         }
         return out;
     }
@@ -663,12 +704,19 @@ Add the precision-aware matcher:
     }
 
     /**
-     * Three tests in order: round1 equality, round0 equality, then equality at the cited number's own
-     * precision. The first two reproduce today's behaviour exactly, so nothing that verifies today can stop
-     * verifying; the third is a fallback reached only before declaring UNVERIFIED, so this is a pure widening.
+     * Two tests in order: round1 equality, then equality at the cited number's own precision. The first
+     * reproduces today's behaviour exactly (today's own check is `allowed.contains(round1(v))`, nothing more —
+     * `allowed` already carries both round1(fact) and round0(fact), so a cited integer matching a fact's
+     * nearest-integer rounding already works today through round1(cited) landing on that stored round0(fact)
+     * value; no separate round0(cited) test is needed to reproduce it, and adding one is NOT a pure widening:
+     * citing "12.4" against a fact of 12.347 must stay unverified (12.4 is materially wrong at its own
+     * one-decimal precision), but `round0(12.4) == round0(12.347) == 12.0` would wrongly verify it if checked
+     * directly. The second test is the new fallback, reached only before declaring UNVERIFIED, comparing the
+     * cited value against facts' RAW (unrounded) values rounded to the cited number's own precision — this is
+     * the actual pure widening the design wants.
      */
     private static boolean matches(double cited, int decimals, Set<Double> allowed) {
-        if (allowed.contains(round1(cited)) || allowed.contains(round0(cited))) {
+        if (allowed.contains(round1(cited))) {
             return true;
         }
         if (decimals <= 1) {
