@@ -55,7 +55,7 @@ class RunProgressTrackerTest {
         assertEquals(new ProgressLabel("queued", "en attente"), t.get(id).orElseThrow().label());
         for (String[] phase : new String[][] {{"LOADING", "reading the team's data", "lecture des données de l'équipe"},
                 {"FEATURES", "preparing the history", "préparation de l'historique"}, {"BACKTEST", "scoring the models", "évaluation des modèles"},
-                {"FORECAST", "predicting the next two weeks", "prévision des deux prochaines semaines"}, {"FACTS", "assembling the facts", "assemblage des faits"},
+                {"FORECAST", "predicting the coming weeks", "prévision des semaines à venir"}, {"FACTS", "assembling the facts", "assemblage des faits"},
                 {"PERSIST", "saving the run", "enregistrement"}}) {
             t.update(id, phase[0], 50, "detail");
             assertEquals(new ProgressLabel(phase[1], phase[2]), t.get(id).orElseThrow().label(), phase[0]);

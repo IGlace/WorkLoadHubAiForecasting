@@ -30,7 +30,7 @@ public final class RunProgressTracker {
             Map.entry("LOADING", new ProgressLabel("reading the team's data", "lecture des données de l'équipe")),
             Map.entry("FEATURES", new ProgressLabel("preparing the history", "préparation de l'historique")),
             Map.entry("BACKTEST", new ProgressLabel("scoring the models", "évaluation des modèles")),
-            Map.entry("FORECAST", new ProgressLabel("predicting the next two weeks", "prévision des deux prochaines semaines")),
+            Map.entry("FORECAST", new ProgressLabel("predicting the coming weeks", "prévision des semaines à venir")),
             Map.entry("FACTS", new ProgressLabel("assembling the facts", "assemblage des faits")),
             Map.entry("PERSIST", new ProgressLabel("saving the run", "enregistrement")),
             Map.entry("RUNNING", new ProgressLabel("running", "en cours")),
