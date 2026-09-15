@@ -311,6 +311,11 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   evaluation surface. Nothing can now grade the model before a forecast is live — that is the accepted cost
   of locking the features and the model (`2026-09-14-evaluation-removal-design.md`, section 10). Reopening
   the question means restoring the harness from git history, deliberately.
+  Two follow-on items below were closed on 2026-09-15 rather than carried forward: "Level B of the
+  evaluation report has no naive baseline" (its subject, `Report`, is gone, and `AccuracyScore`'s
+  `mase`/`maseN` already score against the lag-7 naive baseline the item asked for) and "The evaluation
+  harness applies a shorter history gate than a run does" (its subject, `eval/Harness`, is gone, leaving
+  `Backtest.minHistoryWeeks` with exactly one caller and nothing to diverge from).
 
 - **Open after the weekly hours forecast landed (2026-09-14).** The plan's combined review raised these
   and the fix wave deliberately left them to the owner. The review itself is summarised in the closing
@@ -320,10 +325,6 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
     change them beyond consistency: `NumberVerifier` scopes per-member facts by `m.path("id")`, so a
     name-only list gives Copilot no id to scope a verified number by; and `fullName()` is not unique, so
     two members of one name collapse into one entry and the leader cannot tell which to act on.
-  - **Level B of the evaluation report has no naive baseline.** `open_only_mae` was dropped because it
-    read `DemandRow::openHours`, deleted with the open/new/planned split, and the 2026-09-13 design names
-    no replacement. Level B now reports `mae`, `bias`, `overload_precision` and `overload_recall` with
-    nothing to compare `mae` against. Last week's logged hours per member-week is the obvious candidate.
   - **`CapacityRule.grossDayCapacity` divides by the week's working days when a capacity row exists and
     by five when none does.** That mirrors the existing shape of `dayCapacity`, whose two branches
     already disagree on the divisor, so each branch was kept internally consistent rather than the
@@ -348,19 +349,6 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   mandates jqwik for arithmetic invariants. Renamed in the fix wave; all six passed on their first real
   execution, so the code was right and nothing had been checking it. Do not widen `<includes>`; follow
   the convention the other property files already use.
-
-- **The evaluation harness applies a shorter history gate than a run does (2026-09-14). Important; go back to
-  this.** `eval/Harness` sets `maxHorizon = windows` and passes it to `Backtest.origins`, while a real forecast
-  uses `Horizon.maxHorizon(origin, windows)`, which is `windows + 1`. With `minHistoryWeeks(maxHorizon) =
-  10 + maxHorizon`, the harness admits a team on twelve weeks of history where a run demands thirteen. Each
-  context is internally coherent — the harness scores horizons `1..windows` and a run scores `1..windows + 1`,
-  so each gate matches the hold-out it actually uses — which is why this is a design question and not a bug to
-  patch blindly. The question is whether `evaluate()` should score the same population of teams that a run will
-  forecast. As it stands it can report an accuracy figure for a team production then refuses to score, and the
-  two numbers a leader sees come from different admission rules. Decide deliberately: either the harness takes
-  the run's gate (one population, at the cost of discarding a team the harness could legitimately have scored),
-  or the divergence is documented as intended and `evaluate()` says which gate it used. Landed unresolved with
-  task 8 of `docs/superpowers/plans/2026-09-14-weekly-hours-forecast.md`.
 
 - **Weekly hours forecast (2026-09-13, reviewed 2026-09-14) — landed on `dev` 2026-09-14.** Spec
   `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`, implemented as
