@@ -43,7 +43,7 @@ class WorkFamilyTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CALIBRATION, 12, 32", "COORDINATION, 6, 16", "SUPPORT, 4, 20"})
+    @CsvSource({"CALIBRATION, 12, 42", "COORDINATION, 6, 21", "SUPPORT, 4, 26"})
     void carriesTheDesignParameters(WorkFamily f, double median, double weekly) {
         assertEquals(median, f.medianEstimate);
         assertEquals(weekly, f.weeklyHours);

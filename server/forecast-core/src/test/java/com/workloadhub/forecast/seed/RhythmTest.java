@@ -41,7 +41,7 @@ class RhythmTest {
         double t = r.target(eng, week);
         double expected = r.base(eng) * Rhythm.season(week, r.calendar()) * r.ramp(eng, week) * r.event(r.teamOf(eng).id(), week) * r.availability(eng, week);
         assertEquals(expected, t, 1e-9);
-        assertTrue(r.base(eng) >= 32 * 0.5 && r.base(eng) <= 32 * 1.3);
+        assertTrue(r.base(eng) >= 42 * 0.5 && r.base(eng) <= 42 * 1.3);
         Person lead = eng.withRole("TEAM_LEADER");
         assertEquals(r.base(eng) * 0.5, r.base(lead), 1e-9);
     }

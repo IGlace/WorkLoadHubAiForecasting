@@ -7,16 +7,16 @@ import java.util.Set;
 /** The kinds of work in the directory, with the parameters of the design's section 4.2. */
 public enum WorkFamily {
     // order = precedence: the first family with a matching whole word wins
-    CALIBRATION(Set.of("calibration"), 0.55, 0.20, 0.20, 0.05, 12, 0.35, 32),
-    DATA(Set.of("data", "ai", "dai"), 0.55, 0.20, 0.20, 0.05, 8, 0.55, 28),
+    CALIBRATION(Set.of("calibration"), 0.55, 0.20, 0.20, 0.05, 12, 0.35, 42),
+    DATA(Set.of("data", "ai", "dai"), 0.55, 0.20, 0.20, 0.05, 8, 0.55, 36),
     SUPPORT(Set.of("hr", "admin", "administration", "administrator", "finance", "purchasing", "it", "facility",
-            "specialist", "generalist", "officer"), 0.50, 0.20, 0.30, 0.00, 4, 0.70, 20),
-    SYSTEMS(Set.of("system", "systems"), 0.60, 0.15, 0.20, 0.05, 16, 0.30, 30),
-    ELECTRONICS(Set.of("electric", "electronics", "ee", "software", "sw", "functions"), 0.50, 0.30, 0.15, 0.05, 10, 0.40, 30),
-    VALIDATION(Set.of("validation", "verification", "homologation", "fleet", "test"), 0.45, 0.35, 0.15, 0.05, 12, 0.30, 30),
-    DESIGN(Set.of("design", "simulation", "cfd", "dmu"), 0.60, 0.10, 0.25, 0.05, 20, 0.35, 30),
-    COORDINATION(Set.of("project", "coordination", "leader", "manager", "workshop", "center"), 0.40, 0.10, 0.45, 0.05, 6, 0.60, 16),
-    UNKNOWN(Set.of(), 0.60, 0.15, 0.20, 0.05, 16, 0.30, 30);
+            "specialist", "generalist", "officer"), 0.50, 0.20, 0.30, 0.00, 4, 0.70, 26),
+    SYSTEMS(Set.of("system", "systems"), 0.60, 0.15, 0.20, 0.05, 16, 0.30, 39),
+    ELECTRONICS(Set.of("electric", "electronics", "ee", "software", "sw", "functions"), 0.50, 0.30, 0.15, 0.05, 10, 0.40, 39),
+    VALIDATION(Set.of("validation", "verification", "homologation", "fleet", "test"), 0.45, 0.35, 0.15, 0.05, 12, 0.30, 39),
+    DESIGN(Set.of("design", "simulation", "cfd", "dmu"), 0.60, 0.10, 0.25, 0.05, 20, 0.35, 39),
+    COORDINATION(Set.of("project", "coordination", "leader", "manager", "workshop", "center"), 0.40, 0.10, 0.45, 0.05, 6, 0.60, 21),
+    UNKNOWN(Set.of(), 0.60, 0.15, 0.20, 0.05, 16, 0.30, 39);
 
     public final Set<String> keywords;
     public final double delivery;
