@@ -1,7 +1,7 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04, last updated 2026-09-14; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-16; update this file when an item lands.
 
 Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
 the archived first version only — including the whole "Verification on Windows" section below. Their

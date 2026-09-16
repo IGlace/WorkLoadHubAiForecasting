@@ -120,8 +120,9 @@ surfaced a third, architecturally different gap: Copilot correctly computing der
 difference or sum of two real facts) that is never itself a stored fact node, so the verifier has nothing to
 match it against. This is a design question, not a quick fix, and was deliberately left open rather than
 patched under time pressure — recorded in `docs/backlog.md`, "Java migration".
-The gate stands at 425 tests, 0 failures, 1 skipped (up from 409/0/13; the skip-count drop is Postgres tests
-newly running under this session's Docker-available devbox, not anything this sweep touched).
+The gate stands at 428 tests, 0 failures, 1 skipped with Docker (13 skipped without it; the skip-count drop
+from 409/0/13 is Postgres tests newly running under this session's Docker-available devbox, not anything this
+sweep touched).
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
 server's own integration code, against the sample host.
 The standing workflow for a plan:
