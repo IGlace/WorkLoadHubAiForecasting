@@ -52,7 +52,7 @@ class HorizonTest {
         LocalDate origin = Weeks.lastCompleteWeek(asOf);
         int[] hs = Horizon.horizons(origin, Horizon.windows(asOf, count));
         assertEquals(count + 1, hs[hs.length - 1]);
-        assertEquals(count + 1, Horizon.maxHorizon(origin, count));
+        assertEquals(count + 1, Horizon.maxHorizon(count));
     }
 
     @Property
@@ -93,7 +93,7 @@ class HorizonTest {
         assertEquals(LocalDate.of(2026, 9, 23), wed.get(1).end());
         assertEquals(List.of(LocalDate.of(2026, 9, 10), LocalDate.of(2026, 9, 11), LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 15),
                 LocalDate.of(2026, 9, 16)), wed.get(0).weekdays());
-        assertTrue(wed.get(0).contains(LocalDate.of(2026, 9, 14)) && !wed.get(0).contains(LocalDate.of(2026, 9, 12)));
+        assertTrue(wed.get(0).weekdays().contains(LocalDate.of(2026, 9, 14)) && !wed.get(0).weekdays().contains(LocalDate.of(2026, 9, 12)));
         for (LocalDate asOf : List.of(LocalDate.of(2026, 9, 11), LocalDate.of(2026, 9, 12), LocalDate.of(2026, 9, 13))) {
             List<ForecastWindow> w = Horizon.windows(asOf, 2);
             assertEquals(LocalDate.of(2026, 9, 14), w.get(0).start(), asOf.toString());

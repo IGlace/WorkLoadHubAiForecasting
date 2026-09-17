@@ -58,10 +58,6 @@ public final class FeatureMatrix {
         return keys;
     }
 
-    public Map<String, List<String>> codebooks() {
-        return codebooks;
-    }
-
     public int columnIndex(String column) {
         Integer i = index.get(column);
         if (i == null) {

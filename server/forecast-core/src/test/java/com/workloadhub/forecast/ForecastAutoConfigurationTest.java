@@ -14,7 +14,6 @@ import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.calendar.Horizon;
-import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.data.ExportImporter;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
@@ -157,7 +156,7 @@ class ForecastAutoConfigurationTest {
         long members = r.memberWindows().stream().map(MemberWindowForecast::userId).distinct().count();
         assertEquals(6 * members, r.memberWindows().size());
         assertEquals(30 * members, r.memberDays().size());
-        assertEquals(7, Horizon.maxHorizon(Weeks.lastCompleteWeek(asOf), 6));
+        assertEquals(7, Horizon.maxHorizon(6));
     }
 
     /** Starts the auto-configured context on a fresh database with {@code whf.forecast.windows} set, throwing whatever

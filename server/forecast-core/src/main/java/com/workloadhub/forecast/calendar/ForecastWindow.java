@@ -12,8 +12,4 @@ public record ForecastWindow(int index, LocalDate start, LocalDate end, List<Loc
             throw new IllegalArgumentException("a window's start and end are its first and last weekday");
         }
     }
-
-    public boolean contains(LocalDate day) {
-        return weekdays.contains(day);
-    }
 }

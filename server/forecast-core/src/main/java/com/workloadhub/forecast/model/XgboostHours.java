@@ -15,7 +15,6 @@ import ml.dmlc.xgboost4j.java.XGBoostError;
  * single-threaded and seeded. */
 public final class XgboostHours implements AutoCloseable {
 
-    public static final String NAME = "xgboost";
     static final int ROUNDS = 300;
     private static volatile Boolean categoricalProbe;
 
@@ -29,10 +28,6 @@ public final class XgboostHours implements AutoCloseable {
 
     public XgboostHours(boolean categorical) {
         this.categorical = categorical;
-    }
-
-    public String name() {
-        return NAME;
     }
 
     static Map<String, Object> params(boolean categorical) {

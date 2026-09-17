@@ -136,6 +136,6 @@ public final class Accuracy {
         }
         double[] pr = Metrics.overloadPrecisionRecall(actualOver, forecastOver);
         double mase = maseN == 0 ? Double.NaN : Numbers.mase(my, mp, mNaive);
-        return new AccuracyScore(scope, key, n, Metrics.mae(y, p), Metrics.bias(y, p), mase, maseN, pr[0], pr[1]);
+        return new AccuracyScore(scope, key, n, Numbers.mae(y, p), Metrics.bias(y, p), mase, maseN, pr[0], pr[1]);
     }
 }

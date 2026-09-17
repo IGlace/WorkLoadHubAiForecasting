@@ -207,7 +207,7 @@ class ForecastRunnerTest {
         Prepared p = runner.prepare(data, wednesday, ForecastRunner.ProgressListener.NONE);
         assertEquals(LocalDate.of(2026, 4, 30), p.windows().get(0).start());
         assertEquals(LocalDate.of(2026, 5, 6), p.windows().get(0).end());
-        assertTrue(p.windows().get(0).contains(LocalDate.of(2026, 5, 1)), "the holiday stays inside the window");
+        assertTrue(p.windows().get(0).weekdays().contains(LocalDate.of(2026, 5, 1)), "the holiday stays inside the window");
         TeamOutcome out = runner.forTeam(p, team);
         for (MemberWindowForecast r : out.memberWindows()) {
             if (r.windowIndex() == 1) {

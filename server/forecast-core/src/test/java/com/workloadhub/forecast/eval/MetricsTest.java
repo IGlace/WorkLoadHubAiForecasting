@@ -4,15 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.Numbers;
 import org.junit.jupiter.api.Test;
 
 class MetricsTest {
 
     @Test
     void pointMetrics() {
-        assertEquals(1.0, Metrics.mae(new double[] {1, 2, 3}, new double[] {2, 3, 4}), 1e-9);
+        assertEquals(1.0, Numbers.mae(new double[] {1, 2, 3}, new double[] {2, 3, 4}), 1e-9);
         assertEquals(1.0, Metrics.bias(new double[] {1, 2, 3}, new double[] {2, 3, 4}), 1e-9);
-        assertTrue(Double.isNaN(Metrics.mae(new double[0], new double[0])));
+        assertTrue(Double.isNaN(Numbers.mae(new double[0], new double[0])));
     }
 
     @Test

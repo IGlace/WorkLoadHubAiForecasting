@@ -1,38 +1,18 @@
 package com.workloadhub.forecast.eval;
 
-import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.features.MemberDay;
-import com.workloadhub.forecast.features.MemberWeek;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-/** What the demand forecast is measured against: the hours people logged, per member and week. */
+/** What the forecast is measured against: the hours people logged, per member and day. */
 public final class Truth {
-
-    public static final String SOURCE = "time logs";
 
     private Truth() {
     }
 
-    /**
-     * Every member, every week. {@code features.WeeklySeries.logged} computes the same sum for one member
-     * list and week range (the forecast's target); the two cannot live in one method because
-     * {@code WeeklySeries} is scoped to a member list and this one is not, so they stay as two definitions
-     * of the same arithmetic — bucketed by {@link Weeks#mondayOf}, rounded to six decimals — held together by
-     * {@code features.WeeklySeriesTest.theSeriesAgreesWithTruth}.
-     */
-    public static SortedMap<MemberWeek, Double> realisedHours(ForecastData data) {
-        SortedMap<MemberWeek, Double> out = new TreeMap<>();
-        for (TimeLogRow l : data.timeLogs()) {
-            out.merge(new MemberWeek(l.userId(), Weeks.mondayOf(l.day())), l.hours(), Double::sum);
-        }
-        out.replaceAll((k, v) -> Math.round(v * 1e6) / 1e6);
-        return out;
-    }
-
-    /** The hours people logged, per member and day. */
+    /** The hours people logged, per member and day, rounded to six decimals. */
     public static SortedMap<MemberDay, Double> realisedHoursByDay(ForecastData data) {
         SortedMap<MemberDay, Double> out = new TreeMap<>();
         for (TimeLogRow l : data.timeLogs()) {

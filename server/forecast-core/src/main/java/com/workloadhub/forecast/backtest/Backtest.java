@@ -37,12 +37,6 @@ public final class Backtest {
             }
             return n == 0 ? Double.NaN : s / n;
         }
-
-        /** The pooled residuals at one horizon, or an empty array when unknown. */
-        public double[] residuals(int h) {
-            double[] found = residuals.get(h);
-            return found == null ? new double[0] : found;
-        }
     }
 
     private Backtest() {

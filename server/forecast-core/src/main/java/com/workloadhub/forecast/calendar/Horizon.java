@@ -43,13 +43,11 @@ public final class Horizon {
     }
 
     /**
-     * The largest horizon a run of this many windows reaches, for every run day.
-     *
-     * <p>{@code origin} is always the previous week's Monday, so the run day's own week is horizon 1, and
-     * {@code 5 * windows} weekdays starting inside horizon 1 or 2 end no later than the last weekday of
-     * horizon {@code windows + 1}.
+     * The largest horizon a run of this many windows reaches, for every run day: the origin is always the
+     * previous week's Monday, so the run day's own week is horizon 1, and {@code 5 * windows} weekdays
+     * starting inside horizon 1 or 2 end no later than the last weekday of horizon {@code windows + 1}.
      */
-    public static int maxHorizon(LocalDate origin, int windows) {
+    public static int maxHorizon(int windows) {
         return windows + 1;
     }
 

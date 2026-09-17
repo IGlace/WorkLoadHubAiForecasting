@@ -116,7 +116,7 @@ class CapacityRuleTest {
         CapacityRule rule = new CapacityRule(44.0);
         int reduced = 0;
         for (LeaveRow l : d.leaves()) {
-            MemberRow m = d.memberById().get(l.employeeId());
+            MemberRow m = d.members().stream().filter(x -> x.id().equals(l.employeeId())).findFirst().orElse(null);
             if (m == null) {
                 continue;
             }

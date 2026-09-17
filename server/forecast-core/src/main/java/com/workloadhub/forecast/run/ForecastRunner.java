@@ -123,7 +123,7 @@ public final class ForecastRunner {
         FeatureMatrix features = new FeatureBuilder(data, lc, cal, capacityRule, windows).build(data.members(), origin);
         LocalDate firstWeek = features.rowCount() == 0 ? origin : features.keys().stream().map(MemberWeek::week).min(LocalDate::compareTo).orElse(origin);
         int historyWeeks = features.rowCount() == 0 ? 0 : (int) Weeks.weeksBetween(firstWeek, origin) + 1;
-        List<LocalDate> origins = features.rowCount() == 0 ? List.of() : Backtest.origins(origin, firstWeek, Horizon.maxHorizon(origin, windows));
+        List<LocalDate> origins = features.rowCount() == 0 ? List.of() : Backtest.origins(origin, firstWeek, Horizon.maxHorizon(windows));
         seconds.put("features", elapsed(t0));
 
         long t1 = System.nanoTime();

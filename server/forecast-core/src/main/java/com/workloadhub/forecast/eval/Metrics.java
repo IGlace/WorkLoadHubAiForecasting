@@ -6,10 +6,6 @@ public final class Metrics {
     private Metrics() {
     }
 
-    public static double mae(double[] y, double[] p) {
-        return com.workloadhub.forecast.Numbers.mae(y, p);
-    }
-
     /** Mean of forecast minus truth: positive means the forecast runs high. */
     public static double bias(double[] y, double[] p) {
         if (y.length == 0) {

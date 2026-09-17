@@ -17,22 +17,19 @@ import java.util.stream.Collectors;
 /** Arrivals per member and week (all estimated hours, the fresh part, and the counts), and the target: logged hours. */
 public final class WeeklySeries {
 
-    public record Cell(double estHours, double freshHours, int nTasks, int freshTasks) {
-        public static final Cell ZERO = new Cell(0.0, 0.0, 0, 0);
+    public record Cell(double estHours, double freshHours, int nTasks) {
+        public static final Cell ZERO = new Cell(0.0, 0.0, 0);
 
         Cell plus(TaskFacts f) {
-            boolean fresh = f.fresh();
-            return new Cell(estHours + f.estimate(), freshHours + (fresh ? f.estimate() : 0.0), nTasks + 1, freshTasks + (fresh ? 1 : 0));
+            return new Cell(estHours + f.estimate(), freshHours + (f.fresh() ? f.estimate() : 0.0), nTasks + 1);
         }
     }
 
-    private final List<MemberRow> members;
     private final List<LocalDate> weeks;
     private final Map<MemberWeek, Cell> cells;
     private final Map<MemberWeek, Double> logged;
 
     private WeeklySeries(List<MemberRow> members, List<LocalDate> weeks, Map<MemberWeek, Cell> cells, Map<MemberWeek, Double> logged) {
-        this.members = List.copyOf(members);
         this.weeks = List.copyOf(weeks);
         this.cells = Map.copyOf(cells);
         this.logged = Map.copyOf(logged);
@@ -64,7 +61,7 @@ public final class WeeklySeries {
             }
             logged.merge(new MemberWeek(l.userId(), week), l.hours(), Double::sum);
         }
-        // Same rounding as eval.Truth.realisedHours, so the two arithmetics never disagree: see WeeklySeriesTest.theSeriesAgreesWithTruth.
+        // Rounded to six decimals, the same rounding as eval.Truth.realisedHoursByDay.
         logged.replaceAll((k, v) -> Math.round(v * 1e6) / 1e6);
         return new WeeklySeries(members, weeks, cells, logged);
     }
@@ -77,16 +74,8 @@ public final class WeeklySeries {
         return weeks;
     }
 
-    public List<MemberRow> members() {
-        return members;
-    }
-
     public double[] fresh(UUID member) {
         return weeks.stream().mapToDouble(w -> cell(member, w).freshHours()).toArray();
-    }
-
-    public double[] est(UUID member) {
-        return weeks.stream().mapToDouble(w -> cell(member, w).estHours()).toArray();
     }
 
     /** Hours this member logged in each week, 0.0 where they logged none: the forecast's target. */

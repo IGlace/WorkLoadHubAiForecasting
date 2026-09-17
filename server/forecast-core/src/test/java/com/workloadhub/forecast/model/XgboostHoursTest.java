@@ -62,7 +62,6 @@ class XgboostHoursTest {
             }
             assertFalse(xgb.columnsUsed(1).contains("open_tasks"), "all-NaN columns are dropped");
             assertTrue(xgb.columnsUsed(1).contains("lag1"));
-            assertEquals("xgboost", xgb.name());
         }
     }
 

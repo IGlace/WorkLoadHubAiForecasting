@@ -44,11 +44,9 @@ public final class ForecastData {
     private final List<UserRef> users;
     private final Map<String, String> statusCategoryByName;
 
-    private final Map<UUID, MemberRow> memberById;
     private final Map<UUID, TaskRow> taskById;
     private final Map<UUID, ProjectRow> projectById;
     private final Map<UUID, TeamRow> teamById;
-    private final Map<UUID, UserRef> userById;
     private final Map<UUID, List<TransitionRow>> transitionsByTask;
     private final Map<UUID, List<TimeLogRow>> logsByTask;
     private final Map<UUID, Set<UUID>> projectIdsOfTeamAndParentCache = new ConcurrentHashMap<>();
@@ -76,11 +74,9 @@ public final class ForecastData {
         this.users = sortedBy(users, UserRef::id);
         this.statusCategoryByName = Map.copyOf(statusCategoryByName);
 
-        this.memberById = index(this.members, MemberRow::id);
         this.taskById = index(this.tasks, TaskRow::id);
         this.projectById = index(this.projects, ProjectRow::id);
         this.teamById = index(this.teams, TeamRow::id);
-        this.userById = index(this.users, UserRef::id);
         this.transitionsByTask = groupByTask(this.transitions, TransitionRow::taskId);
         this.logsByTask = groupByTask(this.timeLogs, TimeLogRow::taskId);
     }
@@ -165,10 +161,6 @@ public final class ForecastData {
         return statusCategoryByName;
     }
 
-    public Map<UUID, MemberRow> memberById() {
-        return memberById;
-    }
-
     public Map<UUID, TaskRow> taskById() {
         return taskById;
     }
@@ -179,10 +171,6 @@ public final class ForecastData {
 
     public Map<UUID, TeamRow> teamById() {
         return teamById;
-    }
-
-    public Map<UUID, UserRef> userById() {
-        return userById;
     }
 
     public List<MemberRow> membersOfTeam(UUID teamId) {
