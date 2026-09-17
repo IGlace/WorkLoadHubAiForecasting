@@ -25,7 +25,6 @@ import java.util.UUID;
 /** Builds the feature matrix of spec section 6 for a set of members up to an origin week. */
 public final class FeatureBuilder {
 
-    static final double NEVER_WEEKS = 52.0;
     static final String NO_TITLE = "(none)";
 
     private final ForecastData data;
@@ -84,6 +83,7 @@ public final class FeatureBuilder {
                     r[col.get("absence_hrs_h" + h)] = avail[1];
                     r[col.get("available_hrs_h" + h)] = avail[2];
                     r[col.get("due_hrs_h" + h)] = mc.dueHours(w, target);   // Task 6
+                    r[col.get("planned_hrs_h" + h)] = mc.plannedHours(w, target);
                     r[col.get(Features.target(h))] = i + h <= originIndex ? logged[i + h] : Double.NaN;
                 }
                 r[col.get("member_id")] = books.get("member_id").indexOf(m.id().toString());
@@ -150,7 +150,7 @@ public final class FeatureBuilder {
 
     /** Weeks since the member's last fresh arrival: about arrivals, so it reads the arrival series, not the target's. */
     private static void weeksSinceLastArrival(double[] r, Map<String, Integer> col, double[] fresh, int start, int i) {
-        double since = NEVER_WEEKS;
+        double since = Double.NaN;
         for (int j = i; j >= start; j--) {
             if (fresh[j] > 0) {
                 since = i - j;
@@ -170,8 +170,8 @@ public final class FeatureBuilder {
         int support = 0;
         int high = 0;
         int self = 0;
-        int manual = 0;
-        int project = 0;
+        int assigned = 0;
+        int known = 0;
         int finished = 0;
         int reopened = 0;
         double actual = 0;
@@ -194,10 +194,10 @@ public final class FeatureBuilder {
                 }
                 if (t.mode() == Mode.SELF_PICKED) {
                     self++;
+                    known++;
                 } else if (t.mode() == Mode.ASSIGNED) {
-                    manual++;
-                } else {
-                    project++;
+                    assigned++;
+                    known++;
                 }
             }
             if (t.finished() != null) {
@@ -220,15 +220,14 @@ public final class FeatureBuilder {
             }
         }
         r[col.get("arrivals_13w")] = n;
-        r[col.get("share_defect_13w")] = n == 0 ? 0.0 : (double) defect / n;
-        r[col.get("share_delivery_13w")] = n == 0 ? 0.0 : (double) delivery / n;
-        r[col.get("share_support_13w")] = n == 0 ? 0.0 : (double) support / n;
-        r[col.get("share_high_priority_13w")] = n == 0 ? 0.0 : (double) high / n;
-        r[col.get("share_self_picked_13w")] = n == 0 ? 1.0 / 3 : (double) self / n;
-        r[col.get("share_manual_13w")] = n == 0 ? 1.0 / 3 : (double) manual / n;
-        r[col.get("share_project_13w")] = n == 0 ? 1.0 / 3 : (double) project / n;
-        r[col.get("reopen_rate_13w")] = finished == 0 ? 0.0 : (double) reopened / finished;
-        r[col.get("estimate_ratio_13w")] = estimate == 0 ? 1.0 : actual / estimate;
+        r[col.get("share_defect_13w")] = n == 0 ? Double.NaN : (double) defect / n;
+        r[col.get("share_delivery_13w")] = n == 0 ? Double.NaN : (double) delivery / n;
+        r[col.get("share_support_13w")] = n == 0 ? Double.NaN : (double) support / n;
+        r[col.get("share_high_priority_13w")] = n == 0 ? Double.NaN : (double) high / n;
+        r[col.get("share_self_picked_13w")] = known == 0 ? Double.NaN : (double) self / known;
+        r[col.get("share_assigned_13w")] = known == 0 ? Double.NaN : (double) assigned / known;
+        r[col.get("reopen_rate_13w")] = finished == 0 ? Double.NaN : (double) reopened / finished;
+        r[col.get("estimate_ratio_13w")] = estimate == 0 ? Double.NaN : actual / estimate;
         r[col.get("cycle_days_13w")] = cycles.isEmpty() ? Double.NaN : median(cycles);
     }
 
@@ -277,6 +276,19 @@ public final class FeatureBuilder {
                 LocalDate due = t.task().dueDate();
                 if (due != null && t.openAtEndOf(end) && !due.isBefore(target) && !due.isAfter(targetEnd)) {
                     sum += remainingAsOf(t, end);
+                }
+            }
+            return sum;
+        }
+
+        /** Estimated hours of the member's tasks open at the end of week {@code w} and planned for the week of {@code target}. */
+        double plannedHours(LocalDate w, LocalDate target) {
+            LocalDate end = w.plusDays(6);
+            double sum = 0;
+            for (TaskFacts t : tasks) {
+                LocalDate pw = t.task().plannedWeek();
+                if (pw != null && Weeks.mondayOf(pw).equals(target) && t.openAtEndOf(end)) {
+                    sum += t.estimate();
                 }
             }
             return sum;
@@ -332,7 +344,6 @@ public final class FeatureBuilder {
             r[col.get("team_backlog_unassigned_hrs")] = v[0];
             r[col.get("proj_active")] = v[1];
             r[col.get("proj_planning")] = v[2];
-            r[col.get("proj_first_due_weeks")] = v[3];
         }
 
         private double[] compute(UUID team, LocalDate w) {
@@ -340,12 +351,10 @@ public final class FeatureBuilder {
             double backlog = 0;
             int active = 0;
             int planning = 0;
-            double firstDue = NEVER_WEEKS;
             Map<UUID, ProjectRow> projects = data.projectById();
             for (UUID pid : data.projectIdsOfTeamAndParent(team)) {
                 ProjectRow p = projects.get(pid);
                 boolean hasWork = false;
-                double projectDue = Double.NaN;
                 for (TaskFacts t : tasksByProject.getOrDefault(pid, List.of())) {
                     if (t.task().createdDate().toLocalDate().isAfter(end)) {
                         continue;
@@ -358,11 +367,6 @@ public final class FeatureBuilder {
                     }
                     if (t.openAtEndOf(end)) {
                         hasWork = true;
-                        LocalDate due = t.task().dueDate();
-                        if (due != null && !due.isBefore(w)) {
-                            double weeks = java.time.temporal.ChronoUnit.DAYS.between(w, due) / 7.0;
-                            projectDue = Double.isNaN(projectDue) ? weeks : Math.min(projectDue, weeks);
-                        }
                     }
                 }
                 if ("ACTIVE".equals(p.status()) && hasWork) {
@@ -371,11 +375,8 @@ public final class FeatureBuilder {
                 if ("PLANNING".equals(p.status())) {
                     planning++;
                 }
-                if (!Double.isNaN(projectDue)) {
-                    firstDue = Math.min(firstDue, projectDue);
-                }
             }
-            return new double[] {backlog, active, planning, firstDue};
+            return new double[] {backlog, active, planning};
         }
     }
 }

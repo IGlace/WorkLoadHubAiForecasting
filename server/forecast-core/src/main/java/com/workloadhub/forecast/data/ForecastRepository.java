@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.data;
 
+import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
@@ -87,15 +88,17 @@ public final class ForecastRepository {
         List<TaskRow> tasks = new ArrayList<>();
         for (Map<String, Object> r : rows("SELECT id, key, title, project_id, assignee_id, reporter_id, parent_task_id, task_type_id,"
                 + " task_status_id, priority, original_estimate_hrs, remaining_estimate_hrs, created_date, started_date, finished_date,"
-                + " due_date, reopened_from_done, archived FROM tasks")) {
+                + " due_date, planned_week, reopened_from_done, archived FROM tasks")) {
             if (dialect.asBoolean(r.get("archived"))) {
                 continue;
             }
+            LocalDate pw = date(r, "planned_week");
             tasks.add(new TaskRow(uuid(r, "id"), str(r, "key"), str(r, "title"), uuid(r, "project_id"), uuid(r, "assignee_id"),
                     uuid(r, "reporter_id"), uuid(r, "parent_task_id"), typeNameById.get(str(r, "task_type_id")),
                     categoryById.get(str(r, "task_status_id")), str(r, "priority"), dbl(r, "original_estimate_hrs"),
                     dbl(r, "remaining_estimate_hrs"), dateTime(r, "created_date"), dateTime(r, "started_date"),
-                    dateTime(r, "finished_date"), date(r, "due_date"), dialect.asBoolean(r.get("reopened_from_done")), false));
+                    dateTime(r, "finished_date"), date(r, "due_date"), pw == null ? null : Weeks.mondayOf(pw),
+                    dialect.asBoolean(r.get("reopened_from_done")), false));
         }
         List<TransitionRow> transitions = new ArrayList<>();
         for (Map<String, Object> r : rows("SELECT task_id, user_id, field_name, old_value, new_value, changed_at FROM task_history")) {

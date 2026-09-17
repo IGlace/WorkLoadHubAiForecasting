@@ -96,7 +96,7 @@ class FeatureBuilderTest {
         assertEquals(Math.sqrt(12.5), m.get(row(m, ORIGIN.minusWeeks(5)), "roll_std_4"), 1e-9, "sample std of {0, 5}, the logged hours");
         // weeks_since_last_arrival is genuinely about arrivals, so it keeps reading the fresh series (unaffected by the logs above).
         assertEquals(1.0, m.get(origin, "weeks_since_last_arrival"));
-        assertEquals(52.0, m.get(0, "weeks_since_last_arrival"));
+        assertTrue(Double.isNaN(m.get(0, "weeks_since_last_arrival")), "never: blank, not 52");
         assertEquals(1.0, m.get(w4, "weeks_since_last_arrival"), "week −5 was the last fresh arrival");
     }
 
@@ -110,12 +110,11 @@ class FeatureBuilderTest {
         assertEquals(0.0, m.get(origin, "share_support_13w"));
         assertEquals(0.25, m.get(origin, "share_high_priority_13w"));
         assertEquals(0.25, m.get(origin, "share_self_picked_13w"));
-        assertEquals(0.75, m.get(origin, "share_manual_13w"));
-        assertEquals(0.0, m.get(origin, "share_project_13w"));
-        assertEquals(1.0 / 3, m.get(0, "share_manual_13w"), 1e-9, "no arrivals yet: one third each");
-        assertEquals(0.0, m.get(0, "share_defect_13w"));
-        assertEquals(0.0, m.get(origin, "reopen_rate_13w"));
-        assertEquals(1.0, m.get(origin, "estimate_ratio_13w"), "nothing finished: neutral ratio");
+        assertEquals(0.75, m.get(origin, "share_assigned_13w"));
+        assertTrue(Double.isNaN(m.get(0, "share_assigned_13w")), "no arrivals yet: blank, not one third");
+        assertTrue(Double.isNaN(m.get(0, "share_defect_13w")));
+        assertTrue(Double.isNaN(m.get(origin, "reopen_rate_13w")), "nothing finished: blank");
+        assertTrue(Double.isNaN(m.get(origin, "estimate_ratio_13w")), "nothing finished: blank, not 1.0");
         assertTrue(Double.isNaN(m.get(origin, "cycle_days_13w")));
     }
 
@@ -159,7 +158,7 @@ class FeatureBuilderTest {
         List<String> expected = new ArrayList<>(Features.featureColumns(1));
         expected.removeAll(List.of("arrival_hrs_lag1", "arrival_hrs_lag2", "arrival_hrs_lag3", "arrival_hrs_lag4", "open_tasks",
                 "open_remaining_hrs", "overdue_open", "in_progress_tasks", "team_backlog_unassigned_hrs", "proj_active",
-                "proj_planning", "proj_first_due_weeks", "due_hrs_h1"));
+                "proj_planning", "due_hrs_h1"));
         assertEquals(expected, m.nonEmptyColumns(expected), "Task 6 fills the rest");
         for (int i = 1; i < m.rowCount(); i++) {
             assertTrue(m.key(i - 1).compareTo(m.key(i)) < 0, "rows sorted");
@@ -247,10 +246,23 @@ class FeatureBuilderTest {
         assertEquals(5.0, m.get(atW3, "team_backlog_unassigned_hrs"), "task 2 waited in the backlog until week −1");
         assertEquals(1.0, m.get(atW3, "proj_active"));
         assertEquals(1.0, m.get(atW3, "proj_planning"), "the parent team's project counts");
-        assertEquals(52.0, m.get(atW3, "proj_first_due_weeks"), "nothing open with a due date yet");
         int atW1 = row(m, w1);
         assertEquals(9.0, m.get(atW1, "team_backlog_unassigned_hrs"));
-        assertEquals(10.0 / 7, m.get(atW1, "proj_first_due_weeks"), 1e-9, "Ben's task is due 10 days after week −1");
         assertEquals(m.get(atW1, "team_backlog_unassigned_hrs"), m.get(m.keys().indexOf(new MemberWeek(ben.id(), w1)), "team_backlog_unassigned_hrs"));
+    }
+
+    @Test
+    void plannedHoursAreTheOpenTasksEstimatesPlannedForTheTargetWeek() {
+        TaskRow planned = TestData.task("1", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 12).withPlannedWeek(ORIGIN.plusWeeks(2));
+        TaskRow done = TestData.task("2", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 5).withPlannedWeek(ORIGIN.plusWeeks(2))
+                .withStatus("DONE").withFinished(ORIGIN.minusWeeks(1).atTime(9, 0));
+        TaskRow midweek = TestData.task("3", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 3).withPlannedWeek(ORIGIN.plusWeeks(2).plusDays(2));
+        FeatureMatrix m = matrix(TestData.data(List.of(ANA), List.of(planned, done, midweek), List.of(), List.of()));
+        int origin = row(m, ORIGIN);
+        assertEquals(15.0, m.get(origin, "planned_hrs_h2"), "the open tasks planned for week +2, a Wednesday normalised to its Monday");
+        assertEquals(0.0, m.get(origin, "planned_hrs_h1"));
+        assertEquals(0.0, m.get(origin, "planned_hrs_h3"));
+        int before = row(m, ORIGIN.minusWeeks(3));
+        assertEquals(0.0, m.get(before, "planned_hrs_h2"), "not yet assigned in week −3, so not planned work of hers then");
     }
 }

@@ -45,7 +45,8 @@ public final class Truncation {
                 remaining = t.estimate() == null ? null : Math.max(0.0, t.estimate() - logged);
             }
             tasks.add(new TaskRow(t.id(), t.key(), t.title(), t.projectId(), assignee, t.reporterId(), t.parentId(), t.typeName(),
-                    status, t.priority(), t.estimate(), remaining, t.createdDate(), started, finished, t.dueDate(), t.reopened(), t.archived()));
+                    status, t.priority(), t.estimate(), remaining, t.createdDate(), started, finished, t.dueDate(), t.plannedWeek(),
+                    t.reopened(), t.archived()));
         }
         return new ForecastData(data.members(), data.teams(), data.projects(), tasks, keptTransitions, keptLogs, data.leaves(),
                 data.pendingLeaves(), data.holidays(), data.users(), data.statusCategoryByName());

@@ -21,33 +21,39 @@ class FeaturesTest {
     }
 
     @Test
-    void fortySixColumnsPerHorizonInTheSpecOrderWithoutDuplicates() {
+    void fortyFiveColumnsPerHorizonInTheSpecOrderWithoutDuplicates() {
         for (int h : Features.horizons(WINDOWS)) {
             List<String> cols = Features.featureColumns(h);
-            assertEquals(46, cols.size(), cols.toString());
+            assertEquals(45, cols.size(), cols.toString());
             assertEquals(cols.size(), new HashSet<>(cols).size());
             assertEquals("lag1", cols.get(0));
             assertTrue(cols.contains("due_hrs_h" + h));
+            assertTrue(cols.contains("planned_hrs_h" + h));
             assertTrue(cols.contains("available_hrs_h" + h));
             assertFalse(cols.contains(Features.target(h)));
             for (int k = 1; k <= 4; k++) {
                 assertTrue(cols.contains("arrival_hrs_lag" + k));
             }
             assertFalse(cols.contains("logged_hours_lag1"));
+            assertFalse(cols.contains("proj_first_due_weeks"));
+            assertFalse(cols.contains("share_manual_13w"));
+            assertFalse(cols.contains("share_project_13w"));
+            assertTrue(cols.contains("share_self_picked_13w") && cols.contains("share_assigned_13w"));
             for (int other : Features.horizons(WINDOWS)) {
                 if (other != h) {
                     assertFalse(cols.contains("due_hrs_h" + other));
+                    assertFalse(cols.contains("planned_hrs_h" + other));
                 }
             }
         }
     }
 
     @Test
-    void sharedColumnsStayFortyTwoWithArrivalsInPlaceOfLoggedHours() {
+    void sharedColumnsAreFortyAfterTheReview() {
         int h0 = Features.horizons(WINDOWS)[0];
         List<String> shared = Features.featureColumns(h0).stream()
                 .filter(c -> !c.endsWith("_h" + h0)).toList();
-        assertEquals(42, shared.size(), shared.toString());
+        assertEquals(40, shared.size(), shared.toString());
         for (int k = 1; k <= 4; k++) {
             assertTrue(shared.contains("arrival_hrs_lag" + k));
         }

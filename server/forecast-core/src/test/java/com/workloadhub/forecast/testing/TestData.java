@@ -43,7 +43,7 @@ public final class TestData {
 
     public static TaskRow task(String suffix, UUID assignee, LocalDateTime created, double estimate) {
         return new TaskRow(id("task-" + suffix), "T-" + suffix, "Task " + suffix, null, assignee, id("reporter"), null,
-                "Task", "TO_DO", "MEDIUM", estimate, estimate, created, null, null, null, false, false);
+                "Task", "TO_DO", "MEDIUM", estimate, estimate, created, null, null, null, null, false, false);
     }
 
     public static TransitionRow assignee(UUID task, String newValue, LocalDateTime at) {

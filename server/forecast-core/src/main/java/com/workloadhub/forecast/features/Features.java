@@ -3,7 +3,39 @@ package com.workloadhub.forecast.features;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Column names and constants of the feature matrix (spec section 6). */
+/**
+ * Column names and constants of the feature matrix (spec section 6).
+ *
+ * <p>Missing values, stated once (spec section 5.2): the matrix stores {@code Double.NaN} where a cell has
+ * no value, and XGBoost's histogram trees learn a default direction for it from the training rows that lack
+ * it — a blank is not zero and not average, it is its own branch. The cells left blank, and what "nothing to
+ * measure" means for each:
+ *
+ * <table>
+ * <caption>Blank cells and their non-blank neighbour</caption>
+ * <tr><th>Column</th><th>Blank when</th><th>Was</th></tr>
+ * <tr><td>{@code weeks_since_last_arrival}</td><td>the member received no fresh task in the loaded
+ * history</td><td>52</td></tr>
+ * <tr><td>{@code share_defect_13w}, {@code share_delivery_13w}, {@code share_support_13w},
+ * {@code share_high_priority_13w}</td><td>no task was assigned to the member in the 13-week window
+ * ({@code arrivals_13w} = 0)</td><td>0.0</td></tr>
+ * <tr><td>{@code share_self_picked_13w}, {@code share_assigned_13w}</td><td>no task in the window has a known
+ * mode (section 6)</td><td>1/3</td></tr>
+ * <tr><td>{@code reopen_rate_13w}</td><td>the member finished no task in the window</td><td>0.0</td></tr>
+ * <tr><td>{@code estimate_ratio_13w}</td><td>no finished task in the window has both a positive estimate and
+ * positive hours</td><td>1.0</td></tr>
+ * <tr><td>{@code cycle_days_13w}</td><td>the member finished no task in the window</td><td>already NaN</td></tr>
+ * <tr><td>{@code lag{k}}, {@code arrival_hrs_lag{k}}</td><td>the week is before the member's first
+ * row</td><td>already NaN</td></tr>
+ * <tr><td>{@code target_h}</td><td>the target week is after the origin</td><td>already NaN</td></tr>
+ * </table>
+ *
+ * <p>Not blank, on purpose: {@code arrivals_13w}, {@code open_tasks}, {@code open_remaining_hrs},
+ * {@code overdue_open}, {@code in_progress_tasks}, {@code team_backlog_unassigned_hrs}, {@code proj_active},
+ * {@code proj_planning}, {@code due_hrs_h}, {@code planned_hrs_h}, {@code absence_hrs_h} are counts and sums,
+ * and zero is their true value when there is nothing. {@code roll_std_*} is 0.0 for a single-week window
+ * because one observation has no spread, which is a statement, not an absence of one.
+ */
 public final class Features {
 
     /**
@@ -40,8 +72,7 @@ public final class Features {
         c.add("share_support_13w");
         c.add("share_high_priority_13w");
         c.add("share_self_picked_13w");
-        c.add("share_manual_13w");
-        c.add("share_project_13w");
+        c.add("share_assigned_13w");
         c.add("reopen_rate_13w");
         for (int k = 1; k <= 4; k++) {
             c.add("arrival_hrs_lag" + k);
@@ -55,7 +86,6 @@ public final class Features {
         c.add("team_backlog_unassigned_hrs");
         c.add("proj_active");
         c.add("proj_planning");
-        c.add("proj_first_due_weeks");
         c.addAll(CATEGORICAL);
         c.add("tenure_weeks");
         c.add("week_of_year");
@@ -67,10 +97,10 @@ public final class Features {
     }
 
     public static List<String> horizonColumns(int h) {
-        return List.of("due_hrs_h" + h, "working_days_h" + h, "absence_hrs_h" + h, "available_hrs_h" + h);
+        return List.of("due_hrs_h" + h, "planned_hrs_h" + h, "working_days_h" + h, "absence_hrs_h" + h, "available_hrs_h" + h);
     }
 
-    /** The 46 features of one horizon: 42 shared columns, then the four `_h{h}` columns. */
+    /** 45 features: 40 shared, then the five `_h{h}` columns. */
     public static List<String> featureColumns(int h) {
         List<String> c = new ArrayList<>(SHARED);
         c.addAll(horizonColumns(h));
