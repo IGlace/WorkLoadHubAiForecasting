@@ -364,9 +364,8 @@ public final class WorkQueue {
                 ref.type(typeName), parent, ref.status("To Do"), a.estimate());
         row.put("updated_at", a.assignAt().toString());
         taskRows.add(row);
-        if (backlog) {
-            historyRows.add(Rows.history(rnd.uuid(), id, leader, "assignee", null, p.fullName(), a.assignAt()));
-        }
+        UUID assigner = a.mode().equals("self") ? p.id() : leader;
+        historyRows.add(Rows.history(rnd.uuid(), id, assigner, "assignee", null, p.fullName(), a.assignAt()));
         assignedHours.computeIfAbsent(p.id(), k -> new TreeMap<>()).merge(SeedConfig.mondayOf(a.assignDay()), a.estimate(), Double::sum);
         Work w = new Work(row, a.estimate(), actual, a.assignAt());
         w.unlogged = rnd.chance(rates.unlogged());

@@ -53,12 +53,12 @@ class WorkFamilyPropertyTest {
             for (double hours : e.getValue().values()) {
                 totalWeeks++;
                 sum += hours;
-                if (hours > CapacityWriter.BASE_HOURS) {
+                if (hours > AbsencePlanner.BASE_HOURS) {
                     overCapacity++;
                     if (team != null) {
                         overloadedTeams.add(team);
                     }
-                } else if (hours < 0.7 * CapacityWriter.BASE_HOURS) {
+                } else if (hours < 0.7 * AbsencePlanner.BASE_HOURS) {
                     underThreshold++;
                     if (team != null) {
                         underloadedTeams.add(team);

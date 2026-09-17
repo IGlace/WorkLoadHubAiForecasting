@@ -31,14 +31,33 @@ class AbsencePlannerTest {
         SeedCalendar cal = cal();
         Person p = person(cfg().firstMonday(), null);
         AbsencePlanner.Plan plan = AbsencePlanner.plan(p, cal, cfg(), new SeedRandom(seed));
-        long vacation = plan.absenceRows().stream().filter(a -> "VACATION".equals(a.get("type"))).count();
-        long sick = plan.absenceRows().stream().filter(a -> "SICK_LEAVE".equals(a.get("type"))).count();
         boolean allWorking = plan.absentDays().stream().allMatch(d -> cal.isWorkingDay(d) && p.employedOn(d)
                 && !d.isBefore(cfg().firstMonday()) && !d.isAfter(cfg().lastDay()));
-        boolean distinct = plan.absentDays().size() == plan.absenceRows().size();
-        // two blocks of 5..10 days; the second block is cut short when it runs into the first, so 5 is the floor
-        return allWorking && distinct && vacation >= 5 && vacation <= 20 && sick <= 4
-                && plan.leaveRows().stream().allMatch(l -> "APPROVED".equals(l.get("status")));
+        // two blocks of 5..10 days; the second block is cut short when it runs into the first, so 5 is the
+        // floor. Scoped to APPROVED: a PENDING leave is also leave_type PAID_LEAVE (same kind of leave, just
+        // not yet decided) and would otherwise inflate this count past its 20-day ceiling.
+        long vacation = plan.leaveRows().stream()
+                .filter(l -> "PAID_LEAVE".equals(l.get("leave_type")) && "APPROVED".equals(l.get("status")))
+                .mapToLong(l -> daysOf(l)).sum();
+        long sick = plan.leaveRows().stream().filter(l -> "SICK_LEAVE".equals(l.get("leave_type"))).count();
+        boolean approvedInHistory = plan.leaveRows().stream()
+                .filter(l -> !LocalDate.parse((String) l.get("start_date")).isAfter(cfg().lastDay()))
+                .allMatch(l -> "APPROVED".equals(l.get("status")));
+        boolean pendingInFuture = plan.leaveRows().stream()
+                .filter(l -> "PENDING".equals(l.get("status")))
+                .allMatch(l -> LocalDate.parse((String) l.get("start_date")).isAfter(cfg().lastDay()));
+        return allWorking && vacation >= 5 && vacation <= 20 && sick <= 4 && approvedInHistory && pendingInFuture;
+    }
+
+    static long daysOf(java.util.LinkedHashMap<String, Object> l) {
+        SeedCalendar cal = cal();
+        long n = 0;
+        for (LocalDate d = LocalDate.parse((String) l.get("start_date")); !d.isAfter(LocalDate.parse((String) l.get("end_date"))); d = d.plusDays(1)) {
+            if (cal.isWorkingDay(d)) {
+                n++;
+            }
+        }
+        return n;
     }
 
     @Test

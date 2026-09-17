@@ -13,8 +13,10 @@ public final class AbsencePlanner {
     /** A present working day, requirement C1: a 44-hour week over five days. */
     public static final double HOURS_PER_DAY = 8.8;
 
-    public record Plan(Set<LocalDate> absentDays, List<LinkedHashMap<String, Object>> absenceRows,
-            List<LinkedHashMap<String, Object>> leaveRows, SeedCalendar calendar) {
+    /** The seed's own week; the module's default is `whf.default-weekly-hours`. */
+    public static final double BASE_HOURS = 44.0;
+
+    public record Plan(Set<LocalDate> absentDays, List<LinkedHashMap<String, Object>> leaveRows, SeedCalendar calendar) {
 
         public double hoursPresent(Person p, LocalDate day) {
             return calendar.isWorkingDay(day) && p.employedOn(day) && !absentDays.contains(day) ? HOURS_PER_DAY : 0.0;
@@ -36,7 +38,6 @@ public final class AbsencePlanner {
 
     public static Plan plan(Person p, SeedCalendar cal, SeedConfig cfg, SeedRandom rnd) {
         Set<LocalDate> absent = new TreeSet<>();
-        List<LinkedHashMap<String, Object>> absenceRows = new ArrayList<>();
         List<LinkedHashMap<String, Object>> leaveRows = new ArrayList<>();
         List<LocalDate> workingDays = new ArrayList<>();
         for (LocalDate d = cfg.firstMonday(); !d.isAfter(cfg.lastDay()); d = d.plusDays(1)) {
@@ -45,7 +46,7 @@ public final class AbsencePlanner {
             }
         }
         if (workingDays.isEmpty()) {
-            return new Plan(absent, absenceRows, leaveRows, cal);
+            return new Plan(absent, leaveRows, cal);
         }
         // two vacation blocks per 52 weeks, scaled to the history length, at least one
         int blocks = Math.max(1, Math.round(2f * cfg.weeks() / 52f));
@@ -63,16 +64,27 @@ public final class AbsencePlanner {
             if (block.isEmpty()) {
                 continue;
             }
-            addLeave(p, block, "VACATION", "PAID_LEAVE", "Annual leave", absent, absenceRows, leaveRows, rnd);
+            addLeave(p, block, "PAID_LEAVE", "Annual leave", b == 0 && rnd.chance(0.2), "APPROVED", absent, leaveRows, rnd);
         }
         int sickDays = rnd.between(0, 4);
         for (int s = 0; s < sickDays; s++) {
             LocalDate d = workingDays.get(rnd.between(0, workingDays.size() - 1));
             if (!absent.contains(d)) {
-                addLeave(p, List.of(d), "SICK_LEAVE", "SICK_LEAVE", "Sick", absent, absenceRows, leaveRows, rnd);
+                addLeave(p, List.of(d), "SICK_LEAVE", "Sick", false, "APPROVED", absent, leaveRows, rnd);
             }
         }
-        return new Plan(absent, absenceRows, leaveRows, cal);
+        if (rnd.chance(0.1)) {
+            LocalDate first = cfg.lastDay().plusDays(1 + rnd.between(0, 20));
+            int length = rnd.between(2, 5);
+            List<LocalDate> block = new ArrayList<>();
+            for (LocalDate d = first; block.size() < length; d = d.plusDays(1)) {
+                if (cal.isWorkingDay(d)) {
+                    block.add(d);
+                }
+            }
+            addLeave(p, block, "PAID_LEAVE", "Requested leave", false, "PENDING", new TreeSet<>(), leaveRows, rnd);
+        }
+        return new Plan(absent, leaveRows, cal);
     }
 
     /** 45 % start in ISO weeks 30..34, 20 % in weeks 51..2, the rest anywhere. */
@@ -93,28 +105,17 @@ public final class AbsencePlanner {
         return candidates.get(rnd.between(0, candidates.size() - 1));
     }
 
-    static void addLeave(Person p, List<LocalDate> days, String absenceType, String leaveType, String note,
-            Set<LocalDate> absent, List<LinkedHashMap<String, Object>> absenceRows,
-            List<LinkedHashMap<String, Object>> leaveRows, SeedRandom rnd) {
+    static void addLeave(Person p, List<LocalDate> days, String leaveType, String note, boolean halfDayEnd, String status,
+            Set<LocalDate> absent, List<LinkedHashMap<String, Object>> leaveRows, SeedRandom rnd) {
         String created = days.get(0).minusDays(14).atTime(10, 0).toString();
         for (LocalDate d : days) {
             absent.add(d);
-            LinkedHashMap<String, Object> a = new LinkedHashMap<>();
-            a.put("id", rnd.uuid().toString());
-            a.put("date", d.toString());
-            a.put("note", note);
-            a.put("type", absenceType);
-            a.put("hours", HOURS_PER_DAY);
-            a.put("user_id", p.id().toString());
-            a.put("created_at", created);
-            a.put("updated_at", created);
-            absenceRows.add(a);
         }
         LinkedHashMap<String, Object> l = new LinkedHashMap<>();
-        l.put("absence_hours", HOURS_PER_DAY * days.size());
+        l.put("absence_hours", HOURS_PER_DAY * days.size() - (halfDayEnd ? HOURS_PER_DAY / 2 : 0.0));
         l.put("begin_time", null);
         l.put("end_date", days.get(days.size() - 1).toString());
-        l.put("end_time", null);
+        l.put("end_time", halfDayEnd ? "12:00" : null);
         l.put("start_date", days.get(0).toString());
         l.put("created_at", created);
         l.put("updated_at", created);
@@ -123,7 +124,7 @@ public final class AbsencePlanner {
         l.put("note", note);
         l.put("leave_type", leaveType);
         l.put("processor", null);
-        l.put("status", "APPROVED");
+        l.put("status", status);
         leaveRows.add(l);
     }
 }

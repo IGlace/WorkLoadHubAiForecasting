@@ -71,10 +71,7 @@ class SeedGeneratorTest {
         assertResolves(env, "task_history", "user_id", users);
         assertResolves(env, "time_logs", "task_id", tasks);
         assertResolves(env, "time_logs", "user_id", users);
-        assertResolves(env, "absences", "user_id", users);
         assertResolves(env, "personal_leaves", "employee_id", users);
-        assertResolves(env, "user_capacity", "user_id", users);
-        assertResolves(env, "team_capacity", "team_id", teams);
         assertEquals(env.rows("tasks").size(), env.rows("tasks").stream().map(t -> t.get("key")).distinct().count());
         Map<String, Long> maxNumber = new HashMap<>();
         for (var t : env.rows("tasks")) {
@@ -93,11 +90,11 @@ class SeedGeneratorTest {
         ExportEnvelope env = generated();
         assertEquals(40, env.rows("users").size());
         Set<String> weeks = new HashSet<>();
-        for (var r : env.rows("user_capacity")) {
-            weeks.add((String) r.get("week_start"));
+        for (var r : env.rows("time_logs")) {
+            weeks.add(SeedConfig.mondayOf(LocalDate.parse((String) r.get("log_date"))).toString());
         }
-        assertEquals(CFG.mondays().size(), weeks.size());
-        assertTrue(weeks.contains(CFG.firstMonday().toString()) && weeks.contains(SeedConfig.mondayOf(CFG.lastDay()).toString()));
+        assertTrue(weeks.size() >= CFG.mondays().size() - 2, "logs in nearly every week: " + weeks.size());
+        assertTrue(weeks.contains(CFG.firstMonday().toString()) || weeks.contains(CFG.firstMonday().plusWeeks(1).toString()));
         int tasks = env.rows("tasks").size();
         assertTrue(tasks > 40 * 26 * 0.8 && tasks < 40 * 26 * 6, "tasks " + tasks);
         assertTrue(env.rows("time_logs").size() > tasks, "several logs per task");
@@ -119,8 +116,13 @@ class SeedGeneratorTest {
             perDay.computeIfAbsent(user, k -> new HashMap<>()).merge((String) l.get("log_date"), (Double) l.get("hours"), Double::sum);
         }
         Set<String> absentDays = new HashSet<>();
-        for (var a : env.rows("absences")) {
-            absentDays.add(a.get("user_id") + "|" + a.get("date"));
+        for (var l : env.rows("personal_leaves")) {
+            if (!"APPROVED".equals(l.get("status"))) {
+                continue;
+            }
+            for (LocalDate d = LocalDate.parse((String) l.get("start_date")); !d.isAfter(LocalDate.parse((String) l.get("end_date"))); d = d.plusDays(1)) {
+                absentDays.add(l.get("employee_id") + "|" + d);
+            }
         }
         // A present day can now run long (WorkStyle.hoursOn = presence x weekdayWeight x overtimeFactor).
         // WorkStyle.draw caps every weekday weight at MAX_WEEKDAY_WEIGHT (clip-and-redistribute, after
@@ -142,7 +144,7 @@ class SeedGeneratorTest {
             for (var wk : e.getValue().entrySet()) {
                 // weekdayWeights sum to exactly 5, so a member's week can never exceed a full 44 h week
                 // times the largest overtime factor, however the days within it were weighted.
-                assertTrue(wk.getValue() <= CapacityWriter.BASE_HOURS * WorkStyle.MAX_OVERTIME_FACTOR + 1e-9,
+                assertTrue(wk.getValue() <= AbsencePlanner.BASE_HOURS * WorkStyle.MAX_OVERTIME_FACTOR + 1e-9,
                         "more than a week's worth of hours, even with overtime, for " + e.getKey() + "@" + wk.getKey());
             }
         }
@@ -174,30 +176,60 @@ class SeedGeneratorTest {
     }
 
     @Test
-    void capacityRowsAreConsistent() {
+    void theSeedWritesLeavesNotAbsencesOrCapacityRows() {
         ExportEnvelope env = generated();
-        SeedCalendar cal = SeedCalendar.fromHolidayRows(env.rows("holidays"), CFG);
-        Map<String, Double> available = new HashMap<>();
-        for (var r : env.rows("user_capacity")) {
-            double abs = (Double) r.get("absence_hrs");
-            double avail = (Double) r.get("available_hrs");
-            LocalDate monday = LocalDate.parse((String) r.get("week_start"));
-            // the application's own formula: CapacityWriter.BASE_HOURS spread over the week's working days, minus absence
-            double expected = Math.max(0.0, CapacityWriter.BASE_HOURS * cal.workingDays(monday) / 5.0 - abs);
-            assertEquals(expected, avail, 1e-9, "available_hrs for " + r.get("user_id") + "@" + monday);
-            available.put(r.get("user_id") + "|" + r.get("week_start"), avail);
-        }
-        Map<String, List<String>> members = new HashMap<>();
-        for (var m : env.rows("team_members")) {
-            members.computeIfAbsent((String) m.get("team_id"), k -> new java.util.ArrayList<>()).add((String) m.get("user_id"));
-        }
-        for (var r : env.rows("team_capacity")) {
-            double sum = 0;
-            for (String u : members.getOrDefault((String) r.get("team_id"), List.of())) {
-                sum += available.getOrDefault(u + "|" + r.get("week_start"), 0.0);
+        assertTrue(env.rows("absences").isEmpty());
+        assertTrue(env.rows("user_capacity").isEmpty());
+        assertTrue(env.rows("team_capacity").isEmpty());
+        List<LinkedHashMap<String, Object>> leaves = env.rows("personal_leaves");
+        assertFalse(leaves.isEmpty());
+        long halfDays = leaves.stream().filter(l -> l.get("end_time") != null).count();
+        long pending = leaves.stream().filter(l -> "PENDING".equals(l.get("status"))).count();
+        assertTrue(halfDays > 0, "some vacation blocks end on a half day");
+        assertTrue(pending > 0, "some members have a pending leave after the as-of date");
+        for (var l : leaves) {
+            LocalDate start = LocalDate.parse((String) l.get("start_date"));
+            LocalDate end = LocalDate.parse((String) l.get("end_date"));
+            assertFalse(end.isBefore(start));
+            assertTrue((Double) l.get("absence_hours") > 0);
+            if ("PENDING".equals(l.get("status"))) {
+                assertTrue(start.isAfter(CFG.lastDay()), "a pending leave lies in the future");
+                assertTrue(!start.isAfter(CFG.lastDay().plusWeeks(4)), "inside the four weeks after the as-of date");
+            } else {
+                assertEquals("APPROVED", l.get("status"));
             }
-            assertEquals(sum, (Double) r.get("total_capacity_hrs"), 1e-6);
+            if (l.get("end_time") != null) {
+                assertEquals("12:00", l.get("end_time"));
+            }
         }
+    }
+
+    @Test
+    void everyAssigneeHistoryRowNamesItsAssignerAndSelfPickedTasksAreAssignedByTheirAssignee() {
+        ExportEnvelope env = generated();
+        Map<String, String> assigneeByTask = new HashMap<>();
+        Map<String, String> reporterByTask = new HashMap<>();
+        for (var t : env.rows("tasks")) {
+            assigneeByTask.put((String) t.get("id"), (String) t.get("assignee_id"));
+            reporterByTask.put((String) t.get("id"), (String) t.get("reporter_id"));
+        }
+        int self = 0;
+        int assigned = 0;
+        for (var h : env.rows("task_history")) {
+            if (!"assignee".equals(h.get("field_name"))) {
+                continue;
+            }
+            String actor = (String) h.get("user_id");
+            assertTrue(actor != null && !actor.isBlank());
+            String task = (String) h.get("task_id");
+            if (actor.equals(assigneeByTask.get(task))) {
+                self++;
+                assertEquals(actor, reporterByTask.get(task), "a self-picked task is reported by its assignee");
+            } else {
+                assigned++;
+            }
+        }
+        assertTrue(self > 0 && assigned > 0, "both modes present: self " + self + ", assigned " + assigned);
     }
 
     @Test

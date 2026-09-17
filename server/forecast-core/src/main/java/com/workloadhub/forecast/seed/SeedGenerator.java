@@ -2,7 +2,6 @@ package com.workloadhub.forecast.seed;
 
 import com.workloadhub.forecast.data.ExportEnvelope;
 import com.workloadhub.forecast.store.WorkloadHubSchema;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -207,13 +206,11 @@ public final class SeedGenerator {
         List<Person> ordered = new ArrayList<>(dir.people());
         ordered.sort(Comparator.comparing(p -> p.id().toString()));
         Map<UUID, AbsencePlanner.Plan> plans = new HashMap<>();
-        List<LinkedHashMap<String, Object>> absences = new ArrayList<>();
         List<LinkedHashMap<String, Object>> leaves = new ArrayList<>();
         for (Person p : ordered) {
             AbsencePlanner.Plan plan = AbsencePlanner.plan(p, cal, cfg, rnd);
             plans.put(p.id(), plan);
             if (p.counted()) {
-                absences.addAll(plan.absenceRows());
                 leaves.addAll(plan.leaveRows());
             }
         }
@@ -224,25 +221,6 @@ public final class SeedGenerator {
         Reference ref = Reference.from(statuses, types);
         WorkQueue.Result work = WorkQueue.run(cfg, cal, dir.people(), plans, dir.teams(), projects, rhythm, ref,
                 WorkQueue.Rates.DEFAULT, rnd);
-
-        // 5. capacity
-        Map<UUID, List<LinkedHashMap<String, Object>>> userCapacity = new HashMap<>();
-        List<LinkedHashMap<String, Object>> userCapacityRows = new ArrayList<>();
-        for (Person p : ordered) {
-            if (!p.counted()) {
-                continue;
-            }
-            List<LinkedHashMap<String, Object>> rows = CapacityWriter.userCapacity(p, plans.get(p.id()), cal, cfg, rnd);
-            userCapacity.put(p.id(), rows);
-            userCapacityRows.addAll(rows);
-        }
-        List<LinkedHashMap<String, Object>> teamCapacityRows = new ArrayList<>();
-        List<Team> orderedTeams = new ArrayList<>(dir.teams());
-        orderedTeams.sort(Comparator.comparing(t -> t.id().toString()));
-        for (Team t : orderedTeams) {
-            teamCapacityRows.addAll(CapacityWriter.teamCapacity(t, userCapacity,
-                    (member, monday) -> work.assignedHours().getOrDefault(member, Map.of()).getOrDefault(monday, 0.0), cfg, rnd));
-        }
 
         // 6. project rows with the next task number
         Map<String, LinkedHashMap<String, Object>> existingById = new HashMap<>();
@@ -272,11 +250,8 @@ public final class SeedGenerator {
         data.put("tasks", work.taskRows());
         data.put("task_history", work.historyRows());
         data.put("time_logs", work.timeLogRows());
-        data.put("absences", absences);
         data.put("personal_leaves", leaves);
         data.put("holidays", cal.holidayRows());
-        data.put("user_capacity", userCapacityRows);
-        data.put("team_capacity", teamCapacityRows);
         data.put("sync_metadata", syncMetadata);
         String database = input == null ? "synthetic" : input.database();
         return new ExportEnvelope(database, "task_service", cfg.lastDay().atTime(18, 0).toString(),

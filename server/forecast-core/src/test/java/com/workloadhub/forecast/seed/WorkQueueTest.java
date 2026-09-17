@@ -423,7 +423,7 @@ class WorkQueueTest {
             }
         }
         boolean anyLongWeek = byMemberWeek.values().stream().flatMap(m -> m.values().stream())
-                .anyMatch(h -> h > CapacityWriter.BASE_HOURS);
+                .anyMatch(h -> h > AbsencePlanner.BASE_HOURS);
         assertTrue(anyLongWeek, "no seeded member ever logs more than a week's capacity, so overload can never fire");
     }
 
