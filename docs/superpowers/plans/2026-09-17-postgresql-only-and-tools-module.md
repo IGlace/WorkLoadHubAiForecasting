@@ -39,6 +39,7 @@
 ## Task order and why
 
 1. Dead code outside the seed. 2. Dead code in the seed. Both before anything moves, so the moves are smaller.
+2b. (Added during execution.) Real mode plans projects for the application's own teams: the first PostgreSQL run of the suite found a foreign-key failure on unmodified `dev` that SQLite had hidden.
 3. Every database test on PostgreSQL, the hard failure without an engine, the gate pre-check. SQLite still exists in main.
 4. The final `V1` migration; the SQLite migrations deleted.
 5. `Dialect` out; the stores, the repository, the service, the importer, the exporter, the driver and the sample host on PostgreSQL types and URLs; every SQLite artifact and dependency gone.
@@ -287,6 +288,143 @@ Plan.absenceHours, SeedCalendar.holidays, Rhythm.calendar and two write-only
 fields, Project.existing/family and Person.email had no reader in main code
 since CapacityWriter and the absences table went (spec 2026-09-17, section 5.2).
 The seeded export is byte-identical before and after."
+```
+
+---
+
+### Task 2b: Real mode uses the application's own teams (added by ruling during execution)
+
+**Why this task exists.** Task 1's gate, the first ever run of the PostgreSQL tests since the 2026-09-17 seed change landed (that landing ran without Docker), found `SqlExportWriterTest.aFiveTableScriptLandsTwiceOnPostgresql` failing on unmodified `dev`: `insert or update on table "projects" violates foreign key constraint ... Key (team_id)=(...) is not present in table "teams"`. Cause: `Directory.derive` invents department teams and manager teams (`rnd.uuid()`) in both modes, and `ProjectPlanner.plan` gives every invented department team two to four projects; in real mode the seed writes only `projects`, `tasks`, `task_history`, `time_logs` and `personal_leaves` (spec 2026-09-17 personal leaves, section 7.1), so the invented teams never reach the database and every new project points at a team that does not exist. SQLite never enforced the foreign key, which is why this passed until now. From Task 3 on PostgreSQL is mandatory, so this must be fixed first.
+
+**Ruling.** In real mode the application's teams are the structure: `Directory.derive` builds its `Team` values from the export's `teams` and `team_members` rows and invents none; a team with no `parent_team_id` is a department team (it receives the projects), a team with one is a member team of that department. Synthetic mode is unchanged and its output stays byte-identical. A counted person who belongs to no team gets no work (the module does not count such a user either: `ForecastRepository` requires a membership).
+
+**Files:**
+- Modify: `server/forecast-core/src/main/java/com/workloadhub/forecast/seed/Directory.java`
+- Modify: `server/forecast-core/src/main/java/com/workloadhub/forecast/seed/WorkQueue.java` (`run`)
+- Test: `server/forecast-core/src/test/java/com/workloadhub/forecast/seed/SeedGeneratorTest.java` (new test), `seed/DirectoryTest.java` (its config), `data/SqlExportWriterTest.java` (the failing test, unchanged, must pass)
+
+**Interfaces:**
+- Consumes: `Directory.derive(userRows, teamRows, memberRows, cfg, rnd)`, `Directory.Result`, `Team(id, name, managerId, parentId, memberIds, department, deptCode)`, `SeedConfig.synthetic()`, `Rhythm.teamOf(Person)`.
+- Produces: in real mode `Directory.Result.teams()` holds exactly the export's teams, and `userRows`, `teamRows`, `teamMemberRows` are the input rows unchanged; `WorkQueue.run` simulates only counted people that have a team.
+
+- [ ] **Step 1: Reproduce on HEAD**
+
+From `server/`: `mvn -B -q -pl forecast-core test -Dtest=SqlExportWriterTest -Dsurefire.failIfNoSpecifiedTests=false`
+Expected: `aFiveTableScriptLandsTwiceOnPostgresql` errors with the foreign-key message above (Docker is running on this machine; the test starts PostgreSQL through Testcontainers).
+
+Also pin the synthetic output before the change, from `server/`:
+
+```bash
+cp="$(bash tools/core-classpath.sh)" && java --class-path "$cp" tools/Experiment.java seed --synthetic --users 36 --weeks 30 --end 2026-09-06 --seed 11 --out /tmp/seed-2b-before.json && sha256sum /tmp/seed-2b-before.json
+```
+
+- [ ] **Step 2: The failing test for the rule**
+
+Add to `SeedGeneratorTest`:
+
+```java
+    /** Real mode writes no teams, so every project it plans must belong to a team the export already has. */
+    @Test
+    void realModeProjectsBelongToTheExportsOwnTeams() throws Exception {
+        ExportEnvelope input = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
+        Set<String> teams = ids(input, "teams");
+        for (var p : env.rows("projects")) {
+            assertTrue(p.get("team_id") == null || teams.contains(p.get("team_id")), "project " + p.get("key") + " points at an invented team");
+        }
+        assertFalse(env.rows("tasks").isEmpty(), "the export's team still gets work");
+        for (var t : env.rows("tasks")) {
+            assertTrue(ids(env, "projects").contains(t.get("project_id")));
+        }
+    }
+```
+
+Run: `mvn -B -q -pl forecast-core test -Dtest=SeedGeneratorTest -Dsurefire.failIfNoSpecifiedTests=false`
+Expected: the new test fails on the first assertion (an invented team id).
+
+- [ ] **Step 3: `Directory.derive` in real mode**
+
+In `Directory.java`, immediately after step 3 (the roles block ends with the `heads` loop) and before the comment `// 4. department teams`, insert:
+
+```java
+        // Real mode: the application's own teams are the structure, and the seed writes none (design
+        // 2026-09-17, section 7.1), so nothing may be invented here. A team without a parent is a department
+        // team and receives the projects; a team with one is a member team of that department.
+        if (!cfg.synthetic()) {
+            return new Result(new ArrayList<>(people.values()), applicationTeams(teamRows, memberRows, people), userRows, teamRows, memberRows);
+        }
+```
+
+and add the method beside `existingTeams`:
+
+```java
+    /** The export's teams as the generator's Team values: department when parentless, deptCode from the members' majority. */
+    static List<Team> applicationTeams(List<LinkedHashMap<String, Object>> teamRows, List<LinkedHashMap<String, Object>> memberRows,
+            Map<UUID, Person> people) {
+        List<Team> out = new ArrayList<>();
+        for (LinkedHashMap<String, Object> t : teamRows) {
+            UUID id = UUID.fromString((String) t.get("id"));
+            List<UUID> members = new ArrayList<>();
+            Map<String, Integer> codes = new TreeMap<>();
+            for (LinkedHashMap<String, Object> m : memberRows) {
+                if (!id.toString().equals(m.get("team_id"))) {
+                    continue;
+                }
+                UUID member = UUID.fromString((String) m.get("user_id"));
+                members.add(member);
+                Person p = people.get(member);
+                if (p != null && p.deptCode() != null) {
+                    codes.merge(p.deptCode(), 1, Integer::sum);
+                }
+            }
+            String code = codes.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
+            UUID parent = t.get("parent_team_id") == null ? null : UUID.fromString((String) t.get("parent_team_id"));
+            out.add(new Team(id, (String) t.get("name"), t.get("manager_id") == null ? null : UUID.fromString((String) t.get("manager_id")),
+                    parent, members, parent == null, code));
+        }
+        return out;
+    }
+```
+
+`existingTeams` and the synthetic path stay exactly as they are (the synthetic output must not change by a byte).
+
+- [ ] **Step 4: `WorkQueue.run` skips counted people without a team**
+
+In `WorkQueue.run`, `counted.removeIf(p -> !p.counted());` becomes `counted.removeIf(p -> !p.counted() || rhythm.teamOf(p) == null);` with the comment `// a counted person in no team gets no work: the module does not count such a user either`. In synthetic mode everyone is in a team, so this removes nobody there.
+
+- [ ] **Step 5: `DirectoryTest` runs the derivation it tests in synthetic mode**
+
+`DirectoryTest.cfg()` returns `new SeedConfig(20, LocalDate.of(2026, 9, 6), 42L, true, 0)` (the derivation of teams from managers and departments is the synthetic mode's; a real export brings its own teams).
+
+- [ ] **Step 6: Prove it**
+
+`mvn -B -q -pl forecast-core test -Dtest='SeedGeneratorTest,DirectoryTest,SqlExportWriterTest,RoundTripTest,WorkQueueTest' -Dsurefire.failIfNoSpecifiedTests=false` passes, including `aFiveTableScriptLandsTwiceOnPostgresql`.
+
+Byte-identity of the synthetic seed:
+
+```bash
+cp="$(bash tools/core-classpath.sh)" && java --class-path "$cp" tools/Experiment.java seed --synthetic --users 36 --weeks 30 --end 2026-09-06 --seed 11 --out /tmp/seed-2b-after.json && sha256sum /tmp/seed-2b-before.json /tmp/seed-2b-after.json
+```
+
+Expected: equal hashes.
+
+- [ ] **Step 7: Gate**
+
+`rm -rf forecast-core/target/surefire-reports && mvn -B -q verify` from `server/`; exit 0 this time (Task 1 ended with exactly this one error). Read `TEST-*.xml`: 0 failures, 0 errors.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A server/forecast-core
+git commit -m "Give real-mode projects to the application's own teams
+
+Real mode writes five work tables and no teams, yet the seed still invented
+department and manager teams and planned every project for them, so each new
+project pointed at a team the database never receives. PostgreSQL's foreign
+key caught it the first time the PostgreSQL tests ran after that change
+landed; SQLite never enforced it. In real mode the export's teams are now the
+structure, a parentless one being the department that receives the projects,
+and a counted user in no team gets no work. Synthetic output is byte-identical."
 ```
 
 ---
