@@ -1,7 +1,7 @@
 # Personal leaves, capacity from the calendar, and the seed's scope
 
 **Date:** 2026-09-17
-**Status:** designed; owner review pending
+**Status:** implemented, landed on `dev` on 2026-09-17 (plan `docs/superpowers/plans/2026-09-17-personal-leaves-capacity-and-seed-scope.md`, closing notes there)
 **Supersedes:** section 4 ("Calendar and capacity") and parts of section 5 of
 `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md`; the capacity paragraphs of
 `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md` section 10 where they read
