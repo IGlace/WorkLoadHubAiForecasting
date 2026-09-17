@@ -365,16 +365,26 @@ class WorkQueueTest {
         });
         assertTrue(subTaskFound, "at least one sub-task under an epic of the same project");
 
-        // (c) planned_week equals mondayOf(assignment day) when assigned, null when not
+        // (c) planned_week is the assignment week, or one or two weeks after it by the deterministic rule on
+        // the task's own number, null when unassigned; some rows must be planned forward, or planned_hrs_h{h}
+        // is identically zero on every seeded feature matrix
+        int plannedForward = 0;
         for (var t : r.taskRows()) {
             Object plannedWeek = t.get("planned_week");
             if (t.get("assignee_id") == null) {
                 assertNull(plannedWeek, "unassigned rows carry no planned week: " + t.get("id"));
             } else {
                 LocalDateTime assigned = assignedTimestamp(r, t);
-                assertEquals(SeedConfig.mondayOf(assigned.toLocalDate()).toString(), plannedWeek, "planned week for " + t.get("id"));
+                boolean epic = r.historyRows().stream()
+                        .noneMatch(h -> "assignee".equals(h.get("field_name")) && t.get("id").equals(h.get("task_id")));
+                long number = (Long) t.get("task_number");
+                int ahead = epic ? 0 : number % 7 == 0 ? 2 : number % 3 == 0 ? 1 : 0;
+                LocalDate week = SeedConfig.mondayOf(assigned.toLocalDate()).plusWeeks(ahead);
+                assertEquals(week.toString(), plannedWeek, "planned week for " + t.get("id"));
+                plannedForward += ahead > 0 ? 1 : 0;
             }
         }
+        assertTrue(plannedForward > 0, "a fraction of the tasks is planned forward");
 
         // (d) nextTaskNumber per project equals the max task_number of that project's rows, plus one
         Map<String, Long> maxByProject = new HashMap<>();

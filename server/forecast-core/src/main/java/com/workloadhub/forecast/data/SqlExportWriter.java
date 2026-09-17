@@ -16,13 +16,30 @@ public final class SqlExportWriter {
     private SqlExportWriter() {
     }
 
+    /**
+     * The guard a partial script opens with: the seed deletes the work tables, and {@code task_comments} and
+     * {@code task_attachments} reference them but are user content the seed neither writes nor deletes. A
+     * database that still holds them would fail the delete with a foreign-key error naming nothing a reader
+     * can act on, so the script says it plainly first, before anything is touched.
+     */
+    static final String USER_CONTENT_GUARD = "DO $$ BEGIN\n"
+            + "  IF EXISTS (SELECT 1 FROM task_comments) OR EXISTS (SELECT 1 FROM task_attachments) THEN\n"
+            + "    RAISE EXCEPTION 'task_comments or task_attachments is not empty: the seed never deletes"
+            + " user content; empty them first';\n"
+            + "  END IF;\n"
+            + "END $$;\n";
+
     public static void write(ExportEnvelope env, Writer out) throws IOException {
         out.write("BEGIN;\nSET search_path TO task_service;\n");
-        // partial: the envelope does not carry every table (a real-mode seed), so it lands into a database that
-        // already holds the rest — delete the seeded work tables child-first and upsert the shared one
-        boolean partial = !env.data().keySet().containsAll(
-                WorkloadHubSchema.TABLE_ORDER.stream().filter(t -> !t.equals("refresh_tokens")).toList());
+        // partial: the envelope declares it, by excluding a table it does not carry (a real-mode seed), so it
+        // lands into a database that already holds the rest — delete the seeded work tables child-first and
+        // upsert the shared one. Read the declaration rather than the data keys: what an envelope is
+        // responsible for is what it says it is, not what its rows happen to cover, and a full export whose
+        // last tables are empty is not partial. refresh_tokens is never exported, so it never counts.
+        boolean partial = env.excludedTables().stream()
+                .anyMatch(t -> !t.equals("refresh_tokens") && WorkloadHubSchema.TABLE_ORDER.contains(t));
         if (partial) {
+            out.write(USER_CONTENT_GUARD);
             List<String> reverse = new ArrayList<>(WorkloadHubSchema.TABLE_ORDER);
             Collections.reverse(reverse);
             for (String table : reverse) {

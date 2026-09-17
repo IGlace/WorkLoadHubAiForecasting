@@ -37,7 +37,8 @@ final class FactsTools {
                 new ToolSpec("get_member_open_tasks", "Open tasks of one member with keys, estimates, due dates, overdue flags and project keys.", true,
                         this::memberOpenTasks),
                 new ToolSpec("get_member_capacity", "Capacity, demand, overload and the two pressure figures (backlog_excess_hrs, due_excess_hrs)"
-                        + " per forecast window and per day for one member, with working days and absence hours.", true,
+                        + " per forecast window and per day for one member, with working days and absence hours, and the member's pending"
+                        + " leave requests inside the horizon (not approved yet, so they do not reduce capacity).", true,
                         this::memberCapacity),
                 new ToolSpec("get_project_timelines", "Projects of the team with status, open and backlog task counts and the first due date, plus the forecast windows.",
                         false, id -> projectTimelines()),
@@ -120,7 +121,10 @@ final class FactsTools {
                     "backlog_excess_hrs", plain(row.path("backlog_excess_hrs")), "due_excess_hrs", plain(row.path("due_excess_hrs")),
                     "planned_hours", plain(row.path("planned_hours"))));
         }
-        return map("member_id", id, "name", m.path("name").asText(), "windows", windows, "days", plain(m.path("days")));
+        // Pending leaves ride with capacity: they are the risk to the capacity figures on these rows, and three
+        // skills tell Copilot to read them, which no tool served before.
+        return map("member_id", id, "name", m.path("name").asText(), "windows", windows, "days", plain(m.path("days")),
+                "pending_leaves", plain(m.path("pending_leaves")));
     }
 
     Map<String, Object> projectTimelines() {

@@ -33,7 +33,7 @@ The rulings, in the letters the review used:
 | D | assignment mode | **Replace the guess with the fact.** `task_history.user_id` on the assignee row is who assigned the task. Equal to the new assignee: self-picked. Anyone else: assigned. Two columns replace three (section 6). |
 | E | remaining hours | Keep both definitions: the features recompute estimate minus logged hours as of the row's week; the leader-facing facts read `remaining_estimate_hrs`. Documented in section 5. |
 | F | sentinel values | **Blank instead of invented.** Every ratio whose denominator is zero, and "weeks since" when there is no event, are left empty; the booster treats them as missing (section 5.2). |
-| G | four fields read as of today | Accept and document (section 5.3). |
+| G | the fields read as of today | Accept and document (section 5.3). Five, not four: `planned_week` joins them, because `Truncation` does not rewind it either. |
 | H | project deadline | **Remove `proj_first_due_weeks`.** Projects will have no deadline or start date. |
 | I | capacity default | `user_capacity` is not read. Capacity is the module's own formula (section 3). 44 h stays a setting, `whf.default-weekly-hours`, default 44. |
 | J | `team_capacity` | Not read, not shown. The facts drop the `team.team_capacity` block. |
@@ -93,7 +93,9 @@ For one leave:
    - Otherwise `total` is capped at `n × fullDayHours` and dealt out `fullDayHours` per day **from the first
      day forward**, the last day receiving what is left. When `begin_time` is set and `end_time` is not,
      the leave starts on a partial day, so it is dealt **from the last day backward** and the first day
-     receives what is left. A day that receives zero hours is not an absent day.
+     receives what is left. Only `begin_time` alone moves the partial day to the front: a leave with both
+     `begin_time` and `end_time` is dealt forward like one that only ends, so its remainder lands on the last
+     day. A day that receives zero hours is not an absent day.
 
    Examples with an 8.8-hour day:
 
@@ -102,6 +104,7 @@ For one leave:
    | Mon 7 to Wed 9 Sep, `absence_hours` 26.4 | Mon, Tue, Wed | 8.8, 8.8, 8.8 |
    | Mon 7 to Wed 9 Sep, 22.0, `end_time` 12:00 | Mon, Tue, Wed | 8.8, 8.8, 4.4 |
    | Mon 7 to Wed 9 Sep, 22.0, `begin_time` 13:00 | Mon, Tue, Wed | 4.4, 8.8, 8.8 |
+   | Mon 7 to Wed 9 Sep, 22.0, `begin_time` 13:00 and `end_time` 12:00 | Mon, Tue, Wed | 8.8, 8.8, 4.4 |
    | Fri 4 to Mon 7 Sep, 17.6 | Fri, Mon (weekend skipped) | 8.8, 8.8 |
    | Thu 10 to Thu 10 Sep, 4.0 (a half day) | Thu | 4.0 |
    | Thu 10 to Fri 11 Sep, 8.8 (one day's worth over two dates) | Thu, Fri | 8.8, 0 → only Thu is absent |
@@ -224,12 +227,16 @@ row later.
 
 ### 5.3 Read as of today, documented
 
-The history replay (`Truncation`) rewinds assignments, statuses and logs to the row's week. Four fields have
+The history replay (`Truncation`) rewinds assignments, statuses and logs to the row's week. Five fields have
 no history and are read as they stand on the run day: `tasks.reopened_from_done`, `projects.status`,
-`tasks.due_date`, `tasks.original_estimate_hrs`. `reopen_rate_13w`, `proj_active`, `proj_planning`,
-`overdue_open`, `due_hrs_h` and every estimate-based sum carry that hindsight. Accepted on 2026-09-16: a task's
-current due date is the best available stand-in for the due date it had, and the alternative is to drop the
-columns. The schema document's feature section states it under each column.
+`tasks.due_date`, `tasks.original_estimate_hrs` and `tasks.planned_week`. `reopen_rate_13w`, `proj_active`,
+`proj_planning`, `overdue_open`, `due_hrs_h`, `planned_hrs_h` and every estimate-based sum carry that
+hindsight. `planned_week` belongs on the list because `Truncation` passes it through unrewound and
+`MemberContext.plannedHours` reads it, so `planned_hrs_h{h}` carries the hindsight too: a leader usually sets
+the planned week shortly before the week it names, so a training row can see a plan made after its own week
+ended. Accepted on 2026-09-16 on the same grounds as the other four: a task's current value is the best
+available stand-in for the value it had, and the alternative is to drop the columns. The schema document's
+feature section states it under each column.
 
 The same section states ruling E: `open_remaining_hrs` and `due_hrs_h` recompute remaining hours as
 `original_estimate_hrs` minus the hours logged on the task by the row's week end, because a training row

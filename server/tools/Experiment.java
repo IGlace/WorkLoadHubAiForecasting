@@ -192,8 +192,13 @@ public final class Experiment {
         long ms = (System.nanoTime() - started) / 1_000_000;
         System.out.printf("Wrote %s in %d ms: %d weeks ending %s, seed %d, %s%n", out, ms, weeks, cfg.lastDay(), cfg.seed(),
                 synthetic ? "synthetic identities" : "real identities (do not commit)");
+        // Only the tables that hold rows: a synthetic envelope carries every table of the schema, so printing
+        // every key meant twenty-four lines of which more than half read zero.
         for (String table : result.data().keySet()) {
-            System.out.printf("  %-18s %8d%n", table, result.rows(table).size());
+            int rows = result.rows(table).size();
+            if (rows > 0) {
+                System.out.printf("  %-18s %8d%n", table, rows);
+            }
         }
         return 0;
     }

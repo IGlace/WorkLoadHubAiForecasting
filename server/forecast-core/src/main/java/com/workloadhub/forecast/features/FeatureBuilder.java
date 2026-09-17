@@ -281,7 +281,12 @@ public final class FeatureBuilder {
             return sum;
         }
 
-        /** Estimated hours of the member's tasks open at the end of week {@code w} and planned for the week of {@code target}. */
+        /**
+         * Estimated hours of the member's tasks open at the end of week {@code w} and planned for the week of
+         * {@code target}. {@code planned_week} is one of the five fields read as they stand on the run day
+         * (ruling G of 2026-09-16, {@link Features}): {@code Truncation} does not rewind it, so this column
+         * carries the hindsight of a plan a leader may have set after week {@code w} ended.
+         */
         double plannedHours(LocalDate w, LocalDate target) {
             LocalDate end = w.plusDays(6);
             double sum = 0;

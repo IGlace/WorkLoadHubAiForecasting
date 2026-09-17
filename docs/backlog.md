@@ -307,6 +307,22 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **`CapacityRule` builds its own calendar for the leave index while its callers pass one (2026-09-17).**
+  `CapacityRule.indexFor` expands the approved leaves with `WorkingCalendar.fromHolidays(data.holidays())`,
+  but every public method also takes a `WorkingCalendar` from its caller. The two agree today, because every
+  caller builds the calendar from the same `data.holidays()`. A caller that passed a filtered or otherwise
+  different calendar — a team calendar, a run that excludes an unconfirmed holiday — would get a leave index
+  expanded over different working days from the one used to count them, and nothing would say so: the
+  capacity would simply be wrong by a day here and there. Either take the calendar as a constructor argument
+  and stop building one, or key the index by (data, calendar) instead of by data alone.
+
+- **The fact key `planned_hours` is a reused name (2026-09-17).** It means, since 2026-09-17, the estimated
+  hours of a member's open tasks whose `planned_week` overlaps the window (`tasks.planned_week`, ruling K).
+  Until 2026-09-13 the same key meant the hours `PlannedWork` allocated to a member — a different quantity
+  from a deleted model. Anything read from a stored `forecast_facts` row, an old narrative or a document
+  written before 2026-09-13 means the old one. Rename the new key (`planned_week_hours`) or note the break
+  where the facts contract defines it, before the two meanings are ever compared.
+
 - **Read `tasks.assigned_at` when the application adds it (2026-09-17).** The assignment date is derived from
   the latest `task_history` assignee row (else `created_date`). The application will carry an `assigned_at`
   column later; when it exists, `Lifecycle.assignment` should prefer it and keep today's rule as the fallback.

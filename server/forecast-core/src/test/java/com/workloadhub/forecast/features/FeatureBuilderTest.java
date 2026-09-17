@@ -178,6 +178,15 @@ class FeatureBuilderTest {
             assertTrue(m.key(i - 1).compareTo(m.key(i)) < 0, "rows sorted");
         }
         assertEquals(data.members().size(), m.codebooks().get("member_id").size());
+        // Not just "not all NaN": planned_hrs_h1 was identically zero on every seeded row, because the seed
+        // planned every task for its own assignment week and the column needs planned_week == w + h.
+        long plannedRows = 0;
+        for (int i = 0; i < m.rowCount(); i++) {
+            if (m.get(i, "planned_hrs_h1") > 0) {
+                plannedRows++;
+            }
+        }
+        assertTrue(plannedRows > 0, "planned_hrs_h1 is zero on every seeded row: the column is never exercised");
     }
 
     @Test

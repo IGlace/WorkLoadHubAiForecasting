@@ -52,6 +52,14 @@ class LeaveDaysTest {
     }
 
     @Test
+    void aLeaveWithBothTimesIsDealtForwardLikeOneThatOnlyEnds() {
+        // Both times set: only begin_time alone moves the partial day to the front (design 2026-09-17,
+        // section 2.2), so a leave that starts at 13:00 and ends at 12:00 still leaves its remainder last.
+        assertEquals(Map.of(MON, 8.8, TUE, 8.8, WED, 4.4),
+                days(leave(MON, WED, 22.0, LocalTime.of(13, 0), LocalTime.of(12, 0)), PLAIN));
+    }
+
+    @Test
     void weekendsAndHolidaysCostNothing() {
         LocalDate fri = LocalDate.of(2026, 9, 4);
         assertEquals(Map.of(fri, 8.8, MON, 8.8), days(leave(fri, MON, 17.6, null, null), PLAIN), "Saturday and Sunday are skipped");

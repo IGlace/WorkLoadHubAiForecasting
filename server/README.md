@@ -153,9 +153,14 @@ with the evaluation harness (`docs/superpowers/specs/2026-09-14-evaluation-remov
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
 `psql -d avl_workloadhub -f ~/whf/seeded.sql` (it runs inside one transaction and sets
 `search_path` to `task_service`; the script deletes the seeded work tables (time logs, history, tasks,
-leaves) child-first inside the transaction and upserts projects by id; a database that still holds
-comments or attachments on old tasks makes the delete fail and nothing is applied). The JSON `import` with
-an existing database does the same: it replaces only the tables the file carries.
+leaves) child-first inside the transaction and upserts projects by id). Two things to know before running
+it: `DELETE FROM personal_leaves` removes the leaves of **every** employee in the database, not only those
+of the members the forecast counts; and the script refuses to run at all while `task_comments` or
+`task_attachments` hold rows — it opens with a guard that raises `task_comments or task_attachments is not
+empty: the seed never deletes user content; empty them first`, because those tables are user content the
+seed never writes and never deletes, and they reference the tasks it does delete. Nothing is applied when
+the guard fires. The JSON `import` with an existing database does the same: it replaces only the tables the
+file carries.
 
 ## What the seed writes
 

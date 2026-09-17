@@ -35,6 +35,17 @@ import java.util.List;
  * {@code proj_planning}, {@code due_hrs_h}, {@code planned_hrs_h}, {@code absence_hrs_h} are counts and sums,
  * and zero is their true value when there is nothing. {@code roll_std_*} is 0.0 for a single-week window
  * because one observation has no spread, which is a statement, not an absence of one.
+ *
+ * <p>Read as of the run day (ruling G of 2026-09-16): {@code Truncation} rewinds assignments, statuses and
+ * logs to the row's week, but five task and project fields have no history and are read as they stand today —
+ * {@code tasks.reopened_from_done}, {@code projects.status}, {@code tasks.due_date},
+ * {@code tasks.original_estimate_hrs} and {@code tasks.planned_week}. {@code reopen_rate_13w},
+ * {@code proj_active}, {@code proj_planning}, {@code overdue_open}, {@code due_hrs_h}, {@code planned_hrs_h}
+ * and every estimate-based sum carry that hindsight. {@code planned_week} is the fifth of them:
+ * {@code Truncation} passes it through unrewound and {@code MemberContext.plannedHours} reads it, and a leader
+ * usually sets it shortly before the week it names, so a training row can see a plan made after its own week
+ * ended. Accepted on the same grounds as the other four: the field has no history to replay, and the
+ * alternative is to drop the columns.
  */
 public final class Features {
 

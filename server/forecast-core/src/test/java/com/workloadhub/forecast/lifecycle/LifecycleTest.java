@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.data.rows.TransitionRow;
 import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecast.testing.TestData;
 import java.time.LocalDate;
@@ -140,10 +141,13 @@ class LifecycleTest {
         TaskRow sub = TestData.task("1", ANA.id(), CREATED, 4).withType("Sub-task").withParent(TestData.id("task-2"));
         TaskRow bug = TestData.task("2", ANA.id(), CREATED, 4).withType("Bug");
         TaskRow spike = TestData.task("3", ANA.id(), CREATED, 4).withType("Spike");
-        Lifecycle lc = Lifecycle.derive(TestData.data(List.of(ANA), List.of(sub, bug, spike), List.of(), List.of()));
+        TaskRow orphan = TestData.task("4", ANA.id(), CREATED, 4).withType("Sub-task").withParent(TestData.id("task-gone"));
+        Lifecycle lc = Lifecycle.derive(TestData.data(List.of(ANA), List.of(sub, bug, spike, orphan), List.of(), List.of()));
         assertEquals(Family.DEFECT, lc.of(sub.id()).family(), "a sub-task of a bug is bug work");
         assertEquals(Family.DEFECT, lc.of(bug.id()).family());
         assertEquals(Family.SUPPORT, lc.of(spike.id()).family());
+        assertEquals(Family.DELIVERY, lc.of(orphan.id()).family(),
+                "a sub-task whose parent id points at no task has nothing to inherit and falls back to delivery");
     }
 
     @Test
@@ -158,6 +162,18 @@ class LifecycleTest {
         assertEquals(Mode.SELF_PICKED, lc.of(self.id()).mode(), "the assignee did the assigning");
         assertEquals(Mode.ASSIGNED, lc.of(byLead.id()).mode(), "someone else did");
         assertEquals(Mode.UNKNOWN, lc.of(noRow.id()).mode(), "no assignee row: the reporter is not evidence");
+    }
+
+    @Test
+    void anAssigneeRowWithNoAuthorIsNotEvidenceOfEitherMode() {
+        // task_history.user_id is nullable; a row that does not say who assigned the task cannot decide the
+        // mode, and must not be read as "someone else did it" merely because null is not the assignee.
+        TaskRow anonymous = TestData.task("1", ANA.id(), CREATED, 4);
+        ForecastData data = TestData.data(List.of(ANA), List.of(anonymous),
+                List.of(new TransitionRow(anonymous.id(), null, "assignee", null, ANA.fullName(), CREATED.plusHours(1))), List.of());
+        TaskFacts f = Lifecycle.derive(data).of(anonymous.id());
+        assertEquals(Mode.UNKNOWN, f.mode(), "a null user_id decides nothing");
+        assertEquals(CREATED.plusHours(1), f.assigned(), "the row still dates the assignment");
     }
 
     @Test

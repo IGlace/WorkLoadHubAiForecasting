@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
@@ -106,6 +107,46 @@ class FactsBuilderTest {
         long seededPending = SeededData.data().pendingLeaves().stream()
                 .filter(l -> !l.end().isBefore(first) && !l.start().isAfter(last)).count();
         assertTrue(seededPending > 0, "the seed does produce pending leaves inside a horizon");
+    }
+
+    // Deferred task 6 of the plan, on a constructed fixture rather than the seed: the horizon filter is an
+    // inclusive overlap test at both ends, and a leave whose `absence_hours` the application never recorded
+    // must travel as JSON null rather than as a zero or an exception.
+    @Test
+    @SuppressWarnings("unchecked")
+    void pendingLeavesAreFilteredInclusivelyAtBothEndsOfTheHorizonAndKeepANullTotal() {
+        LocalDate asOf = LocalDate.of(2026, 9, 6);                 // Sunday: window 1 is 09-07..09-11, window 2 is 09-14..09-18
+        MemberRow ana = TestData.member("leaves", TestData.TEAM);
+        TaskRow open = TestData.task("open", ana.id(), asOf.minusWeeks(2).atTime(9, 0), 5.0);
+        LeaveRow endsOnFirstDay = new LeaveRow(ana.id(), LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 7), null, null, 8.8, "PENDING", "PAID_LEAVE");
+        LeaveRow startsOnLastDay = new LeaveRow(ana.id(), LocalDate.of(2026, 9, 18), LocalDate.of(2026, 9, 25), null, null, 17.6, "PENDING", "PAID_LEAVE");
+        LeaveRow outside = new LeaveRow(ana.id(), LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 25), null, null, 8.8, "PENDING", "PAID_LEAVE");
+        LeaveRow noTotal = new LeaveRow(ana.id(), LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), null, null, null, "PENDING", "SICK_LEAVE");
+        ForecastData data = new ForecastData(List.of(ana),
+                List.of(new TeamRow(TestData.PARENT_TEAM, "Dept", null, null), new TeamRow(TestData.TEAM, "Team", null, TestData.PARENT_TEAM)),
+                List.of(), List.of(open), List.of(), List.of(), List.of(),
+                List.of(endsOnFirstDay, startsOnLastDay, outside, noTotal), List.of(), List.of(TestData.user(ana)), TestData.STATUS_CATEGORIES);
+        ForecastRunner runner = new ForecastRunner(new CapacityRule(44), 2);
+        Prepared prepared = runner.prepare(data, asOf, ForecastRunner.ProgressListener.NONE);
+        TeamOutcome out = runner.forTeam(prepared, TestData.TEAM);
+        Map<String, Object> built = FactsBuilder.build(out, UUID.fromString("00000000-0000-0000-0000-000000000006"),
+                LocalDateTime.of(2026, 9, 6, 12, 0));
+
+        List<Map<String, Object>> members = (List<Map<String, Object>>) built.get("members");
+        assertEquals(1, members.size());
+        List<Map<String, Object>> pending = (List<Map<String, Object>>) members.get(0).get("pending_leaves");
+        assertEquals(3, pending.size(), "the leave entirely after the horizon is dropped: " + pending);
+        assertEquals("2026-09-02", pending.get(0).get("start_date"));
+        assertEquals("2026-09-07", pending.get(0).get("end_date"), "a leave ending on the horizon's first day is inside it");
+        assertEquals(8.8, pending.get(0).get("absence_hours"));
+        assertEquals("2026-09-09", pending.get(1).get("start_date"));
+        assertEquals("SICK_LEAVE", pending.get(1).get("leave_type"));
+        assertNull(pending.get(1).get("absence_hours"), "a leave with no recorded total keeps it absent, it is not invented");
+        assertTrue(pending.get(1).containsKey("absence_hours"), "the key is present and null, not missing");
+        assertEquals("2026-09-18", pending.get(2).get("start_date"), "a leave starting on the horizon's last day is inside it");
+        assertEquals("2026-09-25", pending.get(2).get("end_date"));
+        assertFalse(pending.stream().anyMatch(l -> "2026-09-21".equals(l.get("start_date"))));
+        assertTrue(FactsBuilder.toJson(built).contains("\"absence_hours\" : null"), "the null total reaches the JSON as null");
     }
 
     @Test

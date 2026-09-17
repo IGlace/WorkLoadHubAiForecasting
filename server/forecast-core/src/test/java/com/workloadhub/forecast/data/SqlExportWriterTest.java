@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.LocalDate;
+import java.util.List;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +29,11 @@ class SqlExportWriterTest {
         assertTrue(sql.indexOf("INSERT INTO users") < sql.indexOf("INSERT INTO tasks"));
         assertTrue(sql.contains("'New Year''s Day'") || sql.contains("'New Year’s Day'"), "quotes escaped");
         assertTrue(sql.contains("FALSE") && sql.contains("NULL"));
+        // The fixture excludes refresh_tokens and nothing else, so it is a full export and lands whole, even
+        // though several of its tables carry no rows at all.
+        assertEquals(List.of("refresh_tokens"), env.excludedTables());
+        assertTrue(!sql.contains("DELETE FROM"), "a full export deletes nothing");
+        assertTrue(!sql.contains("RAISE EXCEPTION"), "no partial-landing guard on a full export");
     }
 
     @Test
@@ -69,6 +75,12 @@ class SqlExportWriterTest {
         assertTrue(!sql.contains("DELETE FROM projects"));
         assertTrue(sql.contains("INSERT INTO projects"));
         assertTrue(sql.contains("ON CONFLICT (id) DO UPDATE SET"), "projects are upserted");
+        int guard = sql.indexOf(SqlExportWriter.USER_CONTENT_GUARD);
+        assertTrue(guard > 0, "the partial script guards user content: " + sql.substring(0, 200));
+        assertEquals("BEGIN;\nSET search_path TO task_service;\n".length(), guard, "right after the search_path");
+        assertTrue(guard < deletes, "the guard runs before the first delete");
+        assertTrue(!env.excludedTables().isEmpty() && !env.excludedTables().equals(List.of("refresh_tokens")),
+                "the envelope declares itself partial: " + env.excludedTables());
         assertTrue(sql.contains("next_task_number = EXCLUDED.next_task_number"));
         int tasksInsert = sql.indexOf("INSERT INTO tasks");
         assertTrue(!sql.substring(tasksInsert, sql.indexOf(";\n", tasksInsert)).contains("ON CONFLICT"), "only projects carry the upsert");
@@ -78,10 +90,13 @@ class SqlExportWriterTest {
     @Test
     void aSyntheticEnvelopeHasNoDeletes() throws Exception {
         ExportEnvelope env = SeedGenerator.generate(null, new SeedConfig(8, LocalDate.of(2026, 9, 6), 5, true, 12));
+        assertEquals(List.of("refresh_tokens"), env.excludedTables());
+        assertTrue(env.data().keySet().containsAll(WorkloadHubSchema.TABLE_ORDER), "every table is present");
         StringWriter out = new StringWriter();
         SqlExportWriter.write(env, out);
         assertTrue(!out.toString().contains("DELETE FROM"));
         assertTrue(!out.toString().contains("ON CONFLICT"));
+        assertTrue(!out.toString().contains("RAISE EXCEPTION"), "nothing is deleted, so there is nothing to guard");
     }
 
     @Test

@@ -226,6 +226,36 @@ class SeedGeneratorTest {
     }
 
     @Test
+    void someOpenTasksArePlannedForAWeekAfterTheOneTheyWereAssignedIn() {
+        // planned_hrs_h{h} needs planned_week == w + h with the task still open at the end of w. A seed that
+        // plans every task for its own assignment week makes that column identically zero for every h >= 1.
+        ExportEnvelope env = generated();
+        Map<String, LocalDate> assignedWeek = new HashMap<>();
+        for (var h : env.rows("task_history")) {
+            if ("assignee".equals(h.get("field_name"))) {
+                assignedWeek.put((String) h.get("task_id"),
+                        SeedConfig.mondayOf(LocalDate.parse(((String) h.get("changed_at")).substring(0, 10))));
+            }
+        }
+        int forward = 0;
+        for (var t : env.rows("tasks")) {
+            if (t.get("finished_date") != null || t.get("planned_week") == null) {
+                continue;                                   // open at the as-of date only
+            }
+            LocalDate planned = LocalDate.parse((String) t.get("planned_week"));
+            LocalDate assigned = assignedWeek.get((String) t.get("id"));
+            if (assigned == null) {
+                continue;                                   // an epic container: created straight onto its owner, never assigned
+            }
+            assertTrue(!planned.isBefore(assigned), "a plan is never earlier than the assignment week");
+            if (planned.isAfter(assigned)) {
+                forward++;
+            }
+        }
+        assertTrue(forward > 0, "no open task is planned forward: planned_hrs_h1 would be zero on every matrix row");
+    }
+
+    @Test
     void everyAssigneeHistoryRowNamesItsAssignerAndSelfPickedTasksAreAssignedByTheirAssignee() {
         ExportEnvelope env = generated();
         Map<String, String> assigneeByTask = new HashMap<>();

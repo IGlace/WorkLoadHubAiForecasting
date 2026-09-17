@@ -20,7 +20,7 @@ class FeatureLeakageTest {
     static final int WINDOWS = 2;
 
     static FeatureMatrix build(ForecastData data, LocalDate origin) {
-        return new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), new CapacityRule(40), WINDOWS)
+        return new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), new CapacityRule(44.0), WINDOWS)
                 .build(data.members(), origin);
     }
 

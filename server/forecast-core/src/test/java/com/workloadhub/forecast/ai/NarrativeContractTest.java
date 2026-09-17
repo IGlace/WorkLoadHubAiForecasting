@@ -42,7 +42,7 @@ class NarrativeContractTest {
                  "members": [
                    {"member_id": "%s", "name": "Sara Tazi", "risk_level": "high",
                     "summary": "Sara has 52.0 h of demand against 40.0 h of capacity in the window starting 2026-09-07.",
-                    "patterns": [{"kind": "assignment_style", "statement": "Mostly project-driven work.", "evidence": "share_project 0.6"}],
+                    "patterns": [{"kind": "assignment_style", "statement": "Mostly project-driven work.", "evidence": "share_assigned 0.7"}],
                     "warnings": ["Overload of 12.0 h in the window starting 2026-09-07."],
                     "likely_work": [{"statement": "WEB-3 is likely to land.", "evidence": "planned WEB-3 share 0.7", "confidence": "high"}]},
                    {"member_id": "%s", "name": "Omar Benali", "risk_level": "low", "summary": "Spare capacity.", "patterns": [], "warnings": []}],

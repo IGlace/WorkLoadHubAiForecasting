@@ -84,6 +84,21 @@ class PatternsTest {
     }
 
     @Test
+    void bothAssignmentSharesAreBlankWhenNoTaskInTheWindowHasAKnownMode() {
+        // Tasks in the window, but not one assignee history row among them: the two shares have no denominator
+        // and must stay blank rather than collapse to 0.0 or to a half each (ruling F of 2026-09-16). tasks13w
+        // above zero is what makes this different from the empty-window case.
+        LocalDateTime mon = LocalDate.of(2026, 8, 24).atTime(9, 0);
+        TaskRow a = TestData.task("1", ANA.id(), mon, 8);
+        TaskRow b = TestData.task("2", ANA.id(), mon.plusDays(1), 4);
+        ForecastData data = TestData.data(List.of(ANA), List.of(a, b), List.of(), List.of());
+        MemberPattern p = Patterns.of(ANA.id(), Lifecycle.derive(data), data, AS_OF);
+        assertTrue(p.tasks13w() > 0, "the window is not empty: " + p.tasks13w());
+        assertNull(p.shareSelfPicked(), "no task in the window has a known mode");
+        assertNull(p.shareAssigned());
+    }
+
+    @Test
     void completionStatisticsUseTheWholeHistory() {
         LocalDateTime c = LocalDate.of(2026, 3, 2).atTime(9, 0);
         TaskRow fast = TestData.task("1", ANA.id(), c, 10).withStatus("DONE").withFinished(c.plusDays(1)).withDue(c.toLocalDate().plusDays(3)).withRemaining(0.0);

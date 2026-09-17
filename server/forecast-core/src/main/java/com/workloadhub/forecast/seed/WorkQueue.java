@@ -360,7 +360,7 @@ public final class WorkQueue {
         LocalDate due = addWorkingDays(a.assignDay(), (int) Math.ceil(cycleDays * Math.max(0.6, 1.1 + 0.2 * rnd.gaussian())));
         String title = title(a, project);
         LinkedHashMap<String, Object> row = Rows.task(id, project.key() + "-" + number, title, "Generated for " + project.name(),
-                due, a.priority(), project.id(), p.id(), reporter, number, createdAt, SeedConfig.mondayOf(a.assignDay()),
+                due, a.priority(), project.id(), p.id(), reporter, number, createdAt, plannedWeek(a, number),
                 ref.type(typeName), parent, ref.status("To Do"), a.estimate());
         row.put("updated_at", a.assignAt().toString());
         taskRows.add(row);
@@ -376,6 +376,21 @@ public final class WorkQueue {
             w.reopenOn = LocalDate.MIN; // marker: reopen once after the first finish
         }
         return w;
+    }
+
+    /**
+     * The week the leader planned the task for. A fraction is planned forward, because a seed that always
+     * plans a task for its own assignment week makes {@code planned_hrs_h{h}} identically zero on every
+     * seeded feature matrix for every {@code h >= 1}: the column would never be exercised on seeded data.
+     * The rule is deterministic on the task's own number and draws no randomness, so the seed's random
+     * stream — and every fixed-seed test that reads it — is byte-for-byte unchanged.
+     */
+    private static LocalDate plannedWeek(Arrival a, long number) {
+        LocalDate week = SeedConfig.mondayOf(a.assignDay());
+        if (number % 7 == 0) {
+            return week.plusWeeks(2);
+        }
+        return number % 3 == 0 ? week.plusWeeks(1) : week;
     }
 
     private String title(Arrival a, Project project) {

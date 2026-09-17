@@ -88,6 +88,13 @@ sections 2 and 3. `user_capacity` and `team_capacity` are not read.
 
 ## 5. The feature matrix
 
+**History.** This section was written for the arrival forecast: the target was estimated hours of the tasks
+assigned to a member in the target week, and the own-history columns read that arrival series. The retarget of
+2026-09-13 (`docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`) moved the target to logged
+hours per member-week and the own-history columns with it; the review of 2026-09-16
+(`docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md`) settled the rest. The
+tables below are corrected to what the code builds; `Features.java` is the authority for the column list.
+
 One row per counted member per Monday-starting week, from the member's first assignment (or team
 join date) to the origin. All features are computed from data dated on or before the row's week,
 except the `_h{h}` columns, which describe the **target** week `w + h` using only facts known at
@@ -97,15 +104,15 @@ except the `_h{h}` columns, which describe the **target** week `w + h` using onl
 
 | Column | Meaning |
 |---|---|
-| `target_h{h}` | estimated hours (`original_estimate_hrs`) of tasks assigned to the member in week `w + h`, using the assignment date of section 3. This is what the model predicts. Zero weeks are real zeros. |
+| `target_h{h}` | hours the member logged in week `w + h`, summed from `time_logs` (the retarget of 2026-09-13; it was estimated hours of the tasks assigned in that week until then). This is what the model predicts. Zero weeks are real zeros. |
 
-### 5.2 The member's own arrival history
+### 5.2 The member's own logged history
 
 | Column | Meaning |
 |---|---|
-| `lag1` .. `lag4`, `lag8`, `lag13` | estimated hours assigned in the row's week and 1, 2, 3, 7, 12 weeks before it. The recent level and the same week of the last quarter. |
-| `roll_mean_4`, `roll_mean_8`, `roll_mean_13` | average weekly assigned hours over the last 4, 8, 13 weeks: the member's normal load at three time scales. |
-| `roll_std_4`, `roll_std_8`, `roll_std_13` | how much that load varies: a member with a steady 20 h and one alternating 0 and 40 h have the same mean and very different risk. |
+| `lag1` .. `lag4`, `lag8`, `lag13` | hours logged in the row's week and 1, 2, 3, 7, 12 weeks before it — the target's own series, since 2026-09-13. The recent level and the same week of the last quarter. |
+| `roll_mean_4`, `roll_mean_8`, `roll_mean_13` | average weekly logged hours over the last 4, 8, 13 weeks: the member's normal load at three time scales. |
+| `roll_std_4`, `roll_std_8`, `roll_std_13` | how much that logged load varies: a member with a steady 20 h and one alternating 0 and 40 h have the same mean and very different risk. |
 | `weeks_since_last_arrival` | weeks since the member last received anything; long gaps mean an intermittent pattern. Blank when never. |
 | `arrivals_13w` | number of tasks assigned in the last 13 weeks; with the hours, gives the typical task size. |
 | `share_defect_13w`, `share_delivery_13w`, `share_support_13w` | share of the last 13 weeks' tasks by type family. Defect-heavy members receive work that is unplanned and urgent. Blank when there is nothing to measure. |
@@ -120,7 +127,7 @@ fast they clear it, which the arrival forecast alone does not see.
 
 | Column | Meaning |
 |---|---|
-| `logged_hours_lag1` .. `logged_hours_lag4` | hours from `time_logs` in the row's week and the three before: what the member actually worked, week by week. |
+| `arrival_hrs_lag1` .. `arrival_hrs_lag4` | fresh estimated hours assigned to the member in the row's week and the three before (the retarget of 2026-09-13 put these here in place of `logged_hours_lag1` .. `logged_hours_lag4`, which the logged series of 5.2 now carries). What arrives is no longer the target, so it is a signal like any other. |
 | `open_tasks` | tasks of the member not in a `DONE` category at the end of the week. |
 | `open_remaining_hrs` | sum, over the member's open tasks, of the estimate minus the hours logged on the task by the row's week end (ruling E of 2026-09-16: the facts read `remaining_estimate_hrs`; the features cannot, it has no history). |
 | `overdue_open` | of those, how many have a `due_date` before the end of the week. |
@@ -131,7 +138,7 @@ fast they clear it, which the arrival forecast alone does not see.
 ### 5.4 What is already known about the target week
 
 The strongest new signals. At the origin the application already holds tasks planned or due for the
-weeks ahead; a model that sees them predicts arrivals far better than history alone.
+weeks ahead; a model that sees them reads the target week far better than history alone.
 
 | Column | Meaning |
 |---|---|
@@ -165,11 +172,11 @@ database alone, which section 8 states as a test.
 
 Truncation (section 3) replays the task and transition history as of the origin week, which is what
 keeps the own-history and throughput columns leak-free. It does not rewind everything: a task's
-present-day `reopened_from_done` flag, its project's current `status`, its current `due_date`, and its
-`original_estimate_hrs` are all read as they stand today, not as they stood at the origin (only
-`remaining_estimate_hrs` is recomputed from the hours logged by the cutoff). The leakage guarantee
-(section 8) holds only up to that list — a column built from one of those four fields carries a small
-amount of hindsight the replay does not remove.
+present-day `reopened_from_done` flag, its project's current `status`, its current `due_date`, its
+`original_estimate_hrs` and its `planned_week` are all read as they stand today, not as they stood at
+the origin (only `remaining_estimate_hrs` is recomputed from the hours logged by the cutoff). The
+leakage guarantee (section 8) holds only up to that list — a column built from one of those five fields
+carries a small amount of hindsight the replay does not remove.
 
 ### 5.7 Missing values
 
@@ -198,12 +205,16 @@ not an absence of one.
 
 ### 5.8 Read as of today
 
-Truncation (section 3) rewinds assignments, statuses and logs to the row's week, but four fields have no
+Truncation (section 3) rewinds assignments, statuses and logs to the row's week, but five fields have no
 history and are read as they stand on the run day: `tasks.reopened_from_done`, `projects.status`,
-`tasks.due_date`, `tasks.original_estimate_hrs`. `reopen_rate_13w`, `proj_active`, `proj_planning`,
-`overdue_open`, `due_hrs_h` and every estimate-based sum carry that hindsight. Accepted on 2026-09-16
-(ruling G): a task's current due date is the best available stand-in for the due date it had, and the
-alternative is to drop the columns.
+`tasks.due_date`, `tasks.original_estimate_hrs` and `tasks.planned_week`. `reopen_rate_13w`,
+`proj_active`, `proj_planning`, `overdue_open`, `due_hrs_h`, `planned_hrs_h` and every estimate-based
+sum carry that hindsight. `planned_week` is the fifth because `Truncation` passes it through unrewound
+and `planned_hrs_h{h}` reads it: a leader usually sets the planned week shortly before the week it
+names, so a training row can see a plan that did not exist when its own week ended. Accepted on
+2026-09-16 (ruling G) on the same grounds as the other four: the field has no history to replay, a
+task's current value is the best available stand-in for the value it had, and the alternative is to
+drop the columns.
 
 Ruling E (2026-09-16): `open_remaining_hrs` and `due_hrs_h` recompute remaining hours as
 `original_estimate_hrs` minus the hours logged on the task by the row's week end, because a training row

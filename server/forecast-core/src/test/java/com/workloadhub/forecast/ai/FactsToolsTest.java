@@ -44,7 +44,8 @@ class FactsToolsTest {
         assertEquals(Set.of("member_id", "name", "patterns"), TOOLS.memberPatterns(FIRST).keySet());
         assertEquals(Set.of("member_id", "name", "open_tasks"), TOOLS.memberOpenTasks(FIRST).keySet());
         Map<String, Object> capacity = TOOLS.memberCapacity(FIRST);
-        assertEquals(Set.of("member_id", "name", "windows", "days"), capacity.keySet());
+        assertEquals(Set.of("member_id", "name", "windows", "days", "pending_leaves"), capacity.keySet(),
+                "the tool that serves capacity serves the pending leaves three skills tell Copilot to read");
         List<Map<String, Object>> windows = (List<Map<String, Object>>) capacity.get("windows");
         assertEquals(2, windows.size());
         assertEquals(Set.of("window", "start", "end", "capacity", "demand", "overload", "working_days", "absence_hours",
@@ -106,6 +107,24 @@ class FactsToolsTest {
         List<String> known = (List<String>) r.get("known_member_ids");
         assertTrue(known.contains(FIRST));
         assertEquals(known.stream().sorted().toList(), known, "sorted");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theCapacityToolServesThePendingLeavesAndSaysSoInItsDescription() {
+        // Three skills (whf-domain, whf-forecast-interpretation, whf-rebalancing-advice) tell Copilot to read
+        // pending_leaves; without a tool that serves it the instruction could never be followed.
+        for (JsonNode m : FACTS.path("members")) {
+            String id = m.path("id").asText();
+            List<Map<String, Object>> served = (List<Map<String, Object>>) TOOLS.memberCapacity(id).get("pending_leaves");
+            assertEquals(m.path("pending_leaves").size(), served.size(), id);
+            for (int i = 0; i < served.size(); i++) {
+                assertEquals(m.path("pending_leaves").get(i).path("start_date").asText(), served.get(i).get("start_date"));
+                assertEquals(m.path("pending_leaves").get(i).path("leave_type").asText(), served.get(i).get("leave_type"));
+            }
+        }
+        String d = TOOLS.specs().stream().filter(s -> s.name().equals("get_member_capacity")).findFirst().orElseThrow().description();
+        assertTrue(d.contains("pending leave"), d);
     }
 
     @Test
