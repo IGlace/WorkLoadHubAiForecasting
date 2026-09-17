@@ -1,0 +1,645 @@
+<title>Feature Matrix Now</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #f6f7f4;
+  --paper-2: #eceee8;
+  --ink: #1c2229;
+  --ink-2: #4b5560;
+  --rule: #cfd4cb;
+  --accent: #0d5c63;
+  --src: #2b63b8;      /* a number read from the database */
+  --src-bg: #e3ecfa;
+  --drv: #b26a10;      /* an intermediate the module derives */
+  --drv-bg: #fbeedb;
+  --feat: #2c7a4b;     /* a column of the feature matrix */
+  --feat-bg: #e1f1e6;
+  --flag: #b23a32;     /* an assumption, a sentinel, an invented rule */
+  --flag-bg: #f9e3e0;
+  --target: #6a3d9a;
+  --target-bg: #ece2f7;
+  --code-bg: #e9ebe5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14181b; --paper-2: #1d2226; --ink: #e5e8e2; --ink-2: #a6adb3; --rule: #343b41; --accent: #6cc4cb;
+    --src: #7fa8f0; --src-bg: #1a2a45; --drv: #e6a453; --drv-bg: #3a2a12; --feat: #79c48f; --feat-bg: #16301f;
+    --flag: #ee8a80; --flag-bg: #3f1d1a; --target: #c8a3ea; --target-bg: #2d1f3b; --code-bg: #22282c;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14181b; --paper-2: #1d2226; --ink: #e5e8e2; --ink-2: #a6adb3; --rule: #343b41; --accent: #6cc4cb;
+  --src: #7fa8f0; --src-bg: #1a2a45; --drv: #e6a453; --drv-bg: #3a2a12; --feat: #79c48f; --feat-bg: #16301f;
+  --flag: #ee8a80; --flag-bg: #3f1d1a; --target: #c8a3ea; --target-bg: #2d1f3b; --code-bg: #22282c;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; font-size: 15px; line-height: 1.55;
+  padding-inline: clamp(16px, 4vw, 48px); padding-block: 24px 80px;
+}
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; }
+h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 600; margin: 0 0 6px; }
+h2 { font-size: 22px; font-weight: 600; margin: 56px 0 12px; padding-top: 16px; border-top: 1px solid var(--rule); }
+h3 { font-size: 16px; font-weight: 600; margin: 28px 0 8px; color: var(--accent); }
+p, li { max-width: 72ch; }
+.lede { color: var(--ink-2); font-size: 16px; max-width: 80ch; margin: 0 0 18px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 18px 0 8px; font-size: 14px; }
+nav.toc a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+nav.toc a:hover, nav.toc a:focus-visible { border-bottom-color: var(--accent); outline: none; }
+figure { margin: 18px 0 8px; }
+figure svg { max-width: 100%; height: auto; display: block; color: var(--ink); }
+figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 90ch; margin-top: 8px; }
+.scroll { overflow-x: auto; padding-bottom: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; margin: 10px 0 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1.5px solid; }
+.sw.src { background: var(--src-bg); border-color: var(--src); }
+.sw.drv { background: var(--drv-bg); border-color: var(--drv); }
+.sw.feat { background: var(--feat-bg); border-color: var(--feat); }
+.sw.target { background: var(--target-bg); border-color: var(--target); }
+.sw.flag { background: var(--flag-bg); border-color: var(--flag); border-style: dashed; }
+.hint { font-size: 13.5px; color: var(--ink-2); margin: 4px 0 10px; }
+/* lineage diagram */
+#lineage-svg { width: 100%; }
+#lineage-svg .node rect { stroke-width: 1.4; }
+#lineage-svg .node text { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; fill: var(--ink); }
+#lineage-svg .node.src rect { fill: var(--src-bg); stroke: var(--src); }
+#lineage-svg .node.drv rect { fill: var(--drv-bg); stroke: var(--drv); }
+#lineage-svg .node.feat rect { fill: var(--feat-bg); stroke: var(--feat); }
+#lineage-svg .node.target rect { fill: var(--target-bg); stroke: var(--target); }
+#lineage-svg .node.flagged rect { stroke: var(--flag); stroke-dasharray: 4 3; }
+#lineage-svg .node { cursor: pointer; }
+#lineage-svg .edge { fill: none; stroke: var(--ink-2); stroke-opacity: 0.35; stroke-width: 1.1; }
+#lineage-svg .edge.far { stroke-opacity: 0.18; }
+#lineage-svg .group-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--ink-2); }
+#lineage-svg .col-label { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+#lineage-svg.focus .node:not(.on) { opacity: 0.18; }
+#lineage-svg.focus .edge:not(.on) { stroke-opacity: 0.05; }
+#lineage-svg.focus .edge.on { stroke: var(--accent); stroke-opacity: 0.95; stroke-width: 1.8; }
+#lineage-svg .node.on rect { stroke-width: 2.2; }
+#lineage-svg .node text.rule { fill: var(--flag); font-size: 9.5px; font-weight: 500; }
+.detail { border: 1px solid var(--rule); background: var(--paper-2); padding: 12px 14px; border-radius: 6px; font-size: 14px; margin-top: 10px; min-height: 52px; }
+.detail b { font-family: "IBM Plex Mono", monospace; font-weight: 500; }
+/* table */
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--rule); }
+th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; background: var(--paper-2); position: sticky; top: env(safe-area-inset-top, 0px); }
+td.name { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+tr.section td { background: var(--paper-2); font-weight: 600; font-size: 13px; padding-block: 8px; }
+.kind { display: inline-block; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; border: 1px solid; white-space: nowrap; }
+.kind.src { color: var(--src); border-color: var(--src); background: var(--src-bg); }
+.kind.drv { color: var(--drv); border-color: var(--drv); background: var(--drv-bg); }
+.kind.flag { color: var(--flag); border-color: var(--flag); background: var(--flag-bg); }
+.kind.target { color: var(--target); border-color: var(--target); background: var(--target-bg); }
+td .flagnote { color: var(--flag); }
+.table-wrap { overflow-x: auto; }
+.table-wrap table { min-width: 1180px; table-layout: fixed; }
+.callouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 12px; }
+.callout { border: 1px solid var(--rule); border-left: 4px solid var(--flag); padding: 12px 14px; border-radius: 4px; background: var(--paper-2); font-size: 14px; }
+.callout h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.callout p { margin: 0 0 6px; }
+.callout .q { color: var(--accent); font-weight: 500; }
+ol.steps li { margin-bottom: 6px; }
+@media (prefers-reduced-motion: no-preference) { #lineage-svg .node, #lineage-svg .edge { transition: opacity .15s, stroke-opacity .15s; } }
+</style>
+
+<p class="eyebrow">WorkloadHub AI Forecasting · state of <code>dev</code> and <code>main</code> at <code>2e7342c</code>, 2026-09-17</p>
+<h1>The feature matrix, as it stands</h1>
+<p class="lede">What the forecast reads from the database, what it computes from those numbers, what the model actually sees, and which rules are the module's own. This is the page of 2026-09-16 brought up to date after your rulings and the switch from <code>absences</code> to <code>personal_leaves</code>; the changes are listed first, then every section is restated as the code now behaves.</p>
+<nav class="toc" aria-label="Sections">
+  <a href="#changes">0 · What changed since the review</a>
+  <a href="#pipeline">1 · How a forecast is made</a>
+  <a href="#activity">2 · A run, step by step</a>
+  <a href="#lineage">3 · Where every feature comes from</a>
+  <a href="#table">4 · Every feature in plain words</a>
+  <a href="#rules">5 · The module's own rules and your rulings</a>
+  <a href="#leaves">6 · How a leave becomes capacity</a>
+</nav>
+
+<h2 id="changes">0 · What changed since the review</h2>
+<p>The page you reviewed on 2026-09-16 described 42 shared columns and 4 per horizon, an assignment mode guessed from three columns, five invented sentinel values, capacity read from <code>user_capacity</code> and absence from <code>absences</code>. All of that changed on 2026-09-17. The matrix now has <strong>40 shared columns and 5 per horizon</strong>; the table below says which is which.</p>
+<div class="table-wrap">
+<table>
+<colgroup><col style="width:24%"><col style="width:38%"><col style="width:38%"></colgroup>
+<thead><tr><th>Where</th><th>Before (the reviewed page)</th><th>Now</th></tr></thead>
+<tbody>
+<tr><td class="name">share_self_picked_13w · share_manual_13w · share_project_13w</td><td>guessed: reporter = assignee → self-picked; has a parent → project; else manual; one third each when nothing to measure</td><td><strong>two columns from a fact</strong>: <code>share_self_picked_13w</code> and <code>share_assigned_13w</code>, from the <code>user_id</code> of the <code>task_history</code> row that assigned the task (equal to the assignee → self-picked, anyone else → assigned); blank when no task in the window has a known assigner (ruling D)</td></tr>
+<tr><td class="name">proj_first_due_weeks</td><td>weeks to the nearest due date among the team's open tasks, 52 when none</td><td><strong>removed</strong>: projects will have no deadline (ruling H)</td></tr>
+<tr><td class="name">planned_hrs_h</td><td>not read; <code>planned_week</code> ignored</td><td><strong>added</strong>, one column per horizon: estimated hours of the member's open tasks whose <code>planned_week</code> is the target week (ruling K)</td></tr>
+<tr><td class="name">absence_hrs_h · available_hrs_h</td><td><code>user_capacity</code> row when one exists, else 44 h and the <code>absences</code> rows</td><td><strong>computed from leaves</strong>: 44 h × working days / 5, minus the member's APPROVED <code>personal_leaves</code> hours dealt over the week's working days (rulings I, J and the leave semantics of section 6)</td></tr>
+<tr><td class="name">weeks_since_last_arrival · share_*_13w · reopen_rate_13w · estimate_ratio_13w</td><td>52, 0.0, ⅓ and 1.0 stood in for "nothing to measure"</td><td><strong>blank</strong> (NaN): the booster learns its own branch for a missing value; every blank is listed in section 4 (ruling F)</td></tr>
+<tr><td class="name">fields read as of today</td><td>four: <code>reopened_from_done</code>, <code>projects.status</code>, <code>due_date</code>, <code>original_estimate_hrs</code></td><td><strong>five</strong>: <code>planned_week</code> joins them, documented in the code and the schema document (ruling G)</td></tr>
+<tr><td class="name">facts for the narrative</td><td><code>team.team_capacity</code> block; no leave information</td><td><code>team_capacity</code> gone; per member <code>pending_leaves</code> inside the horizon, per window <code>planned_hours</code>; "open" defined in the product skills as "assigned and not finished"</td></tr>
+<tr><td class="name">unchanged, by ruling</td><td colspan="2">assignment date from <code>task_history</code> (A, until <code>tasks.assigned_at</code> exists); the two-day fresh/backlog split (B); the task-family mapping with a sub-task taking its parent's family (C); remaining hours recomputed for the features and read for the facts (E); 44 h as the setting <code>whf.default-weekly-hours</code> (I).</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="pipeline">1 · How a forecast is made</h2>
+<p>The model predicts one number: the hours a member will <em>log</em> in a future week. Everything else is either an input to that prediction or arithmetic done after it. The language model never touches a number; it reads the finished facts and writes prose.</p>
+<figure>
+<div class="scroll">
+<svg id="pipe" viewBox="0 0 1560 340" role="img" aria-label="Data flows from the WorkloadHub tables through lifecycle derivation and the feature matrix into a backtest and an XGBoost model, whose weekly predictions are split into days, compared with capacity computed from holidays and approved leaves, turned into facts and narrated by Copilot." style="min-width: 1100px">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+  </defs>
+  <g font-family="IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="currentColor">
+    <rect x="10" y="40" width="250" height="90" rx="5" fill="var(--src-bg)" stroke="var(--src)" stroke-width="1.4"/>
+    <text x="135" y="61" text-anchor="middle" font-weight="600">WorkloadHub database</text>
+    <text x="135" y="80" text-anchor="middle" font-size="11">tasks · task_history · time_logs</text>
+    <text x="135" y="96" text-anchor="middle" font-size="11">users · teams · projects · holidays</text>
+    <text x="135" y="112" text-anchor="middle" font-size="11">personal_leaves (APPROVED, PENDING)</text>
+
+    <line x1="260" y1="85" x2="302" y2="85" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+    <text x="281" y="74" text-anchor="middle" font-size="10.5">reads</text>
+
+    <rect x="304" y="40" width="270" height="90" rx="5" fill="var(--drv-bg)" stroke="var(--drv)" stroke-width="1.4"/>
+    <text x="439" y="61" text-anchor="middle" font-weight="600">Task lifecycle</text>
+    <text x="439" y="80" text-anchor="middle" font-size="11">when each task was assigned, started,</text>
+    <text x="439" y="96" text-anchor="middle" font-size="11">finished; its family; who assigned it</text>
+    <text x="439" y="112" text-anchor="middle" font-size="11">(self-picked or assigned); its actual hours</text>
+
+    <line x1="574" y1="85" x2="616" y2="85" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+
+    <rect x="618" y="40" width="280" height="90" rx="5" fill="var(--feat-bg)" stroke="var(--feat)" stroke-width="1.4"/>
+    <text x="758" y="61" text-anchor="middle" font-weight="600">Feature matrix</text>
+    <text x="758" y="80" text-anchor="middle" font-size="11">one row per member and week, 65 weeks</text>
+    <text x="758" y="96" text-anchor="middle" font-size="11">back; 40 shared columns, 5 per horizon,</text>
+    <text x="758" y="112" text-anchor="middle" font-size="11">the target; blanks where nothing to measure</text>
+
+    <line x1="898" y1="85" x2="940" y2="85" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+
+    <rect x="942" y="40" width="270" height="90" rx="5" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1077" y="61" text-anchor="middle" font-weight="600">Backtest</text>
+    <text x="1077" y="80" text-anchor="middle" font-size="11">6 past origins, 2 weeks apart: fit,</text>
+    <text x="1077" y="96" text-anchor="middle" font-size="11">predict, compare with the truth</text>
+    <text x="1077" y="112" text-anchor="middle" font-size="11">→ MAE and the 10–90 % error band</text>
+
+    <line x1="1212" y1="85" x2="1254" y2="85" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+
+    <rect x="1256" y="40" width="294" height="90" rx="5" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1403" y="61" text-anchor="middle" font-weight="600">XGBoost, one booster per horizon</text>
+    <text x="1403" y="80" text-anchor="middle" font-size="11">Poisson objective, 300 rounds, fixed seed;</text>
+    <text x="1403" y="96" text-anchor="middle" font-size="11">fits on every row, predicts the rows of the</text>
+    <text x="1403" y="112" text-anchor="middle" font-size="11">last complete week for weeks +1 … +N+1</text>
+
+    <path d="M1403 130 V168 H1077 V192" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+    <text x="1240" y="160" text-anchor="middle" font-size="10.5">predicted hours per member-week</text>
+
+    <rect x="942" y="194" width="270" height="104" rx="5" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1077" y="215" text-anchor="middle" font-weight="600">Days and capacity</text>
+    <text x="1077" y="234" text-anchor="middle" font-size="11">the week is split over the weekdays the</text>
+    <text x="1077" y="250" text-anchor="middle" font-size="11">member usually logs on (13-week shape),</text>
+    <text x="1077" y="266" text-anchor="middle" font-size="11">skipping holidays and full leave days; capacity</text>
+    <text x="1077" y="282" text-anchor="middle" font-size="11">= 8.8 h a day − leave; overload = demand − capacity</text>
+
+    <line x1="942" y1="246" x2="900" y2="246" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+
+    <rect x="618" y="194" width="280" height="104" rx="5" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="758" y="215" text-anchor="middle" font-weight="600">Facts (JSON)</text>
+    <text x="758" y="234" text-anchor="middle" font-size="11">per window and day: demand, band, capacity,</text>
+    <text x="758" y="250" text-anchor="middle" font-size="11">overload, planned hours; backlog and deadline</text>
+    <text x="758" y="266" text-anchor="middle" font-size="11">pressure; patterns; likely work; rebalancing;</text>
+    <text x="758" y="282" text-anchor="middle" font-size="11">pending holidays and pending leaves</text>
+
+    <line x1="618" y1="246" x2="576" y2="246" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+    <text x="597" y="235" text-anchor="middle" font-size="10.5">tools</text>
+
+    <rect x="304" y="194" width="270" height="104" rx="5" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="439" y="215" text-anchor="middle" font-weight="600">Copilot narrative</text>
+    <text x="439" y="234" text-anchor="middle" font-size="11">reads the facts through 9 tools, writes</text>
+    <text x="439" y="250" text-anchor="middle" font-size="11">EN or FR; every number it writes is</text>
+    <text x="439" y="266" text-anchor="middle" font-size="11">checked against the facts; UNVERIFIED</text>
+    <text x="439" y="282" text-anchor="middle" font-size="11">is reported, never hidden</text>
+
+    <line x1="304" y1="246" x2="262" y2="246" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
+
+    <rect x="10" y="194" width="250" height="104" rx="5" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="135" y="215" text-anchor="middle" font-weight="600">Team leader</text>
+    <text x="135" y="234" text-anchor="middle" font-size="11">sees demand against capacity per</text>
+    <text x="135" y="250" text-anchor="middle" font-size="11">member and day, the warnings</text>
+    <text x="135" y="266" text-anchor="middle" font-size="11">and the rebalancing advice</text>
+
+    <text x="10" y="330" font-size="11.5" fill="var(--ink-2)">Deterministic Java computes every number on this page. The language model appears once, at the end, and only writes text.</text>
+  </g>
+</svg>
+</div>
+<figcaption>Left to right: what is read, what is derived, what the model learns from, how it is scored, what it predicts, and how that prediction becomes a leader's view. Capacity no longer comes from a table: it is 44 h a week over the working days, minus approved leave.</figcaption>
+</figure>
+
+<h3>The four ideas that make it work</h3>
+<ol class="steps">
+  <li><strong>The target is logged hours per member-week.</strong> The truth the model is trained on is the sum of <code>time_logs.hours</code> for a member in a Monday-to-Sunday week. It is what the accuracy check scores too, so training and scoring never disagree.</li>
+  <li><strong>Every row is a week in a member's past, with the future hidden.</strong> A row for week <em>w</em> only contains what was knowable at the end of <em>w</em> (with the five as-of-today exceptions of section 5). Its targets are the hours logged in <em>w+1</em>, <em>w+2</em>, … A booster per horizon learns "given how the last weeks looked, how many hours came <em>h</em> weeks later".</li>
+  <li><strong>The backtest is the honesty check.</strong> Six times, the run pretends it is a past Monday, fits only on rows old enough not to overlap the test week, predicts, and compares with what really got logged. The errors give the mean absolute error and the 10th and 90th percentile offsets that become the band around each forecast.</li>
+  <li><strong>A week is then placed on days.</strong> The predicted week is spread over the weekdays the member actually logs on, in the proportions of their last 13 weeks, skipping holidays and full leave days. Each day's demand is compared with that day's capacity, 8.8 h minus that day's leave hours. Overload is the excess and is never capped.</li>
+</ol>
+
+<h2 id="activity">2 · A run, step by step</h2>
+<p>This is the activity of one forecast run as the code performs it, with the two decisions that change what a leader sees: whether the team has enough history to be scored, and whether anyone has a row in the last complete week to predict from.</p>
+<figure>
+<div class="scroll">
+<svg id="act" viewBox="0 0 1040 1010" role="img" aria-label="Activity diagram of a forecast run: start, load data, derive lifecycles and features, decide whether history is long enough for a backtest, fit and predict, place hours on days, compute capacity from the default and the approved leaves, compute pressure, build facts, persist, then optionally narrate with Copilot and verify the numbers." style="min-width: 760px">
+  <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  <g font-family="IBM Plex Sans, system-ui, sans-serif" font-size="12" fill="currentColor" stroke-linejoin="round">
+    <circle cx="300" cy="24" r="9" fill="currentColor"/>
+    <text x="318" y="28" font-size="11.5">Leader (or the host on their behalf) starts a run for one team · status QUEUED</text>
+    <line x1="300" y1="33" x2="300" y2="58" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <rect x="40" y="60" width="520" height="46" rx="14" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="300" y="79" text-anchor="middle" font-weight="600">LOADING · read the team's data</text>
+    <text x="300" y="96" text-anchor="middle" font-size="11">every counted member, their tasks, history, logs, approved and pending leaves, holidays</text>
+    <line x1="300" y1="106" x2="300" y2="130" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <rect x="40" y="132" width="520" height="74" rx="14" fill="var(--drv-bg)" stroke="var(--drv)" stroke-width="1.2"/>
+    <text x="300" y="151" text-anchor="middle" font-weight="600">FEATURES · derive and tabulate</text>
+    <text x="300" y="168" text-anchor="middle" font-size="11">task lifecycle (assigned / started / finished / family / self-picked or assigned)</text>
+    <text x="300" y="183" text-anchor="middle" font-size="11">origin = last complete Monday week · windows start tomorrow</text>
+    <text x="300" y="198" text-anchor="middle" font-size="11">feature matrix over 65 weeks, one row per member-week, 40 + 5 × horizons columns</text>
+    <line x1="300" y1="206" x2="300" y2="232" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <polygon points="300,234 440,284 300,334 160,284" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="300" y="279" text-anchor="middle" font-size="11.5">any origin with at least</text>
+    <text x="300" y="294" text-anchor="middle" font-size="11.5">10 + N + 1 weeks behind it?</text>
+    <line x1="440" y1="284" x2="600" y2="284" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+    <text x="520" y="276" text-anchor="middle" font-size="11">yes</text>
+    <rect x="602" y="246" width="420" height="76" rx="14" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="812" y="266" text-anchor="middle" font-weight="600">BACKTEST · up to 6 origins, 2 weeks apart</text>
+    <text x="812" y="283" text-anchor="middle" font-size="11">train on rows ending ≥ N+1 weeks before the origin,</text>
+    <text x="812" y="298" text-anchor="middle" font-size="11">predict the origin's rows, compare with logged truth</text>
+    <text x="812" y="313" text-anchor="middle" font-size="11">→ MAE per origin and horizon; pooled residuals → q10, q90</text>
+    <path d="M812 322 V380 H300" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <line x1="300" y1="334" x2="300" y2="360" stroke="currentColor" stroke-width="1.3"/>
+    <text x="318" y="352" font-size="11">no → thin history: no MAE, band offsets 0, the facts say so</text>
+    <line x1="300" y1="360" x2="300" y2="404" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <polygon points="300,406 440,456 300,506 160,456" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="300" y="452" text-anchor="middle" font-size="11.5">any member row in the</text>
+    <text x="300" y="467" text-anchor="middle" font-size="11.5">last complete week?</text>
+    <line x1="440" y1="456" x2="600" y2="456" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+    <text x="520" y="448" text-anchor="middle" font-size="11">yes</text>
+    <rect x="602" y="418" width="420" height="76" rx="14" fill="var(--feat-bg)" stroke="var(--feat)" stroke-width="1.2"/>
+    <text x="812" y="438" text-anchor="middle" font-weight="600">FORECAST · fit and predict</text>
+    <text x="812" y="455" text-anchor="middle" font-size="11">one Poisson booster per horizon h = 1 … N+1, fitted on every</text>
+    <text x="812" y="470" text-anchor="middle" font-size="11">row with a known target; blanks handled as missing; predict the</text>
+    <text x="812" y="485" text-anchor="middle" font-size="11">origin rows: hours per member for each of the next N+1 weeks</text>
+    <path d="M812 494 V552 H300" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <line x1="300" y1="506" x2="300" y2="532" stroke="currentColor" stroke-width="1.3"/>
+    <text x="318" y="524" font-size="11">no → nothing to predict from; every demand reads 0</text>
+    <line x1="300" y1="532" x2="300" y2="576" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <rect x="20" y="578" width="560" height="118" rx="14" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="300" y="598" text-anchor="middle" font-weight="600">For the team · place hours on days, compare with capacity</text>
+    <text x="300" y="616" text-anchor="middle" font-size="11">split each predicted week over its weekdays by the member's 13-week logging</text>
+    <text x="300" y="631" text-anchor="middle" font-size="11">shape, skipping holidays and full leave days; keep only days inside the N windows</text>
+    <text x="300" y="646" text-anchor="middle" font-size="11">day capacity = 44 h / 5 minus that day's approved leave hours, never below 0</text>
+    <text x="300" y="661" text-anchor="middle" font-size="11">overload = max(0, demand − capacity) · band = demand + q10 / q90</text>
+    <text x="300" y="676" text-anchor="middle" font-size="11">backlog_excess = open remaining hours − demand so far · due_excess = hours due − capacity</text>
+    <text x="300" y="691" text-anchor="middle" font-size="11">demand is never cut to fit capacity</text>
+    <line x1="300" y1="696" x2="300" y2="720" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <rect x="40" y="722" width="520" height="58" rx="14" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="300" y="741" text-anchor="middle" font-weight="600">FACTS · assemble the JSON the narrative may cite</text>
+    <text x="300" y="758" text-anchor="middle" font-size="11">team totals, per member windows (with planned hours) and days, pending leaves, patterns,</text>
+    <text x="300" y="773" text-anchor="middle" font-size="11">likely work, rebalancing candidates, pending holidays, data quality</text>
+    <line x1="300" y1="780" x2="300" y2="804" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <rect x="40" y="806" width="520" height="46" rx="14" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
+    <text x="300" y="825" text-anchor="middle" font-weight="600">PERSIST · store run, windows, days, facts · status DONE</text>
+    <text x="300" y="842" text-anchor="middle" font-size="11">the current forecast per member and day is now readable by the host</text>
+    <line x1="300" y1="852" x2="300" y2="876" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
+
+    <rect x="20" y="878" width="560" height="84" rx="14" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4"/>
+    <text x="300" y="898" text-anchor="middle" font-weight="600">On request · NARRATING with the user's own Copilot seat</text>
+    <text x="300" y="916" text-anchor="middle" font-size="11">Copilot calls the facts tools and writes the narrative in EN or FR against a strict contract;</text>
+    <text x="300" y="931" text-anchor="middle" font-size="11">the module checks every number it wrote against the facts it was allowed to cite;</text>
+    <text x="300" y="946" text-anchor="middle" font-size="11">the run ends NARRATED, NARRATED with UNVERIFIED numbers reported, or NARRATION_FAILED</text>
+    <line x1="300" y1="962" x2="300" y2="984" stroke="currentColor" stroke-width="1.3"/>
+    <circle cx="300" cy="994" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <circle cx="300" cy="994" r="6" fill="currentColor"/>
+  </g>
+</svg>
+</div>
+<figcaption>The six phases a leader sees as progress labels, with the two decisions that turn a run into a thin-history run or an empty one. Narration is a separate, optional step: the forecast is complete and stored before Copilot is ever called. N is the configured window count (default 2).</figcaption>
+</figure>
+
+<h2 id="lineage">3 · Where every feature comes from</h2>
+<p>Three columns. On the left, the raw numbers as they sit in the database. In the middle, what the module derives from them before any feature is written. On the right, the columns of the feature matrix the model sees, plus the target. <strong>Click any box</strong> to light up everything it depends on or feeds; click the background to reset. A dashed border marks a rule that is the module's own rather than a fact of the application; each carries the letter of your ruling of 2026-09-16 and is explained in section 5.</p>
+<div class="legend">
+  <span><i class="sw src"></i>read from a table</span>
+  <span><i class="sw drv"></i>derived intermediate</span>
+  <span><i class="sw feat"></i>feature column</span>
+  <span><i class="sw target"></i>the target</span>
+  <span><i class="sw flag"></i>module rule, ruled on 2026-09-16</span>
+</div>
+<p class="hint">Features are grouped the way <code>Features.java</code> groups them. A name like <code>lag1 … lag13</code> stands for six columns built the same way; <code>_h</code> means one column per horizon (weeks after the origin, 1 to N+1). No box reads <code>absences</code>, <code>user_capacity</code> or <code>team_capacity</code> any more.</p>
+<figure>
+<div class="scroll"><svg id="lineage-svg" role="img" aria-label="Lineage graph from database columns through derived intermediates to feature columns" style="min-width: 1100px"></svg></div>
+<div class="detail" id="detail">Click a box to see its inputs and what it feeds.</div>
+<figcaption>Every arrow is a real dependency in <code>FeatureBuilder</code>, <code>Lifecycle</code>, <code>WeeklySeries</code>, <code>LeaveDays</code> and <code>CapacityRule</code>. Thin arrows jump straight from a table to a feature; heavier ones pass through a derived value.</figcaption>
+</figure>
+
+<h2 id="table">4 · Every feature in plain words</h2>
+<p>One row per feature family. "Kind" says whether the number is copied from a table, computed from others, or the target. "Blank when" says when the cell is left empty rather than filled with an invented value; the booster treats an empty cell as missing and learns its own branch for it. Examples use a fictional member, Sara, and the week of Monday 2026-08-31.</p>
+<div class="table-wrap">
+<table>
+<colgroup><col style="width:15%"><col style="width:7%"><col style="width:17%"><col style="width:24%"><col style="width:11%"><col style="width:16%"><col style="width:10%"></colgroup>
+<thead><tr><th>Feature</th><th>Kind</th><th>Built from</th><th>What it means, in plain words</th><th>Example</th><th>Why it is there</th><th>Blank when · rule</th></tr></thead>
+<tbody>
+<tr class="section"><td colspan="7">The member's own logging history · the strongest predictor of the target</td></tr>
+<tr><td class="name">lag1 … lag4, lag8, lag13</td><td><span class="kind drv">computed</span></td><td>sum of <code>time_logs.hours</code> per member-week</td><td>How many hours Sara logged in this week and in the weeks before it. <code>lag1</code> is the row's own week, <code>lag2</code> the one before, up to twelve weeks back.</td><td>lag1 = 38.5 h, lag2 = 41.0 h, lag13 = 36.0 h</td><td>People are consistent: last week's hours are the best single guess for next week's, and the same week a quarter ago catches a recurring rhythm.</td><td>the week is before the member's first row</td></tr>
+<tr><td class="name">roll_mean_4 / 8 / 13</td><td><span class="kind drv">computed</span></td><td>the same weekly sums</td><td>Sara's average weekly hours over the last 4, 8 and 13 weeks.</td><td>39.2 h over 4 weeks, 37.8 h over 13</td><td>Smooths one odd week away; three time scales let the model tell a short dip from a real change of level.</td><td></td></tr>
+<tr><td class="name">roll_std_4 / 8 / 13</td><td><span class="kind drv">computed</span></td><td>the same weekly sums</td><td>How much those weekly hours bounce around over the same windows. 0 for a single week: one observation has no spread.</td><td>3.1 h at 4 weeks; 9.4 h for a colleague who alternates 20 h and 45 h</td><td>Two members with the same average can carry very different risk; the spread tells the model how sure to be.</td><td></td></tr>
+<tr class="section"><td colspan="7">What was handed to the member · arrivals</td></tr>
+<tr><td class="name">arrival_hrs_lag1 … 4</td><td><span class="kind drv">computed</span></td><td><code>tasks.original_estimate_hrs</code> of <em>fresh</em> tasks, by assignment week</td><td>Estimated hours of the tasks Sara received in this week and the three before it, counting only tasks assigned within two days of being created.</td><td>lag1 = 24 h (three new tasks), lag2 = 0 h</td><td>New work usually turns into logged hours in the following weeks; a burst of assignments announces a busy period.</td><td>before the first row · <span class="flagnote">A, B</span></td></tr>
+<tr><td class="name">weeks_since_last_arrival</td><td><span class="kind drv">computed</span></td><td>the fresh-arrival series</td><td>How many weeks since Sara last received a fresh task.</td><td>0 (she got one this week); 6 for someone in a quiet stretch</td><td>Long gaps mean an intermittent pattern; the model learns that logged hours fade when nothing new arrives.</td><td>she never received a fresh task in the loaded history (was 52) · <span class="flagnote">A, B, F</span></td></tr>
+<tr><td class="name">arrivals_13w</td><td><span class="kind drv">computed</span></td><td>assignment date of every task</td><td>How many tasks were assigned to Sara in the last 13 weeks. Zero is a real zero.</td><td>31 tasks</td><td>With the hours, gives the typical task size and the pace at which work reaches her.</td><td>never · <span class="flagnote">A</span></td></tr>
+<tr><td class="name">share_defect / delivery / support_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>task_types.name</code> mapped to a family</td><td>Of those 13 weeks' tasks, what fraction were bugs and incidents, what fraction stories and features, what fraction spikes, tests and risks.</td><td>defect 0.35, delivery 0.55, support 0.10</td><td>A member who mostly gets defects receives unplanned, urgent work; their hours look different from a feature developer's.</td><td>no task in the window (was 0.0) · <span class="flagnote">C, F</span></td></tr>
+<tr><td class="name">share_high_priority_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>tasks.priority</code></td><td>Fraction of those tasks marked HIGH or HIGHEST.</td><td>0.42</td><td>Urgent work gets done sooner and longer; a high share predicts more hours soon.</td><td>no task in the window (was 0.0) · <span class="flagnote">F</span></td></tr>
+<tr><td class="name">share_self_picked_13w, share_assigned_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>task_history.user_id</code> of the assignee row</td><td>How Sara's tasks reached her: she assigned them to herself, or a leader or colleague assigned them. Read from who wrote the assignment, over the tasks whose assigner is recorded.</td><td>self-picked 0.30, assigned 0.70</td><td>A self-picking member's workload follows their own pace; an assigned one follows the leader's planning.</td><td>no task in the window has a recorded assigner (was ⅓ each) · <span class="flagnote">D, F</span></td></tr>
+<tr><td class="name">reopen_rate_13w</td><td><span class="kind drv">computed</span></td><td>finish date, <code>tasks.reopened_from_done</code></td><td>Of the tasks Sara finished in the last 13 weeks, the fraction that had been reopened after being done.</td><td>0.08</td><td>Rework creates hours no plan announces.</td><td>she finished nothing in the window (was 0.0) · <span class="flagnote">F, G</span></td></tr>
+<tr class="section"><td colspan="7">What the member is carrying at the end of the week · open work and throughput</td></tr>
+<tr><td class="name">open_tasks</td><td><span class="kind drv">computed</span></td><td>assignment date, finish date</td><td>Tasks assigned to Sara by the end of the week and not finished by then. In the narrative this is said as "assigned and not finished", because the application's status <em>Open</em> means unassigned.</td><td>7 open tasks</td><td>The queue in front of her: more open work means more hours to come, up to a point.</td><td>never (zero is real) · <span class="flagnote">A</span></td></tr>
+<tr><td class="name">open_remaining_hrs</td><td><span class="kind drv">computed</span></td><td><code>original_estimate_hrs</code> − hours logged on the task by week end</td><td>The hours those open tasks still seem to need, by the module's own count.</td><td>52.5 h</td><td>The backlog in hours.</td><td>never · <span class="flagnote">E</span></td></tr>
+<tr><td class="name">overdue_open</td><td><span class="kind drv">computed</span></td><td>open tasks, <code>tasks.due_date</code></td><td>How many of those open tasks were already past their due date at the end of the week.</td><td>2</td><td>Late work gets pushed through; a member with overdue items tends to log more.</td><td>never · <span class="flagnote">G</span></td></tr>
+<tr><td class="name">in_progress_tasks</td><td><span class="kind drv">computed</span></td><td>open tasks, start date</td><td>Of the open tasks, how many Sara had actually started.</td><td>3</td><td>Started work is the work whose hours land next; queued work may wait.</td><td>never</td></tr>
+<tr><td class="name">estimate_ratio_13w</td><td><span class="kind drv">computed</span></td><td>hours logged on finished tasks ÷ their estimates</td><td>Whether Sara's tasks take longer or shorter than estimated. 1.0 means spot on.</td><td>1.25: her tasks take a quarter longer than planned</td><td>Turns estimated hours in the queue into a realistic expectation of logged hours.</td><td>no finished task in the window has both an estimate and logged hours (was 1.0) · <span class="flagnote">F, G</span></td></tr>
+<tr><td class="name">cycle_days_13w</td><td><span class="kind drv">computed</span></td><td>assignment and finish dates of tasks finished in the window</td><td>Sara's typical number of days from receiving a task to finishing it (the median).</td><td>9 days</td><td>Fast turnaround means arrivals become hours sooner.</td><td>she finished nothing in the window · <span class="flagnote">A</span></td></tr>
+<tr class="section"><td colspan="7">The team around the member</td></tr>
+<tr><td class="name">team_backlog_unassigned_hrs</td><td><span class="kind drv">computed</span></td><td>tasks of the team's and parent team's projects: created by week end, neither assigned nor finished; <code>original_estimate_hrs</code></td><td>Estimated hours of work sitting in the team's projects with nobody on it.</td><td>140 h unassigned across the team's projects</td><td>That pool is what will be handed out next; a large pool means more work coming to everyone.</td><td>never</td></tr>
+<tr><td class="name">proj_active</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code>, open tasks</td><td>How many of the team's ACTIVE projects still have work in them.</td><td>3</td><td>More live projects, more parallel demands on the same people.</td><td>never · <span class="flagnote">G</span></td></tr>
+<tr><td class="name">proj_planning</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code></td><td>How many of the team's projects are still in PLANNING.</td><td>1</td><td>The pipeline that will start producing tasks.</td><td>never · <span class="flagnote">G</span></td></tr>
+<tr class="section"><td colspan="7">Who the member is</td></tr>
+<tr><td class="name">member_id, team_id</td><td><span class="kind src">database</span></td><td><code>users.id</code>, the member's primary team from <code>team_members</code></td><td>Which person and which team this row belongs to, as categories.</td><td>Sara; team "Calibration"</td><td>Lets the booster learn each person's and each team's own level instead of one average for everyone.</td><td></td></tr>
+<tr><td class="name">role</td><td><span class="kind src">database</span></td><td><code>users.role</code></td><td>MEMBER or TEAM_LEADER.</td><td>MEMBER</td><td>Leaders log a different mix and fewer task hours.</td><td></td></tr>
+<tr><td class="name">job_title</td><td><span class="kind src">database</span></td><td><code>users.job_title</code></td><td>The job title as written in the directory; blank titles form one category.</td><td>"Calibration engineer"</td><td>People with the same title tend to have similar weeks.</td><td></td></tr>
+<tr><td class="name">tenure_weeks</td><td><span class="kind drv">computed</span></td><td><code>team_members.joined_at</code></td><td>Weeks since Sara joined her first team.</td><td>84 weeks</td><td>Newcomers ramp up; the model should not expect full hours from someone in their first month.</td><td></td></tr>
+<tr><td class="name">week_of_year</td><td><span class="kind drv">computed</span></td><td>the calendar</td><td>The ISO week number of the row's week.</td><td>36</td><td>Seasonality: summer and year-end weeks are lighter for most teams.</td><td></td></tr>
+<tr class="section"><td colspan="7">What is already known about the target week · one column per horizon h</td></tr>
+<tr><td class="name">due_hrs_h</td><td><span class="kind drv">computed</span></td><td>open tasks with <code>due_date</code> inside week w+h, their remaining hours by the module's count</td><td>Hours of Sara's open work that fall due in the target week.</td><td>16 h due in the week after next</td><td>Deadline pressure: hours due in a week tend to get logged in it.</td><td>never · <span class="flagnote">E, G</span></td></tr>
+<tr><td class="name">planned_hrs_h</td><td><span class="kind drv">computed</span></td><td>open tasks whose <code>planned_week</code> is the Monday of week w+h, their <code>original_estimate_hrs</code></td><td>Hours of Sara's open work that the leader has planned for the target week. Filled only when the leader sets a planned week, which is sometimes, and that is enough.</td><td>12 h planned for next week</td><td>The leader's own intention for the week is the most direct signal there is when it exists.</td><td>never (zero when nothing is planned) · <span class="flagnote">G, K</span></td></tr>
+<tr><td class="name">working_days_h</td><td><span class="kind drv">computed</span></td><td><code>holidays</code> (CONFIRMED, active)</td><td>Weekdays in the target week that are not public holidays.</td><td>4 (a Monday holiday)</td><td>A four-day week cannot hold five days of hours.</td><td></td></tr>
+<tr><td class="name">absence_hrs_h</td><td><span class="kind drv">computed</span></td><td>APPROVED <code>personal_leaves</code> expanded into the target week's working days (section 6)</td><td>Hours Sara is away on leave in the target week.</td><td>17.6 h (two leave days), or 13.2 h when the second ends at noon</td><td>A leader cannot expect hours from someone on leave.</td><td>never (zero when no leave) · <span class="flagnote">leave rule</span></td></tr>
+<tr><td class="name">available_hrs_h</td><td><span class="kind drv">computed</span></td><td>44 h × working days / 5 − absence hours, never below 0</td><td>The hours Sara can work in the target week.</td><td>35.2 − 8.8 = 26.4 h</td><td>The ceiling on what can be logged. The most direct signal the model has about the target week.</td><td>never · <span class="flagnote">I</span></td></tr>
+<tr class="section"><td colspan="7">The target</td></tr>
+<tr><td class="name">target_h</td><td><span class="kind target">target</span></td><td>sum of <code>time_logs.hours</code> in week w+h</td><td>What actually got logged h weeks later. Known for past rows (training), unknown for the origin rows (what is predicted).</td><td>37.0 h</td><td>It is the number the whole system exists to predict.</td><td>the target week is after the origin</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="rules">5 · The module's own rules and your rulings</h2>
+<p>No feature column is fabricated out of nothing: every one traces back to real table columns. But a handful of <em>rules</em> on the way are the module's own, not the application's. On 2026-09-16 you ruled on each; the ruling is now the rule, and the letter is the one the lineage diagram and the table carry.</p>
+<div class="callouts">
+  <div class="callout"><h4>A · The assignment date comes from the history</h4><p>WorkloadHub stores who a task is assigned to, not when. The module reads the latest <code>task_history</code> row whose <code>new_value</code> (a full name) resolves to the current assignee and takes its <code>changed_at</code>; when no such row exists it falls back to <code>created_date</code> and reports an unresolved assignment in the data-quality facts.</p><p class="q">Ruling: keep. The application will one day carry <code>tasks.assigned_at</code>; read it when it exists, not now. Logged in the backlog.</p></div>
+  <div class="callout"><h4>B · "Fresh" arrivals: the two-day rule</h4><p>A task is <em>fresh</em> when it was assigned less than two days after being created; otherwise it came from a backlog. Only fresh tasks count in <code>arrival_hrs_lag1..4</code> and <code>weeks_since_last_arrival</code>; every task counts in <code>arrivals_13w</code> and the shares.</p><p class="q">Ruling: keep. Whether work reaches a member fresh or late from the backlog is information you want.</p></div>
+  <div class="callout"><h4>C · Task families are a mapping</h4><p>Bug, Incident → defect; Story, New Feature, Task, Improvement, Change Request → delivery; Spike, Test, Risk → support; Epic → container; a Sub-task takes its parent's family. All twelve types of the application are named.</p><p class="q">Ruling: keep; a sub-task of a bug is bug work.</p></div>
+  <div class="callout"><h4>D · How a task was assigned is now a fact</h4><p>The <code>user_id</code> of the same <code>task_history</code> row that gives the assignment date is who assigned the task. Equal to the new assignee: self-picked. Anyone else: assigned. No row, or no user on it: unknown, and the task is left out of the two shares.</p><p class="q">Ruling: replace the guess with the fact. The old reporter-and-parent heuristic and the "project" mode are gone.</p></div>
+  <div class="callout"><h4>E · Remaining hours: two definitions on purpose</h4><p>The features use <em>estimate − hours logged by the row's week</em> for <code>open_remaining_hrs</code> and <code>due_hrs_h</code>, because a training row must see what was known then and <code>remaining_estimate_hrs</code> has no history. The facts the leader reads (<code>open_est_hours</code>, <code>due_hours</code>, the pressure figures) use the stored <code>remaining_estimate_hrs</code>, the application's own number.</p><p class="q">Ruling: keep both, documented.</p></div>
+  <div class="callout"><h4>F · Blank instead of invented</h4><p>Every ratio whose denominator is zero, and "weeks since" when there was no event, are left empty. XGBoost's trees learn a default direction for a missing value at each split from the training rows that lacked it, so a blank is its own branch, not a zero and not an average. Counts and sums stay zero, because zero is their true value.</p><p class="q">Ruling: go with the recommended logic, documented clearly. The full list is in section 4's last column, in <code>Features.java</code> and in the schema document.</p></div>
+  <div class="callout"><h4>G · Five fields are read as they stand today</h4><p>The history replay rewinds assignments, statuses and logs to the row's week, but <code>reopened_from_done</code>, <code>projects.status</code>, <code>due_date</code>, <code>original_estimate_hrs</code> and <code>planned_week</code> have no history. A row for last March "knows" a due date or a plan that may have been set in June. A task's current value is the best available stand-in, and the alternative is to drop the columns.</p><p class="q">Ruling: accept and document. Five, not four: <code>planned_week</code> joined the list.</p></div>
+  <div class="callout"><h4>H · No project deadline</h4><p><code>proj_first_due_weeks</code> stood in for a project end date that the database does not record.</p><p class="q">Ruling: removed. Projects will have no deadline or start date.</p></div>
+  <div class="callout"><h4>I · J · Capacity is the module's own formula</h4><p><code>user_capacity</code> and <code>team_capacity</code> are not read. Capacity is <code>whf.default-weekly-hours</code> (44) × the week's working days / 5, minus the member's approved leave hours; a day is 8.8 h minus its leave. The team's capacity is the sum over its members and is no longer shown as a separate block.</p><p class="q">Ruling: 44 h stays a setting with 44 as default; the two tables are ignored.</p></div>
+  <div class="callout"><h4>K · Planned weeks are read</h4><p><code>planned_hrs_h</code> sums the estimates of the member's open tasks planned for the target week, and the facts carry <code>planned_hours</code> per window so the narrative can say "12 h planned for this window" and the verifier can check it. The seed plans some tasks forward so the column is exercised.</p><p class="q">Ruling: reuse planned weeks; filled sometimes is good enough.</p></div>
+</div>
+<h3>Recorded by the application but not used by the model</h3>
+<ul>
+  <li><code>tasks.remaining_estimate_hrs</code> is used by the leader-facing facts but not by any feature column (E).</li>
+  <li><code>absences</code> is legacy and never read; <code>user_capacity</code> and <code>team_capacity</code> are never read (I, J). All three stay in the schema files because the application still has the tables.</li>
+  <li><code>personal_leaves</code> rows with status <code>REJECTED</code> or <code>CANCELLED</code> are not loaded; <code>PENDING</code> ones reach the facts only.</li>
+  <li><code>task_comments</code>, <code>task_attachments</code>, <code>notifications</code>, <code>project_history</code>, <code>job_titles</code>, <code>job_title_role_mappings</code> and <code>user_roles</code> are never read.</li>
+</ul>
+
+<h2 id="leaves">6 · How a leave becomes capacity</h2>
+<p>A leave is one row of <code>personal_leaves</code>: a period from <code>start_date</code> to <code>end_date</code>, a total <code>absence_hours</code> for the whole leave, and optional <code>begin_time</code> and <code>end_time</code> that say it starts or ends on a partial day. Only <code>APPROVED</code> leaves count. One pure function, <code>LeaveDays.expand</code>, turns each into hours per working day:</p>
+<ol class="steps">
+  <li><strong>The days.</strong> Every day from start to end that is a weekday and not a confirmed holiday. A leave over a weekend or a holiday costs nothing on those days.</li>
+  <li><strong>The full day.</strong> 44 h / 5 = 8.8 h. There is no per-member figure any more.</li>
+  <li><strong>The hours.</strong> A null or non-positive total means the whole period: every day gets 8.8 h. Otherwise the total is capped at 8.8 h × the number of days and dealt out 8.8 h per day from the first day forward, the last day taking what is left. When only <code>begin_time</code> is set, the leave starts on a partial day, so it is dealt from the last day backward and the first day takes the remainder. A day dealt zero hours is not an absent day.</li>
+  <li><strong>Two leaves on one day</strong> add up, and the sum is capped at 8.8 h.</li>
+</ol>
+<div class="table-wrap">
+<table style="max-width: 900px">
+<thead><tr><th>Leave</th><th>Working days</th><th>Hours per day</th></tr></thead>
+<tbody>
+<tr><td>Mon 7 to Wed 9 Sep, <code>absence_hours</code> 26.4</td><td>Mon, Tue, Wed</td><td class="mono">8.8 · 8.8 · 8.8</td></tr>
+<tr><td>Mon 7 to Wed 9 Sep, 22.0, <code>end_time</code> 12:00</td><td>Mon, Tue, Wed</td><td class="mono">8.8 · 8.8 · 4.4</td></tr>
+<tr><td>Mon 7 to Wed 9 Sep, 22.0, <code>begin_time</code> 13:00</td><td>Mon, Tue, Wed</td><td class="mono">4.4 · 8.8 · 8.8</td></tr>
+<tr><td>Mon 7 to Wed 9 Sep, 22.0, both times set</td><td>Mon, Tue, Wed</td><td class="mono">8.8 · 8.8 · 4.4</td></tr>
+<tr><td>Fri 4 to Mon 7 Sep, 17.6</td><td>Fri, Mon (weekend skipped)</td><td class="mono">8.8 · 8.8</td></tr>
+<tr><td>Thu 10 Sep only, 4.0 (a half day)</td><td>Thu</td><td class="mono">4.0</td></tr>
+<tr><td>Thu 10 to Fri 11 Sep, 8.8 (one day's worth over two dates)</td><td>Thu, Fri</td><td class="mono">8.8 · 0 → only Thu is absent</td></tr>
+<tr><td>Mon 7 to Fri 11 Sep, <code>absence_hours</code> null</td><td>five days</td><td class="mono">8.8 each</td></tr>
+<tr><td>a leave whose only date is a public holiday</td><td>none</td><td class="mono">nothing</td></tr>
+</tbody>
+</table>
+</div>
+<p>Those per-day hours are then used in exactly four places, and none of them is a feature of the member's own history:</p>
+<ol class="steps">
+  <li><strong><code>absence_hrs_h</code> and <code>available_hrs_h</code>.</strong> The target week's leave hours over its working days, and 44 h × working days / 5 minus them.</li>
+  <li><strong>The day placement (<code>offDays</code>).</strong> A day whose leave hours reach 8.8 h is a full leave day: no predicted hours land on it and the week's hours move to the other days. A half day is not off: the hours are still placed, against a halved capacity.</li>
+  <li><strong>The day capacity shown to the leader (<code>dayCapacity</code>).</strong> 8.8 h minus that day's leave hours, never below zero; zero on a weekend or holiday.</li>
+  <li><strong>The facts.</strong> Each member's <code>absence_hours</code> per window keeps its name (the narrative's word is "absence", whatever the table), and <code>pending_leaves</code> lists the member's <code>PENDING</code> leaves that touch the horizon, with start, end, type and hours, served by the <code>get_member_capacity</code> tool: a risk to the window the narrative may mention, never a reduction of capacity.</li>
+</ol>
+<p>Nothing in the model's own history columns (<code>lag*</code>, <code>roll_*</code>, arrivals, open work, team, identity) reads leaves at all, so what the model learns from the past does not depend on the leave table; only the target week's availability, the placement on days and the leader's capacity figures do.</p>
+<p class="hint">Source of truth for this page: <code>Features.java</code>, <code>FeatureBuilder.java</code>, <code>WeeklySeries.java</code>, <code>Lifecycle.java</code>, <code>LeaveDays.java</code>, <code>CapacityRule.java</code>, <code>FactsBuilder.java</code>, <code>ForecastRunner.java</code> on <code>dev</code> at <code>2e7342c</code>; the spec <code>docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md</code> for the rulings; <code>docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md</code> for the column-by-column mapping. The page reviewed on 2026-09-16 is kept in the repository as <code>docs/design/2026-09-16-feature-matrix-review.html</code>.</p>
+
+<script>
+(function () {
+  // kind: src (table column), drv (derived), feat (feature), target; rule: letters of the 2026-09-16 rulings
+  var nodes = [
+    {id:'tl_hours', kind:'src', group:'time_logs', label:'hours · log_date · user_id · task_id'},
+    {id:'t_est', kind:'src', group:'tasks', label:'original_estimate_hrs'},
+    {id:'t_rem', kind:'src', group:'tasks', label:'remaining_estimate_hrs'},
+    {id:'t_created', kind:'src', group:'tasks', label:'created_date'},
+    {id:'t_started', kind:'src', group:'tasks', label:'started_date'},
+    {id:'t_finished', kind:'src', group:'tasks', label:'finished_date'},
+    {id:'t_due', kind:'src', group:'tasks', label:'due_date'},
+    {id:'t_planned', kind:'src', group:'tasks', label:'planned_week (read since 2026-09-17)'},
+    {id:'t_prio', kind:'src', group:'tasks', label:'priority'},
+    {id:'t_type', kind:'src', group:'tasks', label:'task_type_id'},
+    {id:'t_status', kind:'src', group:'tasks', label:'task_status_id'},
+    {id:'t_assignee', kind:'src', group:'tasks', label:'assignee_id'},
+    {id:'t_parent', kind:'src', group:'tasks', label:'parent_task_id'},
+    {id:'t_project', kind:'src', group:'tasks', label:'project_id'},
+    {id:'t_reopened', kind:'src', group:'tasks', label:'reopened_from_done'},
+    {id:'th_rows', kind:'src', group:'task_history', label:'field_name · new_value · changed_at · user_id'},
+    {id:'ts_cat', kind:'src', group:'task_statuses', label:'category'},
+    {id:'tt_name', kind:'src', group:'task_types', label:'name'},
+    {id:'p_status', kind:'src', group:'projects', label:'status · team_id'},
+    {id:'tm_parent', kind:'src', group:'teams', label:'parent_team_id'},
+    {id:'tmem', kind:'src', group:'team_members', label:'team_id · joined_at'},
+    {id:'u_role', kind:'src', group:'users', label:'role · job_title'},
+    {id:'h_rows', kind:'src', group:'holidays', label:'start_date · end_date · status · active'},
+    {id:'pl_rows', kind:'src', group:'personal_leaves (APPROVED only)', label:'employee_id · dates · times · absence_hours'},
+    // derived
+    {id:'d_assigned', kind:'drv', group:'per task', label:'assigned_at', rule:'A', note:'Latest task_history assignee row whose new_value resolves to the current assignee, else created_date.'},
+    {id:'d_started', kind:'drv', group:'per task', label:'started_at', note:'tasks.started_date, else the first status transition into an IN_PROGRESS category.'},
+    {id:'d_finished', kind:'drv', group:'per task', label:'finished_at', note:'tasks.finished_date, else the first transition into a DONE category; only when the task is DONE today.'},
+    {id:'d_fresh', kind:'drv', group:'per task', label:'fresh (assigned < 2 days after creation)', rule:'B', note:'The two-day backlog rule, kept by ruling B.'},
+    {id:'d_family', kind:'drv', group:'per task', label:'family (defect / delivery / support)', rule:'C', note:'Mapping of the twelve task type names; a sub-task takes its parent’s family.'},
+    {id:'d_mode', kind:'drv', group:'per task', label:'mode (self-picked / assigned / unknown)', rule:'D', note:'The user_id of the assignee row that gave assigned_at: equal to the assignee → self-picked; anyone else → assigned; none → unknown.'},
+    {id:'d_actual', kind:'drv', group:'per task', label:'actual hours of a finished task', note:'The assignee’s logged hours; when none, estimate − remaining (an "unlogged" task).'},
+    {id:'d_open', kind:'drv', group:'per task and week', label:'open at week end', note:'assigned_at ≤ week end and not finished by then: assigned and not finished.'},
+    {id:'d_remain', kind:'drv', group:'per task and week', label:'remaining as of week end', rule:'E', note:'original_estimate_hrs − hours logged on the task by then, never below 0.'},
+    {id:'d_logged', kind:'drv', group:'per member and week', label:'logged hours (weekly series)', note:'Sum of time_logs.hours per member and Monday week.'},
+    {id:'d_arrival', kind:'drv', group:'per member and week', label:'fresh arrival hours (weekly series)', note:'Sum of original_estimate_hrs of fresh tasks by assignment week.'},
+    {id:'d_cal', kind:'drv', group:'calendar', label:'working calendar', note:'Weekdays minus holidays that are CONFIRMED and active.'},
+    {id:'d_leave', kind:'drv', group:'calendar', label:'leave hours per member and day', rule:'leave', note:'Each APPROVED leave expanded into its working days: absence_hours dealt 8.8 h a day from the first day forward (backward when only begin_time is set), capped at 8.8 h a day; section 6.'},
+    {id:'d_teamproj', kind:'drv', group:'team', label:'projects of the team and its parent', note:'projects.team_id equal to the member’s primary team or its parent team.'},
+    // features
+    {id:'f_lag', kind:'feat', group:'own history', label:'lag1 … lag4, lag8, lag13'},
+    {id:'f_roll', kind:'feat', group:'own history', label:'roll_mean_4/8/13 · roll_std_4/8/13'},
+    {id:'f_arrlag', kind:'feat', group:'arrivals', label:'arrival_hrs_lag1 … 4', rule:'A B'},
+    {id:'f_since', kind:'feat', group:'arrivals', label:'weeks_since_last_arrival', rule:'A B F'},
+    {id:'f_n13', kind:'feat', group:'arrivals', label:'arrivals_13w', rule:'A'},
+    {id:'f_family', kind:'feat', group:'arrivals', label:'share_defect / delivery / support_13w', rule:'C F'},
+    {id:'f_prio', kind:'feat', group:'arrivals', label:'share_high_priority_13w', rule:'F'},
+    {id:'f_mode', kind:'feat', group:'arrivals', label:'share_self_picked / assigned_13w', rule:'D F'},
+    {id:'f_reopen', kind:'feat', group:'arrivals', label:'reopen_rate_13w', rule:'F G'},
+    {id:'f_open', kind:'feat', group:'open work', label:'open_tasks', rule:'A'},
+    {id:'f_openrem', kind:'feat', group:'open work', label:'open_remaining_hrs', rule:'E'},
+    {id:'f_overdue', kind:'feat', group:'open work', label:'overdue_open', rule:'G'},
+    {id:'f_inprog', kind:'feat', group:'open work', label:'in_progress_tasks'},
+    {id:'f_ratio', kind:'feat', group:'open work', label:'estimate_ratio_13w', rule:'F G'},
+    {id:'f_cycle', kind:'feat', group:'open work', label:'cycle_days_13w', rule:'A'},
+    {id:'f_backlog', kind:'feat', group:'team', label:'team_backlog_unassigned_hrs'},
+    {id:'f_pactive', kind:'feat', group:'team', label:'proj_active', rule:'G'},
+    {id:'f_pplan', kind:'feat', group:'team', label:'proj_planning', rule:'G'},
+    {id:'f_ident', kind:'feat', group:'identity', label:'member_id · team_id · role · job_title'},
+    {id:'f_tenure', kind:'feat', group:'identity', label:'tenure_weeks'},
+    {id:'f_woy', kind:'feat', group:'identity', label:'week_of_year'},
+    {id:'f_due', kind:'feat', group:'target week (per horizon)', label:'due_hrs_h', rule:'E G'},
+    {id:'f_planned', kind:'feat', group:'target week (per horizon)', label:'planned_hrs_h (new)', rule:'G K'},
+    {id:'f_wd', kind:'feat', group:'target week (per horizon)', label:'working_days_h'},
+    {id:'f_abs', kind:'feat', group:'target week (per horizon)', label:'absence_hrs_h', rule:'leave'},
+    {id:'f_avail', kind:'feat', group:'target week (per horizon)', label:'available_hrs_h', rule:'I'},
+    {id:'f_target', kind:'target', group:'target', label:'target_h (logged hours in week w+h)'}
+  ];
+  var edges = [
+    ['tl_hours','d_logged'], ['tl_hours','d_actual'], ['tl_hours','d_remain'],
+    ['t_est','d_arrival'], ['t_est','d_remain'], ['t_est','d_actual'], ['t_est','f_backlog'], ['t_est','f_ratio'], ['t_est','f_planned'],
+    ['t_rem','d_actual'],
+    ['t_created','d_assigned'], ['t_created','d_fresh'], ['t_created','f_backlog'],
+    ['t_started','d_started'], ['t_finished','d_finished'], ['t_status','d_finished'], ['ts_cat','d_finished'], ['ts_cat','d_started'],
+    ['th_rows','d_assigned'], ['th_rows','d_started'], ['th_rows','d_finished'], ['th_rows','d_mode'],
+    ['t_assignee','d_assigned'], ['t_assignee','d_mode'], ['t_parent','d_family'],
+    ['t_type','d_family'], ['tt_name','d_family'],
+    ['t_due','f_overdue'], ['t_due','f_due'], ['t_planned','f_planned'],
+    ['t_prio','f_prio'], ['t_reopened','f_reopen'],
+    ['t_project','d_teamproj'], ['p_status','d_teamproj'], ['tm_parent','d_teamproj'], ['p_status','f_pactive'], ['p_status','f_pplan'],
+    ['tmem','f_ident'], ['tmem','f_tenure'], ['u_role','f_ident'],
+    ['h_rows','d_cal'], ['pl_rows','d_leave'], ['d_cal','d_leave'],
+    ['d_assigned','d_fresh'], ['d_assigned','d_arrival'], ['d_assigned','d_open'], ['d_assigned','f_n13'], ['d_assigned','f_family'], ['d_assigned','f_prio'], ['d_assigned','f_mode'], ['d_assigned','f_cycle'], ['d_assigned','f_backlog'],
+    ['d_fresh','d_arrival'], ['d_family','f_family'], ['d_mode','f_mode'],
+    ['d_started','f_inprog'], ['d_finished','d_open'], ['d_finished','f_reopen'], ['d_finished','f_ratio'], ['d_finished','f_cycle'], ['d_finished','f_backlog'], ['d_finished','d_actual'],
+    ['d_actual','f_ratio'],
+    ['d_open','f_open'], ['d_open','f_openrem'], ['d_open','f_overdue'], ['d_open','f_inprog'], ['d_open','f_due'], ['d_open','f_planned'], ['d_open','f_pactive'],
+    ['d_remain','f_openrem'], ['d_remain','f_due'],
+    ['d_logged','f_lag'], ['d_logged','f_roll'], ['d_logged','f_target'],
+    ['d_arrival','f_arrlag'], ['d_arrival','f_since'],
+    ['d_cal','f_wd'], ['d_cal','f_avail'], ['d_cal','f_abs'], ['d_leave','f_abs'], ['d_leave','f_avail'],
+    ['d_teamproj','f_backlog'], ['d_teamproj','f_pactive'], ['d_teamproj','f_pplan']
+  ];
+  var byId = {};
+  nodes.forEach(function (n) { byId[n.id] = n; });
+  var colOf = {src: 0, drv: 1, feat: 2, target: 2};
+  var colX = [20, 420, 800];
+  var colW = [330, 320, 310];
+  var H = 22, GAP = 5, GGAP = 22, TOP = 44;
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('lineage-svg');
+  function el(name, attrs, text) {
+    var e = document.createElementNS(svgNS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  var cols = [[], [], []];
+  nodes.forEach(function (n) { cols[colOf[n.kind]].push(n); });
+  var maxY = 0;
+  cols.forEach(function (list, c) {
+    var y = TOP, lastGroup = null;
+    list.forEach(function (n) {
+      if (n.group !== lastGroup) { y += (lastGroup === null ? 0 : GGAP) + 14; n.groupStart = true; lastGroup = n.group; }
+      n.x = colX[c]; n.y = y; n.w = colW[c]; y += H + GAP;
+    });
+    maxY = Math.max(maxY, y);
+  });
+  svg.setAttribute('viewBox', '0 0 1140 ' + (maxY + 10));
+  var gEdges = el('g', {'class': 'edges'});
+  var gNodes = el('g', {'class': 'nodes'});
+  svg.appendChild(gEdges); svg.appendChild(gNodes);
+  [['Read from the database', 0], ['Derived by the module', 1], ['Feature matrix columns', 2]].forEach(function (h) {
+    svg.appendChild(el('text', {x: colX[h[1]], y: 22, 'class': 'col-label'}, h[0]));
+  });
+  var edgeEls = [];
+  edges.forEach(function (e) {
+    var a = byId[e[0]], b = byId[e[1]];
+    if (!a || !b) return;
+    var x1 = a.x + a.w, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2;
+    var far = colOf[b.kind] - colOf[a.kind] > 1;
+    var dx = (x2 - x1) * 0.45;
+    var p = el('path', {d: 'M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2, 'class': 'edge' + (far ? ' far' : '')});
+    p.dataset.from = a.id; p.dataset.to = b.id;
+    gEdges.appendChild(p); edgeEls.push(p);
+  });
+  var nodeEls = {};
+  nodes.forEach(function (n) {
+    if (n.groupStart) gNodes.appendChild(el('text', {x: n.x, y: n.y - 5, 'class': 'group-label'}, n.group));
+    var g = el('g', {'class': 'node ' + n.kind + (n.rule ? ' flagged' : ''), tabindex: '0', role: 'button', 'aria-label': n.label + (n.rule ? ' (rule ' + n.rule + ')' : '')});
+    g.appendChild(el('rect', {x: n.x, y: n.y, width: n.w, height: H, rx: 3}));
+    g.appendChild(el('text', {x: n.x + 8, y: n.y + 15}, n.label));
+    if (n.rule) g.appendChild(el('text', {x: n.x + n.w - 6, y: n.y + 15, 'text-anchor': 'end', 'class': 'rule'}, n.rule));
+    g.dataset.id = n.id;
+    gNodes.appendChild(g); nodeEls[n.id] = g;
+  });
+  var up = {}, down = {};
+  edges.forEach(function (e) { (up[e[1]] = up[e[1]] || []).push(e[0]); (down[e[0]] = down[e[0]] || []).push(e[1]); });
+  function closure(start, adj) {
+    var seen = {}; var stack = [start];
+    while (stack.length) { var id = stack.pop(); if (seen[id]) continue; seen[id] = true; (adj[id] || []).forEach(function (x) { stack.push(x); }); }
+    return seen;
+  }
+  var detail = document.getElementById('detail');
+  function focus(id) {
+    var anc = closure(id, up), des = closure(id, down), on = {};
+    for (var k in anc) on[k] = true; for (var k2 in des) on[k2] = true;
+    svg.classList.add('focus');
+    Object.keys(nodeEls).forEach(function (k) { nodeEls[k].classList.toggle('on', !!on[k]); });
+    edgeEls.forEach(function (p) { p.classList.toggle('on', !!((anc[p.dataset.from] && anc[p.dataset.to]) || (des[p.dataset.from] && des[p.dataset.to]))); });
+    var n = byId[id];
+    var ins = (up[id] || []).map(function (x) { return byId[x].label; });
+    var outs = (down[id] || []).map(function (x) { return byId[x].label; });
+    var html = '<b>' + n.label + '</b>';
+    if (n.note) html += ' — ' + n.note;
+    if (n.rule) html += ' <span class="kind flag">rule ' + n.rule + '</span> <a href="#rules" style="color:var(--accent)">section 5</a>';
+    if (ins.length) html += '<br>Built from: ' + ins.join(' · ');
+    if (outs.length) html += '<br>Feeds: ' + outs.join(' · ');
+    if (n.kind === 'src') html += '<br>A number as the application stores it.';
+    detail.innerHTML = html;
+  }
+  function reset() {
+    svg.classList.remove('focus');
+    Object.keys(nodeEls).forEach(function (k) { nodeEls[k].classList.remove('on'); });
+    edgeEls.forEach(function (p) { p.classList.remove('on'); });
+    detail.textContent = 'Click a box to see its inputs and what it feeds.';
+  }
+  var current = null;
+  gNodes.addEventListener('click', function (ev) {
+    var g = ev.target.closest('.node'); if (!g) return;
+    ev.stopPropagation();
+    if (current === g.dataset.id) { current = null; reset(); return; }
+    current = g.dataset.id; focus(current);
+  });
+  gNodes.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var g = ev.target.closest('.node'); if (!g) return;
+    ev.preventDefault(); current = g.dataset.id; focus(current);
+  });
+  svg.addEventListener('click', function () { current = null; reset(); });
+})();
+</script>

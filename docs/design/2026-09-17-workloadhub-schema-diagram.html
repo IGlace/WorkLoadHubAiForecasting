@@ -1,0 +1,441 @@
+<title>WorkloadHub Schema Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #f6f7f4; --paper-2: #eceee8; --ink: #1c2229; --ink-2: #4b5560; --rule: #cfd4cb; --accent: #0d5c63;
+  --new: #2c7a4b; --new-bg: #e1f1e6;        /* a table created after the base schema */
+  --later: #b26a10; --later-bg: #fbeedb;    /* a column or constraint added after the base schema */
+  --read: #2b63b8; --read-bg: #e3ecfa;      /* read by the forecast module */
+  --legacy: #7a838c; --legacy-bg: #e6e8e4;  /* legacy or not read */
+  --warn: #b23a32; --warn-bg: #f9e3e0;      /* a relationship the schema does not declare */
+  --code-bg: #e9ebe5; --box: #fbfbf9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14181b; --paper-2: #1d2226; --ink: #e5e8e2; --ink-2: #a6adb3; --rule: #343b41; --accent: #6cc4cb;
+    --new: #79c48f; --new-bg: #16301f; --later: #e6a453; --later-bg: #3a2a12; --read: #7fa8f0; --read-bg: #1a2a45;
+    --legacy: #8f979e; --legacy-bg: #262b2f; --warn: #ee8a80; --warn-bg: #3f1d1a; --code-bg: #22282c; --box: #191e22;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14181b; --paper-2: #1d2226; --ink: #e5e8e2; --ink-2: #a6adb3; --rule: #343b41; --accent: #6cc4cb;
+  --new: #79c48f; --new-bg: #16301f; --later: #e6a453; --later-bg: #3a2a12; --read: #7fa8f0; --read-bg: #1a2a45;
+  --legacy: #8f979e; --legacy-bg: #262b2f; --warn: #ee8a80; --warn-bg: #3f1d1a; --code-bg: #22282c; --box: #191e22;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; font-size: 15px; line-height: 1.55; padding-inline: clamp(16px, 4vw, 48px); padding-block: 24px 80px; }
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; }
+h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 600; margin: 0 0 6px; }
+h2 { font-size: 22px; font-weight: 600; margin: 56px 0 12px; padding-top: 16px; border-top: 1px solid var(--rule); }
+h3 { font-size: 16px; font-weight: 600; margin: 28px 0 8px; color: var(--accent); }
+p, li { max-width: 78ch; }
+.lede { color: var(--ink-2); font-size: 16px; max-width: 84ch; margin: 0 0 18px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 18px 0 8px; font-size: 14px; }
+nav.toc a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+nav.toc a:hover, nav.toc a:focus-visible { border-bottom-color: var(--accent); outline: none; }
+.stats { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 14px 0 6px; font-size: 14px; color: var(--ink-2); }
+.stats b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+figure { margin: 18px 0 8px; }
+figure svg { max-width: 100%; height: auto; display: block; color: var(--ink); }
+figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 90ch; margin-top: 8px; }
+.scroll { overflow-x: auto; padding-bottom: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; margin: 10px 0 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1.5px solid; }
+.sw.new { background: var(--new-bg); border-color: var(--new); }
+.sw.later { background: var(--later-bg); border-color: var(--later); }
+.sw.read { background: var(--read-bg); border-color: var(--read); }
+.sw.legacy { background: var(--legacy-bg); border-color: var(--legacy); }
+.sw.warn { background: var(--warn-bg); border-color: var(--warn); border-style: dashed; }
+.hint { font-size: 13.5px; color: var(--ink-2); margin: 4px 0 10px; }
+/* ER diagram */
+#er { width: 100%; }
+#er text { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; fill: var(--ink); }
+#er .tbl rect.box { fill: var(--box); stroke: var(--ink-2); stroke-width: 1.1; }
+#er .tbl rect.head { fill: var(--paper-2); stroke: none; }
+#er .tbl text.name { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 12.5px; font-weight: 600; }
+#er .tbl text.type { fill: var(--ink-2); font-size: 10px; }
+#er .tbl.new rect.box { stroke: var(--new); stroke-width: 2; }
+#er .tbl.new rect.head { fill: var(--new-bg); }
+#er .tbl.legacy rect.head { fill: var(--legacy-bg); }
+#er .tbl.legacy text.name { fill: var(--legacy); }
+#er .tbl rect.row-later { fill: var(--later-bg); }
+#er .tbl rect.tick { fill: var(--read); }
+#er .tbl text.badge { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; }
+#er .tbl text.badge.new { fill: var(--new); }
+#er .tbl text.badge.legacy { fill: var(--legacy); }
+#er .tbl text.badge.read { fill: var(--read); }
+#er .grp { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--ink-2); }
+#er .edge { fill: none; stroke: var(--ink-2); stroke-opacity: 0.4; stroke-width: 1.1; }
+#er .edge.later { stroke: var(--later); stroke-opacity: 0.9; stroke-width: 1.5; }
+#er .edge.implied { stroke: var(--warn); stroke-dasharray: 5 4; stroke-opacity: 0.9; stroke-width: 1.4; }
+#er text.elabel { font-size: 10px; fill: var(--warn); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+#er .tbl { cursor: pointer; }
+#er.focus .tbl:not(.on) { opacity: 0.22; }
+#er.focus .edge:not(.on) { stroke-opacity: 0.06; }
+#er.focus .edge.on { stroke: var(--accent); stroke-opacity: 1; stroke-width: 1.9; }
+#er.focus .edge.on.implied { stroke: var(--warn); }
+#er .tbl.on rect.box { stroke-width: 2.2; stroke: var(--accent); }
+#er .arrow { fill: var(--ink-2); }
+.detail { border: 1px solid var(--rule); background: var(--paper-2); padding: 12px 14px; border-radius: 6px; font-size: 14px; margin-top: 10px; min-height: 52px; }
+.detail b { font-family: "IBM Plex Mono", monospace; font-weight: 500; }
+/* cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 12px; }
+.card { border: 1px solid var(--rule); border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 4px; background: var(--paper-2); font-size: 14px; }
+.card.new { border-left-color: var(--new); } .card.later { border-left-color: var(--later); } .card.warn { border-left-color: var(--warn); } .card.legacy { border-left-color: var(--legacy); }
+.card h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.card p { margin: 0 0 6px; }
+.card .ev { color: var(--ink-2); font-size: 13px; }
+/* tables */
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--rule); }
+th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; background: var(--paper-2); }
+td.mono, th.mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.table-wrap { overflow-x: auto; }
+.tag { display: inline-block; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; border: 1px solid; white-space: nowrap; margin-right: 4px; vertical-align: middle; }
+.tag.new { color: var(--new); border-color: var(--new); background: var(--new-bg); }
+.tag.later { color: var(--later); border-color: var(--later); background: var(--later-bg); }
+.tag.read { color: var(--read); border-color: var(--read); background: var(--read-bg); }
+.tag.legacy { color: var(--legacy); border-color: var(--legacy); background: var(--legacy-bg); }
+.tag.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
+.tag.key { color: var(--accent); border-color: var(--accent); background: transparent; }
+tr.later td { background: var(--later-bg); }
+td .readdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--read); margin-right: 6px; vertical-align: middle; }
+/* catalogue */
+.cat { margin-top: 30px; padding-top: 6px; }
+.cat h3 { color: var(--ink); font-size: 17px; margin: 24px 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cat h3 code { font-size: 15px; background: none; padding: 0; }
+.cat .desc { margin: 4px 0 10px; color: var(--ink-2); font-size: 14px; max-width: 90ch; }
+.cat .keys { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
+.cat .keys li { margin: 2px 0; }
+.cat .keys li.later { color: var(--later); }
+.cat table { max-width: 1100px; }
+.cat td.n { white-space: nowrap; }
+details { margin: 10px 0; }
+summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+@media (prefers-reduced-motion: no-preference) { #er .tbl, #er .edge { transition: opacity .15s, stroke-opacity .15s; } }
+</style>
+
+<p class="eyebrow">WorkloadHub · schema <code>task_service</code> · pg_dump of 2026-09-09 09:40, PostgreSQL 18.3</p>
+<h1>The WorkloadHub database, table by table</h1>
+<p class="lede">Every table, column, key and relationship of the latest schema dump, drawn as one diagram. Green marks the table that was created after the base schema, amber the columns and constraints that were added to existing tables, and blue what the forecast module reads. Click a table to see its relationships.</p>
+<nav class="toc" aria-label="Sections">
+  <a href="#diagram">1 · The diagram</a>
+  <a href="#changes">2 · What was added, and how that was decided</a>
+  <a href="#forecast">3 · What the forecast reads</a>
+  <a href="#catalogue">4 · Every table in full</a>
+</nav>
+<div class="stats" id="stats"></div>
+
+<h2 id="diagram">1 · The diagram</h2>
+<div class="legend">
+  <span><i class="sw new"></i>table created after the base schema</span>
+  <span><i class="sw later"></i>column whose key was added later (inferred addition)</span>
+  <span><i class="sw read"></i>read by the forecast (tick on the column, badge on the table)</span>
+  <span><i class="sw legacy"></i>legacy or not read</span>
+  <span><i class="sw warn"></i>relationship the application relies on but the schema does not declare</span>
+</div>
+<p class="hint"><code>PK</code> is the primary key, <code>FK</code> a foreign key; an arrow runs from the foreign-key column to the <code>id</code> of the table it references. A loop on the right of a table is a self-reference (a task's parent task, a user's manager). Column types are shortened: <code>varchar(n)</code>, <code>timestamp</code>, <code>time</code>, <code>double</code>, <code>bool</code>.</p>
+<figure>
+<div class="scroll"><svg id="er" role="img" aria-label="Entity-relationship diagram of the 24 tables of the task_service schema with their columns and foreign keys" style="min-width: 1400px"></svg></div>
+<div class="detail" id="detail">Click a table to list its relationships; click the background to reset.</div>
+<figcaption>Six columns of tables, grouped by what they describe: roles and access, people and teams, leave and capacity, projects and reference data, the work itself, and comments, files and the calendar. Every arrow is a declared foreign key except the two dashed ones.</figcaption>
+</figure>
+
+<h2 id="changes">2 · What was added, and how that was decided</h2>
+<p>The dump you uploaded is the same schema the module already carries in <code>server/forecast-core/src/main/resources/schema/workloadhub-postgresql.sql</code>: the two differ only in <code>pg_dump</code> preamble and <code>OWNER</code> lines. So "added" cannot be read as a difference between two files. It is read from the dump itself: PostgreSQL numbers every object in creation order (its OID), and the dump records that number for each table, constraint and index.</p>
+<div class="cards">
+  <div class="card new"><h4><code>personal_leaves</code> is the table added after the base schema</h4><p>The 23 other tables were created in one alphabetical pass by the application's ORM (OIDs 52590 to 52944, tables and their primary and unique keys interleaved in name order). <code>personal_leaves</code> comes right after the last of them, <code>users</code>, at OID 52945, outside the alphabetical order: it was added later. It carries a primary key and two check constraints (leave type, status) and no foreign key at all.</p><p class="ev">Evidence: table OIDs 52590–52944 alphabetical, then 52945 <code>personal_leaves</code>, then the foreign keys 52958–53108.</p></div>
+  <div class="card later"><h4><code>job_title_role_mappings.user_id</code> was added, with a per-user override rule</h4><p>Its foreign key <code>fk_jtrm_user</code> is hand-named (every base foreign key has an ORM-generated name like <code>fk8f3q…</code>) and sits after all of them, followed by two partial unique indexes: one job title maps to one role globally when <code>user_id</code> is null, and to one role per user otherwise. A migration added the column, the key and the indexes together.</p><p class="ev">Evidence: OIDs 53118 (foreign key), 53123 and 53124 (partial unique indexes), then 53136 (an ORM-generated unique key on the same pair).</p></div>
+  <div class="card later"><h4><code>users.manager_id</code> gained its self-reference later</h4><p>The foreign key from a user to their manager is the first object after the base foreign keys (OID 53113). The column itself sits in the ORM's normal position, so it may have existed without a key; either way the relationship is a later addition. <code>manager_object_id</code> and <code>object_id</code> beside it mirror the directory sync's own identifiers, and <code>object_id</code> and <code>account_name</code> are unique.</p><p class="ev">Evidence: OID 53113, the only base-schema table whose foreign key was not created with the others.</p></div>
+  <div class="card later"><h4>Six unique constraints were re-added by a later ORM pass</h4><p><code>holidays</code>, <code>job_title_role_mappings</code>, <code>job_titles</code>, <code>team_capacity</code>, <code>team_members</code> and <code>user_capacity</code> each carry a second unique constraint named <code>uk…</code> (OIDs 53134–53144) on the same columns as their original <code>…_key</code> one, and <code>job_titles</code> has a case-insensitive unique index <code>uq_job_titles_value_ci</code> (53132) as well. They change no data rule; they show the schema was updated in place after the migration that added <code>user_id</code>.</p><p class="ev">Duplicates are harmless; the catalogue marks each.</p></div>
+  <div class="card warn"><h4>Two relationships the application relies on are not declared</h4><p><code>personal_leaves.employee_id</code> is the user on leave and <code>notifications.user_id</code> / <code>reporter_id</code> are users, but none of the three has a foreign key, so the database will accept a leave for a user id that does not exist. The forecast joins <code>employee_id</code> to <code>users.id</code> and silently ignores a leave whose employee is not a counted member. The dashed arrows in the diagram show these joins.</p><p class="ev">Worth a migration on the application side: <code>ALTER TABLE personal_leaves ADD FOREIGN KEY (employee_id) REFERENCES users(id)</code>.</p></div>
+  <div class="card legacy"><h4>Three tables stay in the schema but are no longer used</h4><p><code>absences</code> is legacy since 2026-09-16 (the main developer's confirmation); <code>user_capacity</code> and <code>team_capacity</code> will not be used, because capacity is now computed from the 44 h default, the confirmed holidays and the approved leaves. The forecast reads none of the three and the seed no longer writes them. They remain in the dump, so the diagram shows them greyed rather than absent.</p></div>
+</div>
+<h3>What a dump cannot show</h3>
+<p>A column added with <code>ALTER TABLE … ADD COLUMN</code> leaves no OID of its own, and this schema's column order is the ORM's (fixed-size types first, then ids, then text), not the order of creation. The amber columns are therefore the ones whose <em>keys</em> prove a later change; a column added later without any key would look like every other. If you know of one, it belongs on this page.</p>
+
+<h2 id="forecast">3 · What the forecast reads</h2>
+<p>Ten tables feed the forecast; the module reads them with plain <code>SELECT</code>s in <code>ForecastRepository</code> and never writes to the application's tables. The seed, in real mode, writes exactly five of them (<code>projects</code> upserted, the other four replaced) and leaves the rest alone.</p>
+<div class="table-wrap"><table id="readtable">
+<thead><tr><th>Table</th><th>Columns read</th><th>What the forecast does with them</th><th>Seed writes it</th></tr></thead>
+<tbody></tbody>
+</table></div>
+<p class="hint">Not read: <code>absences</code>, <code>user_capacity</code>, <code>team_capacity</code> (above), <code>task_comments</code>, <code>task_attachments</code>, <code>notifications</code>, <code>project_history</code>, <code>refresh_tokens</code>, <code>role_change_requests</code>, <code>sync_metadata</code>, <code>user_roles</code>, <code>job_titles</code>, <code>job_title_role_mappings</code>.</p>
+
+<h2 id="catalogue">4 · Every table in full</h2>
+<p>Each table with its columns as the dump declares them, its keys, its allowed values where a check constraint fixes them, and the OID that dates each key. A blue dot marks a column the forecast reads; an amber row a column whose key was added later.</p>
+<div class="cat" id="catalogue"></div>
+<p class="hint">Source: <code>schema.sql</code> as uploaded (pg_dump 18.3, 2026-09-09 09:40 +01:00), parsed table by table; the reading list from <code>ForecastRepository.java</code> on <code>dev</code> at <code>2e7342c</code>. Row counts are not in a schema dump; the export of 2026-09-08 held 10 tasks, 11 history rows, 1 time log, 264 users of whom 6 active, 7 projects and 16 holidays.</p>
+
+<script>
+(function () {
+  var T = {"absences":{"columns":[{"name":"date","type":"date","notnull":true},{"name":"hours","type":"double","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"type","type":"varchar(20)","notnull":true},{"name":"note","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkfj92n9rpcqkq6lqm3aqoak9wv","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52958}],"indexes":[],"checks":[],"oid":52590},"holidays":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"end_date","type":"date","notnull":true},{"name":"start_date","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"country_code","type":"varchar(255)","notnull":true},{"name":"status","type":"varchar(255)","notnull":true},{"name":"title","type":"varchar(255)","notnull":true},{"name":"type","type":"varchar(255)","notnull":true}],"pk":["id"],"unique":[{"name":"holidays_title_start_date_end_date_country_code_key","columns":["title","start_date","end_date","country_code"],"oid":52623},{"name":"ukd0p4te1pukhoqt6pyvm2yi9wb","columns":["title","start_date","end_date","country_code"],"oid":53134}],"fks":[],"indexes":[],"checks":[],"oid":52603},"job_title_role_mappings":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"job_title_id","type":"uuid","notnull":true},{"name":"role_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":false}],"pk":["id"],"unique":[{"name":"uk2y6leuw0mawlosaynsywq3cx3","columns":["job_title_id","user_id"],"oid":53136}],"fks":[{"name":"fk8f3qyj4xaqji8jg3es4gi2f3h","columns":["job_title_id"],"ref_table":"job_titles","ref_columns":["id"],"extra":"","oid":52963},{"name":"fk_jtrm_user","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53118},{"name":"fkqjob3ph5fihjyj2xn871srecn","columns":["role_id"],"ref_table":"user_roles","ref_columns":["id"],"extra":"","oid":52968}],"indexes":[{"name":"uq_jtrm_jobtitle_global","unique":true,"expr":"job_title_id","where":"user_id IS NULL","oid":53123},{"name":"uq_jtrm_jobtitle_user","unique":true,"expr":"job_title_id, user_id","where":"user_id IS NOT NULL","oid":53124}],"checks":[],"oid":52624},"job_titles":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"value","type":"varchar(150)","notnull":true}],"pk":["id"],"unique":[{"name":"ukqydsfc33hake2sogd1she6ybo","columns":["value"],"oid":53138}],"fks":[],"indexes":[{"name":"uq_job_titles_value_ci","unique":true,"expr":"lower((value)::text)","where":null,"oid":53132}],"checks":[],"oid":52636},"notifications":{"columns":[{"name":"is_read","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"reporter_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"type","type":"varchar(50)","notnull":true},{"name":"message","type":"text","notnull":true},{"name":"metadata","type":"text","notnull":false}],"pk":["id"],"unique":[],"fks":[],"indexes":[],"checks":[],"oid":52647},"personal_leaves":{"columns":[{"name":"absence_hours","type":"double","notnull":false},{"name":"begin_time","type":"time","notnull":false},{"name":"end_date","type":"date","notnull":true},{"name":"end_time","type":"time","notnull":false},{"name":"start_date","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":false},{"name":"updated_at","type":"timestamp","notnull":false},{"name":"employee_id","type":"uuid","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"note","type":"varchar(1000)","notnull":false},{"name":"leave_type","type":"varchar(255)","notnull":false},{"name":"processor","type":"varchar(255)","notnull":false},{"name":"status","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[],"fks":[],"indexes":[],"checks":[],"oid":52945},"project_history":{"columns":[{"name":"changed_at","type":"timestamp","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"changed_by","type":"uuid","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"project_id","type":"uuid","notnull":false},{"name":"project_key","type":"varchar(20)","notnull":false},{"name":"field_name","type":"varchar(100)","notnull":true},{"name":"new_value","type":"text","notnull":false},{"name":"old_value","type":"text","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fk7p433kc2lowhbmhl2rkroqksl","columns":["changed_by"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52973},{"name":"fknqot7iut415wq4vg43uo4s0qp","columns":["project_id"],"ref_table":"projects","ref_columns":["id"],"extra":"","oid":52978}],"indexes":[],"checks":[],"oid":52663},"projects":{"columns":[{"name":"archived","type":"bool","default":"false","notnull":true},{"name":"archived_at","type":"timestamp","notnull":false},{"name":"created_at","type":"timestamp","notnull":true},{"name":"next_task_number","type":"bigint","default":"1","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"archived_by","type":"uuid","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"owner_id","type":"uuid","notnull":true},{"name":"team_id","type":"uuid","notnull":false},{"name":"key","type":"varchar(20)","notnull":true},{"name":"previous_status","type":"varchar(20)","notnull":false},{"name":"status","type":"varchar(20)","notnull":true},{"name":"name","type":"varchar(100)","notnull":true},{"name":"description","type":"varchar(500)","notnull":false}],"pk":["id"],"unique":[{"name":"projects_key_key","columns":["key"],"oid":52697}],"fks":[{"name":"fkmqih0928bq6r3gbuh47giq8w","columns":["team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":52988},{"name":"fkmueqy6cpcwpfl8gnnag4idjt9","columns":["owner_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52983}],"indexes":[],"checks":[],"oid":52676},"refresh_tokens":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"expires_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"token","type":"varchar(500)","notnull":true}],"pk":["id"],"unique":[{"name":"refresh_tokens_token_key","columns":["token"],"oid":52712}],"fks":[{"name":"fk1lih5y2npsf8u5o3vhdb9y0os","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52993}],"indexes":[],"checks":[],"oid":52698},"role_change_requests":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"status","type":"varchar(20)","notnull":true},{"name":"current_user_role","type":"varchar(30)","notnull":true},{"name":"requested_role","type":"varchar(30)","notnull":true},{"name":"job_title","type":"varchar(150)","notnull":false},{"name":"reviewed_by","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkd9dhgu58ehgshnnwc9dhj6d76","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52998}],"indexes":[],"checks":[],"oid":52713},"sync_metadata":{"columns":[{"name":"sync_in_progress","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"last_sync_at","type":"timestamp","notnull":false},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"synced_by","type":"varchar(100)","notnull":false},{"name":"last_sync_result","type":"varchar(500)","notnull":false}],"pk":["id"],"unique":[],"fks":[],"indexes":[],"checks":[],"oid":52730},"task_attachments":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"file_size","type":"bigint","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"task_id","type":"uuid","notnull":true},{"name":"uploaded_by","type":"uuid","notnull":true},{"name":"content_type","type":"varchar(100)","notnull":true},{"name":"storage_path","type":"varchar(500)","notnull":true},{"name":"original_file_name","type":"varchar(255)","notnull":true},{"name":"stored_file_name","type":"varchar(255)","notnull":true}],"pk":["id"],"unique":[{"name":"task_attachments_stored_file_name_key","columns":["stored_file_name"],"oid":52759}],"fks":[{"name":"fk4eyiisq4wyx2mfj3p9h8ppufo","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53003},{"name":"fk8g8b4opj0xx4ptu66b8gxkkdo","columns":["uploaded_by"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53008}],"indexes":[],"checks":[],"oid":52741},"task_comments":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"parent_comment_id","type":"uuid","notnull":false},{"name":"task_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"content","type":"text","notnull":true}],"pk":["id"],"unique":[],"fks":[{"name":"fk1q8tnnknoes9jrvibtvg4eoic","columns":["parent_comment_id"],"ref_table":"task_comments","ref_columns":["id"],"extra":"","oid":53013},{"name":"fk6n4f8xnvwdkbjci078pqdn1w1","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53023},{"name":"fk9517viwn2geh1gpivj6l9y64u","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53018}],"indexes":[],"checks":[],"oid":52760},"task_history":{"columns":[{"name":"changed_at","type":"timestamp","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"task_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"field_name","type":"varchar(100)","notnull":true},{"name":"new_value","type":"text","notnull":false},{"name":"old_value","type":"text","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkjqraeud129avhcva579fhioj3","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53028},{"name":"fkvws0ackho5jjqad4sfy8e0tk","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53033}],"indexes":[],"checks":[],"oid":52773},"task_statuses":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"sort_order","type":"int","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"category","type":"varchar(20)","notnull":true},{"name":"name","type":"varchar(50)","notnull":true},{"name":"description","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[{"name":"task_statuses_name_key","columns":["name"],"oid":52801}],"fks":[],"indexes":[],"checks":[],"oid":52787},"task_types":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"subtask_type_id","type":"uuid","notnull":false},{"name":"name","type":"varchar(50)","notnull":true},{"name":"description","type":"varchar(255)","notnull":false},{"name":"icon","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[{"name":"task_types_name_key","columns":["name"],"oid":52815}],"fks":[{"name":"fkn99dior6arm0u1107rb7j3uih","columns":["subtask_type_id"],"ref_table":"task_types","ref_columns":["id"],"extra":"","oid":53038}],"indexes":[],"checks":[],"oid":52802},"tasks":{"columns":[{"name":"archived","type":"bool","notnull":true},{"name":"due_date","type":"date","notnull":false},{"name":"original_estimate_hrs","type":"double","notnull":false},{"name":"planned_week","type":"date","notnull":false},{"name":"remaining_estimate_hrs","type":"double","notnull":false},{"name":"reopened_from_done","type":"bool","default":"false","notnull":true},{"name":"archived_at","type":"timestamp","notnull":false},{"name":"created_at","type":"timestamp","notnull":true},{"name":"created_date","type":"timestamp","notnull":true},{"name":"finished_date","type":"timestamp","notnull":false},{"name":"last_reopened_at","type":"timestamp","notnull":false},{"name":"started_date","type":"timestamp","notnull":false},{"name":"task_number","type":"bigint","notnull":false},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"assignee_id","type":"uuid","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"parent_task_id","type":"uuid","notnull":false},{"name":"project_id","type":"uuid","notnull":true},{"name":"reporter_id","type":"uuid","notnull":true},{"name":"task_status_id","type":"uuid","notnull":true},{"name":"task_type_id","type":"uuid","notnull":true},{"name":"priority","type":"varchar(20)","notnull":true},{"name":"key","type":"varchar(50)","notnull":true},{"name":"description","type":"text","notnull":false},{"name":"title","type":"varchar(255)","notnull":true}],"pk":["id"],"unique":[{"name":"tasks_key_key","columns":["key"],"oid":52839}],"fks":[{"name":"fk76tiq4q248au3u79a8nkexoth","columns":["parent_task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53048},{"name":"fk7xndk7y2uk29wdu734xyutbqe","columns":["task_status_id"],"ref_table":"task_statuses","ref_columns":["id"],"extra":"","oid":53063},{"name":"fkbvjdsa9y725wovwlq4sjhodyk","columns":["reporter_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53058},{"name":"fkekr1dgiqktpyoip3qmp6lxsit","columns":["assignee_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53043},{"name":"fkkb5gyrxp5x7p5inusg3ykdugt","columns":["task_type_id"],"ref_table":"task_types","ref_columns":["id"],"extra":"","oid":53068},{"name":"fksfhn82y57i3k9uxww1s007acc","columns":["project_id"],"ref_table":"projects","ref_columns":["id"],"extra":"","oid":53053}],"indexes":[],"checks":[],"oid":52816},"team_capacity":{"columns":[{"name":"allocated_hrs","type":"double","notnull":true},{"name":"total_capacity_hrs","type":"double","notnull":true},{"name":"week_start","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"team_id","type":"uuid","notnull":true}],"pk":["id"],"unique":[{"name":"team_capacity_team_id_week_start_key","columns":["team_id","week_start"],"oid":52853},{"name":"uka1ytwsnaudxbcy7qny7qckk72","columns":["team_id","week_start"],"oid":53140}],"fks":[{"name":"fkd2c3a1hvnkpgc45f8jw8uf246","columns":["team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":53073}],"indexes":[],"checks":[],"oid":52840},"team_members":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"joined_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"team_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true}],"pk":["id"],"unique":[{"name":"team_members_team_id_user_id_key","columns":["team_id","user_id"],"oid":52866},{"name":"uks8nuwsa7nvebc246ed822w68x","columns":["team_id","user_id"],"oid":53142}],"fks":[{"name":"fkee8x7x5026imwmma9kndkxs36","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53083},{"name":"fktgca08el3ofisywcf11f0f76t","columns":["team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":53078}],"indexes":[],"checks":[],"oid":52854},"teams":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"manager_id","type":"uuid","notnull":false},{"name":"parent_team_id","type":"uuid","notnull":false},{"name":"name","type":"varchar(100)","notnull":true}],"pk":["id"],"unique":[{"name":"teams_name_key","columns":["name"],"oid":52878}],"fks":[{"name":"fk8rwj1snfq6jjnj7wbgbcjgxi3","columns":["parent_team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":53093},{"name":"fk957exwbsdbxyv2kir751ejid7","columns":["manager_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53088}],"indexes":[],"checks":[],"oid":52867},"time_logs":{"columns":[{"name":"hours","type":"double","notnull":true},{"name":"log_date","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"task_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"note","type":"varchar(500)","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkoun22vhbya8md711x7gbqv5j6","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53098},{"name":"fkpa0td7bk535jt0143oslckvxj","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53103}],"indexes":[],"checks":[],"oid":52879},"user_capacity":{"columns":[{"name":"absence_hrs","type":"double","notnull":true},{"name":"available_hrs","type":"double","notnull":true},{"name":"base_capacity_hrs","type":"double","notnull":true},{"name":"week_start","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true}],"pk":["id"],"unique":[{"name":"uki8gtu7glow0uwp4up2d5ksonj","columns":["user_id","week_start"],"oid":53144},{"name":"user_capacity_user_id_week_start_key","columns":["user_id","week_start"],"oid":52907}],"fks":[{"name":"fkiui2fw3yo39om4lodhvrvp18t","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53108}],"indexes":[],"checks":[],"oid":52893},"user_roles":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"code","type":"varchar(50)","notnull":true},{"name":"label","type":"varchar(100)","notnull":true}],"pk":["id"],"unique":[{"name":"user_roles_code_key","columns":["code"],"oid":52920}],"fks":[],"indexes":[],"checks":[],"oid":52908},"users":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"deactivated_at","type":"timestamp","notnull":false},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"manager_id","type":"uuid","notnull":false},{"name":"manager_object_id","type":"uuid","notnull":false},{"name":"object_id","type":"uuid","notnull":false},{"name":"role","type":"varchar(20)","notnull":true},{"name":"account_name","type":"varchar(50)","notnull":false},{"name":"username","type":"varchar(50)","notnull":true},{"name":"department","type":"varchar(100)","notnull":false},{"name":"email","type":"varchar(100)","notnull":true},{"name":"full_name","type":"varchar(100)","notnull":true},{"name":"job_title","type":"varchar(150)","notnull":false},{"name":"password","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[{"name":"users_account_name_key","columns":["account_name"],"oid":52940},{"name":"users_email_key","columns":["email"],"oid":52944},{"name":"users_object_id_key","columns":["object_id"],"oid":52938},{"name":"users_username_key","columns":["username"],"oid":52942}],"fks":[{"name":"fk5p1ci5btqfwvtaqx5n2wxi182","columns":["manager_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53113}],"indexes":[],"checks":[],"oid":52921}};
+  // ---- hand-written knowledge -----------------------------------------------------------
+  var GROUPS = [
+    {label: 'Roles and access', tables: ['user_roles', 'job_titles', 'job_title_role_mappings', 'role_change_requests', 'refresh_tokens', 'sync_metadata']},
+    {label: 'People and teams', tables: ['users', 'teams', 'team_members', 'notifications']},
+    {label: 'Leave and capacity', tables: ['personal_leaves', 'absences', 'user_capacity', 'team_capacity']},
+    {label: 'Projects and reference data', tables: ['projects', 'project_history', 'task_statuses', 'task_types']},
+    {label: 'The work', tables: ['tasks', 'task_history', 'time_logs']},
+    {label: 'Comments, files, calendar', tables: ['task_comments', 'task_attachments', 'holidays']}
+  ];
+  var NEW = {personal_leaves: true};
+  var LEGACY = {absences: 'legacy', user_capacity: 'not read', team_capacity: 'not read'};
+  var LATER_COLS = {'job_title_role_mappings.user_id': true, 'users.manager_id': true};
+  var LATER_OID = 53113; // first object created after the base schema's foreign keys
+  var IMPLIED = [
+    {from: 'personal_leaves', col: 'employee_id', to: 'users', label: 'no FK declared'},
+    {from: 'notifications', col: 'user_id', to: 'users', label: 'no FK declared'}
+  ];
+  var READ = {
+    task_statuses: ['id', 'name', 'category'],
+    task_types: ['id', 'name'],
+    teams: ['id', 'name', 'manager_id', 'parent_team_id'],
+    team_members: ['team_id', 'user_id', 'joined_at'],
+    users: ['id', 'full_name', 'email', 'username', 'role', 'job_title', 'active', 'deactivated_at'],
+    projects: ['id', 'key', 'name', 'status', 'team_id', 'archived'],
+    tasks: ['id', 'key', 'title', 'project_id', 'assignee_id', 'reporter_id', 'parent_task_id', 'task_type_id', 'task_status_id', 'priority', 'original_estimate_hrs', 'remaining_estimate_hrs', 'created_date', 'started_date', 'finished_date', 'due_date', 'planned_week', 'reopened_from_done', 'archived'],
+    task_history: ['task_id', 'user_id', 'field_name', 'old_value', 'new_value', 'changed_at'],
+    time_logs: ['task_id', 'user_id', 'log_date', 'hours'],
+    holidays: ['start_date', 'end_date', 'status', 'active', 'title'],
+    personal_leaves: ['employee_id', 'start_date', 'end_date', 'begin_time', 'end_time', 'absence_hours', 'status', 'leave_type']
+  };
+  var READ_USE = {
+    users: ['Members: active rows with role MEMBER or TEAM_LEADER; the name is what a task_history assignee row stores and what the narrative uses; job_title and role are categorical features; deactivated_at ends the member’s capacity.', 'no'],
+    teams: ['The team a run covers, its leader (manager_id) and its parent team (the department view sums child teams).', 'no'],
+    team_members: ['Which members belong to the team and since when: tenure_weeks and the first row of each member’s history.', 'no'],
+    projects: ['The team’s projects and their status: proj_active, proj_planning, the unassigned team backlog, project keys in the facts. Archived projects are skipped.', 'yes, upserted by id'],
+    tasks: ['The work: estimates, dates, status, type, priority, assignee, reporter, parent, due date, planned week, reopened flag. Every arrival, open-work and target-week feature starts here.', 'yes, replaced'],
+    task_history: ['Assignee rows give the assignment date (changed_at) and who assigned (user_id: self-picked or assigned); status rows give start and finish dates when the task lacks them.', 'yes, replaced'],
+    time_logs: ['The truth: hours per member, task and day. The target of the model and every lag and rolling feature.', 'yes, replaced'],
+    task_statuses: ['Maps each status to TO_DO, IN_PROGRESS or DONE.', 'no'],
+    task_types: ['Maps each type name to a family: defect, delivery, support, container.', 'no'],
+    holidays: ['CONFIRMED and active ranges take days off the working calendar; PENDING ones are listed in the facts.', 'no'],
+    personal_leaves: ['APPROVED leaves reduce capacity: absence_hours dealt over the leave’s working days, 8.8 h per day, times marking a partial first or last day. PENDING leaves are listed in the facts and never reduce capacity. REJECTED and CANCELLED are not loaded.', 'yes, replaced']
+  };
+  var DESC = {
+    absences: 'Legacy: one row per user and day of absence with a type. The application stops writing it; absence now lives in personal_leaves.',
+    holidays: 'Public holidays as date ranges with a country code, a status (CONFIRMED or PENDING) and a type. Confirmed, active ranges are days off for everyone.',
+    job_title_role_mappings: 'Which role a job title implies. With user_id null the mapping is global; with a user_id it overrides the global one for that person (the partial unique indexes enforce one of each).',
+    job_titles: 'The list of job titles, unique ignoring case.',
+    notifications: 'In-app notifications to a user about a task or team event; user_id and reporter_id are user ids without a declared key.',
+    personal_leaves: 'One row per leave request of an employee: a period, optional begin and end times for a partial first or last day, the total absence hours, a type, a status and who processed it.',
+    project_history: 'Field-level change log of projects (who changed what and when).',
+    projects: 'A project with a key, a status, an owner and an owning team; next_task_number numbers its tasks. No start or end date.',
+    refresh_tokens: 'Login session tokens.',
+    role_change_requests: 'A user’s request to change role, with the reviewer and the decision.',
+    sync_metadata: 'State of the directory synchronisation that populates users.',
+    task_attachments: 'Files attached to a task.',
+    task_comments: 'Threaded comments on a task (parent_comment_id).',
+    task_history: 'Field-level change log of tasks: field_name, old and new value, when, and by whom (user_id). The assignee rows carry a full name in new_value.',
+    task_statuses: 'The status list, each in a category TO_DO, IN_PROGRESS or DONE.',
+    task_types: 'The twelve task types; Sub-task points to its parent type through subtask_type_id.',
+    tasks: 'The task: key, title, description, estimates, dates, status, type, priority, assignee, reporter, parent task, project, due date, planned week, reopen flags.',
+    team_capacity: 'Not read: total and allocated hours per team and week. Capacity is now the module’s own formula.',
+    team_members: 'Membership of users in teams with a join date.',
+    teams: 'A team with a leader (manager_id) and an optional parent team (the department).',
+    time_logs: 'Hours logged by a user on a task on a day.',
+    user_capacity: 'Not read: base, absence and available hours per user and week. Capacity is now the module’s own formula.',
+    user_roles: 'The role list (code and label).',
+    users: 'Every account, synced from the directory: name, e-mail, role, job title, department, manager, active flag and deactivation date.'
+  };
+  var COLNOTE = {
+    'tasks.planned_week': 'a Monday, the week the leader intends the work for; read since 2026-09-17 for planned_hrs_h',
+    'tasks.remaining_estimate_hrs': 'read for the leader-facing facts only; the features recompute remaining hours as estimate minus logged',
+    'tasks.reopened_from_done': 'read as of today (no history): reopen_rate_13w',
+    'task_history.user_id': 'who made the change; on an assignee row, who assigned: equal to the assignee means self-picked',
+    'task_history.new_value': 'on an assignee row: the assignee’s full name, resolved to a user',
+    'personal_leaves.absence_hours': 'the total for the whole leave; null means the whole period counts',
+    'personal_leaves.begin_time': 'set when the leave starts on a partial day',
+    'personal_leaves.end_time': 'set when the leave ends on a partial day',
+    'personal_leaves.employee_id': 'the user on leave; no foreign key to users is declared',
+    'personal_leaves.status': 'only APPROVED reduces capacity; PENDING is listed in the facts',
+    'users.manager_id': 'self-reference to the manager; its foreign key was added after the base schema',
+    'users.object_id': 'the directory’s identifier, unique',
+    'users.manager_object_id': 'the manager’s directory identifier',
+    'job_title_role_mappings.user_id': 'null for the global mapping of a job title, set for a per-user override; added after the base schema',
+    'team_members.joined_at': 'start of the member’s history and of tenure_weeks',
+    'holidays.status': 'CONFIRMED takes days off the calendar; PENDING is only mentioned',
+    'time_logs.hours': 'the target of the model, summed per member and week',
+    'projects.next_task_number': 'the seed refreshes it when it upserts projects'
+  };
+  var isRead = {};
+  Object.keys(READ).forEach(function (t) { READ[t].forEach(function (c) { isRead[t + '.' + c] = true; }); });
+  function fkOf(t, c) { return (T[t].fks || []).filter(function (f) { return f.columns[0] === c; })[0]; }
+  function isPk(t, c) { return T[t].pk.indexOf(c) >= 0; }
+  function laterKey(t, c) { var f = fkOf(t, c); return LATER_COLS[t + '.' + c] || (f && f.oid >= LATER_OID); }
+
+  // ---- stats ---------------------------------------------------------------------------
+  var nT = Object.keys(T).length, nC = 0, nF = 0, nI = 0, nU = 0;
+  Object.keys(T).forEach(function (t) { nC += T[t].columns.length; nF += T[t].fks.length; nI += T[t].indexes.length; nU += T[t].unique.length; });
+  document.getElementById('stats').innerHTML = '<span><b>' + nT + '</b> tables</span><span><b>' + nC + '</b> columns</span><span><b>' + nF + '</b> foreign keys</span><span><b>' + nU + '</b> unique constraints</span><span><b>' + nI + '</b> partial or functional unique indexes</span><span><b>1</b> table added after the base schema</span><span><b>2</b> columns with keys added later</span>';
+
+  // ---- ER diagram -----------------------------------------------------------------------
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('er');
+  function el(name, attrs, text) { var e = document.createElementNS(svgNS, name); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+  var W = 262, GAPX = 52, HEAD = 26, ROW = 16, GAPY = 40, TOP = 40, LEFT = 20;
+  var pos = {};
+  var maxY = 0;
+  GROUPS.forEach(function (g, gi) {
+    var x = LEFT + gi * (W + GAPX), y = TOP;
+    g.x = x;
+    g.tables.forEach(function (t) {
+      var h = HEAD + ROW * T[t].columns.length + 6;
+      pos[t] = {x: x, y: y, w: W, h: h};
+      y += h + GAPY;
+    });
+    maxY = Math.max(maxY, y);
+  });
+  var totalW = LEFT + GROUPS.length * (W + GAPX) - GAPX + LEFT;
+  svg.setAttribute('viewBox', '0 0 ' + totalW + ' ' + (maxY + 10));
+  var defs = el('defs', {});
+  var mk = el('marker', {id: 'er-arrow', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse'});
+  mk.appendChild(el('path', {d: 'M0 0L10 5L0 10z', 'class': 'arrow'}));
+  defs.appendChild(mk);
+  var mk2 = el('marker', {id: 'er-arrow-warn', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse'});
+  mk2.appendChild(el('path', {d: 'M0 0L10 5L0 10z', fill: 'var(--warn)'}));
+  defs.appendChild(mk2);
+  svg.appendChild(defs);
+  var gEdges = el('g', {}), gNodes = el('g', {});
+  svg.appendChild(gEdges); svg.appendChild(gNodes);
+  GROUPS.forEach(function (g) { svg.appendChild(el('text', {x: g.x, y: TOP - 14, 'class': 'grp'}, g.label)); });
+  function rowY(t, c) { var i = T[t].columns.map(function (x) { return x.name; }).indexOf(c); return pos[t].y + HEAD + ROW * i + ROW / 2 + 3; }
+  function pkY(t) { return rowY(t, T[t].pk[0]); }
+  var edges = [];
+  function drawEdge(from, col, to, cls, label) {
+    var a = pos[from], b = pos[to];
+    var y1 = rowY(from, col), y2 = pkY(to), d;
+    var lx = 0, ly = y1 - 5, anchor = 'middle';
+    if (from === to) {
+      var xr = a.x + a.w;
+      d = 'M' + xr + ' ' + y1 + ' C' + (xr + 44) + ' ' + y1 + ' ' + (xr + 44) + ' ' + y2 + ' ' + xr + ' ' + y2;
+      lx = xr + 6; anchor = 'start';
+    } else if (a.x === b.x) {
+      var xs = a.x + a.w;
+      d = 'M' + xs + ' ' + y1 + ' C' + (xs + 70) + ' ' + y1 + ' ' + (xs + 70) + ' ' + y2 + ' ' + xs + ' ' + y2;
+      lx = xs + 6; ly = (y1 + y2) / 2; anchor = 'start';
+    } else {
+      var x1, x2, dx;
+      if (b.x > a.x) { x1 = a.x + a.w; x2 = b.x; } else { x1 = a.x; x2 = b.x + b.w; }
+      dx = Math.max(40, Math.abs(x2 - x1) * 0.4) * (x2 > x1 ? 1 : -1);
+      d = 'M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2;
+      lx = (x1 + x2) / 2; ly = (y1 + y2) / 2 - 5;
+    }
+    var p = el('path', {d: d, 'class': 'edge' + (cls ? ' ' + cls : ''), 'marker-end': cls === 'implied' ? 'url(#er-arrow-warn)' : 'url(#er-arrow)'});
+    p.dataset.from = from; p.dataset.to = to; p.dataset.col = col;
+    gEdges.appendChild(p); edges.push(p);
+    if (label) gEdges.appendChild(el('text', {x: lx, y: ly, 'class': 'elabel', 'text-anchor': anchor}, label));
+  }
+  Object.keys(T).forEach(function (t) {
+    T[t].fks.forEach(function (f) { drawEdge(t, f.columns[0], f.ref_table, f.oid >= LATER_OID ? 'later' : ''); });
+  });
+  IMPLIED.forEach(function (i) { drawEdge(i.from, i.col, i.to, 'implied', i.label); });
+  var nodeEls = {};
+  Object.keys(pos).forEach(function (t) {
+    var p = pos[t];
+    var cls = 'tbl' + (NEW[t] ? ' new' : '') + (LEGACY[t] ? ' legacy' : '');
+    var g = el('g', {'class': cls, tabindex: '0', role: 'button', 'aria-label': t});
+    g.dataset.id = t;
+    g.appendChild(el('rect', {x: p.x, y: p.y, width: p.w, height: p.h, rx: 4, 'class': 'box'}));
+    g.appendChild(el('rect', {x: p.x + 1, y: p.y + 1, width: p.w - 2, height: HEAD - 2, rx: 3, 'class': 'head'}));
+    g.appendChild(el('text', {x: p.x + 9, y: p.y + 17, 'class': 'name'}, t));
+    var badge = NEW[t] ? ['NEW TABLE', 'new'] : LEGACY[t] ? [LEGACY[t].toUpperCase(), 'legacy'] : READ[t] ? ['READ', 'read'] : null;
+    if (badge) g.appendChild(el('text', {x: p.x + p.w - 8, y: p.y + 17, 'text-anchor': 'end', 'class': 'badge ' + badge[1]}, badge[0]));
+    T[t].columns.forEach(function (c, i) {
+      var y = p.y + HEAD + ROW * i;
+      if (laterKey(t, c.name)) g.appendChild(el('rect', {x: p.x + 1, y: y, width: p.w - 2, height: ROW, 'class': 'row-later'}));
+      if (isRead[t + '.' + c.name]) g.appendChild(el('rect', {x: p.x + 1, y: y + 3, width: 3, height: ROW - 6, 'class': 'tick'}));
+      var key = isPk(t, c.name) ? 'PK' : fkOf(t, c.name) ? 'FK' : '';
+      g.appendChild(el('text', {x: p.x + 9, y: y + 12, 'class': 'type', 'font-weight': key ? '500' : '400'}, key));
+      g.appendChild(el('text', {x: p.x + 30, y: y + 12}, c.name));
+      g.appendChild(el('text', {x: p.x + p.w - 8, y: y + 12, 'text-anchor': 'end', 'class': 'type'}, c.type));
+    });
+    gNodes.appendChild(g); nodeEls[t] = g;
+  });
+  var detail = document.getElementById('detail');
+  var current = null;
+  function focus(t) {
+    svg.classList.add('focus');
+    var on = {}; on[t] = true;
+    var lines = [];
+    edges.forEach(function (p) {
+      var hit = p.dataset.from === t || p.dataset.to === t;
+      p.classList.toggle('on', hit);
+      if (hit) {
+        on[p.dataset.from] = true; on[p.dataset.to] = true;
+        var implied = p.classList.contains('implied');
+        lines.push('<b>' + p.dataset.from + '.' + p.dataset.col + '</b> → <b>' + p.dataset.to + '.id</b>' + (implied ? ' <span class="tag warn">not declared</span>' : p.classList.contains('later') ? ' <span class="tag later">key added later</span>' : ''));
+      }
+    });
+    Object.keys(nodeEls).forEach(function (k) { nodeEls[k].classList.toggle('on', !!on[k]); });
+    var head = '<b>' + t + '</b> — ' + (DESC[t] || '');
+    detail.innerHTML = head + (lines.length ? '<br>' + lines.join('<br>') : '<br>No relationships.') + ' <a href="#cat-' + t + '" style="color:var(--accent)">Full columns ↓</a>';
+  }
+  function reset() {
+    svg.classList.remove('focus');
+    Object.keys(nodeEls).forEach(function (k) { nodeEls[k].classList.remove('on'); });
+    edges.forEach(function (p) { p.classList.remove('on'); });
+    detail.textContent = 'Click a table to list its relationships; click the background to reset.';
+  }
+  gNodes.addEventListener('click', function (ev) {
+    var g = ev.target.closest('.tbl'); if (!g) return;
+    ev.stopPropagation();
+    if (current === g.dataset.id) { current = null; reset(); return; }
+    current = g.dataset.id; focus(current);
+  });
+  gNodes.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var g = ev.target.closest('.tbl'); if (!g) return;
+    ev.preventDefault(); current = g.dataset.id; focus(current);
+  });
+  svg.addEventListener('click', function () { current = null; reset(); });
+
+  // ---- the reading table --------------------------------------------------------------
+  var rt = document.querySelector('#readtable tbody');
+  ['users', 'teams', 'team_members', 'projects', 'tasks', 'task_history', 'time_logs', 'task_statuses', 'task_types', 'holidays', 'personal_leaves'].forEach(function (t) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="mono"><a href="#cat-' + t + '" style="color:var(--accent);text-decoration:none">' + t + '</a>' + (NEW[t] ? ' <span class="tag new">new</span>' : '') + '</td><td class="mono" style="font-size:12px">' + READ[t].join(', ') + '</td><td>' + READ_USE[t][0] + '</td><td>' + READ_USE[t][1] + '</td>';
+    rt.appendChild(tr);
+  });
+
+  // ---- the catalogue -------------------------------------------------------------------
+  var cat = document.getElementById('catalogue');
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  GROUPS.forEach(function (g) {
+    var gh = document.createElement('p'); gh.className = 'eyebrow'; gh.style.marginTop = '34px'; gh.textContent = g.label; cat.appendChild(gh);
+    g.tables.forEach(function (t) {
+      var d = T[t];
+      var sec = document.createElement('section'); sec.id = 'cat-' + t;
+      var tags = (NEW[t] ? '<span class="tag new">new table · OID ' + d.oid + '</span>' : '<span class="tag key" style="border-color:var(--rule);color:var(--ink-2)">OID ' + d.oid + '</span>') + (LEGACY[t] ? '<span class="tag legacy">' + LEGACY[t] + '</span>' : '') + (READ[t] ? '<span class="tag read">read by the forecast</span>' : '');
+      var h = '<h3><code>' + t + '</code> ' + tags + '</h3><p class="desc">' + esc(DESC[t] || '') + '</p>';
+      h += '<div class="table-wrap"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Key</th><th>Note</th></tr></thead><tbody>';
+      d.columns.forEach(function (c) {
+        var key = [];
+        if (isPk(t, c.name)) key.push('<span class="tag key">PK</span>');
+        var f = fkOf(t, c.name);
+        if (f) key.push('<span class="tag key">FK</span> → <code>' + f.ref_table + '.' + f.ref_columns[0] + '</code>');
+        d.unique.forEach(function (u) { if (u.columns.length === 1 && u.columns[0] === c.name) key.push('<span class="tag key">unique</span>'); });
+        var chk = d.checks.filter(function (x) { return x.column === c.name; })[0];
+        var note = COLNOTE[t + '.' + c.name] ? esc(COLNOTE[t + '.' + c.name]) : '';
+        if (chk) note = (note ? note + '. ' : '') + 'One of ' + chk.values.map(function (v) { return '<code>' + v + '</code>'; }).join(', ');
+        if (c['default']) note = (note ? note + '. ' : '') + 'Default <code>' + esc(c['default']) + '</code>';
+        var later = laterKey(t, c.name);
+        h += '<tr' + (later ? ' class="later"' : '') + '><td class="mono n">' + (isRead[t + '.' + c.name] ? '<span class="readdot" title="read by the forecast"></span>' : '') + c.name + '</td><td class="mono">' + esc(c.type) + '</td><td>' + (c.notnull ? 'not null' : 'null') + '</td><td>' + key.join(' ') + '</td><td>' + note + (later ? (note ? '. ' : '') + '<span class="tag later">key added later</span>' : '') + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+      var keys = [];
+      d.unique.forEach(function (u) { keys.push('<li' + (u.oid >= LATER_OID ? ' class="later"' : '') + '>Unique <code>' + u.name + '</code> on ' + u.columns.map(function (x) { return '<code>' + x + '</code>'; }).join(', ') + ' (OID ' + u.oid + (u.oid >= LATER_OID ? ', added later, duplicates the original key' : '') + ')</li>'); });
+      d.indexes.forEach(function (i) { keys.push('<li class="later">' + (i.unique ? 'Unique index' : 'Index') + ' <code>' + i.name + '</code> on <code>' + esc(i.expr) + '</code>' + (i.where ? ' where <code>' + esc(i.where) + '</code>' : '') + ' (OID ' + i.oid + ', added later)</li>'); });
+      d.fks.forEach(function (f) { keys.push('<li' + (f.oid >= LATER_OID ? ' class="later"' : '') + '>Foreign key <code>' + f.name + '</code>: <code>' + f.columns[0] + '</code> → <code>' + f.ref_table + '.' + f.ref_columns[0] + '</code> (OID ' + f.oid + (f.oid >= LATER_OID ? ', added later' : '') + ')</li>'); });
+      if (keys.length) h += '<ul class="keys">' + keys.join('') + '</ul>';
+      sec.innerHTML = h;
+      cat.appendChild(sec);
+    });
+  });
+})();
+</script>

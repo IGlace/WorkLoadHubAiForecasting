@@ -8,6 +8,11 @@ in section 7 and must be answered before the implementation plan is written.
 
 ## 1. What the export contains, and what it does not
 
+The full diagram of the schema (every table, column, key and foreign key of the pg_dump of 2026-09-09, with the
+table and keys added after the base schema and the columns the module reads highlighted) is
+`docs/design/2026-09-17-workloadhub-schema-diagram.html`; the feature matrix as it stands after the review of
+2026-09-16 is `docs/design/2026-09-17-feature-matrix-now.html`.
+
 | Table | Rows | Use in the forecast |
 |---|---|---|
 | `tasks` | 10 | the work: estimates, remaining estimates, planned week, due date, status, type, priority, assignee, reporter, parent |
