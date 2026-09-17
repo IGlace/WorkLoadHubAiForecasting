@@ -40,6 +40,7 @@
 
 1. Dead code outside the seed. 2. Dead code in the seed. Both before anything moves, so the moves are smaller.
 2b. (Added during execution.) Real mode plans projects for the application's own teams: the first PostgreSQL run of the suite found a foreign-key failure on unmodified `dev` that SQLite had hidden.
+2c. (Added during execution.) Real mode refuses an export missing a status or type: the second foreign-key failure behind the same test, reached once 2b landed.
 3. Every database test on PostgreSQL, the hard failure without an engine, the gate pre-check. SQLite still exists in main.
 4. The final `V1` migration; the SQLite migrations deleted.
 5. `Dialect` out; the stores, the repository, the service, the importer, the exporter, the driver and the sample host on PostgreSQL types and URLs; every SQLite artifact and dependency gone.
@@ -425,6 +426,172 @@ key caught it the first time the PostgreSQL tests ran after that change
 landed; SQLite never enforced it. In real mode the export's teams are now the
 structure, a parentless one being the department that receives the projects,
 and a counted user in no team gets no work. Synthetic output is byte-identical."
+```
+
+---
+
+### Task 2c: Real mode refuses an export that lacks a status or a type (added by ruling during execution)
+
+**Why this task exists.** With Task 2b landed, `SqlExportWriterTest.aFiveTableScriptLandsTwiceOnPostgresql` reaches a second, independent foreign-key failure: `tasks.task_status_id` (and `task_type_id`) not present in `task_statuses`. Cause: `SeedGenerator.generate` substitutes `ReferenceData.statusRows()` and `typeRows()` whenever the input export does not name every status and type the generator writes (`Reference.covers` is false), in both modes. In synthetic mode that is right, because the synthetic envelope writes `task_statuses` and `task_types` itself. In real mode the seed writes only the five work tables (spec 2026-09-17 personal leaves, section 7.1), so every task then points at status and type rows the database does not have. The test fixture `mini-export.json` carries two statuses and one type, which is why the substitution fires there. SQLite never enforced the key.
+
+**Ruling.** A real export always carries the application's own statuses and types, because the application defines them; real mode therefore refuses an export that lacks any of the statuses or types the seed writes, with an `IllegalArgumentException` naming every missing one, and never substitutes. Synthetic mode keeps the substitution. The fixture gains the full set of nine statuses and twelve types so the real-mode tests use the export's own ids. The 36-user synthetic seed (no input) stays byte-identical.
+
+**Files:**
+- Modify: `server/forecast-core/src/main/java/com/workloadhub/forecast/seed/SeedGenerator.java` (the `Reference.covers` branch)
+- Modify: `server/forecast-core/src/main/java/com/workloadhub/forecast/seed/Reference.java` (`from` reports every missing name; new `missing`)
+- Modify: `server/forecast-core/src/test/resources/fixtures/mini-export.json` (complete `task_statuses` and `task_types`)
+- Test: `seed/SeedGeneratorTest.java` (new test), `seed/ReferenceTest.java` if it pins the old message, `data/SqlExportWriterTest.java` (the failing test, unchanged, must pass)
+
+**Interfaces:**
+- Consumes: `Reference.from(statusRows, typeRows)`, `Reference.covers(...)`, `ReferenceData.STATUSES` (name, category, order, description) and `ReferenceData.TYPES`, `SeedConfig.synthetic()`.
+- Produces: `Reference.missing(statusRows, typeRows)` returning `""` when complete, else `task_statuses lacks 'A', 'B'; task_types lacks 'C'` (each part only when non-empty); `SeedGenerator.generate(input, cfg)` throws `IllegalArgumentException("real mode needs an export that carries every task status and type the seed writes: " + missing)` in real mode when the export is incomplete.
+
+- [ ] **Step 1: Reproduce on HEAD and pin the synthetic seed**
+
+From `server/`: `mvn -B -q -pl forecast-core test -Dtest=SqlExportWriterTest -Dsurefire.failIfNoSpecifiedTests=false`
+Expected: `aFiveTableScriptLandsTwiceOnPostgresql` errors with a foreign-key message naming `task_status_id` or `task_type_id`.
+
+```bash
+cp="$(bash tools/core-classpath.sh)" && java --class-path "$cp" tools/Experiment.java seed --synthetic --users 36 --weeks 30 --end 2026-09-06 --seed 11 --out /tmp/seed-2c-before.json && sha256sum /tmp/seed-2c-before.json
+```
+
+- [ ] **Step 2: The failing tests**
+
+Add to `SeedGeneratorTest`:
+
+```java
+    /** A real export carries the application's own statuses and types; one that lacks any is refused, never patched with invented ids. */
+    @Test
+    void realModeRefusesAnExportMissingAStatusOrType() throws Exception {
+        ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>(real.data());
+        data.put("task_statuses", real.rows("task_statuses").stream().filter(s -> !"Done".equals(s.get("name"))).toList());
+        data.put("task_types", real.rows("task_types").stream().filter(t -> !"Bug".equals(t.get("name"))).toList());
+        ExportEnvelope partial = new ExportEnvelope(real.database(), real.schema(), real.exportedAt(), real.excludedTables(), data);
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> SeedGenerator.generate(partial, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0)));
+        assertTrue(e.getMessage().contains("task_statuses lacks 'Done'") && e.getMessage().contains("task_types lacks 'Bug'"), e.getMessage());
+    }
+
+    /** Real mode writes no statuses or types, so every task must use the ids the export already has. */
+    @Test
+    void realModeTasksUseTheExportsOwnStatusesAndTypes() throws Exception {
+        ExportEnvelope input = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
+        Set<String> statuses = ids(input, "task_statuses");
+        Set<String> types = ids(input, "task_types");
+        assertFalse(env.rows("tasks").isEmpty());
+        for (var t : env.rows("tasks")) {
+            assertTrue(statuses.contains(t.get("task_status_id")), "task " + t.get("key") + " uses an invented status");
+            assertTrue(types.contains(t.get("task_type_id")), "task " + t.get("key") + " uses an invented type");
+        }
+    }
+```
+
+(`assertThrows` from `org.junit.jupiter.api.Assertions`.) Run `mvn -B -q -pl forecast-core test -Dtest=SeedGeneratorTest -Dsurefire.failIfNoSpecifiedTests=false`. Expected: both fail (the first because nothing is thrown, the second because the fixture is incomplete and ids are substituted).
+
+- [ ] **Step 3: `Reference` reports every missing name**
+
+In `Reference.from`, replace the two loops that throw at the first missing name with one collection:
+
+```java
+        List<String> missingStatuses = STATUSES.stream().filter(s -> !statuses.containsKey(s)).toList();
+        List<String> missingTypes = TYPES.stream().filter(t -> !types.containsKey(t)).toList();
+        if (!missingStatuses.isEmpty() || !missingTypes.isEmpty()) {
+            throw new IllegalArgumentException(describe(missingStatuses, missingTypes));
+        }
+        return new Reference(statuses, types);
+```
+
+with
+
+```java
+    private static String describe(List<String> missingStatuses, List<String> missingTypes) {
+        List<String> parts = new ArrayList<>();
+        if (!missingStatuses.isEmpty()) {
+            parts.add("task_statuses lacks " + missingStatuses.stream().map(s -> "'" + s + "'").collect(java.util.stream.Collectors.joining(", ")));
+        }
+        if (!missingTypes.isEmpty()) {
+            parts.add("task_types lacks " + missingTypes.stream().map(t -> "'" + t + "'").collect(java.util.stream.Collectors.joining(", ")));
+        }
+        return String.join("; ", parts);
+    }
+
+    /** What the rows lack, in the words of {@link #from}'s exception, or the empty string when they cover everything. */
+    public static String missing(List<LinkedHashMap<String, Object>> statusRows, List<LinkedHashMap<String, Object>> typeRows) {
+        try {
+            from(statusRows, typeRows);
+            return "";
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        }
+    }
+```
+
+`covers` stays as it is. If `ReferenceTest` pins the old single-name message (`grep -n "lacks" src/test/java/com/workloadhub/forecast/seed/ReferenceTest.java`), update its expected text to the new form (`task_statuses lacks 'X'` still appears verbatim for a single missing status, so most assertions hold unchanged).
+
+- [ ] **Step 4: `SeedGenerator` refuses in real mode**
+
+Replace
+
+```java
+            if (!Reference.covers(statuses, types)) {
+                // a partial export (tests, early installs): use the reference rows instead
+                statuses = ReferenceData.statusRows();
+                types = ReferenceData.typeRows();
+            }
+```
+
+with
+
+```java
+            if (!Reference.covers(statuses, types)) {
+                if (!synthetic) {
+                    // Real mode writes neither task_statuses nor task_types (design 2026-09-17, section 7.1), so a
+                    // substitute would point every task at rows the database does not have: refuse instead. A real
+                    // export always carries them all, because the application defines them.
+                    throw new IllegalArgumentException("real mode needs an export that carries every task status and type the seed writes: "
+                            + Reference.missing(statuses, types));
+                }
+                // a partial export in synthetic mode (tests, early installs): the synthetic envelope writes both tables itself
+                statuses = ReferenceData.statusRows();
+                types = ReferenceData.typeRows();
+            }
+```
+
+- [ ] **Step 5: Complete the fixture**
+
+In `server/forecast-core/src/test/resources/fixtures/mini-export.json`, `task_statuses` currently holds `To Do` (id `60000000-0000-0000-0000-000000000001`) and `In Progress` (id `...0002`); add the other seven statuses of `ReferenceData.STATUSES` (`Open`, `In Review`, `Testing`, `Blocked`, `On Hold`, `Done`, `Closed`) as rows of the same shape (`id`, `name`, `active`, `category`, `sort_order`, `description`, `created_at`, `updated_at`), ids `60000000-0000-0000-0000-000000000003` to `...0009` in that order, `category` and `sort_order` copied from `ReferenceData.STATUSES`, `active` true, `description` null, the same two timestamps as the existing rows. `task_types` holds `Task` (id `70000000-0000-0000-0000-000000000001`); add the other eleven of `ReferenceData.TYPES` (`Story`, `Bug`, `Epic`, `Improvement`, `New Feature`, `Change Request`, `Incident`, `Risk`, `Spike`, `Test`, `Sub-task`), ids `...0002` to `...0012` in that order, same shape as the existing row (`icon`, `description`, `subtask_type_id` null). Keep the file's indentation and LF endings; `python3 -m json.tool` must parse it.
+
+Then `grep -rn 'task_statuses\|task_types' src/test/java --include=*.java | grep -i 'size()\|count'` and check that no test pins the fixture's old counts (two and one); if one does, update it to nine and twelve.
+
+- [ ] **Step 6: Prove it**
+
+`mvn -B -q -pl forecast-core test -Dtest='SeedGeneratorTest,ReferenceTest,SqlExportWriterTest,RoundTripTest,ExportImporterTest,ExportFilesTest,ExperimentFlowTest' -Dsurefire.failIfNoSpecifiedTests=false` passes, including `aFiveTableScriptLandsTwiceOnPostgresql`.
+
+```bash
+cp="$(bash tools/core-classpath.sh)" && java --class-path "$cp" tools/Experiment.java seed --synthetic --users 36 --weeks 30 --end 2026-09-06 --seed 11 --out /tmp/seed-2c-after.json && sha256sum /tmp/seed-2c-before.json /tmp/seed-2c-after.json
+```
+
+Expected: equal hashes.
+
+- [ ] **Step 7: Gate**
+
+`rm -rf forecast-core/target/surefire-reports && mvn -B -q verify` from `server/`; expected exit 0 and, in `TEST-*.xml`, 0 failures and 0 errors. If a third pre-existing PostgreSQL failure appears, do not fix it: report it with its message under concerns.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A server/forecast-core
+git commit -m "Refuse a real-mode export that lacks a task status or type
+
+Real mode writes neither task_statuses nor task_types, yet an incomplete
+export had its missing rows silently replaced by the seed's own, so every task
+pointed at ids the database does not have; PostgreSQL's foreign key caught it
+once the previous invented reference was fixed. A real export carries them all,
+so real mode now refuses an incomplete one and names what is missing; synthetic
+mode keeps the substitution because it writes both tables. The test fixture
+gains the full nine statuses and twelve types."
 ```
 
 ---
