@@ -40,8 +40,8 @@ app with a Python service) is archived on the remote branch `archive/python-desk
   approved leaves over the 44 h default, `user_capacity` and `team_capacity` are not read, the seed writes
   five tables in real mode, and the owner's feature-matrix rulings of 2026-09-16 (section 1 of the spec,
   `docs/design/2026-09-16-feature-matrix-review.html`) are applied. Two pages of 2026-09-17 record the result:
-  `docs/design/2026-09-17-workloadhub-schema-diagram.html` (every table and key of the schema dump, the
-  additions and what the module reads highlighted) and `docs/design/2026-09-17-feature-matrix-now.html` (the
+  `docs/design/2026-09-17-workloadhub-schema-diagram.html` (every table and key of the schema dump plus the
+  seven tables and two columns the module's migrations add, the additions and what the module reads highlighted) and `docs/design/2026-09-17-feature-matrix-now.html` (the
   matrix after the rulings; the 2026-09-16 page is kept as the reviewed record).
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
