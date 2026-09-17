@@ -1,7 +1,7 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04, last updated 2026-09-16; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-17; update this file when an item lands.
 
 Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
 the archived first version only — including the whole "Verification on Windows" section below. Their
@@ -306,6 +306,21 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   the smoke path stays deferred as it was (spec section 10: "later").
 
 ## Java migration
+
+- **Read `tasks.assigned_at` when the application adds it (2026-09-17).** The assignment date is derived from
+  the latest `task_history` assignee row (else `created_date`). The application will carry an `assigned_at`
+  column later; when it exists, `Lifecycle.assignment` should prefer it and keep today's rule as the fallback.
+  Owner's ruling A of 2026-09-16.
+
+- **The assignee history stores full names (2026-09-17).** `task_history.new_value` on an assignee row is the
+  member's full name, not the id. Two users with the same name, or a renamed user, make the row unresolvable:
+  the task falls back to its creation date and is listed under `data_quality.unresolved_assignments`. If the
+  application stored the user id in `new_value` for assignee rows, the fragility would go.
+
+- **Rename the `open_*` facts if narratives confuse the word (2026-09-17).** The application's status `Open`
+  means unassigned; the module's `open_tasks` and `open_est_hours` mean assigned and not finished. The skills
+  define the word (design 2026-09-17, section 8); if live narratives still say "open" the wrong way, rename the
+  facts to `queued_tasks` and `queued_hours` (contract, skills, verifier scopes, tests).
 
 - **Evaluation removed (2026-09-14).** The offline harness is gone; `accuracy(teamId, from, to)` is the only
   evaluation surface. Nothing can now grade the model before a forecast is live — that is the accepted cost

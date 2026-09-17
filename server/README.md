@@ -106,7 +106,7 @@ X="bash tools/experiment.sh"
 # 1. a database with the WorkloadHub schema and the module's tables
 $X init-db --db ~/whf/workloadhub.db
 
-# 2. a year of history for the real directory (the export holds personal data: keep it and the output outside git)
+# 2. a year of history for the real directory: the seed writes projects, tasks, task_history, time_logs and personal_leaves; the application's own tables are read from the export and left alone (the export holds personal data: keep it and the output outside git)
 $X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
 $X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --format sql --out ~/whf/seeded.sql
 
@@ -132,7 +132,7 @@ $X export --db ~/whf/workloadhub.db /tmp/dump.json
 | `init-db` | `[--db] [--force]` | Creates the 24 WorkloadHub tables and the module's tables in a new SQLite file; refuses an existing file without `--force`. |
 | `import` | `[--db] <file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
 | `export` | `[--db] <file>` | Writes the database's WorkloadHub tables as a JSON export. |
-| `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. |
+| `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. Real mode writes five tables; synthetic mode writes them all. |
 
 Those four are the whole of it: they build and move an experiment database. Everything a
 *host* does — starting a run and polling its progress, reading the run, the current forecast, the run list,
@@ -152,7 +152,10 @@ with the evaluation harness (`docs/superpowers/specs/2026-09-14-evaluation-remov
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
 `psql -d avl_workloadhub -f ~/whf/seeded.sql` (it runs inside one transaction and sets
-`search_path` to `task_service`; the target tables must be empty).
+`search_path` to `task_service`; the script deletes the seeded work tables (time logs, history, tasks,
+leaves) child-first inside the transaction and upserts projects by id; a database that still holds
+comments or attachments on old tasks makes the delete fail and nothing is applied). The JSON `import` with
+an existing database does the same: it replaces only the tables the file carries.
 
 ## What the seed writes
 
@@ -160,7 +163,9 @@ Teams come from `users.manager_id`, one per manager under a department team per 
 job titles decide the kind of work; each member gets a weekly rhythm with seasonal dips, project
 ramps, team events and absences; tasks are created into the backlog or assigned directly, worked
 three at a time, logged day by day, reviewed, blocked or reopened at the design's rates, and a few
-finish without logs. Capacity rows follow the application's formula. The invariants the tests hold
+finish without logs. Leaves are written as `personal_leaves` (paid leave blocks, one in five ending on a
+half day, sick days, and for one member in ten a pending request after the as-of date); no capacity rows
+are written, the module computes capacity itself. The invariants the tests hold
 are listed in the design, section 4.8.
 
 ## Using the module from the WorkloadHub server

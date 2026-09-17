@@ -5,7 +5,7 @@ A Java 21 module for the WorkloadHub Spring Boot server (Linux; development on W
 forecasts each team member's logged work hours for a rolling horizon (one to six windows of five weekdays,
 two by default) from the team's task history in the
 application's own PostgreSQL database, compares them with capacity (44 h/week default over the working days,
-holidays, absences and the team's capacity plan), and uses each user's own GitHub Copilot seat to explain
+minus public holidays and approved personal leaves), and uses each user's own GitHub Copilot seat to explain
 patterns, warn about overload and suggest rebalancing. The host calls a Java interface or an optional REST
 surface; a single-file Java driver runs the same code on SQLite for experiments. The first version (a Windows desktop
 app with a Python service) is archived on the remote branch `archive/python-desktop-v1`.
@@ -35,13 +35,18 @@ app with a Python service) is archived on the remote branch `archive/python-desk
   `Report` and the driver's `eval` command — once the features were settled and the model locked, leaving
   `accuracy(teamId, from, to)` as the module's only evaluation surface. The per-run backtest inside
   `ForecastRunner.prepare` stayed: it still produces every run's prediction intervals and `mae`.
+- `docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md`: **implemented,
+  landing on dev on 2026-09-17.** `personal_leaves` replaces `absences`, capacity is the calendar and the
+  approved leaves over the 44 h default, `user_capacity` and `team_capacity` are not read, the seed writes
+  five tables in real mode, and the owner's feature-matrix rulings of 2026-09-16 (section 1 of the spec,
+  `docs/design/2026-09-16-feature-matrix-review.html`) are applied.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
 - `server/README.md`: build, running experiments, the seed, using the module from the server, narrating with
   Copilot.
 - Documents dated before 2026-09-09 describe the archived version; each carries a note saying so.
 
-## Where the project stands (2026-09-15)
+## Where the project stands (2026-09-17)
 
 Plans 1 to 4 landed on `dev` and `main` (foundation and seed; pipeline core; run, eval and parity; Copilot
 narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Then the
@@ -123,6 +128,18 @@ patched under time pressure — recorded in `docs/backlog.md`, "Java migration".
 The gate stands at 428 tests, 0 failures, 1 skipped with Docker (13 skipped without it; the skip-count drop
 from 409/0/13 is Postgres tests newly running under this session's Docker-available devbox, not anything this
 sweep touched).
+Then, on 2026-09-17, personal leaves, capacity from the calendar and the seed's scope
+(`docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md`): the main developer
+confirmed `absences` is legacy and `user_capacity`/`team_capacity` will not be used, so the module reads
+`personal_leaves` instead and computes capacity itself from `whf.default-weekly-hours` (44), the working
+days and the member's own APPROVED leave hours; the seed's real mode now writes only the five work tables
+(`projects`, `tasks`, `task_history`, `time_logs`, `personal_leaves`), with the application's own tables read
+from the export and left alone, `projects` upserted by id and the other four replaced child-first; and the
+owner walked the feature matrix on 2026-09-16 and ruled on every invented rule: `proj_first_due_weeks` is
+gone, `share_manual_13w`/`share_project_13w` are replaced by `share_assigned_13w` from the assignment's own
+`task_history.user_id`, `planned_hrs_h` returns as a per-horizon column, and every ratio or "weeks since"
+with nothing to measure is left blank instead of an invented sentinel, for 40 shared and 5 per-horizon
+feature columns. The gate's totals are recorded in the plan's closing notes.
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
 server's own integration code, against the sample host.
 The standing workflow for a plan:

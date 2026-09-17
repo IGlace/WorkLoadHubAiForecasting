@@ -18,11 +18,11 @@ in section 7 and must be answered before the implementation plan is written.
 | `users` | 264 (6 active) | members, roles (`MEMBER`, `TEAM_LEADER`, `SKILL_TEAM_LEADER`, `CENTER_MANAGER`, `ADMIN`, `VIEWER`), job title, department, manager |
 | `teams`, `team_members` | 3, 3 | teams with a manager and a parent team; membership with a join date |
 | `projects` | 7 | key, name, status (`ACTIVE`, `PLANNING`), owning team; **no start or end date** |
-| `user_capacity` | 2 | per user and week: base hours, absence hours, available hours |
-| `team_capacity` | 2 | per team and week: total and allocated hours |
-| `absences` | 4 | per user and day: hours and type |
+| `user_capacity` | 2 | not read since 2026-09-17: capacity is the module's own formula |
+| `team_capacity` | 2 | not read since 2026-09-17: capacity is the module's own formula |
+| `absences` | 4 | not read since 2026-09-17: legacy; absence is `personal_leaves` |
 | `holidays` | 16 | date ranges with a status (`CONFIRMED`, `PENDING`) and a country code |
-| `personal_leaves` | 0 | (empty) |
+| `personal_leaves` | 0 | per leave: start and end date, begin and end time, total absence hours, status, type; the source of absence since 2026-09-17 |
 | `job_titles`, `user_roles`, `notifications`, `task_comments`, `sync_metadata`, others | | not used |
 
 Three facts matter for the design:
@@ -81,16 +81,10 @@ already supports them, so no migration is needed on the WorkloadHub side.
 
 ## 4. Calendar and capacity
 
-- Weeks start on Monday, as the application's own `week_start` columns do.
-- **Working days** exclude holidays with `status = 'CONFIRMED'` and `active = true`, over
-  `start_date..end_date`. `PENDING` holidays are ignored for the forecast and named in the facts as
-  uncertain, so Copilot can mention them.
-- **Capacity** for a member and week, in this order: `user_capacity.available_hrs` for that week
-  when a row exists; otherwise `base_capacity_hrs` of the member's latest row, else 40, minus the
-  member's `absences.hours` in that week, scaled by working days over 5. The current 44-hour default
-  is replaced by what the application records; the base is 40 in the export.
-- `team_capacity.total_capacity_hrs` and `allocated_hrs` are shown in the facts as the team's own
-  plan for comparison; they are not used as inputs.
+Superseded on 2026-09-17: capacity is `whf.default-weekly-hours` (44) times the week's confirmed working
+days over five, minus the member's APPROVED leave hours, a leave being dealt into its working days one full
+day (8.8 h) at a time; see `docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md`,
+sections 2 and 3. `user_capacity` and `team_capacity` are not read.
 
 ## 5. The feature matrix
 
@@ -112,12 +106,12 @@ except the `_h{h}` columns, which describe the **target** week `w + h` using onl
 | `lag1` .. `lag4`, `lag8`, `lag13` | estimated hours assigned in the row's week and 1, 2, 3, 7, 12 weeks before it. The recent level and the same week of the last quarter. |
 | `roll_mean_4`, `roll_mean_8`, `roll_mean_13` | average weekly assigned hours over the last 4, 8, 13 weeks: the member's normal load at three time scales. |
 | `roll_std_4`, `roll_std_8`, `roll_std_13` | how much that load varies: a member with a steady 20 h and one alternating 0 and 40 h have the same mean and very different risk. |
-| `weeks_since_last_arrival` | weeks since the member last received anything; long gaps mean an intermittent pattern. 52 when never. |
+| `weeks_since_last_arrival` | weeks since the member last received anything; long gaps mean an intermittent pattern. Blank when never. |
 | `arrivals_13w` | number of tasks assigned in the last 13 weeks; with the hours, gives the typical task size. |
-| `share_defect_13w`, `share_delivery_13w`, `share_support_13w` | share of the last 13 weeks' tasks by type family. Defect-heavy members receive work that is unplanned and urgent. |
-| `share_high_priority_13w` | share of `HIGHEST` and `HIGH` tasks in the last 13 weeks. |
-| `share_self_picked_13w`, `share_manual_13w`, `share_project_13w` | assignment style from section 3. A self-picking member's arrivals follow their own throughput; a manually assigned member's follow the leader's planning. |
-| `reopen_rate_13w` | share of the member's finished tasks reopened from done: rework generates arrivals that no plan announces. |
+| `share_defect_13w`, `share_delivery_13w`, `share_support_13w` | share of the last 13 weeks' tasks by type family. Defect-heavy members receive work that is unplanned and urgent. Blank when there is nothing to measure. |
+| `share_high_priority_13w` | share of `HIGHEST` and `HIGH` tasks in the last 13 weeks. Blank when there is nothing to measure. |
+| `share_self_picked_13w`, `share_assigned_13w` | whether the member assigned the task to themselves or received it, from the `user_id` of the `task_history` row that assigned it; over the tasks whose assigner is recorded; blank when none. |
+| `reopen_rate_13w` | share of the member's finished tasks reopened from done: rework generates arrivals that no plan announces. Blank when there is nothing to measure. |
 
 ### 5.3 Throughput and open work at the origin
 
@@ -128,10 +122,10 @@ fast they clear it, which the arrival forecast alone does not see.
 |---|---|
 | `logged_hours_lag1` .. `logged_hours_lag4` | hours from `time_logs` in the row's week and the three before: what the member actually worked, week by week. |
 | `open_tasks` | tasks of the member not in a `DONE` category at the end of the week. |
-| `open_remaining_hrs` | sum of their `remaining_estimate_hrs`: the backlog in hours, as the application tracks it. |
+| `open_remaining_hrs` | sum, over the member's open tasks, of the estimate minus the hours logged on the task by the row's week end (ruling E of 2026-09-17: the facts read `remaining_estimate_hrs`; the features cannot, it has no history). |
 | `overdue_open` | of those, how many have a `due_date` before the end of the week. |
 | `in_progress_tasks` | open tasks in an `IN_PROGRESS` category: work started, not queued. |
-| `estimate_ratio_13w` | logged hours over original estimate for tasks finished in the last 13 weeks, the member's estimation bias; 1.0 when unknown. |
+| `estimate_ratio_13w` | logged hours over original estimate for tasks finished in the last 13 weeks, the member's estimation bias; blank when unknown. |
 | `cycle_days_13w` | median days from assignment to finish over the same tasks; the member's typical turnaround. |
 
 ### 5.4 What is already known about the target week
@@ -141,22 +135,19 @@ weeks ahead; a model that sees them predicts arrivals far better than history al
 
 | Column | Meaning |
 |---|---|
-| `planned_hrs_h{h}` | estimated hours of the member's tasks (any status but `DONE`) whose `planned_week` is the target week. The leader's stated intention for that week. |
-| `planned_remaining_h{h}` | the `remaining_estimate_hrs` of the same tasks: what is left to do of the plan. |
+| `planned_hrs_h{h}` | estimated hours of the member's open tasks whose `planned_week` is the target week's Monday (back since 2026-09-17). |
 | `due_hrs_h{h}` | remaining hours of the member's open tasks with a `due_date` inside the target week: deadline pressure. |
-| `team_planned_hrs_h{h}` | the whole team's planned hours for the target week; a member's share of a heavy team week tends to rise. |
 | `team_backlog_unassigned_hrs` | estimated hours of the team's tasks with no assignee at the origin: the pool the planned-work allocation draws from. |
 | `proj_active` | number of the team's projects with status `ACTIVE` that have at least one open task at the origin. |
 | `proj_planning` | number with status `PLANNING`: the pipeline that will start producing tasks. |
-| `proj_first_due_weeks` | weeks from the row's week to the nearest `due_date` among the team's open tasks, per project, minimum over projects. Replaces the missing project deadline. |
 
 ### 5.5 Availability of the target week
 
 | Column | Meaning |
 |---|---|
 | `working_days_h{h}` | weekdays in the target week minus confirmed holidays. |
-| `absence_hrs_h{h}` | the member's recorded absence hours in the target week, from `user_capacity.absence_hrs` when a row exists, else the sum of `absences.hours`. |
-| `available_hrs_h{h}` | capacity of section 4 for the target week. A leader assigns less to a member who is away. |
+| `absence_hrs_h{h}` | the member's approved leave hours on the target week's working days. |
+| `available_hrs_h{h}` | capacity of section 4 as superseded. A leader assigns less to a member who is away. |
 
 ### 5.6 Identity
 
@@ -168,7 +159,7 @@ weeks ahead; a model that sees them predicts arrivals far better than history al
 | `tenure_weeks` | weeks since `team_members.joined_at`: newcomers ramp up. |
 | `week_of_year` | seasonality. |
 
-That is 46 columns per horizon after dropping the three planned-week columns, against 25 today. The
+That is 45 columns per horizon (40 shared, 5 per horizon) since 2026-09-17, against 25 today. The
 booster handles the width; what matters is that every column is available at prediction time from the
 database alone, which section 8 states as a test.
 
@@ -180,7 +171,54 @@ present-day `reopened_from_done` flag, its project's current `status`, its curre
 (section 8) holds only up to that list — a column built from one of those four fields carries a small
 amount of hindsight the replay does not remove.
 
+### 5.7 Missing values
+
+Since 2026-09-17 (ruling F), the matrix stores `Double.NaN` where a cell has no value instead of an
+invented sentinel; `FeatureMatrix.flatten` hands XGBoost a dense array with `Float.NaN` as its declared
+missing marker, and XGBoost's histogram trees learn, at every split, a default direction for a missing
+value from the training rows that lack it. A blank is therefore not "zero" and not "average": it is its
+own branch, learnt from the rows where the same thing was unknown.
+
+| Column | Blank when | Was |
+|---|---|---|
+| `weeks_since_last_arrival` | the member received no fresh task in the loaded history | 52 |
+| `share_defect_13w`, `share_delivery_13w`, `share_support_13w`, `share_high_priority_13w` | no task was assigned to the member in the 13-week window (`arrivals_13w` = 0) | 0.0 |
+| `share_self_picked_13w`, `share_assigned_13w` | no task in the window has a known mode (section 3) | 1/3 |
+| `reopen_rate_13w` | the member finished no task in the window | 0.0 |
+| `estimate_ratio_13w` | no finished task in the window has both a positive estimate and positive hours | 1.0 |
+| `cycle_days_13w` | the member finished no task in the window | already NaN |
+| `lag{k}`, `arrival_hrs_lag{k}` | the week is before the member's first row | already NaN |
+| `target_h` | the target week is after the origin | already NaN |
+
+Not blank, on purpose: `arrivals_13w`, `open_tasks`, `open_remaining_hrs`, `overdue_open`,
+`in_progress_tasks`, `team_backlog_unassigned_hrs`, `proj_active`, `proj_planning`, `due_hrs_h`,
+`planned_hrs_h`, `absence_hrs_h` are counts and sums, and zero is their true value when there is nothing.
+`roll_std_*` is 0.0 for a single-week window because one observation has no spread, which is a statement,
+not an absence of one.
+
+### 5.8 Read as of today
+
+Truncation (section 3) rewinds assignments, statuses and logs to the row's week, but four fields have no
+history and are read as they stand on the run day: `tasks.reopened_from_done`, `projects.status`,
+`tasks.due_date`, `tasks.original_estimate_hrs`. `reopen_rate_13w`, `proj_active`, `proj_planning`,
+`overdue_open`, `due_hrs_h` and every estimate-based sum carry that hindsight. Accepted on 2026-09-16
+(ruling G): a task's current due date is the best available stand-in for the due date it had, and the
+alternative is to drop the columns.
+
+Ruling E (2026-09-17): `open_remaining_hrs` and `due_hrs_h` recompute remaining hours as
+`original_estimate_hrs` minus the hours logged on the task by the row's week end, because a training row
+must see what was known then and `remaining_estimate_hrs` has no history; the facts the leader reads
+(`open_est_hours`, `due_hours`, `backlog_excess_hrs`, `due_excess_hrs`) keep reading
+`remaining_estimate_hrs`, the application's own number. The two can differ, and the difference is by
+design.
+
 ## 6. Demand, bands and the narrative facts on this schema
+
+History: this section describes the original open/new/planned decomposition. It is superseded by
+`docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md` (`EffortModel`, `PlannedWork` and the
+open/new/planned split are gone; the model forecasts logged hours per member-week directly) and, for
+capacity and absence, by `docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md`
+(`team_capacity` is not read or shown; absence is `personal_leaves`). Kept for the reasoning it records.
 
 - **Open hours** are `remaining_estimate_hrs` of the member's open tasks, placed from the first
   forecast week to `max(planned_week, due_date + member's median lateness)`, evenly over working
