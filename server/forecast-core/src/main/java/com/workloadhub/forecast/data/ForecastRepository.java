@@ -1,12 +1,10 @@
 package com.workloadhub.forecast.data;
 
-import com.workloadhub.forecast.data.rows.AbsenceRow;
-import com.workloadhub.forecast.data.rows.CapacityRow;
 import com.workloadhub.forecast.data.rows.HolidayRow;
+import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.data.rows.TeamCapacityRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
@@ -14,6 +12,7 @@ import com.workloadhub.forecast.data.rows.UserRef;
 import com.workloadhub.forecast.store.Dialect;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -107,26 +106,20 @@ public final class ForecastRepository {
         for (Map<String, Object> r : rows("SELECT task_id, user_id, log_date, hours FROM time_logs")) {
             logs.add(new TimeLogRow(uuid(r, "task_id"), uuid(r, "user_id"), date(r, "log_date"), dbl(r, "hours")));
         }
-        List<CapacityRow> capacity = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT user_id, week_start, base_capacity_hrs, absence_hrs, available_hrs FROM user_capacity")) {
-            capacity.add(new CapacityRow(uuid(r, "user_id"), date(r, "week_start"), dbl(r, "base_capacity_hrs"),
-                    dbl(r, "absence_hrs"), dbl(r, "available_hrs")));
-        }
-        List<AbsenceRow> absences = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT user_id, date, hours FROM absences")) {
-            absences.add(new AbsenceRow(uuid(r, "user_id"), date(r, "date"), dbl(r, "hours")));
+        List<LeaveRow> leaves = new ArrayList<>();
+        List<LeaveRow> pendingLeaves = new ArrayList<>();
+        for (Map<String, Object> r : rows("SELECT employee_id, start_date, end_date, begin_time, end_time, absence_hours, status, leave_type"
+                + " FROM personal_leaves WHERE status IN ('APPROVED', 'PENDING')")) {
+            LeaveRow row = new LeaveRow(uuid(r, "employee_id"), date(r, "start_date"), date(r, "end_date"), time(r, "begin_time"),
+                    time(r, "end_time"), dbl(r, "absence_hours"), str(r, "status"), str(r, "leave_type"));
+            ("APPROVED".equals(row.status()) ? leaves : pendingLeaves).add(row);
         }
         List<HolidayRow> holidays = new ArrayList<>();
         for (Map<String, Object> r : rows("SELECT start_date, end_date, status, active, title FROM holidays")) {
             holidays.add(new HolidayRow(date(r, "start_date"), date(r, "end_date"), "CONFIRMED".equals(str(r, "status")),
                     dialect.asBoolean(r.get("active")), str(r, "title")));
         }
-        List<TeamCapacityRow> teamCapacity = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT team_id, week_start, total_capacity_hrs, allocated_hrs FROM team_capacity")) {
-            teamCapacity.add(new TeamCapacityRow(uuid(r, "team_id"), date(r, "week_start"), dbl(r, "total_capacity_hrs"), dbl(r, "allocated_hrs")));
-        }
-        return new ForecastData(members, teams, projects, tasks, transitions, logs, capacity, absences, holidays, users, categoryByName)
-                .withTeamCapacity(teamCapacity);
+        return new ForecastData(members, teams, projects, tasks, transitions, logs, leaves, pendingLeaves, holidays, users, categoryByName);
     }
 
     private List<Map<String, Object>> rows(String sql) {
@@ -158,6 +151,20 @@ public final class ForecastRepository {
         }
         String s = v.toString();
         return LocalDate.parse(s.length() > 10 ? s.substring(0, 10) : s);
+    }
+
+    static LocalTime time(Map<String, Object> r, String col) {
+        Object v = r.get(col);
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof java.sql.Time t) {
+            return t.toLocalTime();
+        }
+        if (v instanceof LocalTime t) {
+            return t;
+        }
+        return LocalTime.parse(v.toString().length() > 8 ? v.toString().substring(0, 8) : v.toString());
     }
 
     static LocalDateTime dateTime(Map<String, Object> r, String col) {

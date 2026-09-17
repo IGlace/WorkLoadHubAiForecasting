@@ -10,5 +10,5 @@ import java.util.UUID;
  * on a partial day (design 2026-09-17, section 2).
  */
 public record LeaveRow(UUID employeeId, LocalDate start, LocalDate end, LocalTime beginTime, LocalTime endTime,
-		Double absenceHours, String status, String leaveType) {
+        Double absenceHours, String status, String leaveType) {
 }

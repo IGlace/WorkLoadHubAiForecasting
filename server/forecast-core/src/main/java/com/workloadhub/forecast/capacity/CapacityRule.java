@@ -1,24 +1,18 @@
 package com.workloadhub.forecast.capacity;
 
 import com.workloadhub.forecast.Numbers;
-import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.calendar.WorkingCalendar;
 import com.workloadhub.forecast.data.ForecastData;
-import com.workloadhub.forecast.data.rows.AbsenceRow;
-import com.workloadhub.forecast.data.rows.CapacityRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import java.time.LocalDate;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 
-/** Hours a member can work in a week (design section 5): the application's own row first, then the rule. */
+/** Hours a member can work in a week (design 2026-09-17, section 3): the default week, minus the member's leaves. */
 public final class CapacityRule {
 
     public static final int WORKING_DAYS_PER_WEEK = 5;
@@ -26,144 +20,73 @@ public final class CapacityRule {
     private final double defaultWeeklyHours;
 
     /**
-     * One index per {@link ForecastData} this rule has seen, keyed by instance identity (not equals/hashCode,
-     * which would force a full scan of the lists to hash or compare): {@code capacity()} and {@code absences()}
-     * are scanned once per data set here instead of once per {@code capacity()}/{@code absenceHours()} call,
-     * which FeatureBuilder makes on the order of member-weeks × horizons.
+     * One index per {@link ForecastData}, keyed by instance identity: the leaves are expanded once per data set
+     * here instead of once per call, which FeatureBuilder makes on the order of member-weeks × horizons.
      */
-    private final Map<ForecastData, Index> indexes = new IdentityHashMap<>();
+    private final Map<ForecastData, Map<UUID, NavigableMap<LocalDate, Double>>> indexes = new IdentityHashMap<>();
 
     public CapacityRule(double defaultWeeklyHours) {
         this.defaultWeeklyHours = defaultWeeklyHours;
     }
 
-    private record Index(Map<UUID, NavigableMap<LocalDate, CapacityRow>> capacityByMember,
-            Map<UUID, NavigableMap<LocalDate, Double>> absenceHoursByMember) {
-
-        static Index of(ForecastData data) {
-            Map<UUID, NavigableMap<LocalDate, CapacityRow>> capacity = new HashMap<>();
-            for (CapacityRow c : data.capacity()) {
-                capacity.computeIfAbsent(c.userId(), k -> new TreeMap<>()).put(c.weekStart(), c);
-            }
-            Map<UUID, NavigableMap<LocalDate, Double>> absence = new HashMap<>();
-            for (AbsenceRow a : data.absences()) {
-                absence.computeIfAbsent(a.userId(), k -> new TreeMap<>()).merge(a.day(), a.hours(), Double::sum);
-            }
-            return new Index(capacity, absence);
-        }
+    /** A working day's hours before any leave: the default week over five days (design 2026-09-17, section 3). */
+    double fullDay() {
+        return defaultWeeklyHours / WORKING_DAYS_PER_WEEK;
     }
 
-    private Index indexFor(ForecastData data) {
-        return indexes.computeIfAbsent(data, Index::of);
+    private Map<UUID, NavigableMap<LocalDate, Double>> indexFor(ForecastData data) {
+        return indexes.computeIfAbsent(data, d -> LeaveDays.expand(d.leaves(), WorkingCalendar.fromHolidays(d.holidays()), fullDay()));
     }
 
-    private Optional<CapacityRow> rowFor(UUID member, LocalDate monday, ForecastData data) {
-        NavigableMap<LocalDate, CapacityRow> byWeek = indexFor(data).capacityByMember().get(member);
-        return byWeek == null ? Optional.empty() : Optional.ofNullable(byWeek.get(monday));
-    }
-
-    private Optional<CapacityRow> latestRowBefore(UUID member, LocalDate monday, ForecastData data) {
-        NavigableMap<LocalDate, CapacityRow> byWeek = indexFor(data).capacityByMember().get(member);
-        if (byWeek == null) {
-            return Optional.empty();
-        }
-        Map.Entry<LocalDate, CapacityRow> floor = byWeek.floorEntry(monday);
-        return floor == null ? Optional.empty() : Optional.of(floor.getValue());
-    }
-
+    /** The member's leave hours on the week's working days. */
     public double absenceHours(UUID member, LocalDate monday, ForecastData data, WorkingCalendar cal) {
-        Optional<CapacityRow> row = rowFor(member, monday, data);
-        if (row.isPresent()) {
-            return Numbers.round2(row.get().absence());
-        }
-        LocalDate end = monday.plusDays(6);
-        NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
+        NavigableMap<LocalDate, Double> byDay = indexFor(data).get(member);
         if (byDay == null || byDay.isEmpty()) {
             return 0.0;
         }
         double sum = 0;
-        for (Map.Entry<LocalDate, Double> e : byDay.subMap(monday, true, end, true).entrySet()) {
+        for (Map.Entry<LocalDate, Double> e : byDay.subMap(monday, true, monday.plusDays(6), true).entrySet()) {
             if (cal.isWorkingDay(e.getKey())) {
-                sum += e.getValue();
+                sum += Math.min(fullDay(), e.getValue());
             }
         }
         return Numbers.round2(sum);
     }
 
+    /** The default week over the week's working days, minus the member's leave hours in it, never below zero. */
     public double capacity(MemberRow member, LocalDate monday, ForecastData data, WorkingCalendar cal) {
-        Optional<CapacityRow> row = rowFor(member.id(), monday, data);
-        if (row.isPresent()) {
-            return Numbers.round2(row.get().available());
-        }
-        double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
-        double hours = base * cal.workingDaysInWeek(monday) / WORKING_DAYS_PER_WEEK - absenceHours(member.id(), monday, data, cal);
+        double hours = defaultWeeklyHours * cal.workingDaysInWeek(monday) / WORKING_DAYS_PER_WEEK - absenceHours(member.id(), monday, data, cal);
         return Numbers.round2(Math.max(0.0, hours));
     }
 
-    /**
-     * Hours a member can work on one day (design 2026-09-10, section 5): nothing on a weekend or holiday; the
-     * application's own week row spread evenly over that week's working days; else the latest base (or the
-     * default) over five days minus that day's absence hours, never below zero.
-     */
+    /** Nothing on a weekend or holiday; else the default over five days minus that day's leave hours, never below zero. */
     public double dayCapacity(MemberRow member, LocalDate day, ForecastData data, WorkingCalendar cal) {
         if (!cal.isWorkingDay(day)) {
             return 0.0;
         }
-        LocalDate monday = Weeks.mondayOf(day);
-        Optional<CapacityRow> row = rowFor(member.id(), monday, data);
-        if (row.isPresent()) {
-            int working = cal.workingDaysInWeek(monday);
-            return working == 0 ? 0.0 : Numbers.round2(Math.max(0.0, row.get().available() / working));
-        }
-        double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
-        return Numbers.round2(Math.max(0.0, base / WORKING_DAYS_PER_WEEK - dayAbsenceHours(member.id(), day, data)));
+        return Numbers.round2(Math.max(0.0, fullDay() - dayAbsenceHours(member.id(), day, data)));
     }
 
-    /**
-     * That day's capacity <em>before</em> the day's own absence is taken off: the figure an absence is measured
-     * against to decide whether it takes the whole day (design 2026-09-13, section 5 step 1, "that day's own
-     * capacity"). Comparing against {@link #dayCapacity} instead would be circular — that figure has already
-     * subtracted the very absence being judged, halving the threshold.
-     */
-    private double grossDayCapacity(MemberRow member, LocalDate day, ForecastData data, WorkingCalendar cal) {
-        if (!cal.isWorkingDay(day)) {
-            return 0.0;
-        }
-        LocalDate monday = Weeks.mondayOf(day);
-        Optional<CapacityRow> row = rowFor(member.id(), monday, data);
-        if (row.isPresent()) {
-            int working = cal.workingDaysInWeek(monday);
-            return working == 0 ? 0.0 : Numbers.round2(Math.max(0.0, row.get().base() / working));
-        }
-        double base = latestRowBefore(member.id(), monday, data).map(CapacityRow::base).orElse(defaultWeeklyHours);
-        return Numbers.round2(Math.max(0.0, base / WORKING_DAYS_PER_WEEK));
-    }
-
-    /** The member's absence hours recorded on that day. */
+    /** The member's leave hours on that day, capped at a full day. */
     public double dayAbsenceHours(UUID member, LocalDate day, ForecastData data) {
-        NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
-        return byDay == null ? 0.0 : Numbers.round2(byDay.getOrDefault(day, 0.0));
+        NavigableMap<LocalDate, Double> byDay = indexFor(data).get(member);
+        return byDay == null ? 0.0 : Numbers.round2(Math.min(fullDay(), byDay.getOrDefault(day, 0.0)));
     }
 
     /**
-     * The days a member is fully absent: their absence hours meet that day's capacity.
-     *
-     * <p>Its caller is the weekday split in {@code ForecastRunner}: predicted hours must not land on a day the
-     * member is not there, because the day's capacity is zero and every hour on it would read as pure overload
-     * — and by the 2026-09-13 ruling 18.4 no hour is ever logged on such a day.
-     *
-     * <p>The day's hours are read from the absence index, so a member's absences cost one lookup rather than a
-     * scan of every absence row in the data set, and two rows on one day are judged by their sum. They are
-     * compared with {@link #grossDayCapacity}, never with {@link #dayCapacity}, which has already taken them off.
+     * The days a member is fully absent: their leave hours meet a full day. Its caller is the weekday split in
+     * {@code ForecastRunner}: predicted hours must not land on a day the member is not there (ruling 18.4 of the
+     * 2026-09-13 design). Judged against the full day, never against {@link #dayCapacity}, which has already
+     * taken the leave off.
      */
-    public Set<LocalDate> offDays(UUID member, ForecastData data, MemberRow row, WorkingCalendar cal) {
+    public Set<LocalDate> offDays(UUID member, ForecastData data, WorkingCalendar cal) {
         Set<LocalDate> out = new TreeSet<>();
-        NavigableMap<LocalDate, Double> byDay = indexFor(data).absenceHoursByMember().get(member);
+        NavigableMap<LocalDate, Double> byDay = indexFor(data).get(member);
         if (byDay == null) {
             return out;
         }
         for (Map.Entry<LocalDate, Double> e : byDay.entrySet()) {
-            if (e.getValue() >= grossDayCapacity(row, e.getKey(), data, cal)) {
+            if (cal.isWorkingDay(e.getKey()) && e.getValue() >= fullDay() - 1e-9) {
                 out.add(e.getKey());
             }
         }

@@ -1,12 +1,10 @@
 package com.workloadhub.forecast.data;
 
-import com.workloadhub.forecast.data.rows.AbsenceRow;
-import com.workloadhub.forecast.data.rows.CapacityRow;
 import com.workloadhub.forecast.data.rows.HolidayRow;
+import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.data.rows.TeamCapacityRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
@@ -40,12 +38,11 @@ public final class ForecastData {
     private final List<TaskRow> tasks;
     private final List<TransitionRow> transitions;
     private final List<TimeLogRow> timeLogs;
-    private final List<CapacityRow> capacity;
-    private final List<AbsenceRow> absences;
+    private final List<LeaveRow> leaves;
+    private final List<LeaveRow> pendingLeaves;
     private final List<HolidayRow> holidays;
     private final List<UserRef> users;
     private final Map<String, String> statusCategoryByName;
-    private List<TeamCapacityRow> teamCapacity;
 
     private final Map<UUID, MemberRow> memberById;
     private final Map<UUID, TaskRow> taskById;
@@ -57,7 +54,7 @@ public final class ForecastData {
     private final Map<UUID, Set<UUID>> projectIdsOfTeamAndParentCache = new ConcurrentHashMap<>();
 
     public ForecastData(List<MemberRow> members, List<TeamRow> teams, List<ProjectRow> projects, List<TaskRow> tasks,
-            List<TransitionRow> transitions, List<TimeLogRow> timeLogs, List<CapacityRow> capacity, List<AbsenceRow> absences,
+            List<TransitionRow> transitions, List<TimeLogRow> timeLogs, List<LeaveRow> leaves, List<LeaveRow> pendingLeaves,
             List<HolidayRow> holidays, List<UserRef> users, Map<String, String> statusCategoryByName) {
         this.members = sortedBy(members, MemberRow::id);
         this.teams = sortedBy(teams, TeamRow::id);
@@ -69,12 +66,8 @@ public final class ForecastData {
         this.timeLogs = List.copyOf(timeLogs.stream()
                 .sorted(Comparator.comparing(TimeLogRow::day).thenComparing(TimeLogRow::taskId, Ids.UUID_ORDER))
                 .toList());
-        this.capacity = List.copyOf(capacity.stream()
-                .sorted(Comparator.comparing(CapacityRow::userId, Ids.UUID_ORDER).thenComparing(CapacityRow::weekStart))
-                .toList());
-        this.absences = List.copyOf(absences.stream()
-                .sorted(Comparator.comparing(AbsenceRow::userId, Ids.UUID_ORDER).thenComparing(AbsenceRow::day))
-                .toList());
+        this.leaves = sortedLeaves(leaves);
+        this.pendingLeaves = sortedLeaves(pendingLeaves);
         this.holidays = List.copyOf(holidays.stream()
                 .sorted(Comparator.comparing(HolidayRow::start)
                         .thenComparing(HolidayRow::end)
@@ -82,7 +75,6 @@ public final class ForecastData {
                 .toList());
         this.users = sortedBy(users, UserRef::id);
         this.statusCategoryByName = Map.copyOf(statusCategoryByName);
-        this.teamCapacity = List.of();
 
         this.memberById = index(this.members, MemberRow::id);
         this.taskById = index(this.tasks, TaskRow::id);
@@ -95,6 +87,12 @@ public final class ForecastData {
 
     private static <T> List<T> sortedBy(List<T> items, Function<T, UUID> id) {
         return List.copyOf(items.stream().sorted(Comparator.comparing(id, Ids.UUID_ORDER)).toList());
+    }
+
+    private static List<LeaveRow> sortedLeaves(List<LeaveRow> rows) {
+        return List.copyOf(rows.stream()
+                .sorted(Comparator.comparing(LeaveRow::employeeId, Ids.UUID_ORDER).thenComparing(LeaveRow::start).thenComparing(LeaveRow::end))
+                .toList());
     }
 
     private static <T> Map<UUID, T> index(List<T> items, Function<T, UUID> id) {
@@ -117,17 +115,8 @@ public final class ForecastData {
     }
 
     public ForecastData withProjects(List<ProjectRow> projects) {
-        return new ForecastData(members, teams, projects, tasks, transitions, timeLogs, capacity, absences, holidays, users,
-                statusCategoryByName).withTeamCapacity(teamCapacity);
-    }
-
-    public ForecastData withTeamCapacity(List<TeamCapacityRow> rows) {
-        ForecastData copy = new ForecastData(members, teams, projects, tasks, transitions, timeLogs, capacity, absences, holidays, users,
+        return new ForecastData(members, teams, projects, tasks, transitions, timeLogs, leaves, pendingLeaves, holidays, users,
                 statusCategoryByName);
-        copy.teamCapacity = rows.stream()
-                .sorted(Comparator.comparing((TeamCapacityRow r) -> r.teamId().toString()).thenComparing(TeamCapacityRow::weekStart))
-                .toList();
-        return copy;
     }
 
     public List<MemberRow> members() {
@@ -154,12 +143,14 @@ public final class ForecastData {
         return timeLogs;
     }
 
-    public List<CapacityRow> capacity() {
-        return capacity;
+    /** The APPROVED personal leaves, by member then start date. Only these reduce capacity. */
+    public List<LeaveRow> leaves() {
+        return leaves;
     }
 
-    public List<AbsenceRow> absences() {
-        return absences;
+    /** The PENDING personal leaves, for the facts only; they never reduce capacity. */
+    public List<LeaveRow> pendingLeaves() {
+        return pendingLeaves;
     }
 
     public List<HolidayRow> holidays() {
@@ -172,10 +163,6 @@ public final class ForecastData {
 
     public Map<String, String> statusCategoryByName() {
         return statusCategoryByName;
-    }
-
-    public List<TeamCapacityRow> teamCapacity() {
-        return teamCapacity;
     }
 
     public Map<UUID, MemberRow> memberById() {

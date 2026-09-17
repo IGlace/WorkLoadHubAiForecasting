@@ -180,7 +180,7 @@ public final class ForecastRunner {
         Map<UUID, List<TaskFacts>> openTasksByMember = new HashMap<>();
         for (MemberRow m : members) {
             sharesByMember.put(m.id(), LoggedWeekdayShares.of(m.id(), data, p.asOf()));
-            offDaysByMember.put(m.id(), capacityRule.offDays(m.id(), data, m, p.calendar()));
+            offDaysByMember.put(m.id(), capacityRule.offDays(m.id(), data, p.calendar()));
             openTasksByMember.put(m.id(), p.lifecycle().assignedTo(m.id()).stream().filter(f -> !f.done()).toList());
         }
         SortedMap<MemberDay, Double> demandByDay = new TreeMap<>();

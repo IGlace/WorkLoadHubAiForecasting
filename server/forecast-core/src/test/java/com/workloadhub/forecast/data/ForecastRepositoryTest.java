@@ -7,11 +7,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
+import com.workloadhub.forecast.store.DatabaseTestSupport;
+import com.workloadhub.forecast.store.Dialect;
+import com.workloadhub.forecast.store.WorkloadHubSchema;
 import com.workloadhub.forecast.testing.SeededData;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 class ForecastRepositoryTest {
 
@@ -60,29 +68,23 @@ class ForecastRepositoryTest {
     }
 
     @Test
-    void holidaysCapacityAbsencesAndProjectsArePresent() {
+    void holidaysLeavesAndProjectsArePresentAndTheCapacityTablesAreNeverRead() {
         ForecastData data = SeededData.data();
         assertTrue(data.holidays().stream().anyMatch(h -> h.confirmed() && h.active()));
-        assertEquals(SeededData.envelope().rows("user_capacity").size(), data.capacity().size());
-        assertEquals(SeededData.envelope().rows("absences").size(), data.absences().size());
+        long approved = SeededData.envelope().rows("personal_leaves").stream().filter(l -> "APPROVED".equals(l.get("status"))).count();
+        long pending = SeededData.envelope().rows("personal_leaves").stream().filter(l -> "PENDING".equals(l.get("status"))).count();
+        assertEquals(approved, data.leaves().size());
+        assertEquals(pending, data.pendingLeaves().size());
+        assertTrue(data.leaves().stream().allMatch(l -> "APPROVED".equals(l.status()) && l.absenceHours() != null && l.absenceHours() > 0));
         assertEquals(SeededData.envelope().rows("projects").size(), data.projects().size());
         MemberRow m = data.members().get(0);
         assertFalse(data.projectIdsOfTeamAndParent(m.primaryTeamId()).isEmpty());
         assertEquals(SeededData.envelope().rows("users").size(), data.users().size());
-        assertEquals(SeededData.envelope().rows("team_capacity").size(), data.teamCapacity().size());
-        for (int i = 1; i < data.capacity().size(); i++) {
-            var prev = data.capacity().get(i - 1);
-            var cur = data.capacity().get(i);
-            int cmp = prev.userId().toString().compareTo(cur.userId().toString());
-            assertTrue(cmp < 0 || (cmp == 0 && !cur.weekStart().isBefore(prev.weekStart())),
-                    "capacity out of order at " + i);
-        }
-        for (int i = 1; i < data.absences().size(); i++) {
-            var prev = data.absences().get(i - 1);
-            var cur = data.absences().get(i);
-            int cmp = prev.userId().toString().compareTo(cur.userId().toString());
-            assertTrue(cmp < 0 || (cmp == 0 && !cur.day().isBefore(prev.day())),
-                    "absences out of order at " + i);
+        for (int i = 1; i < data.leaves().size(); i++) {
+            var prev = data.leaves().get(i - 1);
+            var cur = data.leaves().get(i);
+            int cmp = prev.employeeId().toString().compareTo(cur.employeeId().toString());
+            assertTrue(cmp < 0 || (cmp == 0 && !cur.start().isBefore(prev.start())), "leaves out of order at " + i);
         }
         for (int i = 1; i < data.holidays().size(); i++) {
             var prev = data.holidays().get(i - 1);
@@ -91,5 +93,41 @@ class ForecastRepositoryTest {
             assertTrue(cmp < 0 || (cmp == 0 && !cur.end().isBefore(prev.end())),
                     "holidays out of order at " + i);
         }
+        // The three tables the module no longer reads: drop them and the load must still succeed.
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        new ExportImporter(ds).importAll(SeededData.envelope(), true);
+        try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
+            st.execute("DROP TABLE user_capacity");
+            st.execute("DROP TABLE team_capacity");
+            st.execute("DROP TABLE absences");
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+        ForecastData without = new ForecastRepository(JdbcClient.create(ds), Dialect.of(ds)).loadAll();
+        assertEquals(data.leaves().size(), without.leaves().size());
+    }
+
+    @Test
+    void rejectedAndCancelledLeavesAreNotLoadedAndTimesAreParsed() {
+        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        WorkloadHubSchema.createSqlite(ds);
+        new ExportImporter(ds).importAll(SeededData.envelope(), true);
+        String member = SeededData.envelope().rows("users").get(0).get("id").toString();
+        try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
+            st.execute("DELETE FROM personal_leaves");
+            for (String status : List.of("APPROVED", "PENDING", "REJECTED", "CANCELLED")) {
+                st.execute("INSERT INTO personal_leaves (id, employee_id, start_date, end_date, begin_time, end_time, absence_hours, status, leave_type)"
+                        + " VALUES ('" + UUID.randomUUID() + "', '" + member + "', '2026-09-07', '2026-09-09', '13:00:00', NULL, 22.0, '" + status + "', 'PAID_LEAVE')");
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+        ForecastData data = new ForecastRepository(JdbcClient.create(ds), Dialect.of(ds)).loadAll();
+        assertEquals(1, data.leaves().size());
+        assertEquals(1, data.pendingLeaves().size());
+        assertEquals(java.time.LocalTime.of(13, 0), data.leaves().get(0).beginTime());
+        assertEquals(22.0, data.leaves().get(0).absenceHours());
+        assertEquals("PAID_LEAVE", data.leaves().get(0).leaveType());
     }
 }

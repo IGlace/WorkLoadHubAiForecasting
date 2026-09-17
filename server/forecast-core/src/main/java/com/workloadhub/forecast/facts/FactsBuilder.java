@@ -4,14 +4,12 @@ import com.workloadhub.forecast.Numbers;
 import com.workloadhub.forecast.api.MemberDayForecast;
 import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.calendar.ForecastWindow;
-import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
-import com.workloadhub.forecast.data.rows.TeamCapacityRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.features.WeeklySeries;
@@ -28,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -142,18 +139,8 @@ public final class FactsBuilder {
             }
             totals.add(map("window", w.index(), "start", str(w.start()), "end", str(w.end()), "demand", round1(demand), "capacity", round1(capacity)));
         }
-        Set<LocalDate> horizonWeeks = new TreeSet<>();
-        for (LocalDate d : Horizon.days(out.prepared().windows())) {
-            horizonWeeks.add(Weeks.mondayOf(d));
-        }
-        List<Object> teamCapacity = new ArrayList<>();
-        for (TeamCapacityRow r : data.teamCapacity()) {
-            if (r.teamId().equals(out.teamId()) && horizonWeeks.contains(r.weekStart())) {
-                teamCapacity.add(map("week", str(r.weekStart()), "total", Numbers.round2(r.totalCapacity()), "allocated", Numbers.round2(r.allocated())));
-            }
-        }
         return map("id", str(out.teamId()), "name", team == null ? null : team.name(), "parent_team_id", team == null ? null : str(team.parentId()),
-                "manager_id", team == null ? null : str(team.managerId()), "totals", totals, "team_capacity", teamCapacity);
+                "manager_id", team == null ? null : str(team.managerId()), "totals", totals);
     }
 
     private static Map<String, Object> member(MemberRow m, TeamOutcome out, List<MemberWindowForecast> rows, List<MemberDayForecast> days,
