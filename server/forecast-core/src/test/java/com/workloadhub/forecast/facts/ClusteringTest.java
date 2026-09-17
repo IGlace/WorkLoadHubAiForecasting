@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 
 class ClusteringTest {
 
-    static MemberPattern pattern(int i, double hoursPerWeek, double shareManual, double cycle) {
-        return new MemberPattern(new UUID(0x3000_0000_0000_0000L, i), 10, hoursPerWeek * 13, hoursPerWeek, 0.0, shareManual, 1 - shareManual, 0.0,
+    static MemberPattern pattern(int i, double hoursPerWeek, double shareAssigned, double cycle) {
+        return new MemberPattern(new UUID(0x3000_0000_0000_0000L, i), 10, hoursPerWeek * 13, hoursPerWeek, 0.0, 1 - shareAssigned, shareAssigned,
                 "Monday", List.of(1.0, 0.0, 0.0, 0.0, 0.0), List.of(1.0, 0.0, 0.0, 0.0, 0.0), 1.0, cycle, Map.of(), 0.0, 0.0, 0.5, Map.of(), 2, 8.0, 0, 0.0);
     }
 

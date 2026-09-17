@@ -194,7 +194,7 @@ public final class FeatureBuilder {
                 }
                 if (t.mode() == Mode.SELF_PICKED) {
                     self++;
-                } else if (t.mode() == Mode.MANUAL) {
+                } else if (t.mode() == Mode.ASSIGNED) {
                     manual++;
                 } else {
                     project++;

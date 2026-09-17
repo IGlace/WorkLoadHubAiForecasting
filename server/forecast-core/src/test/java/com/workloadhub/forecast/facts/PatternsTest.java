@@ -48,7 +48,9 @@ class PatternsTest {
         TaskRow b = TestData.task("2", ANA.id(), mon.plusDays(1), 4).withType("Bug");
         TaskRow old = TestData.task("3", ANA.id(), LocalDate.of(2026, 5, 4).atTime(9, 0), 40);
         TaskRow current = TestData.task("4", ANA.id(), LocalDate.of(2026, 8, 31).atTime(9, 0), 6);   // this week: outside the window
-        ForecastData data = TestData.data(List.of(ANA), List.of(a, b, old, current), List.of(), List.of())
+        ForecastData data = TestData.data(List.of(ANA), List.of(a, b, old, current), List.of(
+                        TestData.assignedBy(a.id(), ANA.id(), ANA.fullName(), mon),
+                        TestData.assignedBy(b.id(), TestData.id("lead"), ANA.fullName(), mon.plusDays(1))), List.of())
                 .withProjects(List.of(new ProjectRow(PROJECT, "PRJ", "Project", "ACTIVE", TestData.TEAM)));
         MemberPattern p = Patterns.of(ANA.id(), Lifecycle.derive(data), data, AS_OF);
         assertEquals(2, p.tasks13w());
@@ -56,7 +58,7 @@ class PatternsTest {
         assertEquals(12.0 / 13, p.hoursPerWeek13w(), 1e-9);
         assertTrue(p.trendHoursPerWeek() > 0, "all hours in the last week: rising trend");
         assertEquals(0.5, p.shareSelfPicked(), 1e-9);
-        assertEquals(0.5, p.shareManual(), 1e-9);
+        assertEquals(0.5, p.shareAssigned(), 1e-9);
         assertEquals("Monday", p.topWeekday());
         assertEquals(List.of(0.5, 0.5, 0.0, 0.0, 0.0), p.weekdayShares());
         assertEquals(0.5, p.shareWithProject(), 1e-9);
@@ -66,7 +68,7 @@ class PatternsTest {
         assertEquals(58.0, p.openEstHours(), 1e-9);
         assertEquals(ANA.id().toString(), p.toMap().get("member_id"), "member ids are strings in the facts");
         assertEquals(0.0, p.overdueHrs(), 1e-9, "none of the open tasks are overdue");
-        assertEquals(22, p.toMap().size());
+        assertEquals(21, p.toMap().size());
     }
 
     @Test
@@ -90,7 +92,7 @@ class PatternsTest {
                 TestData.log(fast.id(), ANA.id(), c.toLocalDate(), 5), TestData.log(slow.id(), ANA.id(), c.toLocalDate(), 20)));
         MemberPattern p = Patterns.of(ANA.id(), Lifecycle.derive(data), data, AS_OF);
         assertEquals(0, p.tasks13w());
-        assertNull(p.shareManual());
+        assertNull(p.shareAssigned());
         assertNull(p.topWeekday());
         assertEquals((0.5 + 2.0) / 2, p.estimateRatioMedian(), 1e-9);
         assertEquals((2 + 10) / 2.0, p.cycleDaysMedian(), 1e-9);

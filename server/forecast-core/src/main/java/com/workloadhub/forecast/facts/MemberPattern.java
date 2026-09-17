@@ -6,8 +6,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Deterministic statistics about one member, handed to the narrative as facts. */
-public record MemberPattern(UUID memberId, int tasks13w, double hours13w, double hoursPerWeek13w, double trendHoursPerWeek, Double shareManual,
-        Double shareSelfPicked, Double shareProject, String topWeekday, List<Double> weekdayShares, List<Double> loggedWeekdayShares,
+public record MemberPattern(UUID memberId, int tasks13w, double hours13w, double hoursPerWeek13w, double trendHoursPerWeek,
+        Double shareSelfPicked, Double shareAssigned, String topWeekday, List<Double> weekdayShares, List<Double> loggedWeekdayShares,
         Double estimateRatioMedian, Double cycleDaysMedian,
         Map<String, Double> cycleDaysByFamily, Double latenessDaysMedian, Double shareLate, Double shareWithProject, Map<String, Double> hoursByProject,
         int openTasks, double openEstHours, int overdueOpen, double overdueHrs) {
@@ -19,9 +19,8 @@ public record MemberPattern(UUID memberId, int tasks13w, double hours13w, double
         m.put("hours_13w", hours13w);
         m.put("hours_per_week_13w", hoursPerWeek13w);
         m.put("trend_hours_per_week", trendHoursPerWeek);
-        m.put("share_manual", shareManual);
         m.put("share_self_picked", shareSelfPicked);
-        m.put("share_project", shareProject);
+        m.put("share_assigned", shareAssigned);
         m.put("top_weekday", topWeekday);
         m.put("weekday_shares", weekdayShares);
         m.put("logged_weekday_shares", loggedWeekdayShares);

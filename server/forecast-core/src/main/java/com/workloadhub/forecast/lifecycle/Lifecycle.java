@@ -93,17 +93,17 @@ public final class Lifecycle {
             if (a.fallback()) {
                 unresolved.add(t.key());
             }
-            out.put(t.id(), new TaskFacts(t, a.at(), started, finished, family(t, byId), mode(t), actual, isUnlogged, a.fallback()));
+            out.put(t.id(), new TaskFacts(t, a.at(), started, finished, family(t, byId), mode(t, a), actual, isUnlogged, a.fallback()));
         }
         return new Lifecycle(out, unresolved, unlogged);
     }
 
-    private record Assignment(LocalDateTime at, boolean fallback) {
+    private record Assignment(LocalDateTime at, boolean fallback, UUID assigner) {
     }
 
     private static Assignment assignment(TaskRow t, List<TransitionRow> history, Resolver resolver) {
         if (t.assigneeId() == null) {
-            return new Assignment(null, false);
+            return new Assignment(null, false, null);
         }
         boolean sawAssigneeRow = false;
         for (int i = history.size() - 1; i >= 0; i--) {
@@ -114,10 +114,10 @@ public final class Lifecycle {
             sawAssigneeRow = true;
             UUID resolved = resolver.resolve(row.newValue(), t.assigneeId());
             if (t.assigneeId().equals(resolved)) {
-                return new Assignment(row.changedAt(), false);
+                return new Assignment(row.changedAt(), false, row.userId());
             }
         }
-        return new Assignment(t.createdDate(), sawAssigneeRow);
+        return new Assignment(t.createdDate(), sawAssigneeRow, null);
     }
 
     private static LocalDateTime firstEntry(List<TransitionRow> history, ForecastData data, String category) {
@@ -139,11 +139,11 @@ public final class Lifecycle {
         return parentFamily == null ? Family.DELIVERY : parentFamily;
     }
 
-    private static Mode mode(TaskRow t) {
-        if (t.reporterId() != null && t.reporterId().equals(t.assigneeId())) {
-            return Mode.SELF_PICKED;
+    private static Mode mode(TaskRow t, Assignment a) {
+        if (a.assigner() == null || t.assigneeId() == null) {
+            return Mode.UNKNOWN;
         }
-        return t.parentId() != null ? Mode.PROJECT : Mode.MANUAL;
+        return a.assigner().equals(t.assigneeId()) ? Mode.SELF_PICKED : Mode.ASSIGNED;
     }
 
     public TaskFacts of(UUID taskId) {

@@ -136,21 +136,28 @@ class LifecycleTest {
     }
 
     @Test
-    void familyAndModeFollowTheTables() {
-        TaskRow epic = TestData.task("1", ANA.id(), CREATED, 40).withType("Epic");
-        TaskRow sub = TestData.task("2", ANA.id(), CREATED, 4).withType("Sub-task").withParent(epic.id());
-        TaskRow bug = TestData.task("3", ANA.id(), CREATED, 4).withType("Bug").withReporter(ANA.id());
-        TaskRow spike = TestData.task("4", ANA.id(), CREATED, 4).withType("Spike").withReporter(BEN.id());
-        TaskRow orphanSub = TestData.task("5", ANA.id(), CREATED, 4).withType("Sub-task");
-        Lifecycle lc = Lifecycle.derive(TestData.data(List.of(ANA, BEN), List.of(epic, sub, bug, spike, orphanSub), List.of(), List.of()));
-        assertEquals(Family.CONTAINER, lc.of(epic.id()).family());
-        assertEquals(Family.CONTAINER, lc.of(sub.id()).family(), "a sub-task takes its parent's family");
-        assertEquals(Mode.PROJECT, lc.of(sub.id()).mode());
+    void familyFollowsTheTypeTableAndTheParent() {
+        TaskRow sub = TestData.task("1", ANA.id(), CREATED, 4).withType("Sub-task").withParent(TestData.id("task-2"));
+        TaskRow bug = TestData.task("2", ANA.id(), CREATED, 4).withType("Bug");
+        TaskRow spike = TestData.task("3", ANA.id(), CREATED, 4).withType("Spike");
+        Lifecycle lc = Lifecycle.derive(TestData.data(List.of(ANA), List.of(sub, bug, spike), List.of(), List.of()));
+        assertEquals(Family.DEFECT, lc.of(sub.id()).family(), "a sub-task of a bug is bug work");
         assertEquals(Family.DEFECT, lc.of(bug.id()).family());
-        assertEquals(Mode.SELF_PICKED, lc.of(bug.id()).mode());
         assertEquals(Family.SUPPORT, lc.of(spike.id()).family());
-        assertEquals(Mode.MANUAL, lc.of(spike.id()).mode());
-        assertEquals(Family.DELIVERY, lc.of(orphanSub.id()).family());
+    }
+
+    @Test
+    void modeIsWhoAssignedTheTaskAccordingToTheHistory() {
+        TaskRow self = TestData.task("1", ANA.id(), CREATED, 4);
+        TaskRow byLead = TestData.task("2", ANA.id(), CREATED, 4);
+        TaskRow noRow = TestData.task("3", ANA.id(), CREATED, 4).withReporter(ANA.id());
+        ForecastData data = TestData.data(List.of(ANA, BEN), List.of(self, byLead, noRow), List.of(
+                TestData.assignedBy(self.id(), ANA.id(), ANA.fullName(), CREATED.plusHours(1)),
+                TestData.assignedBy(byLead.id(), BEN.id(), ANA.fullName(), CREATED.plusHours(1))), List.of());
+        Lifecycle lc = Lifecycle.derive(data);
+        assertEquals(Mode.SELF_PICKED, lc.of(self.id()).mode(), "the assignee did the assigning");
+        assertEquals(Mode.ASSIGNED, lc.of(byLead.id()).mode(), "someone else did");
+        assertEquals(Mode.UNKNOWN, lc.of(noRow.id()).mode(), "no assignee row: the reporter is not evidence");
     }
 
     @Test

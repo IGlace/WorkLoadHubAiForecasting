@@ -50,6 +50,10 @@ public final class TestData {
         return new TransitionRow(task, id("reporter"), "assignee", null, newValue, at);
     }
 
+    public static TransitionRow assignedBy(UUID task, UUID actor, String newValue, LocalDateTime at) {
+        return new TransitionRow(task, actor, "assignee", null, newValue, at);
+    }
+
     public static TransitionRow status(UUID task, String newStatus, LocalDateTime at) {
         return new TransitionRow(task, id("reporter"), "status", null, newStatus, at);
     }

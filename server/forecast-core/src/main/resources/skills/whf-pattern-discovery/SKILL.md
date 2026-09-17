@@ -9,7 +9,7 @@ Each member's `patterns` object is computed deterministically over the last 13 w
 
 | Statistic | Meaning | Say something when |
 |-----------|---------|--------------------|
-| share_manual, share_self_picked, share_project | share of the recent tasks by assignment mode | one share is at least 0.5 (dominant style) |
+| share_self_picked, share_assigned | share of the recent tasks the member picked themselves versus received from someone else, over the tasks whose assigner is recorded | one share is at least 0.7 (dominant style) |
 | top_weekday, weekday_shares | weekday on which tasks most often arrive, by task count | the top share is at least 0.35 |
 | logged_weekday_shares | weekday on which the member actually works, by logged hours — a different thing from weekday_shares, which counts when work arrives rather than when it gets done | one day carries most of the shape and it is worth naming |
 | hours_per_week_13w, trend_hours_per_week | average weekly arrival hours and its slope per week | the slope is at least 5 percent of the average in either direction |

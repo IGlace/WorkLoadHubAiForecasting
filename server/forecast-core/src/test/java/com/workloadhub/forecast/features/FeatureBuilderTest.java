@@ -54,7 +54,10 @@ class FeatureBuilderTest {
                 TestData.log(third.id(), ANA.id(), ORIGIN.minusWeeks(2), 3),
                 TestData.log(fourth.id(), ANA.id(), ORIGIN.minusWeeks(1), 9));
         return TestData.data(List.of(ANA), tasks,
-                List.of(TestData.assignee(lagged.id(), ANA.fullName(), lagged.createdDate().plusDays(3))), logs);
+                List.of(TestData.assignee(lagged.id(), ANA.fullName(), lagged.createdDate().plusDays(3)),
+                        TestData.assignedBy(first.id(), TestData.id("lead"), ANA.fullName(), w5),
+                        TestData.assignedBy(third.id(), TestData.id("lead"), ANA.fullName(), ORIGIN.minusWeeks(2).atTime(9, 0)),
+                        TestData.assignedBy(fourth.id(), ANA.id(), ANA.fullName(), ORIGIN.minusWeeks(1).atTime(9, 0))), logs);
     }
 
     static FeatureMatrix matrix(ForecastData data) {

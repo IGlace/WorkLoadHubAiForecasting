@@ -52,7 +52,7 @@ public final class Clustering {
         double[][] x = new double[table.size()][];
         for (int i = 0; i < table.size(); i++) {
             MemberPattern p = table.get(i);
-            x[i] = new double[] {p.hoursPerWeek13w(), p.trendHoursPerWeek(), z(p.shareManual()), z(p.shareSelfPicked()), z(p.shareProject()),
+            x[i] = new double[] {p.hoursPerWeek13w(), p.trendHoursPerWeek(), z(p.shareSelfPicked()), z(p.shareAssigned()),
                     z(p.estimateRatioMedian()), z(p.cycleDaysMedian()), z(p.shareLate())};
         }
         return x;

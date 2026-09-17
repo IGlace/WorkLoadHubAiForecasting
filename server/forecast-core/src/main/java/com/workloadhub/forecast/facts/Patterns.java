@@ -43,8 +43,7 @@ public final class Patterns {
         // The same series the weekday split reads (design 2026-09-13, section 5), computed once in lifecycle.
         List<Double> loggedWeekdayShares = LoggedWeekdayShares.of(member, data, windowStart, windowEnd);
         int self = 0;
-        int manual = 0;
-        int project = 0;
+        int assigned = 0;
         int withProject = 0;
         Map<UUID, Double> byProject = new TreeMap<>((a, b) -> a.toString().compareTo(b.toString()));
         for (TaskFacts f : recent) {
@@ -55,10 +54,8 @@ public final class Patterns {
             }
             if (f.mode() == Mode.SELF_PICKED) {
                 self++;
-            } else if (f.mode() == Mode.MANUAL) {
-                manual++;
-            } else {
-                project++;
+            } else if (f.mode() == Mode.ASSIGNED) {
+                assigned++;
             }
             if (f.task().projectId() != null) {
                 withProject++;
@@ -66,6 +63,7 @@ public final class Patterns {
             }
         }
         int n = recent.size();
+        int known = self + assigned;
         double hours13 = 0;
         for (double w : weekly) {
             hours13 += w;
@@ -128,7 +126,7 @@ public final class Patterns {
         // section 8.2): one static helper, called from both, so the two figures can never drift apart.
         double openEstHours = OpenWork.openEstHours(openTasks);
         return new MemberPattern(member, n, hours13, hours13 / WINDOW_WEEKS, round3(slope(weekly)),
-                n == 0 ? null : (double) manual / n, n == 0 ? null : (double) self / n, n == 0 ? null : (double) project / n,
+                known == 0 ? null : (double) self / known, known == 0 ? null : (double) assigned / known,
                 weekdayTotal == 0 ? null : WEEKDAYS.get(top), weekdayShares, loggedWeekdayShares,
                 ratios.isEmpty() ? null : median(ratios), cycles.isEmpty() ? null : median(cycles), cycleByFamily,
                 lateness.isEmpty() ? null : median(lateness), lateness.isEmpty() ? null : lateness.stream().filter(l -> l > 0).count() / (double) lateness.size(),
