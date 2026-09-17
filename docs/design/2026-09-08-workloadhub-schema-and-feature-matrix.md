@@ -65,14 +65,14 @@ the evaluation import.
 | finished | `tasks.finished_date`, else the first transition into a `DONE` category; `reopened_from_done` and `last_reopened_at` reopen it | |
 | status | `task_statuses.category` of `task_status_id` | `TO_DO` (Open, To Do, On Hold), `IN_PROGRESS` (In Progress, In Review, Testing, Blocked), `DONE` (Done, Closed) |
 | estimate | `original_estimate_hrs` | the arrival series target, in hours |
-| remaining | `remaining_estimate_hrs` | replaces the "remaining fraction of the cycle" heuristic of the current effort model |
+| remaining | `remaining_estimate_hrs` | replaced the "remaining fraction of the cycle" heuristic of the archived version's effort model |
 | actual | sum of `time_logs.hours` for the task, per user | replaces `actual_hours`; also gives hours per day, which the current design had to assume |
 | due | `due_date` | as is |
 | planned week | `planned_week` | a Monday; the week the team leader intends the work for |
 | project | `project_id` → `projects.team_id`, `status` | no dates: the project phase features of section 5 use task-derived dates |
 | type | `task_types.name` | grouped into four families for the features: **delivery** (Story, New Feature, Task, Improvement, Change Request), **defect** (Bug, Incident), **container** (Epic, Sub-task's parent), **support** (Spike, Test, Risk) |
 | priority | `priority` | `HIGHEST`, `HIGH`, `MEDIUM`, `LOW`, ordinal 4..1 |
-| assignment mode | derived | **self-picked** when `reporter_id = assignee_id`; **manual** when the reporter is a team leader or manager; **project** when `parent_task_id` is set (a sub-task of an Epic) |
+| assignment mode | derived | Superseded on 2026-09-17 (ruling D, spec section 6): who assigned the task, from the `user_id` of the same `task_history` assignee row that gives the assignment date above — equal to the current assignee, **self-picked**; anyone else, **assigned**; no such row, **unknown**. The old heuristic (self-picked when `reporter_id = assignee_id`; manual when the reporter is a team leader; project when `parent_task_id` is set) is gone, and so is the "project" mode. |
 | archived | `archived` | excluded everywhere |
 
 An unassigned task is a row with `assignee_id` null; the history shows the application produces them
@@ -122,7 +122,7 @@ fast they clear it, which the arrival forecast alone does not see.
 |---|---|
 | `logged_hours_lag1` .. `logged_hours_lag4` | hours from `time_logs` in the row's week and the three before: what the member actually worked, week by week. |
 | `open_tasks` | tasks of the member not in a `DONE` category at the end of the week. |
-| `open_remaining_hrs` | sum, over the member's open tasks, of the estimate minus the hours logged on the task by the row's week end (ruling E of 2026-09-17: the facts read `remaining_estimate_hrs`; the features cannot, it has no history). |
+| `open_remaining_hrs` | sum, over the member's open tasks, of the estimate minus the hours logged on the task by the row's week end (ruling E of 2026-09-16: the facts read `remaining_estimate_hrs`; the features cannot, it has no history). |
 | `overdue_open` | of those, how many have a `due_date` before the end of the week. |
 | `in_progress_tasks` | open tasks in an `IN_PROGRESS` category: work started, not queued. |
 | `estimate_ratio_13w` | logged hours over original estimate for tasks finished in the last 13 weeks, the member's estimation bias; blank when unknown. |
@@ -205,7 +205,7 @@ history and are read as they stand on the run day: `tasks.reopened_from_done`, `
 (ruling G): a task's current due date is the best available stand-in for the due date it had, and the
 alternative is to drop the columns.
 
-Ruling E (2026-09-17): `open_remaining_hrs` and `due_hrs_h` recompute remaining hours as
+Ruling E (2026-09-16): `open_remaining_hrs` and `due_hrs_h` recompute remaining hours as
 `original_estimate_hrs` minus the hours logged on the task by the row's week end, because a training row
 must see what was known then and `remaining_estimate_hrs` has no history; the facts the leader reads
 (`open_est_hours`, `due_hours`, `backlog_excess_hrs`, `due_excess_hrs`) keep reading
