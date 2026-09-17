@@ -145,7 +145,14 @@ public final class SeedGenerator {
                 syncMetadata = List.of();
             }
             if (!Reference.covers(statuses, types)) {
-                // a partial export (tests, early installs): use the reference rows instead
+                if (!synthetic) {
+                    // Real mode writes neither task_statuses nor task_types (design 2026-09-17, section 7.1), so a
+                    // substitute would point every task at rows the database does not have: refuse instead. A real
+                    // export always carries them all, because the application defines them.
+                    throw new IllegalArgumentException("real mode needs an export that carries every task status and type the seed writes: "
+                            + Reference.missing(statuses, types));
+                }
+                // a partial export in synthetic mode (tests, early installs): the synthetic envelope writes both tables itself
                 statuses = ReferenceData.statusRows();
                 types = ReferenceData.typeRows();
             }

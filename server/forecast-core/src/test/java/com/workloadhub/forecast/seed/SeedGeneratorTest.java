@@ -2,6 +2,7 @@ package com.workloadhub.forecast.seed;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.data.ExportEnvelope;
@@ -421,6 +422,33 @@ class SeedGeneratorTest {
         assertFalse(env.rows("tasks").isEmpty(), "the export's team still gets work");
         for (var t : env.rows("tasks")) {
             assertTrue(ids(env, "projects").contains(t.get("project_id")));
+        }
+    }
+
+    /** A real export carries the application's own statuses and types; one that lacks any is refused, never patched with invented ids. */
+    @Test
+    void realModeRefusesAnExportMissingAStatusOrType() throws Exception {
+        ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>(real.data());
+        data.put("task_statuses", real.rows("task_statuses").stream().filter(s -> !"Done".equals(s.get("name"))).toList());
+        data.put("task_types", real.rows("task_types").stream().filter(t -> !"Bug".equals(t.get("name"))).toList());
+        ExportEnvelope partial = new ExportEnvelope(real.database(), real.schema(), real.exportedAt(), real.excludedTables(), data);
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> SeedGenerator.generate(partial, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0)));
+        assertTrue(e.getMessage().contains("task_statuses lacks 'Done'") && e.getMessage().contains("task_types lacks 'Bug'"), e.getMessage());
+    }
+
+    /** Real mode writes no statuses or types, so every task must use the ids the export already has. */
+    @Test
+    void realModeTasksUseTheExportsOwnStatusesAndTypes() throws Exception {
+        ExportEnvelope input = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
+        Set<String> statuses = ids(input, "task_statuses");
+        Set<String> types = ids(input, "task_types");
+        assertFalse(env.rows("tasks").isEmpty());
+        for (var t : env.rows("tasks")) {
+            assertTrue(statuses.contains(t.get("task_status_id")), "task " + t.get("key") + " uses an invented status");
+            assertTrue(types.contains(t.get("task_type_id")), "task " + t.get("key") + " uses an invented type");
         }
     }
 

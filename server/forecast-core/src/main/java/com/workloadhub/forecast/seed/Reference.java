@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.seed;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,17 +23,33 @@ public record Reference(Map<String, UUID> statusIds, Map<String, UUID> typeIds) 
         for (LinkedHashMap<String, Object> r : typeRows) {
             types.put((String) r.get("name"), UUID.fromString((String) r.get("id")));
         }
-        for (String s : STATUSES) {
-            if (!statuses.containsKey(s)) {
-                throw new IllegalArgumentException("task_statuses lacks '" + s + "'");
-            }
-        }
-        for (String t : TYPES) {
-            if (!types.containsKey(t)) {
-                throw new IllegalArgumentException("task_types lacks '" + t + "'");
-            }
+        List<String> missingStatuses = STATUSES.stream().filter(s -> !statuses.containsKey(s)).toList();
+        List<String> missingTypes = TYPES.stream().filter(t -> !types.containsKey(t)).toList();
+        if (!missingStatuses.isEmpty() || !missingTypes.isEmpty()) {
+            throw new IllegalArgumentException(describe(missingStatuses, missingTypes));
         }
         return new Reference(statuses, types);
+    }
+
+    private static String describe(List<String> missingStatuses, List<String> missingTypes) {
+        List<String> parts = new ArrayList<>();
+        if (!missingStatuses.isEmpty()) {
+            parts.add("task_statuses lacks " + missingStatuses.stream().map(s -> "'" + s + "'").collect(java.util.stream.Collectors.joining(", ")));
+        }
+        if (!missingTypes.isEmpty()) {
+            parts.add("task_types lacks " + missingTypes.stream().map(t -> "'" + t + "'").collect(java.util.stream.Collectors.joining(", ")));
+        }
+        return String.join("; ", parts);
+    }
+
+    /** What the rows lack, in the words of {@link #from}'s exception, or the empty string when they cover everything. */
+    public static String missing(List<LinkedHashMap<String, Object>> statusRows, List<LinkedHashMap<String, Object>> typeRows) {
+        try {
+            from(statusRows, typeRows);
+            return "";
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        }
     }
 
     /** True when the rows name every status and type the generator writes. */
