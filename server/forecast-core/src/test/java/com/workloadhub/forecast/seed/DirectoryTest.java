@@ -52,7 +52,7 @@ class DirectoryTest {
     }
 
     static SeedConfig cfg() {
-        return new SeedConfig(20, LocalDate.of(2026, 9, 6), 42L, false, 0);
+        return new SeedConfig(20, LocalDate.of(2026, 9, 6), 42L, true, 0);
     }
 
     @Test

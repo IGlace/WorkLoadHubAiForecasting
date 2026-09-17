@@ -119,7 +119,8 @@ public final class WorkQueue {
         WorkQueue q = new WorkQueue(cfg, cal, people, plans, teams, projects, rhythm, ref, rates, rnd);
         q.createEpics();
         List<Person> counted = new ArrayList<>(people);
-        counted.removeIf(p -> !p.counted());
+        // a counted person in no team gets no work: the module does not count such a user either
+        counted.removeIf(p -> !p.counted() || rhythm.teamOf(p) == null);
         counted.sort(Comparator.comparing(p -> p.id().toString()));
         for (Person p : counted) {
             q.simulate(p);

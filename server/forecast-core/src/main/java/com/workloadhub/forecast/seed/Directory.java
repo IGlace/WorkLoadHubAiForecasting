@@ -136,6 +136,13 @@ public final class Directory {
             }
         }
 
+        // Real mode: the application's own teams are the structure, and the seed writes none (design
+        // 2026-09-17, section 7.1), so nothing may be invented here. A team without a parent is a department
+        // team and receives the projects; a team with one is a member team of that department.
+        if (!cfg.synthetic()) {
+            return new Result(new ArrayList<>(people.values()), applicationTeams(teamRows, memberRows, people), userRows, teamRows, memberRows);
+        }
+
         // 4. department teams (one per code, plus "Unassigned" for people with neither manager nor department)
         List<Team> teams = new ArrayList<>();
         Map<String, UUID> deptTeamIds = new TreeMap<>();
@@ -223,6 +230,33 @@ public final class Directory {
             teams.add(existing);
         }
         return new Result(new ArrayList<>(people.values()), teams, newUserRows, newTeamRows, newMemberRows);
+    }
+
+    /** The export's teams as the generator's Team values: department when parentless, deptCode from the members' majority. */
+    static List<Team> applicationTeams(List<LinkedHashMap<String, Object>> teamRows, List<LinkedHashMap<String, Object>> memberRows,
+            Map<UUID, Person> people) {
+        List<Team> out = new ArrayList<>();
+        for (LinkedHashMap<String, Object> t : teamRows) {
+            UUID id = UUID.fromString((String) t.get("id"));
+            List<UUID> members = new ArrayList<>();
+            Map<String, Integer> codes = new TreeMap<>();
+            for (LinkedHashMap<String, Object> m : memberRows) {
+                if (!id.toString().equals(m.get("team_id"))) {
+                    continue;
+                }
+                UUID member = UUID.fromString((String) m.get("user_id"));
+                members.add(member);
+                Person p = people.get(member);
+                if (p != null && p.deptCode() != null) {
+                    codes.merge(p.deptCode(), 1, Integer::sum);
+                }
+            }
+            String code = codes.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
+            UUID parent = t.get("parent_team_id") == null ? null : UUID.fromString((String) t.get("parent_team_id"));
+            out.add(new Team(id, (String) t.get("name"), t.get("manager_id") == null ? null : UUID.fromString((String) t.get("manager_id")),
+                    parent, members, parent == null, code));
+        }
+        return out;
     }
 
     /** The export's own teams, as Team values, so the generator can give them tasks too. */

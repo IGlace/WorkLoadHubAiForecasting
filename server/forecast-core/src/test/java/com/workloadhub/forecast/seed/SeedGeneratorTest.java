@@ -409,6 +409,21 @@ class SeedGeneratorTest {
         }
     }
 
+    /** Real mode writes no teams, so every project it plans must belong to a team the export already has. */
+    @Test
+    void realModeProjectsBelongToTheExportsOwnTeams() throws Exception {
+        ExportEnvelope input = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
+        Set<String> teams = ids(input, "teams");
+        for (var p : env.rows("projects")) {
+            assertTrue(p.get("team_id") == null || teams.contains(p.get("team_id")), "project " + p.get("key") + " points at an invented team");
+        }
+        assertFalse(env.rows("tasks").isEmpty(), "the export's team still gets work");
+        for (var t : env.rows("tasks")) {
+            assertTrue(ids(env, "projects").contains(t.get("project_id")));
+        }
+    }
+
     @Test
     @EnabledIfSystemProperty(named = "seed.full", matches = "true")
     void fullPopulationRunsInUnderAMinute() {
