@@ -46,7 +46,7 @@ public final class ExportImporter {
         return out;
     }
 
-    /** Inserts every table of the envelope that exists in the schema; with replace, deletes children then parents first. */
+    /** Inserts every table of the envelope that exists in the schema; with replace, deletes the envelope's own tables, children first. */
     public Map<String, Integer> importAll(ExportEnvelope envelope, boolean replace) {
         Map<String, Integer> counts = new LinkedHashMap<>();
         Connection c = null;
@@ -54,11 +54,15 @@ public final class ExportImporter {
             c = dataSource.getConnection();
             c.setAutoCommit(false);
             if (replace) {
+                // Only the tables the envelope carries, children first: a five-table seed lands into a database
+                // that already holds the directory (design 2026-09-17, section 7.2).
                 List<String> reverse = new ArrayList<>(WorkloadHubSchema.TABLE_ORDER);
                 java.util.Collections.reverse(reverse);
                 try (Statement st = c.createStatement()) {
                     for (String table : reverse) {
-                        st.execute("DELETE FROM " + table);
+                        if (envelope.data().containsKey(table)) {
+                            st.execute("DELETE FROM " + table);
+                        }
                     }
                 }
             }

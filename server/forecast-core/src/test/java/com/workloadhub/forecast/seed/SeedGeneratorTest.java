@@ -86,6 +86,27 @@ class SeedGeneratorTest {
     }
 
     @Test
+    void realModeWritesTheFiveWorkTablesAndExcludesTheRest() throws Exception {
+        ExportEnvelope input = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
+        ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
+        assertEquals(SeedGenerator.REAL_MODE_TABLES, List.copyOf(env.data().keySet()));
+        List<String> excluded = new java.util.ArrayList<>(WorkloadHubSchema.TABLE_ORDER);
+        excluded.removeAll(SeedGenerator.REAL_MODE_TABLES);
+        assertEquals(excluded, env.excludedTables());
+        assertFalse(env.rows("tasks").isEmpty());
+        Set<String> inputProjects = ids(input, "projects");
+        assertTrue(ids(env, "projects").containsAll(inputProjects), "existing projects are re-emitted");
+        assertEquals(input.database(), env.database());
+    }
+
+    @Test
+    void syntheticModeStillWritesEveryTable() {
+        ExportEnvelope env = generated();
+        assertEquals(WorkloadHubSchema.TABLE_ORDER, List.copyOf(env.data().keySet()));
+        assertEquals(List.of("refresh_tokens"), env.excludedTables());
+    }
+
+    @Test
     void historyCoversTheConfiguredWeeksWithRealisticVolume() {
         ExportEnvelope env = generated();
         assertEquals(40, env.rows("users").size());

@@ -18,6 +18,9 @@ public final class SeedGenerator {
     private SeedGenerator() {
     }
 
+    /** The tables a real-mode seed writes: the application's own database already holds every other one (design 2026-09-17, section 7). */
+    public static final List<String> REAL_MODE_TABLES = List.of("projects", "tasks", "task_history", "time_logs", "personal_leaves");
+
     /** Free-text columns a carried-over row may embed a real identity in; never an id, key, status or date column. */
     private static final Set<String> SCRUBBABLE_COLUMNS = Set.of("name", "description", "title", "note");
 
@@ -234,27 +237,40 @@ public final class SeedGenerator {
             outProjects.add(ProjectPlanner.row(p, existingById.get(p.id().toString()), work.nextTaskNumber().getOrDefault(p.id(), 1L), cfg));
         }
 
-        // 7. envelope in table order
+        // 7. envelope in table order: every table in synthetic mode (the experiment database is built from it),
+        // the five work tables in real mode (the application's database holds the rest)
         LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>();
-        for (String table : WorkloadHubSchema.TABLE_ORDER) {
-            data.put(table, new ArrayList<>());
+        List<String> excluded;
+        if (synthetic) {
+            for (String table : WorkloadHubSchema.TABLE_ORDER) {
+                data.put(table, new ArrayList<>());
+            }
+            data.put("user_roles", roles);
+            data.put("job_titles", jobTitles);
+            data.put("users", dir.userRows());
+            data.put("teams", dir.teamRows());
+            data.put("team_members", dir.teamMemberRows());
+            data.put("task_statuses", statuses);
+            data.put("task_types", types);
+            data.put("holidays", cal.holidayRows());
+            data.put("sync_metadata", syncMetadata);
+            excluded = List.of("refresh_tokens");
+        } else {
+            excluded = new ArrayList<>();
+            for (String table : WorkloadHubSchema.TABLE_ORDER) {
+                if (REAL_MODE_TABLES.contains(table)) {
+                    data.put(table, new ArrayList<>());
+                } else {
+                    excluded.add(table);
+                }
+            }
         }
-        data.put("user_roles", roles);
-        data.put("job_titles", jobTitles);
-        data.put("users", dir.userRows());
-        data.put("teams", dir.teamRows());
-        data.put("team_members", dir.teamMemberRows());
-        data.put("task_statuses", statuses);
-        data.put("task_types", types);
         data.put("projects", outProjects);
         data.put("tasks", work.taskRows());
         data.put("task_history", work.historyRows());
         data.put("time_logs", work.timeLogRows());
         data.put("personal_leaves", leaves);
-        data.put("holidays", cal.holidayRows());
-        data.put("sync_metadata", syncMetadata);
         String database = input == null ? "synthetic" : input.database();
-        return new ExportEnvelope(database, "task_service", cfg.lastDay().atTime(18, 0).toString(),
-                List.of("refresh_tokens"), data);
+        return new ExportEnvelope(database, "task_service", cfg.lastDay().atTime(18, 0).toString(), excluded, data);
     }
 }

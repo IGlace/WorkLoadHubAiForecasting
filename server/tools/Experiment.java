@@ -192,8 +192,7 @@ public final class Experiment {
         long ms = (System.nanoTime() - started) / 1_000_000;
         System.out.printf("Wrote %s in %d ms: %d weeks ending %s, seed %d, %s%n", out, ms, weeks, cfg.lastDay(), cfg.seed(),
                 synthetic ? "synthetic identities" : "real identities (do not commit)");
-        for (String table : new String[] {"users", "teams", "team_members", "projects", "tasks", "task_history", "time_logs",
-                "absences", "personal_leaves", "user_capacity", "team_capacity", "holidays"}) {
+        for (String table : result.data().keySet()) {
             System.out.printf("  %-18s %8d%n", table, result.rows(table).size());
         }
         return 0;
