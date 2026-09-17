@@ -37,12 +37,16 @@ class SkillTextsTest {
         assertTrue(!all.contains("40 h"), "the old 40 h default is gone from the skills");
         assertTrue(all.contains("window") && all.contains("five weekdays"), "the rolling horizon vocabulary");
         assertTrue(!all.contains("expected_week") && !all.contains("two-week forecast") && !all.contains("per member and week"), "the weekly horizon is gone");
+        assertTrue(all.contains("pending_leaves") && all.contains("planned_hours"), "the 2026-09-17 facts");
+        assertTrue(all.contains("assigned to them and not finished"), "open, defined for the leader (design 2026-09-17, section 8)");
+        assertTrue(!all.contains("team_capacity") && !all.contains("share_manual") && !all.contains("share_project"), "removed facts");
+        assertTrue(all.contains("approved leave"), "capacity is the calendar and the approved leaves");
     }
 
     @Test
     void noSkillNamesARemovedFactKey() {
         String all = String.join("\n", SkillTexts.load().stream().map(SkillTexts.Skill::text).toList());
-        for (String key : List.of("open_hours", "new_hours", "planned_hours", "planned_backlog", "planned_basis", "champion", "champion_mase",
+        for (String key : List.of("open_hours", "new_hours", "planned_backlog", "planned_basis", "champion", "champion_mase",
                 "forced_model", "mase_by_model", "unavailable", "expected_window", "hours_in_window", "fresh_hours")) {
             assertTrue(!all.contains(key), key + " is still named by a skill");
         }

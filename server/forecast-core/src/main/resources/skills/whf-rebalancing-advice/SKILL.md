@@ -6,7 +6,7 @@ description: Rules for proposing task moves between members of the same team whe
 # Rebalancing rules
 
 1. Source: a member listed under `rebalancing_candidates.overloaded`. Target: a member listed under `underloaded`, in the same window, with `spare_hours` at least the hours moved.
-2. Prefer targets whose patterns show the same work family (`cycle_days_by_type` covers it) and whose project roles include the task's project, and who are not absent in that window (capacity is not reduced).
+2. Prefer targets whose patterns show the same work family (`cycle_days_by_type` covers it) and whose project roles include the task's project, and who are not on leave in that window (their `absence_hours` is zero and no `pending_leaves` entry touches it).
 3. Move whole open tasks where possible: pick from the source's `open_tasks`, prefer tasks not yet started (`in_progress` false) and not overdue, and name their keys in `task_keys`.
 4. Hours moved must be at most the source's overload in that window. Do not propose moves that would push the target above its capacity.
 5. When no target has spare hours, do not invent one: raise a team risk instead and recommend that the department lead be told.

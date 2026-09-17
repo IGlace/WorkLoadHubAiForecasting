@@ -8,6 +8,7 @@ import com.workloadhub.forecast.calendar.Weeks;
 import com.workloadhub.forecast.data.ExportFiles;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.HolidayRow;
+import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
@@ -143,6 +144,22 @@ public final class FactsBuilder {
                 "manager_id", team == null ? null : str(team.managerId()), "totals", totals);
     }
 
+    /** Estimated hours of the member's open tasks whose planned week overlaps the window. */
+    static double plannedHours(List<TaskFacts> open, LocalDate start, LocalDate end) {
+        double sum = 0;
+        for (TaskFacts f : open) {
+            LocalDate pw = f.task().plannedWeek();
+            if (pw == null) {
+                continue;
+            }
+            pw = Weeks.mondayOf(pw);
+            if (!pw.plusDays(6).isBefore(start) && !pw.isAfter(end)) {
+                sum += f.estimate();
+            }
+        }
+        return sum;
+    }
+
     private static Map<String, Object> member(MemberRow m, TeamOutcome out, List<MemberWindowForecast> rows, List<MemberDayForecast> days,
             MemberPattern pattern, int cluster,
             WeeklySeries series, List<LocalDate> historyWeeks, Map<UUID, ProjectRow> projects, Set<UUID> liveProjectIds,
@@ -167,12 +184,22 @@ public final class FactsBuilder {
             forecast.add(map("window", r.windowIndex(), "start", str(r.windowStart()), "end", str(r.windowEnd()), "demand", r.demandHrs(), "low", r.lowHrs(),
                     "high", r.highHrs(), "capacity", r.capacityHrs(), "overload", r.overloadHrs(),
                     "working_days", r.workingDays(), "absence_hours", r.absenceHrs(), "due_hours", Numbers.round2(due),
-                    "backlog_excess_hrs", r.backlogExcessHrs(), "due_excess_hrs", r.dueExcessHrs()));
+                    "backlog_excess_hrs", r.backlogExcessHrs(), "due_excess_hrs", r.dueExcessHrs(),
+                    "planned_hours", Numbers.round2(plannedHours(open, r.windowStart(), r.windowEnd()))));
         }
         List<Object> dayList = new ArrayList<>();
         for (MemberDayForecast d : days) {
             dayList.add(map("day", str(d.day()), "window", d.windowIndex(), "demand", d.demandHrs(), "capacity", d.capacityHrs(), "overload", d.overloadHrs(),
                     "working_day", d.workingDay()));
+        }
+        LocalDate first = p.windows().get(0).start();
+        LocalDate last = p.windows().get(p.windows().size() - 1).end();
+        List<Object> pendingLeaves = new ArrayList<>();
+        for (LeaveRow l : p.data().pendingLeaves()) {
+            if (l.employeeId().equals(m.id()) && !l.end().isBefore(first) && !l.start().isAfter(last)) {
+                pendingLeaves.add(map("start_date", str(l.start()), "end_date", str(l.end()), "leave_type", l.leaveType(),
+                        "absence_hours", l.absenceHours() == null ? null : Numbers.round2(l.absenceHours())));
+            }
         }
         Map<String, Object> patternMap = pattern.toMap();
         patternMap.put("cluster", cluster);
@@ -217,6 +244,7 @@ public final class FactsBuilder {
             }
         }
         return map("id", str(m.id()), "name", m.fullName(), "role", m.role(), "job_title", m.jobTitle(), "history_13w", history, "forecast", forecast, "days", dayList,
+                "pending_leaves", pendingLeaves,
                 "patterns", patternMap, "open_tasks", openTasks,
                 "reopened_tasks", mine.stream().filter(f -> f.task().reopened()).map(f -> f.task().key()).sorted().toList(),
                 "logged_hours_4w", loggedWeeks,

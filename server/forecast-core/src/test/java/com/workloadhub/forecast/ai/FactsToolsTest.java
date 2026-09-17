@@ -48,7 +48,7 @@ class FactsToolsTest {
         List<Map<String, Object>> windows = (List<Map<String, Object>>) capacity.get("windows");
         assertEquals(2, windows.size());
         assertEquals(Set.of("window", "start", "end", "capacity", "demand", "overload", "working_days", "absence_hours",
-                "backlog_excess_hrs", "due_excess_hrs"), windows.get(0).keySet(),
+                "backlog_excess_hrs", "due_excess_hrs", "planned_hours"), windows.get(0).keySet(),
                 "the tool that serves overload per window serves the two pressure figures beside it (design 2026-09-13, section 8.2)");
         assertEquals(Set.of("windows", "projects"), TOOLS.projectTimelines().keySet());
         assertEquals(Set.of("overloaded", "underloaded", "backlog_pressed", "deadline_pressed"), TOOLS.rebalancingCandidates().keySet(),

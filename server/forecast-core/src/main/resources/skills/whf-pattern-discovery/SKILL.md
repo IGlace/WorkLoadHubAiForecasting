@@ -18,6 +18,6 @@ Each member's `patterns` object is computed deterministically over the last 13 w
 | lateness_days_median, share_late | completion relative to due date | share_late above 0.4 or median lateness above 2 days |
 | hours_by_project, share_with_project | how work is spread over projects | one project takes more than 0.6 of the hours |
 | cluster | members with similar behaviour share a cluster number | when explaining that a member behaves like others |
-| open_tasks, open_est_hours, overdue_open | current backlog | overdue_open is greater than 0 |
+| open_tasks, open_est_hours, overdue_open | the member's queue: tasks assigned to them and not finished | overdue_open is greater than 0 |
 
 Use the kinds `assignment_style`, `weekday_rhythm`, `trend`, `estimate_bias`, `cycle_time`, `lateness`, `project_phase`, `cluster` or `other`. A `null` statistic means there is not enough history: say so rather than guessing.

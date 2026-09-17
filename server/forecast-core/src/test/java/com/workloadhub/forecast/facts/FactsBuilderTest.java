@@ -74,10 +74,44 @@ class FactsBuilderTest {
 
     @Test
     void theRemovedKeysAreGone() {
-        for (String key : List.of("open_hours", "new_hours", "planned_hours", "planned_backlog", "planned_basis", "champion", "champion_mase",
+        for (String key : List.of("open_hours", "new_hours", "planned_backlog", "planned_basis", "champion", "champion_mase",
                 "forced_model", "mase_by_model", "unavailable")) {
             assertFalse(json.contains("\"" + key + "\""), key + " is still in the facts");
         }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void membersCarryTheirPendingLeavesInsideTheHorizonAndPlannedHoursPerWindow() {
+        List<Map<String, Object>> members = (List<Map<String, Object>>) facts.get("members");
+        LocalDate first = LocalDate.parse((String) ((Map<?, ?>) ((List<?>) ((Map<?, ?>) facts.get("run")).get("windows")).get(0)).get("start"));
+        LocalDate last = LocalDate.parse((String) ((Map<?, ?>) ((List<?>) ((Map<?, ?>) facts.get("run")).get("windows")).get(1)).get("end"));
+        for (Map<String, Object> m : members) {
+            List<Map<String, Object>> pending = (List<Map<String, Object>>) m.get("pending_leaves");
+            assertNotNull(pending);
+            for (Map<String, Object> l : pending) {
+                assertEquals(java.util.Set.of("start_date", "end_date", "leave_type", "absence_hours"), l.keySet());
+                LocalDate s = LocalDate.parse((String) l.get("start_date"));
+                LocalDate e = LocalDate.parse((String) l.get("end_date"));
+                assertTrue(!e.isBefore(first) && !s.isAfter(last), "inside the horizon");
+            }
+            for (Map<String, Object> w : (List<Map<String, Object>>) m.get("forecast")) {
+                assertTrue(w.containsKey("planned_hours"));
+                assertTrue(((Number) w.get("planned_hours")).doubleValue() >= 0);
+            }
+        }
+        // The seed gives one member in ten a pending leave inside the four weeks after the as-of date; a two-window
+        // horizon of a 36-user seed catches at least one on some team, but not necessarily on the first team. The
+        // shape is what this test pins; the count is asserted on the whole population below.
+        long seededPending = SeededData.data().pendingLeaves().stream()
+                .filter(l -> !l.end().isBefore(first) && !l.start().isAfter(last)).count();
+        assertTrue(seededPending > 0, "the seed does produce pending leaves inside a horizon");
+    }
+
+    @Test
+    void theTeamBlockHasNoCapacityPlan() {
+        assertFalse(((Map<?, ?>) facts.get("team")).containsKey("team_capacity"));
+        assertFalse(json.contains("team_capacity"));
     }
 
     @Test

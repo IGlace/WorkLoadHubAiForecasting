@@ -117,7 +117,8 @@ final class FactsTools {
             windows.add(map("window", plain(row.path("window")), "start", row.path("start").asText(), "end", row.path("end").asText(),
                     "capacity", plain(row.path("capacity")), "demand", plain(row.path("demand")), "overload", plain(row.path("overload")),
                     "working_days", plain(row.path("working_days")), "absence_hours", plain(row.path("absence_hours")),
-                    "backlog_excess_hrs", plain(row.path("backlog_excess_hrs")), "due_excess_hrs", plain(row.path("due_excess_hrs"))));
+                    "backlog_excess_hrs", plain(row.path("backlog_excess_hrs")), "due_excess_hrs", plain(row.path("due_excess_hrs")),
+                    "planned_hours", plain(row.path("planned_hours"))));
         }
         return map("member_id", id, "name", m.path("name").asText(), "windows", windows, "days", plain(m.path("days")));
     }
