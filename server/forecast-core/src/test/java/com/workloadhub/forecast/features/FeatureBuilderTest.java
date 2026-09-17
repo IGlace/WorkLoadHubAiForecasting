@@ -119,6 +119,20 @@ class FeatureBuilderTest {
     }
 
     @Test
+    void reopenRateReflectsReopenedFinishesInTheWindow() {
+        // Two tasks finish inside the 13-week window ending at the origin (windowStats counts a finish by
+        // its finish date, from origin−12w to origin+6d); one of the two was reopened, so the ratio is 0.5,
+        // not the blank of the sibling test above (nothing finished) and not 0.0 or 1.0 by accident.
+        TaskRow steady = TestData.task("1", ANA.id(), ORIGIN.minusWeeks(4).atTime(9, 0), 8)
+                .withStatus("DONE").withFinished(ORIGIN.minusWeeks(2).atTime(17, 0));
+        TaskRow flaky = TestData.task("2", ANA.id(), ORIGIN.minusWeeks(3).atTime(9, 0), 5)
+                .withStatus("DONE").withFinished(ORIGIN.minusWeeks(1).atTime(17, 0)).withReopened(true);
+        FeatureMatrix m = matrix(TestData.data(List.of(ANA), List.of(steady, flaky), List.of(), List.of()));
+        int origin = row(m, ORIGIN);
+        assertEquals(0.5, m.get(origin, "reopen_rate_13w"), "one of the two tasks finished in the window (flaky) was reopened");
+    }
+
+    @Test
     void targetsAreTheFutureLoggedHoursAndUnknownPastTheOrigin() {
         FeatureMatrix m = matrix(ana());
         int w3 = row(m, ORIGIN.minusWeeks(3));
@@ -253,16 +267,24 @@ class FeatureBuilderTest {
 
     @Test
     void plannedHoursAreTheOpenTasksEstimatesPlannedForTheTargetWeek() {
-        TaskRow planned = TestData.task("1", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 12).withPlannedWeek(ORIGIN.plusWeeks(2));
+        // planned is assigned week −1 and targets week +1: at the origin (h1 target = +1w) it is the only
+        // open task whose plan matches, so planned_hrs_h1 = 12.0, its own estimate.
+        TaskRow planned = TestData.task("1", ANA.id(), ORIGIN.minusWeeks(1).atTime(9, 0), 12).withPlannedWeek(ORIGIN.plusWeeks(1));
+        // done also targets +2w, same as midweek below, but finishes before the origin: if the finished
+        // guard were missing, planned_hrs_h2 at the origin would wrongly be 3.0 + 5.0 = 8.0.
         TaskRow done = TestData.task("2", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 5).withPlannedWeek(ORIGIN.plusWeeks(2))
                 .withStatus("DONE").withFinished(ORIGIN.minusWeeks(1).atTime(9, 0));
+        // midweek targets a Wednesday of +2w, normalised to its Monday, and stays open through the origin.
         TaskRow midweek = TestData.task("3", ANA.id(), ORIGIN.minusWeeks(2).atTime(9, 0), 3).withPlannedWeek(ORIGIN.plusWeeks(2).plusDays(2));
         FeatureMatrix m = matrix(TestData.data(List.of(ANA), List.of(planned, done, midweek), List.of(), List.of()));
         int origin = row(m, ORIGIN);
-        assertEquals(15.0, m.get(origin, "planned_hrs_h2"), "the open tasks planned for week +2, a Wednesday normalised to its Monday");
-        assertEquals(0.0, m.get(origin, "planned_hrs_h1"));
+        assertEquals(12.0, m.get(origin, "planned_hrs_h1"), "planned's own estimate, the only task open and planned for week +1");
+        assertEquals(3.0, m.get(origin, "planned_hrs_h2"), "midweek only (a Wednesday normalised to its Monday): done's matching plan is excluded because it is finished");
         assertEquals(0.0, m.get(origin, "planned_hrs_h3"));
-        int before = row(m, ORIGIN.minusWeeks(3));
-        assertEquals(0.0, m.get(before, "planned_hrs_h2"), "not yet assigned in week −3, so not planned work of hers then");
+        // From week −2, h3 targets +1w — exactly the week `planned` is planned for — but `planned` is not
+        // assigned until week −1, a week after this row's end, so the openAtEndOf guard must reject it: this
+        // 0.0 holds only because of that guard, not because no plan matches the target (it does).
+        int atW2 = row(m, ORIGIN.minusWeeks(2));
+        assertEquals(0.0, m.get(atW2, "planned_hrs_h3"), "planned's target matches h3 here, but it is not yet assigned as of week −2");
     }
 }
