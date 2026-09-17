@@ -139,7 +139,7 @@ owner walked the feature matrix on 2026-09-16 and ruled on every invented rule: 
 gone, `share_manual_13w`/`share_project_13w` are replaced by `share_assigned_13w` from the assignment's own
 `task_history.user_id`, `planned_hrs_h` returns as a per-horizon column, and every ratio or "weeks since"
 with nothing to measure is left blank instead of an invented sentinel, for 40 shared and 5 per-horizon
-feature columns. The gate's totals are recorded in the plan's closing notes.
+feature columns. The gate stands at 450 tests, 0 failures, 14 skipped without Docker (the plan's closing notes).
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
 server's own integration code, against the sample host.
 The standing workflow for a plan:

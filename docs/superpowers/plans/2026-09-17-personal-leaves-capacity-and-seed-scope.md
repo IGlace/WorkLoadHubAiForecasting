@@ -1800,3 +1800,45 @@ git commit -m "docs: closing notes of the personal leaves plan and the gate's to
 ```
 
 Push `dev`. `main` is fast-forwarded by the owner's decision, not by this plan.
+
+---
+
+## Closing notes (2026-09-17)
+
+Landed on `dev` as twelve commits, `ebcb5cc..85dce2f`, each task reviewed on landing, then one whole-branch
+review and one fix wave (`85dce2f`).
+
+**The gate**, `bash scripts/check.sh` on `85dce2f`: 450 tests, 0 failures, 0 errors, 14 skipped, in 14 minutes.
+The 14 skips are the PostgreSQL tests (Testcontainers): the session's container had no Docker daemon, so
+`SqlExportWriterTest.aFiveTableScriptLandsTwiceOnPostgresql` and the new `DO $$ … $$;` guard were asserted on
+the generated script but never executed against PostgreSQL. **Run the gate once in the development container
+(Docker present) before fast-forwarding `main`.**
+
+**Deviations from the spec**, all recorded as rulings while executing:
+
+- The seed plans a fraction of tasks forward (`WorkQueue.plannedWeek`: two weeks when the task number is a
+  multiple of 7, one week when a multiple of 3, by a deterministic rule with no new random draw) so that
+  `planned_hrs_h` is exercised on seeded data. Section 4 of the spec did not foresee it; the whole-branch review
+  found the column identically zero on every seeded matrix.
+- The real-mode SQL script opens with a guard that raises when `task_comments` or `task_attachments` hold rows,
+  so the refusal the spec's section 7.2 relies on names the problem instead of a constraint hash. The script
+  still never deletes those tables.
+- `SqlExportWriter` decides "partial" from the envelope's `excludedTables` (any `TABLE_ORDER` table other than
+  `refresh_tokens`), not from the data keys; the data-key rule would have treated a full export that omits a
+  zero-row table as partial and deleted directory tables.
+- `planned_week` is the fifth field read as of the run day (spec 5.3 amended); `planned_hrs_h` carries that
+  hindsight, accepted under ruling G.
+- A leave with both `begin_time` and `end_time` set is dealt forward (the partial day is the last); spec 2.2
+  now says so and a test pins it.
+- The mini-export fixture's username changed from `eng` to `vtwo`: the identity-leak assertion substring-searches
+  the whole JSON and collided with a generated project name.
+
+**Findings parked with a ruling**: the real-mode `DELETE FROM tasks` fails on a database holding task comments
+or attachments. The owner chose this on 2026-09-16 (the seed never deletes user content; the transaction aborts
+and nothing is applied), the whole-branch reviewer agreed, and the guard above makes the refusal readable.
+
+**Left to the backlog** (`docs/backlog.md`, "Java migration"): read `tasks.assigned_at` when it exists; the
+assignee history stores full names; rename the `open_*` facts if narratives confuse the word; `CapacityRule`
+builds its own calendar for the leave index; `planned_hours` is a reused key name. Not recorded there, small:
+the seed's identity-leak assertion should be scoped to identity-bearing columns; the reversed `TABLE_ORDER`
+walk is duplicated between the SQL writer and the importer.
