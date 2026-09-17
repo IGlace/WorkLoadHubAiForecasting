@@ -39,10 +39,11 @@ app with a Python service) is archived on the remote branch `archive/python-desk
   landing on dev on 2026-09-17.** `personal_leaves` replaces `absences`, capacity is the calendar and the
   approved leaves over the 44 h default, `user_capacity` and `team_capacity` are not read, the seed writes
   five tables in real mode, and the owner's feature-matrix rulings of 2026-09-16 (section 1 of the spec,
-  `docs/design/2026-09-16-feature-matrix-review.html`) are applied. Two pages of 2026-09-17 record the result:
-  `docs/design/2026-09-17-workloadhub-schema-diagram.html` (every table and key of the schema dump plus the
-  seven tables and two columns the module's migrations add, the additions and what the module reads highlighted) and `docs/design/2026-09-17-feature-matrix-now.html` (the
-  matrix after the rulings; the 2026-09-16 page is kept as the reviewed record).
+  `docs/design/2026-09-16-feature-matrix-review.html`) are applied. Two pages of 2026-09-17 describe the
+  result for the application's developer, current state only: `docs/design/2026-09-17-workloadhub-schema-diagram.html`
+  (every table of the database with the module installed, what the module adds, what it reads and what the
+  data must contain, how the server integrates it) and `docs/design/2026-09-17-feature-matrix-now.html` (the
+  features, the logic and the rules; the 2026-09-16 page is kept as the reviewed record).
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
 - `server/README.md`: build, running experiments, the seed, using the module from the server, narrating with

@@ -3,40 +3,40 @@
 <style>
 :root {
   --paper: #f6f7f4; --paper-2: #eceee8; --ink: #1c2229; --ink-2: #4b5560; --rule: #cfd4cb; --accent: #0d5c63;
-  --new: #2c7a4b; --new-bg: #e1f1e6;        /* a table created after the base schema */
-  --later: #b26a10; --later-bg: #fbeedb;    /* a column or constraint added after the base schema */
+  --mod: #6a3d9a; --mod-bg: #ece2f7;        /* added by the forecast module */
   --read: #2b63b8; --read-bg: #e3ecfa;      /* read by the forecast module */
-  --legacy: #7a838c; --legacy-bg: #e6e8e4;  /* legacy or not read */
-  --warn: #b23a32; --warn-bg: #f9e3e0;      /* a relationship the schema does not declare */
-  --mod: #6a3d9a; --mod-bg: #ece2f7;        /* added by the forecast module when it is installed */
+  --legacy: #7a838c; --legacy-bg: #e6e8e4;  /* not used by the forecast */
+  --warn: #b23a32; --warn-bg: #f9e3e0;      /* a join the module relies on without a declared key */
   --code-bg: #e9ebe5; --box: #fbfbf9;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #14181b; --paper-2: #1d2226; --ink: #e5e8e2; --ink-2: #a6adb3; --rule: #343b41; --accent: #6cc4cb;
-    --new: #79c48f; --new-bg: #16301f; --later: #e6a453; --later-bg: #3a2a12; --read: #7fa8f0; --read-bg: #1a2a45;
-    --legacy: #8f979e; --legacy-bg: #262b2f; --warn: #ee8a80; --warn-bg: #3f1d1a; --mod: #c8a3ea; --mod-bg: #2d1f3b; --code-bg: #22282c; --box: #191e22;
+    --mod: #c8a3ea; --mod-bg: #2d1f3b; --read: #7fa8f0; --read-bg: #1a2a45;
+    --legacy: #8f979e; --legacy-bg: #262b2f; --warn: #ee8a80; --warn-bg: #3f1d1a; --code-bg: #22282c; --box: #191e22;
   }
 }
 :root[data-theme="dark"] {
   --paper: #14181b; --paper-2: #1d2226; --ink: #e5e8e2; --ink-2: #a6adb3; --rule: #343b41; --accent: #6cc4cb;
-  --new: #79c48f; --new-bg: #16301f; --later: #e6a453; --later-bg: #3a2a12; --read: #7fa8f0; --read-bg: #1a2a45;
-  --legacy: #8f979e; --legacy-bg: #262b2f; --warn: #ee8a80; --warn-bg: #3f1d1a; --mod: #c8a3ea; --mod-bg: #2d1f3b; --code-bg: #22282c; --box: #191e22;
+  --mod: #c8a3ea; --mod-bg: #2d1f3b; --read: #7fa8f0; --read-bg: #1a2a45;
+  --legacy: #8f979e; --legacy-bg: #262b2f; --warn: #ee8a80; --warn-bg: #3f1d1a; --code-bg: #22282c; --box: #191e22;
 }
 * { box-sizing: border-box; }
 body { background: var(--paper); color: var(--ink); font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; font-size: 15px; line-height: 1.55; padding-inline: clamp(16px, 4vw, 48px); padding-block: 24px 80px; }
 code, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
 code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 10px 14px; border-radius: 5px; overflow-x: auto; font-size: 13px; line-height: 1.45; }
+pre code { background: none; padding: 0; }
 h1, h2, h3 { text-wrap: balance; line-height: 1.2; }
 h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 600; margin: 0 0 6px; }
 h2 { font-size: 22px; font-weight: 600; margin: 56px 0 12px; padding-top: 16px; border-top: 1px solid var(--rule); }
 h3 { font-size: 16px; font-weight: 600; margin: 28px 0 8px; color: var(--accent); }
-p, li { max-width: 78ch; }
-.lede { color: var(--ink-2); font-size: 16px; max-width: 84ch; margin: 0 0 18px; }
+p, li { max-width: 80ch; }
+.lede { color: var(--ink-2); font-size: 16px; max-width: 86ch; margin: 0 0 18px; }
 .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
 nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 18px 0 8px; font-size: 14px; }
-nav.toc a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
-nav.toc a:hover, nav.toc a:focus-visible { border-bottom-color: var(--accent); outline: none; }
+nav.toc a, a.x { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+nav.toc a:hover, nav.toc a:focus-visible, a.x:hover { border-bottom-color: var(--accent); outline: none; }
 .stats { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 14px 0 6px; font-size: 14px; color: var(--ink-2); }
 .stats b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 figure { margin: 18px 0 8px; }
@@ -46,13 +46,11 @@ figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 90ch; margin-top
 .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; margin: 10px 0 4px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1.5px solid; }
-.sw.new { background: var(--new-bg); border-color: var(--new); }
-.sw.later { background: var(--later-bg); border-color: var(--later); }
+.sw.mod { background: var(--mod-bg); border-color: var(--mod); }
 .sw.read { background: var(--read-bg); border-color: var(--read); }
 .sw.legacy { background: var(--legacy-bg); border-color: var(--legacy); }
 .sw.warn { background: var(--warn-bg); border-color: var(--warn); border-style: dashed; }
-.sw.mod { background: var(--mod-bg); border-color: var(--mod); }
-.hint { font-size: 13.5px; color: var(--ink-2); margin: 4px 0 10px; }
+.hint { font-size: 13.5px; color: var(--ink-2); margin: 4px 0 10px; max-width: 90ch; }
 /* ER diagram */
 #er { width: 100%; }
 #er text { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; fill: var(--ink); }
@@ -60,32 +58,26 @@ figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 90ch; margin-top
 #er .tbl rect.head { fill: var(--paper-2); stroke: none; }
 #er .tbl text.name { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 12.5px; font-weight: 600; }
 #er .tbl text.type { fill: var(--ink-2); font-size: 10px; }
-#er .tbl.new rect.box { stroke: var(--new); stroke-width: 2; }
-#er .tbl.new rect.head { fill: var(--new-bg); }
-#er .tbl.legacy rect.head { fill: var(--legacy-bg); }
-#er .tbl.legacy text.name { fill: var(--legacy); }
 #er .tbl.mod rect.box { stroke: var(--mod); stroke-width: 2; }
 #er .tbl.mod rect.head { fill: var(--mod-bg); }
+#er .tbl.legacy rect.head { fill: var(--legacy-bg); }
+#er .tbl.legacy text.name { fill: var(--legacy); }
 #er .tbl rect.row-mod { fill: var(--mod-bg); }
-#er .tbl text.badge.mod { fill: var(--mod); }
-#er .edge.modjoin { stroke: var(--mod); stroke-dasharray: 5 4; stroke-opacity: 0.85; stroke-width: 1.3; }
-#er.focus .edge.on.modjoin { stroke: var(--mod); }
-#er .tbl rect.row-later { fill: var(--later-bg); }
 #er .tbl rect.tick { fill: var(--read); }
 #er .tbl text.badge { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; }
-#er .tbl text.badge.new { fill: var(--new); }
+#er .tbl text.badge.mod { fill: var(--mod); }
 #er .tbl text.badge.legacy { fill: var(--legacy); }
 #er .tbl text.badge.read { fill: var(--read); }
 #er .grp { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--ink-2); }
 #er .edge { fill: none; stroke: var(--ink-2); stroke-opacity: 0.4; stroke-width: 1.1; }
-#er .edge.later { stroke: var(--later); stroke-opacity: 0.9; stroke-width: 1.5; }
 #er .edge.implied { stroke: var(--warn); stroke-dasharray: 5 4; stroke-opacity: 0.9; stroke-width: 1.4; }
-#er text.elabel { font-size: 10px; fill: var(--warn); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+#er .edge.modjoin { stroke: var(--mod); stroke-dasharray: 5 4; stroke-opacity: 0.85; stroke-width: 1.3; }
 #er .tbl { cursor: pointer; }
 #er.focus .tbl:not(.on) { opacity: 0.22; }
 #er.focus .edge:not(.on) { stroke-opacity: 0.06; }
 #er.focus .edge.on { stroke: var(--accent); stroke-opacity: 1; stroke-width: 1.9; }
 #er.focus .edge.on.implied { stroke: var(--warn); }
+#er.focus .edge.on.modjoin { stroke: var(--mod); }
 #er .tbl.on rect.box { stroke-width: 2.2; stroke: var(--accent); }
 #er .arrow { fill: var(--ink-2); }
 .detail { border: 1px solid var(--rule); background: var(--paper-2); padding: 12px 14px; border-radius: 6px; font-size: 14px; margin-top: 10px; min-height: 52px; }
@@ -93,10 +85,9 @@ figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 90ch; margin-top
 /* cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 12px; }
 .card { border: 1px solid var(--rule); border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 4px; background: var(--paper-2); font-size: 14px; }
-.card.new { border-left-color: var(--new); } .card.mod { border-left-color: var(--mod); } .card.later { border-left-color: var(--later); } .card.warn { border-left-color: var(--warn); } .card.legacy { border-left-color: var(--legacy); }
+.card.mod { border-left-color: var(--mod); } .card.read { border-left-color: var(--read); } .card.warn { border-left-color: var(--warn); }
 .card h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
 .card p { margin: 0 0 6px; }
-.card .ev { color: var(--ink-2); font-size: 13px; }
 /* tables */
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--rule); }
@@ -104,101 +95,139 @@ th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: 
 td.mono, th.mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
 .table-wrap { overflow-x: auto; }
 .tag { display: inline-block; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 7px; border-radius: 3px; border: 1px solid; white-space: nowrap; margin-right: 4px; vertical-align: middle; }
-.tag.new { color: var(--new); border-color: var(--new); background: var(--new-bg); }
-.tag.later { color: var(--later); border-color: var(--later); background: var(--later-bg); }
+.tag.mod { color: var(--mod); border-color: var(--mod); background: var(--mod-bg); }
 .tag.read { color: var(--read); border-color: var(--read); background: var(--read-bg); }
 .tag.legacy { color: var(--legacy); border-color: var(--legacy); background: var(--legacy-bg); }
 .tag.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
-.tag.mod { color: var(--mod); border-color: var(--mod); background: var(--mod-bg); }
-tr.mod td { background: var(--mod-bg); }
 .tag.key { color: var(--accent); border-color: var(--accent); background: transparent; }
-tr.later td { background: var(--later-bg); }
+tr.mod td { background: var(--mod-bg); }
 td .readdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--read); margin-right: 6px; vertical-align: middle; }
+ol.steps li, ul.rules li { margin-bottom: 8px; }
 /* catalogue */
-.cat { margin-top: 30px; padding-top: 6px; }
 .cat h3 { color: var(--ink); font-size: 17px; margin: 24px 0 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cat h3 code { font-size: 15px; background: none; padding: 0; }
 .cat .desc { margin: 4px 0 10px; color: var(--ink-2); font-size: 14px; max-width: 90ch; }
 .cat .keys { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
 .cat .keys li { margin: 2px 0; }
-.cat .keys li.later { color: var(--later); }
 .cat table { max-width: 1100px; }
 .cat td.n { white-space: nowrap; }
-details { margin: 10px 0; }
-summary { cursor: pointer; color: var(--accent); font-weight: 500; }
 @media (prefers-reduced-motion: no-preference) { #er .tbl, #er .edge { transition: opacity .15s, stroke-opacity .15s; } }
 </style>
 
-<p class="eyebrow">WorkloadHub · schema <code>task_service</code> · pg_dump of 2026-09-09 09:40, PostgreSQL 18.3</p>
-<h1>The WorkloadHub database, table by table</h1>
-<p class="lede">Every table, column, key and relationship of the database as it will stand with the forecast installed: the 24 application tables of the latest schema dump, plus the 7 tables and 2 columns the forecast module creates through its own migrations. Green marks the application table created after the base schema, amber the keys added to existing tables, violet what the module adds, and blue what the module reads. Click a table to see its relationships.</p>
+<p class="eyebrow">WorkloadHub · schema <code>task_service</code> · with the forecast module installed</p>
+<h1>The WorkloadHub database with the forecast installed</h1>
+<p class="lede">For the developer of the WorkloadHub Spring Boot application: every table of the database as it stands once <code>forecast-core</code> is on the classpath, what the module adds to the schema and what those additions mean, which of the application's tables and columns it reads and what they must contain, and how the server wires it in. The forecasting logic itself, the features and how they are computed, is on the companion page <a class="x" href="https://claude.ai/artifact/MdmK6W9hpQnceTKbKxNjpt">The feature matrix, as it stands</a>.</p>
 <nav class="toc" aria-label="Sections">
   <a href="#diagram">1 · The diagram</a>
-  <a href="#changes">2 · What the application added, and how that was decided</a>
-  <a href="#module">3 · What the forecast module adds</a>
-  <a href="#forecast">4 · What the forecast reads</a>
+  <a href="#module">2 · What the forecast adds to the database</a>
+  <a href="#inputs">3 · What it reads, and what the data must contain</a>
+  <a href="#integration">4 · How to integrate it</a>
   <a href="#catalogue">5 · Every table in full</a>
 </nav>
 <div class="stats" id="stats"></div>
 
 <h2 id="diagram">1 · The diagram</h2>
 <div class="legend">
-  <span><i class="sw new"></i>table created after the base schema</span>
-  <span><i class="sw later"></i>column whose key was added later (inferred addition)</span>
+  <span><i class="sw mod"></i>added by the forecast module: seven tables, and two columns on <code>users</code></span>
   <span><i class="sw read"></i>read by the forecast (tick on the column, badge on the table)</span>
-  <span><i class="sw legacy"></i>legacy or not read</span>
-  <span><i class="sw mod"></i>added by the forecast module (tables, and two columns on users)</span>
-  <span><i class="sw warn"></i>relationship the application relies on but the schema does not declare</span>
+  <span><i class="sw legacy"></i>application table the forecast does not use</span>
+  <span><i class="sw warn"></i>join the forecast relies on without a declared key</span>
 </div>
-<p class="hint"><code>PK</code> is the primary key, <code>FK</code> a foreign key; an arrow runs from the foreign-key column to the <code>id</code> of the table it references. A loop on the right of a table is a self-reference (a task's parent task, a user's manager). A dashed violet arrow is a join the module makes without declaring a key, so that its tables never block the application's own. Column types are shortened: <code>varchar(n)</code>, <code>timestamp</code>, <code>time</code>, <code>double</code>, <code>bool</code>.</p>
+<p class="hint"><code>PK</code> is the primary key, <code>FK</code> a foreign key; an arrow runs from the foreign-key column to the <code>id</code> of the table it references. A loop on the right of a table is a self-reference (a task's parent task, a user's manager). Dashed violet arrows are the module's joins to <code>users</code> and <code>teams</code>, made on the application's UUIDs without a declared key. Column types are shortened: <code>varchar(n)</code>, <code>timestamp</code>, <code>time</code>, <code>double</code>, <code>bool</code>. Click a table to list its relationships.</p>
 <figure>
-<div class="scroll"><svg id="er" role="img" aria-label="Entity-relationship diagram of the 24 tables of the task_service schema with their columns and foreign keys" style="min-width: 2300px"></svg></div>
+<div class="scroll"><svg id="er" role="img" aria-label="Entity-relationship diagram of the 24 application tables and the 7 forecast tables with their columns and foreign keys" style="min-width: 2300px"></svg></div>
 <div class="detail" id="detail">Click a table to list its relationships; click the background to reset.</div>
 <figcaption>Eight columns of tables. The two on the left are the forecast module's: what each run stores (results per member, window and day, and the current forecast) and the run itself with its facts and narratives. The six on the right are the application's, grouped by what they describe. Every solid arrow is a declared foreign key; dashed ones are joins without a key.</figcaption>
 </figure>
 
-<h2 id="changes">2 · What the application added, and how that was decided</h2>
-<p>The dump you uploaded is the same schema the module already carries in <code>server/forecast-core/src/main/resources/schema/workloadhub-postgresql.sql</code>: the two differ only in <code>pg_dump</code> preamble and <code>OWNER</code> lines. So "added" cannot be read as a difference between two files. It is read from the dump itself: PostgreSQL numbers every object in creation order (its OID), and the dump records that number for each table, constraint and index.</p>
+<h2 id="module">2 · What the forecast adds to the database</h2>
+<p>The module ships its own Flyway migrations and runs them into the application's schema at start-up, under its own history table <code>forecast_schema_history</code>, baselined at version 0 so that the application's tables are never created, altered or dropped by it, with one exception: two nullable columns on <code>users</code>. The schema gains seven tables and those two columns. No application table gets a foreign key pointing into the module, and the module writes to nothing but its own tables and the two columns.</p>
 <div class="cards">
-  <div class="card new"><h4><code>personal_leaves</code> is the table added after the base schema</h4><p>The 23 other tables were created in one alphabetical pass by the application's ORM (OIDs 52590 to 52944, tables and their primary and unique keys interleaved in name order). <code>personal_leaves</code> comes right after the last of them, <code>users</code>, at OID 52945, outside the alphabetical order: it was added later. It carries a primary key and two check constraints (leave type, status) and no foreign key at all.</p><p class="ev">Evidence: table OIDs 52590–52944 alphabetical, then 52945 <code>personal_leaves</code>, then the foreign keys 52958–53108.</p></div>
-  <div class="card later"><h4><code>job_title_role_mappings.user_id</code> was added, with a per-user override rule</h4><p>Its foreign key <code>fk_jtrm_user</code> is hand-named (every base foreign key has an ORM-generated name like <code>fk8f3q…</code>) and sits after all of them, followed by two partial unique indexes: one job title maps to one role globally when <code>user_id</code> is null, and to one role per user otherwise. A migration added the column, the key and the indexes together.</p><p class="ev">Evidence: OIDs 53118 (foreign key), 53123 and 53124 (partial unique indexes), then 53136 (an ORM-generated unique key on the same pair).</p></div>
-  <div class="card later"><h4><code>users.manager_id</code> gained its self-reference later</h4><p>The foreign key from a user to their manager is the first object after the base foreign keys (OID 53113). The column itself sits in the ORM's normal position, so it may have existed without a key; either way the relationship is a later addition. <code>manager_object_id</code> and <code>object_id</code> beside it mirror the directory sync's own identifiers, and <code>object_id</code> and <code>account_name</code> are unique.</p><p class="ev">Evidence: OID 53113, the only base-schema table whose foreign key was not created with the others.</p></div>
-  <div class="card later"><h4>Six unique constraints were re-added by a later ORM pass</h4><p><code>holidays</code>, <code>job_title_role_mappings</code>, <code>job_titles</code>, <code>team_capacity</code>, <code>team_members</code> and <code>user_capacity</code> each carry a second unique constraint named <code>uk…</code> (OIDs 53134–53144) on the same columns as their original <code>…_key</code> one, and <code>job_titles</code> has a case-insensitive unique index <code>uq_job_titles_value_ci</code> (53132) as well. They change no data rule; they show the schema was updated in place after the migration that added <code>user_id</code>.</p><p class="ev">Duplicates are harmless; the catalogue marks each.</p></div>
-  <div class="card warn"><h4>Two relationships the application relies on are not declared</h4><p><code>personal_leaves.employee_id</code> is the user on leave and <code>notifications.user_id</code> / <code>reporter_id</code> are users, but none of the three has a foreign key, so the database will accept a leave for a user id that does not exist. The forecast joins <code>employee_id</code> to <code>users.id</code> and silently ignores a leave whose employee is not a counted member. The dashed arrows in the diagram show these joins.</p><p class="ev">Worth a migration on the application side: <code>ALTER TABLE personal_leaves ADD FOREIGN KEY (employee_id) REFERENCES users(id)</code>.</p></div>
-  <div class="card legacy"><h4>Three tables stay in the schema but are no longer used</h4><p><code>absences</code> is legacy since 2026-09-16 (the main developer's confirmation); <code>user_capacity</code> and <code>team_capacity</code> will not be used, because capacity is now computed from the 44 h default, the confirmed holidays and the approved leaves. The forecast reads none of the three and the seed no longer writes them. They remain in the dump, so the diagram shows them greyed rather than absent.</p></div>
+  <div class="card mod"><h4>One row per run: <code>forecast_runs</code></h4><p>Who asked (<code>requested_by</code>), for which team, as of which day, the status the host shows as a progress label, the backtest result (<code>mae</code> in hours, <code>backtest_json</code>) and the error text when a run fails. Every other module table hangs off its <code>id</code>.</p></div>
+  <div class="card mod"><h4>What a run computed: <code>forecast_member_windows</code>, <code>forecast_member_days</code></h4><p>Per member and window (five weekdays): predicted demand in hours with its low and high band, capacity, overload, working days, absence hours and two pressure figures (backlog excess, due excess). Per member and day: the week's demand placed on the day, the day's capacity and overload, and whether it is a working day. Kept per run, so past runs stay comparable with what was later logged.</p></div>
+  <div class="card mod"><h4>The current forecast: <code>forecast_current_days</code></h4><p>The latest run's value per team, member and day, one row each. Each run upserts its days, so days ahead are overwritten and days that have arrived keep the last forecast made before them. This is what the calendar reads and what the accuracy check scores against <code>time_logs</code>.</p></div>
+  <div class="card mod"><h4>What Copilot saw and wrote: <code>forecast_facts</code>, <code>forecast_narratives</code></h4><p>The exact facts JSON a run produced and Copilot was allowed to cite, one per run, kept for audit; and every narration attempt with its language, status (<code>OK</code>, <code>UNVERIFIED</code>, <code>FAILED</code>), the narrative and verification JSON, the raw answer, usage, attempts and tool calls. A failed narration keeps its row and its cost.</p></div>
+  <div class="card mod"><h4>Two columns on <code>users</code>: the Copilot token</h4><p><code>github_token</code> holds the user's own GitHub token, encrypted with the key in <code>whf.token-key</code>; <code>github_token_updated_at</code> says when it was stored. The module reads the token in exactly one place, for the user who requested a narration, and never returns it. No other provider's key is ever stored.</p></div>
+  <div class="card mod"><h4>How the module's tables join the application's</h4><p><code>team_id</code>, <code>user_id</code> and <code>requested_by</code> hold the application's own UUIDs, but the module declares no foreign key to <code>teams</code> or <code>users</code>, so that a deleted or deactivated user never makes an old run undeletable or a migration fail. Inside the module every table references <code>forecast_runs(id)</code>.</p></div>
 </div>
-<h3>What a dump cannot show</h3>
-<p>A column added with <code>ALTER TABLE … ADD COLUMN</code> leaves no OID of its own, and this schema's column order is the ORM's (fixed-size types first, then ids, then text), not the order of creation. The amber columns are therefore the ones whose <em>keys</em> prove a later change; a column added later without any key would look like every other. If you know of one, it belongs on this page.</p>
 
-<h2 id="module">3 · What the forecast module adds</h2>
-<p>When the WorkloadHub server adds <code>forecast-core</code> as a dependency, the module's Flyway runs its five migrations into the same schema, under its own history table <code>forecast_schema_history</code>, baselined at version 0 so that the application's tables are never touched by it. Net of the five migrations, the schema gains seven tables and two columns; nothing else changes and no application table gets a foreign key pointing into the module.</p>
-<div class="cards">
-  <div class="card mod"><h4>One row per run: <code>forecast_runs</code></h4><p>Who asked (<code>requested_by</code>), for which team, as of which day, the status the host shows as a progress label, the backtest result (<code>mae</code>, <code>backtest_json</code>) and the error text when a run fails. Every other module table hangs off its <code>id</code>.</p></div>
-  <div class="card mod"><h4>What a run computed: <code>forecast_member_windows</code>, <code>forecast_member_days</code></h4><p>Per member and window: demand, the low and high band, capacity, overload, working days, absence hours and the two pressure figures (backlog excess, due excess). Per member and day: demand, capacity, overload and whether the day is a working day. Keyed by run, member and window or day.</p></div>
-  <div class="card mod"><h4>The current forecast: <code>forecast_current_days</code></h4><p>The latest run's value per team, member and day. Each run upserts its days, so days ahead are overwritten and days that have arrived keep the last forecast made before them. This is what the accuracy check scores against <code>time_logs</code>.</p></div>
-  <div class="card mod"><h4>What Copilot saw and wrote: <code>forecast_facts</code>, <code>forecast_narratives</code></h4><p>The exact facts JSON sent to Copilot, one per run, kept for audit; and every narration attempt with its language, status (<code>OK</code>, <code>UNVERIFIED</code>, <code>FAILED</code>), the narrative and verification JSON, the raw answer, usage, attempts and tool calls. A failed narration keeps its row and its cost.</p></div>
-  <div class="card mod"><h4>Two columns on <code>users</code>: the Copilot token</h4><p><code>github_token</code> holds the user's own GitHub token, encrypted with <code>whf.token-key</code>, and <code>github_token_updated_at</code> says when it was set. The module reads the token in exactly one place, for the user who requested the narration; no other provider's key is ever stored.</p></div>
-  <div class="card mod"><h4>How the module's tables join the application's</h4><p><code>team_id</code>, <code>user_id</code> and <code>requested_by</code> hold the application's own UUIDs, but the module declares no foreign key to <code>teams</code> or <code>users</code>: a deleted or deactivated user must not make an old run undeletable or a migration fail. The dashed violet arrows in the diagram are those joins. Inside the module, every table references <code>forecast_runs(id)</code>.</p></div>
-</div>
-<p class="hint">Migration history, for the record: V1 created the runs, facts, narratives and a per-week table, and the token column pair on users; V2 recreated narratives with a status; V3 replaced weeks by windows, days and the current forecast; V4 removed the open/new/planned split and the model tournament (a single <code>mae</code> remains); V5 added the two pressure columns. The catalogue shows the tables as they stand after V5.</p>
-
-<h2 id="forecast">4 · What the forecast reads</h2>
-<p>Ten tables feed the forecast; the module reads them with plain <code>SELECT</code>s in <code>ForecastRepository</code> and never writes to the application's tables. The seed, in real mode, writes exactly five of them (<code>projects</code> upserted, the other four replaced) and leaves the rest alone.</p>
+<h2 id="inputs">3 · What it reads, and what the data must contain</h2>
+<p>The forecast reads eleven of the application's tables with plain <code>SELECT</code>s at the start of every run and writes to none of them. This is the whole input: there is no feed to build and no event to send. What the application must do is keep these tables meaning what the forecast assumes they mean.</p>
 <div class="table-wrap"><table id="readtable">
-<thead><tr><th>Table</th><th>Columns read</th><th>What the forecast does with them</th><th>Seed writes it</th></tr></thead>
+<thead><tr><th>Table</th><th>Columns read</th><th>What the forecast does with them</th></tr></thead>
 <tbody></tbody>
 </table></div>
-<p class="hint">Not read: <code>absences</code>, <code>user_capacity</code>, <code>team_capacity</code> (above), <code>task_comments</code>, <code>task_attachments</code>, <code>notifications</code>, <code>project_history</code>, <code>refresh_tokens</code>, <code>role_change_requests</code>, <code>sync_metadata</code>, <code>user_roles</code>, <code>job_titles</code>, <code>job_title_role_mappings</code>.</p>
+<h3>What the data must contain</h3>
+<ul class="rules">
+  <li><strong>A member</strong> is a <code>users</code> row with <code>active</code> true, <code>role</code> <code>MEMBER</code> or <code>TEAM_LEADER</code>, and at least one <code>team_members</code> row. Team leaders are forecast like members. <code>SKILL_TEAM_LEADER</code>, <code>CENTER_MANAGER</code>, <code>ADMIN</code> and <code>VIEWER</code> are never forecast. When a user belongs to several teams, the primary one is the team that has a parent team. <code>deactivated_at</code> ends the member's capacity; their history is kept.</li>
+  <li><strong>A run is per team</strong> (<code>teams.id</code>). The team's projects and its parent team's projects (<code>projects.team_id</code>) feed the team-level features; a department view is the sum of its child teams. Archived projects and archived tasks are skipped.</li>
+  <li><strong>Assignments must be written to <code>task_history</code>.</strong> Every change of assignee must produce a row with <code>field_name</code> <code>assignee</code>, <code>new_value</code> naming the new assignee (their full name; an e-mail, username or UUID is also resolved; empty, <code>None</code> or <code>null</code> means unassigned), <code>changed_at</code>, and <code>user_id</code> = the user who made the change. The forecast takes the assignment date from the latest such row that names the current assignee, and reads "self-picked" when that <code>user_id</code> equals the assignee, "assigned" otherwise. Without those rows it falls back to <code>created_date</code> and cannot tell how the task was assigned, and it reports the task as an unresolved assignment in the data-quality facts.</li>
+  <li><strong>Status changes</strong> are read from <code>task_history</code> rows with <code>field_name</code> <code>status</code> and <code>new_value</code> the status name, only when <code>tasks.started_date</code> or <code>finished_date</code> is null. Every status must have a <code>task_statuses.category</code> of <code>TO_DO</code>, <code>IN_PROGRESS</code> or <code>DONE</code>.</li>
+  <li><strong>Task types</strong> are read by <code>task_types.name</code>. The twelve names are grouped into families: Bug and Incident are defect work; Story, New Feature, Task, Improvement and Change Request are delivery; Spike, Test and Risk are support; Epic is a container; a Sub-task takes its parent task's family; a name the forecast does not know counts as delivery.</li>
+  <li><strong>Estimates and dates on <code>tasks</code></strong>: <code>original_estimate_hrs</code> in hours (the size of arriving work), <code>remaining_estimate_hrs</code> (shown to the leader as the hours still open), <code>due_date</code>, and <code>planned_week</code> as the Monday of the intended week (any other date is normalised to its Monday; null means unplanned). <code>reopened_from_done</code> marks rework. These five are read as they stand today; they have no history.</li>
+  <li><strong><code>time_logs</code> is the truth</strong>: hours per user, task and day. The forecast predicts exactly this, summed per member and week, and scores itself against it. Logging is not capped, so overtime shows up as it is.</li>
+  <li><strong>Capacity is computed, not read.</strong> A member's week is <code>whf.default-weekly-hours</code> (44) times the week's working days over five, minus their approved leave hours; a working day is 8.8 h. <code>user_capacity</code> and <code>team_capacity</code> are not read.</li>
+  <li><strong>Holidays</strong>: a <code>holidays</code> range with <code>status</code> <code>CONFIRMED</code> and <code>active</code> true removes its weekdays from everyone's calendar; a <code>PENDING</code> one is only mentioned in the narrative.</li>
+  <li><strong>Leaves</strong> come from <code>personal_leaves</code> only (<code>absences</code> is not read). <code>employee_id</code> must be a <code>users.id</code>; the table declares no foreign key, so the application must guarantee it. <code>status</code> <code>APPROVED</code> reduces capacity, <code>PENDING</code> is listed for the narrative as a risk, <code>REJECTED</code> and <code>CANCELLED</code> are ignored. <code>absence_hours</code> is the total for the whole leave (null means every working day of the period); <code>begin_time</code> and <code>end_time</code> mark a leave that starts or ends on a partial day. The forecast deals the total over the leave's working days, 8.8 h a day, weekends and holidays skipped, the partial day last (or first when only <code>begin_time</code> is set).</li>
+</ul>
+<p class="hint">Not read at all: <code>absences</code>, <code>user_capacity</code>, <code>team_capacity</code>, <code>task_comments</code>, <code>task_attachments</code>, <code>notifications</code>, <code>project_history</code>, <code>refresh_tokens</code>, <code>role_change_requests</code>, <code>sync_metadata</code>, <code>user_roles</code>, <code>job_titles</code>, <code>job_title_role_mappings</code>. Names are used in the facts sent to Copilot (the member's <code>full_name</code>, the task <code>key</code> and title, project keys); UUIDs never leave the server.</p>
+
+<h2 id="integration">4 · How to integrate it</h2>
+<p>The module is a library, not a service. The server adds one dependency; Spring Boot's auto-configuration finds the server's own <code>DataSource</code>, runs the migrations of section 2 and registers the <code>ForecastService</code> bean, the token store, the run executor and the Copilot gateway. Every bean is <code>@ConditionalOnMissingBean</code>, so the server can replace any of them.</p>
+<pre><code>&lt;dependency&gt;
+  &lt;groupId&gt;com.workloadhub&lt;/groupId&gt;
+  &lt;artifactId&gt;workloadhub-forecast-core&lt;/artifactId&gt;
+  &lt;version&gt;0.1.0-SNAPSHOT&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+<h3>Properties</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Default</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td class="mono">whf.token-key</td><td>unset</td><td>Base64 AES-256 key (32 bytes) that encrypts <code>users.github_token</code>. Generate once (<code>openssl rand -base64 32</code>), keep it in the secret store: a new key makes every stored token unreadable. Unset means no token can be stored or read and narration fails with <code>TOKEN_KEY_MISSING</code>.</td></tr>
+<tr><td class="mono">whf.work-dir</td><td><code>${user.home}/.workloadhub-forecast</code></td><td>The module's own directory; the Copilot runtime lives under it. Must be writable by the account the server runs as.</td></tr>
+<tr><td class="mono">whf.default-weekly-hours</td><td>44.0</td><td>A member's weekly capacity before leave, spread over the working days.</td></tr>
+<tr><td class="mono">whf.forecast.windows</td><td>2</td><td>How many five-weekday windows a run covers after the run day, 1 to 6.</td></tr>
+<tr><td class="mono">whf.run-threads</td><td>2</td><td>Size of the pool that runs forecasts.</td></tr>
+<tr><td class="mono">whf.copilot.model</td><td>blank</td><td>The model a narration asks for; blank means the account default.</td></tr>
+<tr><td class="mono">whf.copilot.cli-path</td><td>blank</td><td>Path to an installed Copilot CLI; blank means the in-process runtime shipped with the SDK.</td></tr>
+<tr><td class="mono">whf.copilot.timeout-seconds</td><td>300</td><td>How long one narration may take before it ends as <code>FAILED</code>.</td></tr>
+<tr><td class="mono">whf.web.enabled</td><td>false</td><td>Registers the module's REST controller. A server that calls <code>ForecastService</code> directly leaves it off.</td></tr>
+<tr><td class="mono">whf.web.base-path</td><td><code>/api/forecast</code></td><td>Where that controller is mounted.</td></tr>
+<tr><td class="mono">whf.flyway.enabled</td><td>true</td><td>Runs the module's migrations at start-up; false when the server migrates the module's tables itself.</td></tr>
+</tbody></table></div>
+<p>Declare a <code>java.time.Clock</code> bean in the server's time zone: the run day is "today" by that clock, and a run always starts from today (an <code>asOf</code> in a request is refused). Without one the module uses the system default zone.</p>
+<h3>Who may do what</h3>
+<p>The module trusts the <code>requestedBy</code> it is given; the server enforces the roles before calling it. A refused check is the server's 403.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Role</th><th>May start a run for</th><th>May view</th></tr></thead>
+<tbody>
+<tr><td class="mono">ADMIN</td><td>any team</td><td>any team</td></tr>
+<tr><td class="mono">SKILL_TEAM_LEADER</td><td>a team whose parent team they manage, one at a time</td><td>those teams and their own memberships</td></tr>
+<tr><td class="mono">TEAM_LEADER</td><td>the teams they manage</td><td>those teams and their own memberships</td></tr>
+<tr><td class="mono">MEMBER</td><td>none</td><td>the teams they belong to</td></tr>
+<tr><td class="mono">VIEWER, CENTER_MANAGER</td><td>none</td><td>any team</td></tr>
+</tbody></table></div>
+<h3>The calls, in the order a page makes them</h3>
+<ol class="steps">
+  <li><strong>Start a run.</strong> <code>startRun(new RunRequest(teamId, userId))</code> returns the run id at once; the run executes on the module's pool. Persist <code>(runId, teamId, requestedBy)</code> in a table of your own: after a restart that row is what lets you authorise a poll of an interrupted run.</li>
+  <li><strong>Show progress.</strong> Poll <code>progress(runId)</code> and show <code>label</code> (<code>en</code> and <code>fr</code>) until the phase is <code>DONE</code> or <code>FAILED</code>. The phases are the run's steps: loading, features, backtest, forecast, facts, persist. Runs left <code>QUEUED</code> or <code>RUNNING</code> by a previous process are marked <code>FAILED</code> at start-up; progress lives in one JVM.</li>
+  <li><strong>Read the result.</strong> <code>getRun(runId)</code> gives the run, its backtest scores, the member windows (demand, band, capacity, overload, pressure) and the member days, plus the facts JSON. <code>currentForecast(teamId, from, to)</code> gives the calendar view: per member and day, demand against capacity, from whichever run last covered the day. <code>listRuns(teamId, limit)</code> lists past runs.</li>
+  <li><strong>Show accuracy.</strong> <code>accuracy(teamId, from, to)</code> compares the forecasts made before each past weekday with the hours logged on it and scores them by team, member and horizon. Nothing is stored; every call recomputes.</li>
+  <li><strong>Narrate.</strong> Requires a <code>DONE</code> run and a token for the requesting user (<code>GitHubTokenStore.has(userId)</code>). <code>narrate(new NarrativeRequest(runId, userId, language, null))</code> blocks for the whole narration, a minute or more, so submit it to a bounded executor of your own and let the page poll <code>progress(runId)</code> (<code>NARRATING</code> with a rotating label, then <code>NARRATED</code> or <code>NARRATION_FAILED</code>) and read <code>narrative(runId, language)</code>. Copilot reads the facts through nine tools and writes English or French; every number it writes is checked against the facts, and a number that cannot be found is reported as <code>UNVERIFIED</code>, never hidden. Refuse a second narration of the same run and language while one is in flight.</li>
+  <li><strong>Tokens.</strong> A settings page calls <code>GitHubTokenStore.save(userId, token)</code> and <code>clear(userId)</code>, and shows <code>copilotStatus(userId)</code>, which opens a Copilot session and reports authentication and quota. Accepted tokens are <code>gho_</code>, <code>ghu_</code> and <code>github_pat_</code>; classic <code>ghp_</code> tokens are refused. The intended source is a GitHub OAuth App in the server, where the user signs in and the server stores what comes back.</li>
+  <li><strong>Errors.</strong> <code>ForecastException.code()</code>: a code ending in <code>_NOT_FOUND</code> is a 404, <code>INVALID_REQUEST</code> a 400, everything else (<code>RUN_NOT_DONE</code>, <code>TOKEN_MISSING</code>, <code>TOKEN_KEY_MISSING</code>, <code>TOKEN_REJECTED</code>, <code>COPILOT_UNAVAILABLE</code>) a 409.</li>
+</ol>
+<p>With <code>whf.web.enabled=true</code> the same calls exist as REST routes under the base path: <code>POST /runs</code>, <code>GET /runs/{id}</code>, <code>GET /runs/{id}/progress</code>, <code>GET /teams/{teamId}/runs</code>, <code>GET /teams/{teamId}/current?from&amp;to</code>, <code>POST /runs/{id}/narratives</code>, <code>GET /runs/{id}/narratives/{lang}</code>, <code>GET /copilot/status?userId</code>, <code>PUT</code> and <code>DELETE /users/{id}/github-token</code>. Authorisation stays the server's. The reference implementation of all of the above is the sample host in the module's tests (<code>samplehost/</code>: a facade with the role checks, the one-run-at-a-time rule and the narration executor) and <code>server/examples/HostExample.java</code>, which makes every call against a seeded database and prints what comes back.</p>
+<p class="hint">What the dependency brings with it: <code>copilot-sdk-java</code> with its 44 MB in-process runtime (unpacked once under the work directory, nothing downloaded at run time), JNA, and Jackson 2 beside the server's Jackson 3; the two coexist under different package names. Spring MVC is optional and only used when the REST controller is enabled.</p>
 
 <h2 id="catalogue">5 · Every table in full</h2>
-<p>Each table with its columns as the dump declares them (or as the module's migrations create them), its keys, its allowed values where a check constraint fixes them, and the OID that dates each key of the application's. A blue dot marks a column the forecast reads; an amber row a column whose key was added later; a violet row a column the module adds.</p>
+<p>Each table with its columns as the schema declares them, its keys, and its allowed values where a check constraint fixes them. A blue dot marks a column the forecast reads; a violet row a column the module adds.</p>
 <div class="cat" id="catalogue"></div>
-<p class="hint">Source: <code>schema.sql</code> as uploaded (pg_dump 18.3, 2026-09-09 09:40 +01:00), parsed table by table; the module's tables from <code>db/forecast/postgresql/V1</code> to <code>V5</code> and the reading list from <code>ForecastRepository.java</code> on <code>dev</code> at <code>2e7342c</code>. Row counts are not in a schema dump; the export of 2026-09-08 held 10 tasks, 11 history rows, 1 time log, 264 users of whom 6 active, 7 projects and 16 holidays.</p>
+<p class="hint">Source: the application's schema dump (<code>task_service</code>, PostgreSQL 18, 2026-09-09), the module's migrations <code>db/forecast/postgresql/V1</code> to <code>V5</code>, <code>ForecastRepository.java</code> and <code>server/README.md</code> of <code>forecast-core</code> on <code>dev</code> at <code>ee4dd97</code>.</p>
 
 <script>
 (function () {
   var T = {"absences":{"columns":[{"name":"date","type":"date","notnull":true},{"name":"hours","type":"double","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"type","type":"varchar(20)","notnull":true},{"name":"note","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkfj92n9rpcqkq6lqm3aqoak9wv","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52958}],"indexes":[],"checks":[],"oid":52590},"holidays":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"end_date","type":"date","notnull":true},{"name":"start_date","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"country_code","type":"varchar(255)","notnull":true},{"name":"status","type":"varchar(255)","notnull":true},{"name":"title","type":"varchar(255)","notnull":true},{"name":"type","type":"varchar(255)","notnull":true}],"pk":["id"],"unique":[{"name":"holidays_title_start_date_end_date_country_code_key","columns":["title","start_date","end_date","country_code"],"oid":52623},{"name":"ukd0p4te1pukhoqt6pyvm2yi9wb","columns":["title","start_date","end_date","country_code"],"oid":53134}],"fks":[],"indexes":[],"checks":[],"oid":52603},"job_title_role_mappings":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"job_title_id","type":"uuid","notnull":true},{"name":"role_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":false}],"pk":["id"],"unique":[{"name":"uk2y6leuw0mawlosaynsywq3cx3","columns":["job_title_id","user_id"],"oid":53136}],"fks":[{"name":"fk8f3qyj4xaqji8jg3es4gi2f3h","columns":["job_title_id"],"ref_table":"job_titles","ref_columns":["id"],"extra":"","oid":52963},{"name":"fk_jtrm_user","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53118},{"name":"fkqjob3ph5fihjyj2xn871srecn","columns":["role_id"],"ref_table":"user_roles","ref_columns":["id"],"extra":"","oid":52968}],"indexes":[{"name":"uq_jtrm_jobtitle_global","unique":true,"expr":"job_title_id","where":"user_id IS NULL","oid":53123},{"name":"uq_jtrm_jobtitle_user","unique":true,"expr":"job_title_id, user_id","where":"user_id IS NOT NULL","oid":53124}],"checks":[],"oid":52624},"job_titles":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"value","type":"varchar(150)","notnull":true}],"pk":["id"],"unique":[{"name":"ukqydsfc33hake2sogd1she6ybo","columns":["value"],"oid":53138}],"fks":[],"indexes":[{"name":"uq_job_titles_value_ci","unique":true,"expr":"lower((value)::text)","where":null,"oid":53132}],"checks":[],"oid":52636},"notifications":{"columns":[{"name":"is_read","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"reporter_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"type","type":"varchar(50)","notnull":true},{"name":"message","type":"text","notnull":true},{"name":"metadata","type":"text","notnull":false}],"pk":["id"],"unique":[],"fks":[],"indexes":[],"checks":[],"oid":52647},"personal_leaves":{"columns":[{"name":"absence_hours","type":"double","notnull":false},{"name":"begin_time","type":"time","notnull":false},{"name":"end_date","type":"date","notnull":true},{"name":"end_time","type":"time","notnull":false},{"name":"start_date","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":false},{"name":"updated_at","type":"timestamp","notnull":false},{"name":"employee_id","type":"uuid","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"note","type":"varchar(1000)","notnull":false},{"name":"leave_type","type":"varchar(255)","notnull":false},{"name":"processor","type":"varchar(255)","notnull":false},{"name":"status","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[],"fks":[],"indexes":[],"checks":[],"oid":52945},"project_history":{"columns":[{"name":"changed_at","type":"timestamp","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"changed_by","type":"uuid","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"project_id","type":"uuid","notnull":false},{"name":"project_key","type":"varchar(20)","notnull":false},{"name":"field_name","type":"varchar(100)","notnull":true},{"name":"new_value","type":"text","notnull":false},{"name":"old_value","type":"text","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fk7p433kc2lowhbmhl2rkroqksl","columns":["changed_by"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52973},{"name":"fknqot7iut415wq4vg43uo4s0qp","columns":["project_id"],"ref_table":"projects","ref_columns":["id"],"extra":"","oid":52978}],"indexes":[],"checks":[],"oid":52663},"projects":{"columns":[{"name":"archived","type":"bool","default":"false","notnull":true},{"name":"archived_at","type":"timestamp","notnull":false},{"name":"created_at","type":"timestamp","notnull":true},{"name":"next_task_number","type":"bigint","default":"1","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"archived_by","type":"uuid","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"owner_id","type":"uuid","notnull":true},{"name":"team_id","type":"uuid","notnull":false},{"name":"key","type":"varchar(20)","notnull":true},{"name":"previous_status","type":"varchar(20)","notnull":false},{"name":"status","type":"varchar(20)","notnull":true},{"name":"name","type":"varchar(100)","notnull":true},{"name":"description","type":"varchar(500)","notnull":false}],"pk":["id"],"unique":[{"name":"projects_key_key","columns":["key"],"oid":52697}],"fks":[{"name":"fkmqih0928bq6r3gbuh47giq8w","columns":["team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":52988},{"name":"fkmueqy6cpcwpfl8gnnag4idjt9","columns":["owner_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52983}],"indexes":[],"checks":[],"oid":52676},"refresh_tokens":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"expires_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"token","type":"varchar(500)","notnull":true}],"pk":["id"],"unique":[{"name":"refresh_tokens_token_key","columns":["token"],"oid":52712}],"fks":[{"name":"fk1lih5y2npsf8u5o3vhdb9y0os","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52993}],"indexes":[],"checks":[],"oid":52698},"role_change_requests":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"status","type":"varchar(20)","notnull":true},{"name":"current_user_role","type":"varchar(30)","notnull":true},{"name":"requested_role","type":"varchar(30)","notnull":true},{"name":"job_title","type":"varchar(150)","notnull":false},{"name":"reviewed_by","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkd9dhgu58ehgshnnwc9dhj6d76","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":52998}],"indexes":[],"checks":[],"oid":52713},"sync_metadata":{"columns":[{"name":"sync_in_progress","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"last_sync_at","type":"timestamp","notnull":false},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"synced_by","type":"varchar(100)","notnull":false},{"name":"last_sync_result","type":"varchar(500)","notnull":false}],"pk":["id"],"unique":[],"fks":[],"indexes":[],"checks":[],"oid":52730},"task_attachments":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"file_size","type":"bigint","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"task_id","type":"uuid","notnull":true},{"name":"uploaded_by","type":"uuid","notnull":true},{"name":"content_type","type":"varchar(100)","notnull":true},{"name":"storage_path","type":"varchar(500)","notnull":true},{"name":"original_file_name","type":"varchar(255)","notnull":true},{"name":"stored_file_name","type":"varchar(255)","notnull":true}],"pk":["id"],"unique":[{"name":"task_attachments_stored_file_name_key","columns":["stored_file_name"],"oid":52759}],"fks":[{"name":"fk4eyiisq4wyx2mfj3p9h8ppufo","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53003},{"name":"fk8g8b4opj0xx4ptu66b8gxkkdo","columns":["uploaded_by"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53008}],"indexes":[],"checks":[],"oid":52741},"task_comments":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"parent_comment_id","type":"uuid","notnull":false},{"name":"task_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"content","type":"text","notnull":true}],"pk":["id"],"unique":[],"fks":[{"name":"fk1q8tnnknoes9jrvibtvg4eoic","columns":["parent_comment_id"],"ref_table":"task_comments","ref_columns":["id"],"extra":"","oid":53013},{"name":"fk6n4f8xnvwdkbjci078pqdn1w1","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53023},{"name":"fk9517viwn2geh1gpivj6l9y64u","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53018}],"indexes":[],"checks":[],"oid":52760},"task_history":{"columns":[{"name":"changed_at","type":"timestamp","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"task_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"field_name","type":"varchar(100)","notnull":true},{"name":"new_value","type":"text","notnull":false},{"name":"old_value","type":"text","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkjqraeud129avhcva579fhioj3","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53028},{"name":"fkvws0ackho5jjqad4sfy8e0tk","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53033}],"indexes":[],"checks":[],"oid":52773},"task_statuses":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"sort_order","type":"int","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"category","type":"varchar(20)","notnull":true},{"name":"name","type":"varchar(50)","notnull":true},{"name":"description","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[{"name":"task_statuses_name_key","columns":["name"],"oid":52801}],"fks":[],"indexes":[],"checks":[],"oid":52787},"task_types":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"subtask_type_id","type":"uuid","notnull":false},{"name":"name","type":"varchar(50)","notnull":true},{"name":"description","type":"varchar(255)","notnull":false},{"name":"icon","type":"varchar(255)","notnull":false}],"pk":["id"],"unique":[{"name":"task_types_name_key","columns":["name"],"oid":52815}],"fks":[{"name":"fkn99dior6arm0u1107rb7j3uih","columns":["subtask_type_id"],"ref_table":"task_types","ref_columns":["id"],"extra":"","oid":53038}],"indexes":[],"checks":[],"oid":52802},"tasks":{"columns":[{"name":"archived","type":"bool","notnull":true},{"name":"due_date","type":"date","notnull":false},{"name":"original_estimate_hrs","type":"double","notnull":false},{"name":"planned_week","type":"date","notnull":false},{"name":"remaining_estimate_hrs","type":"double","notnull":false},{"name":"reopened_from_done","type":"bool","default":"false","notnull":true},{"name":"archived_at","type":"timestamp","notnull":false},{"name":"created_at","type":"timestamp","notnull":true},{"name":"created_date","type":"timestamp","notnull":true},{"name":"finished_date","type":"timestamp","notnull":false},{"name":"last_reopened_at","type":"timestamp","notnull":false},{"name":"started_date","type":"timestamp","notnull":false},{"name":"task_number","type":"bigint","notnull":false},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"assignee_id","type":"uuid","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"parent_task_id","type":"uuid","notnull":false},{"name":"project_id","type":"uuid","notnull":true},{"name":"reporter_id","type":"uuid","notnull":true},{"name":"task_status_id","type":"uuid","notnull":true},{"name":"task_type_id","type":"uuid","notnull":true},{"name":"priority","type":"varchar(20)","notnull":true},{"name":"key","type":"varchar(50)","notnull":true},{"name":"description","type":"text","notnull":false},{"name":"title","type":"varchar(255)","notnull":true}],"pk":["id"],"unique":[{"name":"tasks_key_key","columns":["key"],"oid":52839}],"fks":[{"name":"fk76tiq4q248au3u79a8nkexoth","columns":["parent_task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53048},{"name":"fk7xndk7y2uk29wdu734xyutbqe","columns":["task_status_id"],"ref_table":"task_statuses","ref_columns":["id"],"extra":"","oid":53063},{"name":"fkbvjdsa9y725wovwlq4sjhodyk","columns":["reporter_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53058},{"name":"fkekr1dgiqktpyoip3qmp6lxsit","columns":["assignee_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53043},{"name":"fkkb5gyrxp5x7p5inusg3ykdugt","columns":["task_type_id"],"ref_table":"task_types","ref_columns":["id"],"extra":"","oid":53068},{"name":"fksfhn82y57i3k9uxww1s007acc","columns":["project_id"],"ref_table":"projects","ref_columns":["id"],"extra":"","oid":53053}],"indexes":[],"checks":[],"oid":52816},"team_capacity":{"columns":[{"name":"allocated_hrs","type":"double","notnull":true},{"name":"total_capacity_hrs","type":"double","notnull":true},{"name":"week_start","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"team_id","type":"uuid","notnull":true}],"pk":["id"],"unique":[{"name":"team_capacity_team_id_week_start_key","columns":["team_id","week_start"],"oid":52853},{"name":"uka1ytwsnaudxbcy7qny7qckk72","columns":["team_id","week_start"],"oid":53140}],"fks":[{"name":"fkd2c3a1hvnkpgc45f8jw8uf246","columns":["team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":53073}],"indexes":[],"checks":[],"oid":52840},"team_members":{"columns":[{"name":"created_at","type":"timestamp","notnull":true},{"name":"joined_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"team_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true}],"pk":["id"],"unique":[{"name":"team_members_team_id_user_id_key","columns":["team_id","user_id"],"oid":52866},{"name":"uks8nuwsa7nvebc246ed822w68x","columns":["team_id","user_id"],"oid":53142}],"fks":[{"name":"fkee8x7x5026imwmma9kndkxs36","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53083},{"name":"fktgca08el3ofisywcf11f0f76t","columns":["team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":53078}],"indexes":[],"checks":[],"oid":52854},"teams":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"manager_id","type":"uuid","notnull":false},{"name":"parent_team_id","type":"uuid","notnull":false},{"name":"name","type":"varchar(100)","notnull":true}],"pk":["id"],"unique":[{"name":"teams_name_key","columns":["name"],"oid":52878}],"fks":[{"name":"fk8rwj1snfq6jjnj7wbgbcjgxi3","columns":["parent_team_id"],"ref_table":"teams","ref_columns":["id"],"extra":"","oid":53093},{"name":"fk957exwbsdbxyv2kir751ejid7","columns":["manager_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53088}],"indexes":[],"checks":[],"oid":52867},"time_logs":{"columns":[{"name":"hours","type":"double","notnull":true},{"name":"log_date","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"task_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"note","type":"varchar(500)","notnull":false}],"pk":["id"],"unique":[],"fks":[{"name":"fkoun22vhbya8md711x7gbqv5j6","columns":["task_id"],"ref_table":"tasks","ref_columns":["id"],"extra":"","oid":53098},{"name":"fkpa0td7bk535jt0143oslckvxj","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53103}],"indexes":[],"checks":[],"oid":52879},"user_capacity":{"columns":[{"name":"absence_hrs","type":"double","notnull":true},{"name":"available_hrs","type":"double","notnull":true},{"name":"base_capacity_hrs","type":"double","notnull":true},{"name":"week_start","type":"date","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true}],"pk":["id"],"unique":[{"name":"uki8gtu7glow0uwp4up2d5ksonj","columns":["user_id","week_start"],"oid":53144},{"name":"user_capacity_user_id_week_start_key","columns":["user_id","week_start"],"oid":52907}],"fks":[{"name":"fkiui2fw3yo39om4lodhvrvp18t","columns":["user_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53108}],"indexes":[],"checks":[],"oid":52893},"user_roles":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"id","type":"uuid","notnull":true},{"name":"code","type":"varchar(50)","notnull":true},{"name":"label","type":"varchar(100)","notnull":true}],"pk":["id"],"unique":[{"name":"user_roles_code_key","columns":["code"],"oid":52920}],"fks":[],"indexes":[],"checks":[],"oid":52908},"users":{"columns":[{"name":"active","type":"bool","notnull":true},{"name":"created_at","type":"timestamp","notnull":true},{"name":"deactivated_at","type":"timestamp","notnull":false},{"name":"updated_at","type":"timestamp","notnull":true},{"name":"version","type":"bigint","notnull":false},{"name":"id","type":"uuid","notnull":true},{"name":"manager_id","type":"uuid","notnull":false},{"name":"manager_object_id","type":"uuid","notnull":false},{"name":"object_id","type":"uuid","notnull":false},{"name":"role","type":"varchar(20)","notnull":true},{"name":"account_name","type":"varchar(50)","notnull":false},{"name":"username","type":"varchar(50)","notnull":true},{"name":"department","type":"varchar(100)","notnull":false},{"name":"email","type":"varchar(100)","notnull":true},{"name":"full_name","type":"varchar(100)","notnull":true},{"name":"job_title","type":"varchar(150)","notnull":false},{"name":"password","type":"varchar(255)","notnull":false},{"name":"github_token","type":"varchar(512)","notnull":false},{"name":"github_token_updated_at","type":"timestamp","notnull":false}],"pk":["id"],"unique":[{"name":"users_account_name_key","columns":["account_name"],"oid":52940},{"name":"users_email_key","columns":["email"],"oid":52944},{"name":"users_object_id_key","columns":["object_id"],"oid":52938},{"name":"users_username_key","columns":["username"],"oid":52942}],"fks":[{"name":"fk5p1ci5btqfwvtaqx5n2wxi182","columns":["manager_id"],"ref_table":"users","ref_columns":["id"],"extra":"","oid":53113}],"indexes":[],"checks":[],"oid":52921},"forecast_runs":{"columns":[{"name":"id","type":"uuid","notnull":true},{"name":"team_id","type":"uuid","notnull":true},{"name":"requested_by","type":"uuid","notnull":true},{"name":"as_of","type":"date","notnull":true},{"name":"status","type":"varchar(16)","notnull":true},{"name":"backtest_json","type":"text","notnull":false},{"name":"error","type":"text","notnull":false},{"name":"created_at","type":"timestamp","notnull":true},{"name":"finished_at","type":"timestamp","notnull":false},{"name":"mae","type":"double","notnull":false}],"pk":["id"],"unique":[],"fks":[],"checks":[],"indexes":[{"name":"forecast_runs_team_idx","unique":false,"expr":"team_id, created_at","where":null,"oid":0}],"migration":"V1, V4","module":true,"oid":null},"forecast_member_windows":{"columns":[{"name":"run_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"window_index","type":"int","notnull":true},{"name":"window_start","type":"date","notnull":true},{"name":"window_end","type":"date","notnull":true},{"name":"demand_hrs","type":"double","notnull":true},{"name":"low_hrs","type":"double","notnull":true},{"name":"high_hrs","type":"double","notnull":true},{"name":"capacity_hrs","type":"double","notnull":true},{"name":"overload_hrs","type":"double","notnull":true},{"name":"working_days","type":"int","notnull":true},{"name":"absence_hrs","type":"double","notnull":true},{"name":"backlog_excess_hrs","type":"double","notnull":true,"default":"0"},{"name":"due_excess_hrs","type":"double","notnull":true,"default":"0"}],"pk":["run_id","user_id","window_index"],"unique":[],"fks":[{"name":"references forecast_runs(id)","columns":["run_id"],"ref_table":"forecast_runs","ref_columns":["id"],"extra":"","oid":0}],"checks":[],"indexes":[],"migration":"V3, V4, V5","module":true,"oid":null},"forecast_member_days":{"columns":[{"name":"run_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"day","type":"date","notnull":true},{"name":"window_index","type":"int","notnull":true},{"name":"demand_hrs","type":"double","notnull":true},{"name":"capacity_hrs","type":"double","notnull":true},{"name":"overload_hrs","type":"double","notnull":true},{"name":"working_day","type":"bool","notnull":true}],"pk":["run_id","user_id","day"],"unique":[],"fks":[{"name":"references forecast_runs(id)","columns":["run_id"],"ref_table":"forecast_runs","ref_columns":["id"],"extra":"","oid":0}],"checks":[],"indexes":[],"migration":"V3, V4","module":true,"oid":null},"forecast_current_days":{"columns":[{"name":"team_id","type":"uuid","notnull":true},{"name":"user_id","type":"uuid","notnull":true},{"name":"day","type":"date","notnull":true},{"name":"run_id","type":"uuid","notnull":true},{"name":"demand_hrs","type":"double","notnull":true},{"name":"capacity_hrs","type":"double","notnull":true},{"name":"overload_hrs","type":"double","notnull":true},{"name":"forecast_at","type":"timestamp","notnull":true}],"pk":["team_id","user_id","day"],"unique":[],"fks":[{"name":"references forecast_runs(id)","columns":["run_id"],"ref_table":"forecast_runs","ref_columns":["id"],"extra":"","oid":0}],"checks":[],"indexes":[{"name":"forecast_current_days_team_idx","unique":false,"expr":"team_id, day","where":null,"oid":0}],"migration":"V3, V4","module":true,"oid":null},"forecast_facts":{"columns":[{"name":"run_id","type":"uuid","notnull":true},{"name":"facts_json","type":"text","notnull":true},{"name":"created_at","type":"timestamp","notnull":true}],"pk":["run_id"],"unique":[],"fks":[{"name":"references forecast_runs(id)","columns":["run_id"],"ref_table":"forecast_runs","ref_columns":["id"],"extra":"","oid":0}],"checks":[],"indexes":[],"migration":"V1","module":true,"oid":null},"forecast_narratives":{"columns":[{"name":"id","type":"uuid","notnull":true},{"name":"run_id","type":"uuid","notnull":true},{"name":"language","type":"varchar(2)","notnull":true},{"name":"status","type":"varchar(16)","notnull":true},{"name":"model","type":"text","notnull":false},{"name":"narrative_json","type":"text","notnull":false},{"name":"raw_text","type":"text","notnull":false},{"name":"verification_json","type":"text","notnull":true},{"name":"usage_json","type":"text","notnull":true},{"name":"error","type":"text","notnull":false},{"name":"attempts","type":"int","notnull":true},{"name":"tool_calls","type":"int","notnull":true},{"name":"created_at","type":"timestamp","notnull":true}],"pk":["id"],"unique":[],"fks":[{"name":"references forecast_runs(id)","columns":["run_id"],"ref_table":"forecast_runs","ref_columns":["id"],"extra":"","oid":0}],"checks":[],"indexes":[{"name":"forecast_narratives_run_idx","unique":false,"expr":"run_id, language, created_at","where":null,"oid":0}],"migration":"V1, V2","module":true,"oid":null},"forecast_schema_history":{"columns":[{"name":"installed_rank","type":"int","notnull":true},{"name":"version","type":"varchar(50)","notnull":false},{"name":"description","type":"varchar(200)","notnull":true},{"name":"type","type":"varchar(20)","notnull":true},{"name":"script","type":"varchar(1000)","notnull":true},{"name":"checksum","type":"int","notnull":false},{"name":"installed_by","type":"varchar(100)","notnull":true},{"name":"installed_on","type":"timestamp","notnull":true,"default":"now()"},{"name":"execution_time","type":"int","notnull":true},{"name":"success","type":"bool","notnull":true}],"pk":["installed_rank"],"unique":[],"fks":[],"checks":[],"indexes":[{"name":"forecast_schema_history_s_idx","unique":false,"expr":"success","where":null,"oid":0}],"migration":"Flyway","module":true,"oid":null}};
-  // ---- hand-written knowledge -----------------------------------------------------------
   var GROUPS = [
     {label: 'Forecast module · results', tables: ['forecast_member_windows', 'forecast_member_days', 'forecast_current_days']},
     {label: 'Forecast module · runs', tables: ['forecast_runs', 'forecast_facts', 'forecast_narratives', 'forecast_schema_history']},
@@ -209,14 +238,9 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
     {label: 'The work', tables: ['tasks', 'task_history', 'time_logs']},
     {label: 'Comments, files, calendar', tables: ['task_comments', 'task_attachments', 'holidays']}
   ];
-  var NEW = {personal_leaves: true};
-  var LEGACY = {absences: 'legacy', user_capacity: 'not read', team_capacity: 'not read'};
-  var LATER_COLS = {'job_title_role_mappings.user_id': true, 'users.manager_id': true};
-  var LATER_OID = 53113; // first object created after the base schema's foreign keys
   var MOD_COLS = {'users.github_token': true, 'users.github_token_updated_at': true};
   var IMPLIED = [
     {from: 'personal_leaves', col: 'employee_id', to: 'users', cls: 'implied'},
-    {from: 'notifications', col: 'user_id', to: 'users', cls: 'implied'},
     {from: 'forecast_runs', col: 'team_id', to: 'teams', cls: 'modjoin'},
     {from: 'forecast_runs', col: 'requested_by', to: 'users', cls: 'modjoin'},
     {from: 'forecast_member_windows', col: 'user_id', to: 'users', cls: 'modjoin'},
@@ -238,32 +262,33 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
     personal_leaves: ['employee_id', 'start_date', 'end_date', 'begin_time', 'end_time', 'absence_hours', 'status', 'leave_type']
   };
   var READ_USE = {
-    users: ['Members: active rows with role MEMBER or TEAM_LEADER; the name is what a task_history assignee row stores and what the narrative uses; job_title and role are categorical features; deactivated_at ends the member’s capacity.', 'no'],
-    teams: ['The team a run covers, its leader (manager_id) and its parent team (the department view sums child teams).', 'no'],
-    team_members: ['Which members belong to the team and since when: tenure_weeks and the first row of each member’s history.', 'no'],
-    projects: ['The team’s projects and their status: proj_active, proj_planning, the unassigned team backlog, project keys in the facts. Archived projects are skipped.', 'yes, upserted by id'],
-    tasks: ['The work: estimates, dates, status, type, priority, assignee, reporter, parent, due date, planned week, reopened flag. Every arrival, open-work and target-week feature starts here.', 'yes, replaced'],
-    task_history: ['Assignee rows give the assignment date (changed_at) and who assigned (user_id: self-picked or assigned); status rows give start and finish dates when the task lacks them.', 'yes, replaced'],
-    time_logs: ['The truth: hours per member, task and day. The target of the model and every lag and rolling feature.', 'yes, replaced'],
-    task_statuses: ['Maps each status to TO_DO, IN_PROGRESS or DONE.', 'no'],
-    task_types: ['Maps each type name to a family: defect, delivery, support, container.', 'no'],
-    holidays: ['CONFIRMED and active ranges take days off the working calendar; PENDING ones are listed in the facts.', 'no'],
-    personal_leaves: ['APPROVED leaves reduce capacity: absence_hours dealt over the leave’s working days, 8.8 h per day, times marking a partial first or last day. PENDING leaves are listed in the facts and never reduce capacity. REJECTED and CANCELLED are not loaded.', 'yes, replaced']
+    users: 'Who is forecast: active users with role MEMBER or TEAM_LEADER and a team. full_name is what a task_history assignee row names and what the narrative calls the person; role and job_title are categorical features; deactivated_at ends the member’s capacity.',
+    teams: 'The team a run covers, its leader (manager_id) and its parent team; a department view sums its child teams.',
+    team_members: 'Which members belong to the team and since when: the start of each member’s history and their tenure.',
+    projects: 'The team’s and parent team’s projects and their status: active and planning project counts, the unassigned backlog of the team, project keys in the facts. Archived projects are skipped.',
+    tasks: 'The work: estimates, dates, status, type, priority, assignee, reporter, parent, due date, planned week, reopened flag. Every arrival, open-work and target-week feature starts here.',
+    task_history: 'Assignee rows give the assignment date (changed_at) and who assigned (user_id); status rows give start and finish dates when the task lacks them.',
+    time_logs: 'The truth: hours per member, task and day. The target of the model, every lag and rolling feature, and the accuracy check.',
+    task_statuses: 'Maps each status to TO_DO, IN_PROGRESS or DONE.',
+    task_types: 'Maps each type name to a family: defect, delivery, support, container.',
+    holidays: 'CONFIRMED and active ranges take weekdays off everyone’s calendar; PENDING ones are listed in the facts.',
+    personal_leaves: 'APPROVED leaves reduce capacity, dealt over the leave’s working days at 8.8 h a day with the times marking a partial first or last day; PENDING leaves are listed in the facts; other statuses are ignored.'
   };
+  var LEGACY = {absences: 'not used', user_capacity: 'not used', team_capacity: 'not used'};
   var DESC = {
-    forecast_runs: 'One row per forecast run: the team, who requested it, the as-of day, the status shown as a progress label, the backtest\u2019s MAE and JSON, and the error when it failed.',
+    forecast_runs: 'One row per forecast run: the team, who requested it, the as-of day, the status shown as a progress label, the backtest’s MAE and JSON, and the error when it failed.',
     forecast_member_windows: 'Per run, member and window: predicted demand with its low and high band, capacity, overload, working days, absence hours and the two pressure figures.',
-    forecast_member_days: 'Per run, member and day: the week\u2019s demand placed on the day, the day\u2019s capacity and overload, and whether it is a working day.',
+    forecast_member_days: 'Per run, member and day: the week’s demand placed on the day, the day’s capacity and overload, and whether it is a working day.',
     forecast_current_days: 'The current forecast: the latest value per team, member and day, upserted by each run; days that have arrived keep the last forecast made before them. The accuracy check scores it against time_logs.',
     forecast_facts: 'The exact facts JSON a run produced and Copilot was allowed to cite, kept for audit.',
     forecast_narratives: 'Every narration attempt: language, status (OK, UNVERIFIED, FAILED), the narrative and verification JSON, the raw answer, usage, attempts and tool calls.',
-    forecast_schema_history: 'Flyway\u2019s history of the module\u2019s own migrations, baselined at version 0 so the application\u2019s tables are left alone.',
-    absences: 'Legacy: one row per user and day of absence with a type. The application stops writing it; absence now lives in personal_leaves.',
+    forecast_schema_history: 'Flyway’s history of the module’s own migrations, baselined at version 0 so the application’s tables are left alone.',
+    absences: 'One row per user and day of absence with a type. Not read by the forecast: absence comes from personal_leaves.',
     holidays: 'Public holidays as date ranges with a country code, a status (CONFIRMED or PENDING) and a type. Confirmed, active ranges are days off for everyone.',
     job_title_role_mappings: 'Which role a job title implies. With user_id null the mapping is global; with a user_id it overrides the global one for that person (the partial unique indexes enforce one of each).',
     job_titles: 'The list of job titles, unique ignoring case.',
-    notifications: 'In-app notifications to a user about a task or team event; user_id and reporter_id are user ids without a declared key.',
-    personal_leaves: 'One row per leave request of an employee: a period, optional begin and end times for a partial first or last day, the total absence hours, a type, a status and who processed it.',
+    notifications: 'In-app notifications to a user about a task or team event.',
+    personal_leaves: 'One row per leave request of an employee: a period, optional begin and end times for a partial first or last day, the total absence hours, a type, a status and who processed it. The forecast’s only source of absence.',
     project_history: 'Field-level change log of projects (who changed what and when).',
     projects: 'A project with a key, a status, an owner and an owning team; next_task_number numbers its tasks. No start or end date.',
     refresh_tokens: 'Login session tokens.',
@@ -271,93 +296,91 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
     sync_metadata: 'State of the directory synchronisation that populates users.',
     task_attachments: 'Files attached to a task.',
     task_comments: 'Threaded comments on a task (parent_comment_id).',
-    task_history: 'Field-level change log of tasks: field_name, old and new value, when, and by whom (user_id). The assignee rows carry a full name in new_value.',
+    task_history: 'Field-level change log of tasks: field_name, old and new value, when, and by whom (user_id). The assignee rows are the forecast’s source for assignment dates and for who assigned.',
     task_statuses: 'The status list, each in a category TO_DO, IN_PROGRESS or DONE.',
     task_types: 'The twelve task types; Sub-task points to its parent type through subtask_type_id.',
     tasks: 'The task: key, title, description, estimates, dates, status, type, priority, assignee, reporter, parent task, project, due date, planned week, reopen flags.',
-    team_capacity: 'Not read: total and allocated hours per team and week. Capacity is now the module’s own formula.',
+    team_capacity: 'Total and allocated hours per team and week. Not read: capacity is the forecast’s own formula.',
     team_members: 'Membership of users in teams with a join date.',
     teams: 'A team with a leader (manager_id) and an optional parent team (the department).',
     time_logs: 'Hours logged by a user on a task on a day.',
-    user_capacity: 'Not read: base, absence and available hours per user and week. Capacity is now the module’s own formula.',
+    user_capacity: 'Base, absence and available hours per user and week. Not read: capacity is the forecast’s own formula.',
     user_roles: 'The role list (code and label).',
-    users: 'Every account, synced from the directory: name, e-mail, role, job title, department, manager, active flag and deactivation date.'
+    users: 'Every account, synced from the directory: name, e-mail, role, job title, department, manager, active flag and deactivation date; plus the module’s two token columns.'
   };
   var COLNOTE = {
-    'users.github_token': 'the user\u2019s own GitHub token for Copilot, encrypted with whf.token-key; read in one place, for the requesting user',
+    'users.github_token': 'the user’s own GitHub token for Copilot, encrypted with whf.token-key; read in one place, for the requesting user',
     'users.github_token_updated_at': 'when the token was stored',
+    'users.manager_id': 'self-reference to the manager',
+    'users.object_id': 'the directory’s identifier, unique',
+    'users.active': 'only active users are forecast',
+    'users.role': 'MEMBER and TEAM_LEADER are forecast; the others are not',
+    'users.deactivated_at': 'ends the member’s capacity from that day',
+    'tasks.planned_week': 'the Monday of the week the leader intends the work for; planned hours per target week',
+    'tasks.original_estimate_hrs': 'the size of arriving work, in hours',
+    'tasks.remaining_estimate_hrs': 'shown to the leader as the hours still open; the features recompute remaining hours as estimate minus logged',
+    'tasks.reopened_from_done': 'rework; read as of today (no history)',
+    'tasks.due_date': 'overdue work and hours due per target week; read as of today',
+    'tasks.archived': 'archived tasks are skipped',
+    'task_history.field_name': 'assignee and status rows are read',
+    'task_history.user_id': 'who made the change; on an assignee row, who assigned: equal to the assignee means self-picked',
+    'task_history.new_value': 'on an assignee row: the assignee’s full name (or e-mail, username, UUID); empty, None or null means unassigned',
+    'task_history.changed_at': 'the assignment date, or the start or finish date when the task lacks one',
+    'personal_leaves.absence_hours': 'the total for the whole leave; null means every working day of the period',
+    'personal_leaves.begin_time': 'set when the leave starts on a partial day',
+    'personal_leaves.end_time': 'set when the leave ends on a partial day',
+    'personal_leaves.employee_id': 'the user on leave; must be a users.id, no foreign key is declared',
+    'personal_leaves.status': 'APPROVED reduces capacity; PENDING is listed in the facts; REJECTED and CANCELLED are ignored',
+    'team_members.joined_at': 'start of the member’s history and of their tenure',
+    'holidays.status': 'CONFIRMED takes days off the calendar; PENDING is only mentioned',
+    'holidays.active': 'inactive ranges are ignored',
+    'time_logs.hours': 'the target of the model, summed per member and week',
+    'projects.archived': 'archived projects are skipped',
+    'projects.team_id': 'the team’s and its parent team’s projects feed the team features',
     'forecast_runs.team_id': 'teams.id, without a declared key',
     'forecast_runs.requested_by': 'users.id of the leader who started the run, without a declared key',
     'forecast_runs.status': 'the progress label the host shows',
-    'forecast_runs.mae': 'mean absolute error in hours from the run\u2019s backtest; null on thin history',
-    'forecast_member_windows.low_hrs': 'demand plus the backtest\u2019s 10th percentile offset',
+    'forecast_runs.mae': 'mean absolute error in hours from the run’s backtest; null on thin history',
+    'forecast_member_windows.low_hrs': 'demand plus the backtest’s 10th percentile offset',
     'forecast_member_windows.high_hrs': 'demand plus the 90th percentile offset',
     'forecast_member_windows.backlog_excess_hrs': 'open remaining hours beyond the predicted demand so far',
     'forecast_member_windows.due_excess_hrs': 'hours due in the window beyond its capacity',
     'forecast_member_windows.absence_hrs': 'approved leave hours in the window, dealt from personal_leaves',
     'forecast_current_days.forecast_at': 'when the run that wrote this day finished',
     'forecast_narratives.status': 'OK, UNVERIFIED (numbers not found in the facts) or FAILED',
-    'forecast_narratives.language': 'en or fr',
-    'tasks.planned_week': 'a Monday, the week the leader intends the work for; read since 2026-09-17 for planned_hrs_h',
-    'tasks.remaining_estimate_hrs': 'read for the leader-facing facts only; the features recompute remaining hours as estimate minus logged',
-    'tasks.reopened_from_done': 'read as of today (no history): reopen_rate_13w',
-    'task_history.user_id': 'who made the change; on an assignee row, who assigned: equal to the assignee means self-picked',
-    'task_history.new_value': 'on an assignee row: the assignee’s full name, resolved to a user',
-    'personal_leaves.absence_hours': 'the total for the whole leave; null means the whole period counts',
-    'personal_leaves.begin_time': 'set when the leave starts on a partial day',
-    'personal_leaves.end_time': 'set when the leave ends on a partial day',
-    'personal_leaves.employee_id': 'the user on leave; no foreign key to users is declared',
-    'personal_leaves.status': 'only APPROVED reduces capacity; PENDING is listed in the facts',
-    'users.manager_id': 'self-reference to the manager; its foreign key was added after the base schema',
-    'users.object_id': 'the directory’s identifier, unique',
-    'users.manager_object_id': 'the manager’s directory identifier',
-    'job_title_role_mappings.user_id': 'null for the global mapping of a job title, set for a per-user override; added after the base schema',
-    'team_members.joined_at': 'start of the member’s history and of tenure_weeks',
-    'holidays.status': 'CONFIRMED takes days off the calendar; PENDING is only mentioned',
-    'time_logs.hours': 'the target of the model, summed per member and week',
-    'projects.next_task_number': 'the seed refreshes it when it upserts projects'
+    'forecast_narratives.language': 'en or fr'
   };
   var isRead = {};
   Object.keys(READ).forEach(function (t) { READ[t].forEach(function (c) { isRead[t + '.' + c] = true; }); });
   function fkOf(t, c) { return (T[t].fks || []).filter(function (f) { return f.columns[0] === c; })[0]; }
   function isPk(t, c) { return T[t].pk.indexOf(c) >= 0; }
-  function laterKey(t, c) { var f = fkOf(t, c); return LATER_COLS[t + '.' + c] || (f && f.oid && f.oid >= LATER_OID); }
 
-  // ---- stats ---------------------------------------------------------------------------
-  var nT = 0, nC = 0, nF = 0, nU = 0, mT = 0, mC = 0;
-  Object.keys(T).forEach(function (t) { if (T[t].module) { mT++; mC += T[t].columns.length; return; } nT++; nC += T[t].columns.length; nF += T[t].fks.length; nU += T[t].unique.length; });
+  // stats
+  var nT = 0, nC = 0, nF = 0, mT = 0, mC = 0;
+  Object.keys(T).forEach(function (t) { if (T[t].module) { mT++; mC += T[t].columns.length; return; } nT++; nC += T[t].columns.length; nF += T[t].fks.length; });
   nC -= 2;
-  document.getElementById('stats').innerHTML = '<span><b>' + nT + '</b> application tables</span><span><b>' + nC + '</b> columns</span><span><b>' + nF + '</b> foreign keys</span><span><b>' + nU + '</b> unique constraints</span><span><b>1</b> table added after the base schema</span><span><b>2</b> columns with keys added later</span><span><b>' + mT + '</b> tables added by the forecast module, <b>' + (mC + 2) + '</b> columns</span>';
+  document.getElementById('stats').innerHTML = '<span><b>' + nT + '</b> application tables, <b>' + nC + '</b> columns, <b>' + nF + '</b> foreign keys</span><span><b>' + mT + '</b> tables added by the forecast module, <b>' + (mC + 2) + '</b> columns</span><span><b>' + Object.keys(READ).length + '</b> application tables read by the forecast</span>';
 
-  // ---- ER diagram -----------------------------------------------------------------------
+  // ER diagram
   var svgNS = 'http://www.w3.org/2000/svg';
   var svg = document.getElementById('er');
   function el(name, attrs, text) { var e = document.createElementNS(svgNS, name); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
   var W = 262, GAPX = 52, HEAD = 26, ROW = 16, GAPY = 40, TOP = 40, LEFT = 20;
-  var pos = {};
-  var maxY = 0;
+  var pos = {}, maxY = 0;
   GROUPS.forEach(function (g, gi) {
     var x = LEFT + gi * (W + GAPX), y = TOP;
     g.x = x;
-    g.tables.forEach(function (t) {
-      var h = HEAD + ROW * T[t].columns.length + 6;
-      pos[t] = {x: x, y: y, w: W, h: h};
-      y += h + GAPY;
-    });
+    g.tables.forEach(function (t) { var h = HEAD + ROW * T[t].columns.length + 6; pos[t] = {x: x, y: y, w: W, h: h}; y += h + GAPY; });
     maxY = Math.max(maxY, y);
   });
   var totalW = LEFT + GROUPS.length * (W + GAPX) - GAPX + LEFT;
   svg.setAttribute('viewBox', '0 0 ' + totalW + ' ' + (maxY + 10));
   var defs = el('defs', {});
-  var mk = el('marker', {id: 'er-arrow', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse'});
-  mk.appendChild(el('path', {d: 'M0 0L10 5L0 10z', 'class': 'arrow'}));
-  defs.appendChild(mk);
-  var mk2 = el('marker', {id: 'er-arrow-warn', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse'});
-  mk2.appendChild(el('path', {d: 'M0 0L10 5L0 10z', fill: 'var(--warn)'}));
-  defs.appendChild(mk2);
-  var mk3 = el('marker', {id: 'er-arrow-mod', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse'});
-  mk3.appendChild(el('path', {d: 'M0 0L10 5L0 10z', fill: 'var(--mod)'}));
-  defs.appendChild(mk3);
+  [['er-arrow', 'var(--ink-2)'], ['er-arrow-warn', 'var(--warn)'], ['er-arrow-mod', 'var(--mod)']].forEach(function (m) {
+    var mk = el('marker', {id: m[0], viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse'});
+    mk.appendChild(el('path', {d: 'M0 0L10 5L0 10z', fill: m[1]}));
+    defs.appendChild(mk);
+  });
   svg.appendChild(defs);
   var gEdges = el('g', {}), gNodes = el('g', {});
   svg.appendChild(gEdges); svg.appendChild(gNodes);
@@ -365,48 +388,39 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
   function rowY(t, c) { var i = T[t].columns.map(function (x) { return x.name; }).indexOf(c); return pos[t].y + HEAD + ROW * i + ROW / 2 + 3; }
   function pkY(t) { return rowY(t, T[t].pk[0]); }
   var edges = [];
-  function drawEdge(from, col, to, cls, label) {
+  function drawEdge(from, col, to, cls) {
     var a = pos[from], b = pos[to];
     var y1 = rowY(from, col), y2 = pkY(to), d;
-    var lx = 0, ly = y1 - 5, anchor = 'middle';
     if (from === to) {
       var xr = a.x + a.w;
       d = 'M' + xr + ' ' + y1 + ' C' + (xr + 44) + ' ' + y1 + ' ' + (xr + 44) + ' ' + y2 + ' ' + xr + ' ' + y2;
-      lx = xr + 6; anchor = 'start';
     } else if (a.x === b.x) {
       var xs = a.x + a.w;
       d = 'M' + xs + ' ' + y1 + ' C' + (xs + 70) + ' ' + y1 + ' ' + (xs + 70) + ' ' + y2 + ' ' + xs + ' ' + y2;
-      lx = xs + 6; ly = (y1 + y2) / 2; anchor = 'start';
     } else {
       var x1, x2, dx;
       if (b.x > a.x) { x1 = a.x + a.w; x2 = b.x; } else { x1 = a.x; x2 = b.x + b.w; }
       dx = Math.max(40, Math.abs(x2 - x1) * 0.4) * (x2 > x1 ? 1 : -1);
       d = 'M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ' ' + (x2 - dx) + ' ' + y2 + ' ' + x2 + ' ' + y2;
-      lx = (x1 + x2) / 2; ly = (y1 + y2) / 2 - 5;
     }
     var p = el('path', {d: d, 'class': 'edge' + (cls ? ' ' + cls : ''), 'marker-end': cls === 'implied' ? 'url(#er-arrow-warn)' : cls === 'modjoin' ? 'url(#er-arrow-mod)' : 'url(#er-arrow)'});
     p.dataset.from = from; p.dataset.to = to; p.dataset.col = col;
     gEdges.appendChild(p); edges.push(p);
-    if (label) gEdges.appendChild(el('text', {x: lx, y: ly, 'class': 'elabel', 'text-anchor': anchor}, label));
   }
-  Object.keys(T).forEach(function (t) {
-    T[t].fks.forEach(function (f) { drawEdge(t, f.columns[0], f.ref_table, f.oid >= LATER_OID ? 'later' : ''); });
-  });
-  IMPLIED.forEach(function (i) { drawEdge(i.from, i.col, i.to, i.cls, i.label); });
+  Object.keys(T).forEach(function (t) { T[t].fks.forEach(function (f) { drawEdge(t, f.columns[0], f.ref_table, ''); }); });
+  IMPLIED.forEach(function (i) { drawEdge(i.from, i.col, i.to, i.cls); });
   var nodeEls = {};
   Object.keys(pos).forEach(function (t) {
     var p = pos[t];
-    var cls = 'tbl' + (NEW[t] ? ' new' : '') + (LEGACY[t] ? ' legacy' : '') + (T[t].module ? ' mod' : '');
-    var g = el('g', {'class': cls, tabindex: '0', role: 'button', 'aria-label': t});
+    var g = el('g', {'class': 'tbl' + (LEGACY[t] ? ' legacy' : '') + (T[t].module ? ' mod' : ''), tabindex: '0', role: 'button', 'aria-label': t});
     g.dataset.id = t;
     g.appendChild(el('rect', {x: p.x, y: p.y, width: p.w, height: p.h, rx: 4, 'class': 'box'}));
     g.appendChild(el('rect', {x: p.x + 1, y: p.y + 1, width: p.w - 2, height: HEAD - 2, rx: 3, 'class': 'head'}));
     g.appendChild(el('text', {x: p.x + 9, y: p.y + 17, 'class': 'name'}, t));
-    var badge = T[t].module ? ['MODULE', 'mod'] : NEW[t] ? ['NEW TABLE', 'new'] : LEGACY[t] ? [LEGACY[t].toUpperCase(), 'legacy'] : READ[t] ? ['READ', 'read'] : null;
+    var badge = T[t].module ? ['MODULE', 'mod'] : LEGACY[t] ? ['NOT USED', 'legacy'] : READ[t] ? ['READ', 'read'] : null;
     if (badge) g.appendChild(el('text', {x: p.x + p.w - 8, y: p.y + 17, 'text-anchor': 'end', 'class': 'badge ' + badge[1]}, badge[0]));
     T[t].columns.forEach(function (c, i) {
       var y = p.y + HEAD + ROW * i;
-      if (laterKey(t, c.name)) g.appendChild(el('rect', {x: p.x + 1, y: y, width: p.w - 2, height: ROW, 'class': 'row-later'}));
       if (MOD_COLS[t + '.' + c.name]) g.appendChild(el('rect', {x: p.x + 1, y: y, width: p.w - 2, height: ROW, 'class': 'row-mod'}));
       if (isRead[t + '.' + c.name]) g.appendChild(el('rect', {x: p.x + 1, y: y + 3, width: 3, height: ROW - 6, 'class': 'tick'}));
       var key = isPk(t, c.name) ? 'PK' : fkOf(t, c.name) ? 'FK' : '';
@@ -416,24 +430,20 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
     });
     gNodes.appendChild(g); nodeEls[t] = g;
   });
-  var detail = document.getElementById('detail');
-  var current = null;
+  var detail = document.getElementById('detail'), current = null;
   function focus(t) {
     svg.classList.add('focus');
-    var on = {}; on[t] = true;
-    var lines = [];
+    var on = {}; on[t] = true; var lines = [];
     edges.forEach(function (p) {
       var hit = p.dataset.from === t || p.dataset.to === t;
       p.classList.toggle('on', hit);
       if (hit) {
         on[p.dataset.from] = true; on[p.dataset.to] = true;
-        var implied = p.classList.contains('implied');
-        lines.push('<b>' + p.dataset.from + '.' + p.dataset.col + '</b> → <b>' + p.dataset.to + '.id</b>' + (implied ? ' <span class="tag warn">not declared</span>' : p.classList.contains('modjoin') ? ' <span class="tag mod">module join, no key</span>' : p.classList.contains('later') ? ' <span class="tag later">key added later</span>' : ''));
+        lines.push('<b>' + p.dataset.from + '.' + p.dataset.col + '</b> → <b>' + p.dataset.to + '.id</b>' + (p.classList.contains('implied') ? ' <span class="tag warn">no key declared</span>' : p.classList.contains('modjoin') ? ' <span class="tag mod">module join, no key</span>' : ''));
       }
     });
     Object.keys(nodeEls).forEach(function (k) { nodeEls[k].classList.toggle('on', !!on[k]); });
-    var head = '<b>' + t + '</b> — ' + (DESC[t] || '');
-    detail.innerHTML = head + (lines.length ? '<br>' + lines.join('<br>') : '<br>No relationships.') + ' <a href="#cat-' + t + '" style="color:var(--accent)">Full columns ↓</a>';
+    detail.innerHTML = '<b>' + t + '</b> — ' + (DESC[t] || '') + (lines.length ? '<br>' + lines.join('<br>') : '<br>No relationships.') + ' <a class="x" href="#cat-' + t + '">Full columns ↓</a>';
   }
   function reset() {
     svg.classList.remove('focus');
@@ -441,28 +451,19 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
     edges.forEach(function (p) { p.classList.remove('on'); });
     detail.textContent = 'Click a table to list its relationships; click the background to reset.';
   }
-  gNodes.addEventListener('click', function (ev) {
-    var g = ev.target.closest('.tbl'); if (!g) return;
-    ev.stopPropagation();
-    if (current === g.dataset.id) { current = null; reset(); return; }
-    current = g.dataset.id; focus(current);
-  });
-  gNodes.addEventListener('keydown', function (ev) {
-    if (ev.key !== 'Enter' && ev.key !== ' ') return;
-    var g = ev.target.closest('.tbl'); if (!g) return;
-    ev.preventDefault(); current = g.dataset.id; focus(current);
-  });
+  gNodes.addEventListener('click', function (ev) { var g = ev.target.closest('.tbl'); if (!g) return; ev.stopPropagation(); if (current === g.dataset.id) { current = null; reset(); return; } current = g.dataset.id; focus(current); });
+  gNodes.addEventListener('keydown', function (ev) { if (ev.key !== 'Enter' && ev.key !== ' ') return; var g = ev.target.closest('.tbl'); if (!g) return; ev.preventDefault(); current = g.dataset.id; focus(current); });
   svg.addEventListener('click', function () { current = null; reset(); });
 
-  // ---- the reading table --------------------------------------------------------------
+  // the reading table
   var rt = document.querySelector('#readtable tbody');
   ['users', 'teams', 'team_members', 'projects', 'tasks', 'task_history', 'time_logs', 'task_statuses', 'task_types', 'holidays', 'personal_leaves'].forEach(function (t) {
     var tr = document.createElement('tr');
-    tr.innerHTML = '<td class="mono"><a href="#cat-' + t + '" style="color:var(--accent);text-decoration:none">' + t + '</a>' + (NEW[t] ? ' <span class="tag new">new</span>' : '') + '</td><td class="mono" style="font-size:12px">' + READ[t].join(', ') + '</td><td>' + READ_USE[t][0] + '</td><td>' + READ_USE[t][1] + '</td>';
+    tr.innerHTML = '<td class="mono"><a class="x" href="#cat-' + t + '">' + t + '</a></td><td class="mono" style="font-size:12px">' + READ[t].join(', ') + '</td><td>' + READ_USE[t] + '</td>';
     rt.appendChild(tr);
   });
 
-  // ---- the catalogue -------------------------------------------------------------------
+  // the catalogue
   var cat = document.getElementById('catalogue');
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
   GROUPS.forEach(function (g) {
@@ -470,7 +471,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
     g.tables.forEach(function (t) {
       var d = T[t];
       var sec = document.createElement('section'); sec.id = 'cat-' + t;
-      var tags = (d.module ? '<span class="tag mod">added by the forecast module \u00b7 ' + d.migration + '</span>' : NEW[t] ? '<span class="tag new">new table \u00b7 OID ' + d.oid + '</span>' : '<span class="tag key" style="border-color:var(--rule);color:var(--ink-2)">OID ' + d.oid + '</span>') + (LEGACY[t] ? '<span class="tag legacy">' + LEGACY[t] + '</span>' : '') + (READ[t] ? '<span class="tag read">read by the forecast</span>' : '');
+      var tags = (d.module ? '<span class="tag mod">added by the forecast module</span>' : '') + (LEGACY[t] ? '<span class="tag legacy">' + LEGACY[t] + '</span>' : '') + (READ[t] ? '<span class="tag read">read by the forecast</span>' : '');
       var h = '<h3><code>' + t + '</code> ' + tags + '</h3><p class="desc">' + esc(DESC[t] || '') + '</p>';
       h += '<div class="table-wrap"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Key</th><th>Note</th></tr></thead><tbody>';
       d.columns.forEach(function (c) {
@@ -483,16 +484,17 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
         var note = COLNOTE[t + '.' + c.name] ? esc(COLNOTE[t + '.' + c.name]) : '';
         if (chk) note = (note ? note + '. ' : '') + 'One of ' + chk.values.map(function (v) { return '<code>' + v + '</code>'; }).join(', ');
         if (c['default']) note = (note ? note + '. ' : '') + 'Default <code>' + esc(c['default']) + '</code>';
-        var later = laterKey(t, c.name), modc = MOD_COLS[t + '.' + c.name];
+        var modc = MOD_COLS[t + '.' + c.name];
         if (modc) note = (note ? note + '. ' : '') + '<span class="tag mod">added by the module</span>';
-        h += '<tr' + (later ? ' class="later"' : modc ? ' class="mod"' : '') + '><td class="mono n">' + (isRead[t + '.' + c.name] ? '<span class="readdot" title="read by the forecast"></span>' : '') + c.name + '</td><td class="mono">' + esc(c.type) + '</td><td>' + (c.notnull ? 'not null' : 'null') + '</td><td>' + key.join(' ') + '</td><td>' + note + (later ? (note ? '. ' : '') + '<span class="tag later">key added later</span>' : '') + '</td></tr>';
+        h += '<tr' + (modc ? ' class="mod"' : '') + '><td class="mono n">' + (isRead[t + '.' + c.name] ? '<span class="readdot" title="read by the forecast"></span>' : '') + c.name + '</td><td class="mono">' + esc(c.type) + '</td><td>' + (c.notnull ? 'not null' : 'null') + '</td><td>' + key.join(' ') + '</td><td>' + note + '</td></tr>';
       });
       h += '</tbody></table></div>';
       var keys = [];
-      d.unique.forEach(function (u) { keys.push('<li' + (u.oid >= LATER_OID ? ' class="later"' : '') + '>Unique <code>' + u.name + '</code> on ' + u.columns.map(function (x) { return '<code>' + x + '</code>'; }).join(', ') + ' (OID ' + u.oid + (u.oid >= LATER_OID ? ', added later, duplicates the original key' : '') + ')</li>'); });
-      d.indexes.forEach(function (i) { keys.push('<li' + (i.oid ? ' class="later"' : '') + '>' + (i.unique ? 'Unique index' : 'Index') + ' <code>' + i.name + '</code> on <code>' + esc(i.expr) + '</code>' + (i.where ? ' where <code>' + esc(i.where) + '</code>' : '') + (i.oid ? ' (OID ' + i.oid + ', added later)' : '') + '</li>'); });
-      d.fks.forEach(function (f) { keys.push('<li' + (f.oid >= LATER_OID ? ' class="later"' : '') + '>Foreign key' + (f.oid ? ' <code>' + f.name + '</code>' : '') + ': <code>' + f.columns[0] + '</code> \u2192 <code>' + f.ref_table + '.' + f.ref_columns[0] + '</code>' + (f.oid ? ' (OID ' + f.oid + (f.oid >= LATER_OID ? ', added later' : '') + ')' : ' (declared by the module)') + '</li>'); });
-      if (d.pk.length > 1) keys.unshift('<li>Primary key on ' + d.pk.map(function (x) { return '<code>' + x + '</code>'; }).join(', ') + '</li>');
+      if (d.pk.length > 1) keys.push('<li>Primary key on ' + d.pk.map(function (x) { return '<code>' + x + '</code>'; }).join(', ') + '</li>');
+      var seenU = {};
+      d.unique.forEach(function (u) { var k = u.columns.join(','); if (u.columns.length > 1 && !seenU[k]) { seenU[k] = true; keys.push('<li>Unique on ' + u.columns.map(function (x) { return '<code>' + x + '</code>'; }).join(', ') + '</li>'); } });
+      d.indexes.forEach(function (i) { keys.push('<li>' + (i.unique ? 'Unique index' : 'Index') + ' on <code>' + esc(i.expr) + '</code>' + (i.where ? ' where <code>' + esc(i.where) + '</code>' : '') + '</li>'); });
+      d.fks.forEach(function (f) { keys.push('<li>Foreign key <code>' + f.columns[0] + '</code> → <code>' + f.ref_table + '.' + f.ref_columns[0] + '</code></li>'); });
       if (keys.length) h += '<ul class="keys">' + keys.join('') + '</ul>';
       sec.innerHTML = h;
       cat.appendChild(sec);

@@ -107,37 +107,17 @@ ol.steps li { margin-bottom: 6px; }
 @media (prefers-reduced-motion: no-preference) { #lineage-svg .node, #lineage-svg .edge { transition: opacity .15s, stroke-opacity .15s; } }
 </style>
 
-<p class="eyebrow">WorkloadHub AI Forecasting · state of <code>dev</code> and <code>main</code> at <code>2e7342c</code>, 2026-09-17</p>
+<p class="eyebrow">WorkloadHub AI Forecasting · how the forecast works</p>
 <h1>The feature matrix, as it stands</h1>
-<p class="lede">What the forecast reads from the database, what it computes from those numbers, what the model actually sees, and which rules are the module's own. This is the page of 2026-09-16 brought up to date after your rulings and the switch from <code>absences</code> to <code>personal_leaves</code>; the changes are listed first, then every section is restated as the code now behaves.</p>
+<p class="lede">For the developer of the WorkloadHub application: what the forecast computes and how. What it reads from the database, what it derives from those numbers, the columns the model actually learns from, the rules it applies on the way, and how a leave becomes capacity. The tables it reads, what they must contain and how the module is wired into the server are on the companion page <a href="https://claude.ai/artifact/UB7y1Law2w3QEe66yS3enF" style="color:var(--accent)">The WorkloadHub database with the forecast installed</a>.</p>
 <nav class="toc" aria-label="Sections">
-  <a href="#changes">0 · What changed since the review</a>
   <a href="#pipeline">1 · How a forecast is made</a>
   <a href="#activity">2 · A run, step by step</a>
   <a href="#lineage">3 · Where every feature comes from</a>
   <a href="#table">4 · Every feature in plain words</a>
-  <a href="#rules">5 · The module's own rules and your rulings</a>
+  <a href="#rules">5 · The rules the forecast applies</a>
   <a href="#leaves">6 · How a leave becomes capacity</a>
 </nav>
-
-<h2 id="changes">0 · What changed since the review</h2>
-<p>The page you reviewed on 2026-09-16 described 42 shared columns and 4 per horizon, an assignment mode guessed from three columns, five invented sentinel values, capacity read from <code>user_capacity</code> and absence from <code>absences</code>. All of that changed on 2026-09-17. The matrix now has <strong>40 shared columns and 5 per horizon</strong>; the table below says which is which.</p>
-<div class="table-wrap">
-<table>
-<colgroup><col style="width:24%"><col style="width:38%"><col style="width:38%"></colgroup>
-<thead><tr><th>Where</th><th>Before (the reviewed page)</th><th>Now</th></tr></thead>
-<tbody>
-<tr><td class="name">share_self_picked_13w · share_manual_13w · share_project_13w</td><td>guessed: reporter = assignee → self-picked; has a parent → project; else manual; one third each when nothing to measure</td><td><strong>two columns from a fact</strong>: <code>share_self_picked_13w</code> and <code>share_assigned_13w</code>, from the <code>user_id</code> of the <code>task_history</code> row that assigned the task (equal to the assignee → self-picked, anyone else → assigned); blank when no task in the window has a known assigner (ruling D)</td></tr>
-<tr><td class="name">proj_first_due_weeks</td><td>weeks to the nearest due date among the team's open tasks, 52 when none</td><td><strong>removed</strong>: projects will have no deadline (ruling H)</td></tr>
-<tr><td class="name">planned_hrs_h</td><td>not read; <code>planned_week</code> ignored</td><td><strong>added</strong>, one column per horizon: estimated hours of the member's open tasks whose <code>planned_week</code> is the target week (ruling K)</td></tr>
-<tr><td class="name">absence_hrs_h · available_hrs_h</td><td><code>user_capacity</code> row when one exists, else 44 h and the <code>absences</code> rows</td><td><strong>computed from leaves</strong>: 44 h × working days / 5, minus the member's APPROVED <code>personal_leaves</code> hours dealt over the week's working days (rulings I, J and the leave semantics of section 6)</td></tr>
-<tr><td class="name">weeks_since_last_arrival · share_*_13w · reopen_rate_13w · estimate_ratio_13w</td><td>52, 0.0, ⅓ and 1.0 stood in for "nothing to measure"</td><td><strong>blank</strong> (NaN): the booster learns its own branch for a missing value; every blank is listed in section 4 (ruling F)</td></tr>
-<tr><td class="name">fields read as of today</td><td>four: <code>reopened_from_done</code>, <code>projects.status</code>, <code>due_date</code>, <code>original_estimate_hrs</code></td><td><strong>five</strong>: <code>planned_week</code> joins them, documented in the code and the schema document (ruling G)</td></tr>
-<tr><td class="name">facts for the narrative</td><td><code>team.team_capacity</code> block; no leave information</td><td><code>team_capacity</code> gone; per member <code>pending_leaves</code> inside the horizon, per window <code>planned_hours</code>; "open" defined in the product skills as "assigned and not finished"</td></tr>
-<tr><td class="name">unchanged, by ruling</td><td colspan="2">assignment date from <code>task_history</code> (A, until <code>tasks.assigned_at</code> exists); the two-day fresh/backlog split (B); the task-family mapping with a sub-task taking its parent's family (C); remaining hours recomputed for the features and read for the facts (E); 44 h as the setting <code>whf.default-weekly-hours</code> (I).</td></tr>
-</tbody>
-</table>
-</div>
 
 <h2 id="pipeline">1 · How a forecast is made</h2>
 <p>The model predicts one number: the hours a member will <em>log</em> in a future week. Everything else is either an input to that prediction or arithmetic done after it. The language model never touches a number; it reads the finished facts and writes prose.</p>
@@ -228,13 +208,13 @@ ol.steps li { margin-bottom: 6px; }
   </g>
 </svg>
 </div>
-<figcaption>Left to right: what is read, what is derived, what the model learns from, how it is scored, what it predicts, and how that prediction becomes a leader's view. Capacity no longer comes from a table: it is 44 h a week over the working days, minus approved leave.</figcaption>
+<figcaption>Left to right: what is read, what is derived, what the model learns from, how it is scored, what it predicts, and how that prediction becomes a leader's view. Capacity is not read from a table: it is 44 h a week over the working days, minus approved leave.</figcaption>
 </figure>
 
 <h3>The four ideas that make it work</h3>
 <ol class="steps">
   <li><strong>The target is logged hours per member-week.</strong> The truth the model is trained on is the sum of <code>time_logs.hours</code> for a member in a Monday-to-Sunday week. It is what the accuracy check scores too, so training and scoring never disagree.</li>
-  <li><strong>Every row is a week in a member's past, with the future hidden.</strong> A row for week <em>w</em> only contains what was knowable at the end of <em>w</em> (with the five as-of-today exceptions of section 5). Its targets are the hours logged in <em>w+1</em>, <em>w+2</em>, … A booster per horizon learns "given how the last weeks looked, how many hours came <em>h</em> weeks later".</li>
+  <li><strong>Every row is a week in a member's past, with the future hidden.</strong> A row for week <em>w</em> only contains what was knowable at the end of <em>w</em> (with the five fields section 5 names, which are read as they stand today). Its targets are the hours logged in <em>w+1</em>, <em>w+2</em>, … A booster per horizon learns "given how the last weeks looked, how many hours came <em>h</em> weeks later".</li>
   <li><strong>The backtest is the honesty check.</strong> Six times, the run pretends it is a past Monday, fits only on rows old enough not to overlap the test week, predicts, and compares with what really got logged. The errors give the mean absolute error and the 10th and 90th percentile offsets that become the band around each forecast.</li>
   <li><strong>A week is then placed on days.</strong> The predicted week is spread over the weekdays the member actually logs on, in the proportions of their last 13 weeks, skipping holidays and full leave days. Each day's demand is compared with that day's capacity, 8.8 h minus that day's leave hours. Overload is the excess and is never capped.</li>
 </ol>
@@ -328,15 +308,15 @@ ol.steps li { margin-bottom: 6px; }
 </figure>
 
 <h2 id="lineage">3 · Where every feature comes from</h2>
-<p>Three columns. On the left, the raw numbers as they sit in the database. In the middle, what the module derives from them before any feature is written. On the right, the columns of the feature matrix the model sees, plus the target. <strong>Click any box</strong> to light up everything it depends on or feeds; click the background to reset. A dashed border marks a rule that is the module's own rather than a fact of the application; each carries the letter of your ruling of 2026-09-16 and is explained in section 5.</p>
+<p>Three columns. On the left, the raw numbers as they sit in the database. In the middle, what the module derives from them before any feature is written. On the right, the columns of the feature matrix the model sees, plus the target. <strong>Click any box</strong> to light up everything it depends on or feeds; click the background to reset. A dashed border marks a rule the forecast applies rather than a fact it reads from the application; the word on the box names the rule, and section 5 explains each.</p>
 <div class="legend">
   <span><i class="sw src"></i>read from a table</span>
   <span><i class="sw drv"></i>derived intermediate</span>
   <span><i class="sw feat"></i>feature column</span>
   <span><i class="sw target"></i>the target</span>
-  <span><i class="sw flag"></i>module rule, ruled on 2026-09-16</span>
+  <span><i class="sw flag"></i>a rule the forecast applies (section 5)</span>
 </div>
-<p class="hint">Features are grouped the way <code>Features.java</code> groups them. A name like <code>lag1 … lag13</code> stands for six columns built the same way; <code>_h</code> means one column per horizon (weeks after the origin, 1 to N+1). No box reads <code>absences</code>, <code>user_capacity</code> or <code>team_capacity</code> any more.</p>
+<p class="hint">Features are grouped the way <code>Features.java</code> groups them. A name like <code>lag1 … lag13</code> stands for six columns built the same way; <code>_h</code> means one column per horizon (weeks after the origin, 1 to N+1). Absence comes from <code>personal_leaves</code> only; <code>absences</code>, <code>user_capacity</code> and <code>team_capacity</code> are not read.</p>
 <figure>
 <div class="scroll"><svg id="lineage-svg" role="img" aria-label="Lineage graph from database columns through derived intermediates to feature columns" style="min-width: 1100px"></svg></div>
 <div class="detail" id="detail">Click a box to see its inputs and what it feeds.</div>
@@ -344,7 +324,7 @@ ol.steps li { margin-bottom: 6px; }
 </figure>
 
 <h2 id="table">4 · Every feature in plain words</h2>
-<p>One row per feature family. "Kind" says whether the number is copied from a table, computed from others, or the target. "Blank when" says when the cell is left empty rather than filled with an invented value; the booster treats an empty cell as missing and learns its own branch for it. Examples use a fictional member, Sara, and the week of Monday 2026-08-31.</p>
+<p>One row per feature family. "Kind" says whether the number is copied from a table, computed from others, or the target. "Blank when" says when the cell is left empty; the booster treats an empty cell as missing and learns its own branch for it. "Rule" names the rule of section 5 the feature depends on. Examples use a fictional member, Sara, and the week of Monday 2026-08-31.</p>
 <div class="table-wrap">
 <table>
 <colgroup><col style="width:15%"><col style="width:7%"><col style="width:17%"><col style="width:24%"><col style="width:11%"><col style="width:16%"><col style="width:10%"></colgroup>
@@ -355,24 +335,24 @@ ol.steps li { margin-bottom: 6px; }
 <tr><td class="name">roll_mean_4 / 8 / 13</td><td><span class="kind drv">computed</span></td><td>the same weekly sums</td><td>Sara's average weekly hours over the last 4, 8 and 13 weeks.</td><td>39.2 h over 4 weeks, 37.8 h over 13</td><td>Smooths one odd week away; three time scales let the model tell a short dip from a real change of level.</td><td></td></tr>
 <tr><td class="name">roll_std_4 / 8 / 13</td><td><span class="kind drv">computed</span></td><td>the same weekly sums</td><td>How much those weekly hours bounce around over the same windows. 0 for a single week: one observation has no spread.</td><td>3.1 h at 4 weeks; 9.4 h for a colleague who alternates 20 h and 45 h</td><td>Two members with the same average can carry very different risk; the spread tells the model how sure to be.</td><td></td></tr>
 <tr class="section"><td colspan="7">What was handed to the member · arrivals</td></tr>
-<tr><td class="name">arrival_hrs_lag1 … 4</td><td><span class="kind drv">computed</span></td><td><code>tasks.original_estimate_hrs</code> of <em>fresh</em> tasks, by assignment week</td><td>Estimated hours of the tasks Sara received in this week and the three before it, counting only tasks assigned within two days of being created.</td><td>lag1 = 24 h (three new tasks), lag2 = 0 h</td><td>New work usually turns into logged hours in the following weeks; a burst of assignments announces a busy period.</td><td>before the first row · <span class="flagnote">A, B</span></td></tr>
-<tr><td class="name">weeks_since_last_arrival</td><td><span class="kind drv">computed</span></td><td>the fresh-arrival series</td><td>How many weeks since Sara last received a fresh task.</td><td>0 (she got one this week); 6 for someone in a quiet stretch</td><td>Long gaps mean an intermittent pattern; the model learns that logged hours fade when nothing new arrives.</td><td>she never received a fresh task in the loaded history (was 52) · <span class="flagnote">A, B, F</span></td></tr>
-<tr><td class="name">arrivals_13w</td><td><span class="kind drv">computed</span></td><td>assignment date of every task</td><td>How many tasks were assigned to Sara in the last 13 weeks. Zero is a real zero.</td><td>31 tasks</td><td>With the hours, gives the typical task size and the pace at which work reaches her.</td><td>never · <span class="flagnote">A</span></td></tr>
-<tr><td class="name">share_defect / delivery / support_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>task_types.name</code> mapped to a family</td><td>Of those 13 weeks' tasks, what fraction were bugs and incidents, what fraction stories and features, what fraction spikes, tests and risks.</td><td>defect 0.35, delivery 0.55, support 0.10</td><td>A member who mostly gets defects receives unplanned, urgent work; their hours look different from a feature developer's.</td><td>no task in the window (was 0.0) · <span class="flagnote">C, F</span></td></tr>
-<tr><td class="name">share_high_priority_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>tasks.priority</code></td><td>Fraction of those tasks marked HIGH or HIGHEST.</td><td>0.42</td><td>Urgent work gets done sooner and longer; a high share predicts more hours soon.</td><td>no task in the window (was 0.0) · <span class="flagnote">F</span></td></tr>
-<tr><td class="name">share_self_picked_13w, share_assigned_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>task_history.user_id</code> of the assignee row</td><td>How Sara's tasks reached her: she assigned them to herself, or a leader or colleague assigned them. Read from who wrote the assignment, over the tasks whose assigner is recorded.</td><td>self-picked 0.30, assigned 0.70</td><td>A self-picking member's workload follows their own pace; an assigned one follows the leader's planning.</td><td>no task in the window has a recorded assigner (was ⅓ each) · <span class="flagnote">D, F</span></td></tr>
-<tr><td class="name">reopen_rate_13w</td><td><span class="kind drv">computed</span></td><td>finish date, <code>tasks.reopened_from_done</code></td><td>Of the tasks Sara finished in the last 13 weeks, the fraction that had been reopened after being done.</td><td>0.08</td><td>Rework creates hours no plan announces.</td><td>she finished nothing in the window (was 0.0) · <span class="flagnote">F, G</span></td></tr>
+<tr><td class="name">arrival_hrs_lag1 … 4</td><td><span class="kind drv">computed</span></td><td><code>tasks.original_estimate_hrs</code> of <em>fresh</em> tasks, by assignment week</td><td>Estimated hours of the tasks Sara received in this week and the three before it, counting only tasks assigned within two days of being created.</td><td>lag1 = 24 h (three new tasks), lag2 = 0 h</td><td>New work usually turns into logged hours in the following weeks; a burst of assignments announces a busy period.</td><td>before the first row · <span class="flagnote">history, fresh</span></td></tr>
+<tr><td class="name">weeks_since_last_arrival</td><td><span class="kind drv">computed</span></td><td>the fresh-arrival series</td><td>How many weeks since Sara last received a fresh task.</td><td>0 (she got one this week); 6 for someone in a quiet stretch</td><td>Long gaps mean an intermittent pattern; the model learns that logged hours fade when nothing new arrives.</td><td>she never received a fresh task in the loaded history · <span class="flagnote">history, fresh, blank</span></td></tr>
+<tr><td class="name">arrivals_13w</td><td><span class="kind drv">computed</span></td><td>assignment date of every task</td><td>How many tasks were assigned to Sara in the last 13 weeks. Zero is a real zero.</td><td>31 tasks</td><td>With the hours, gives the typical task size and the pace at which work reaches her.</td><td>never · <span class="flagnote">history</span></td></tr>
+<tr><td class="name">share_defect / delivery / support_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>task_types.name</code> mapped to a family</td><td>Of those 13 weeks' tasks, what fraction were bugs and incidents, what fraction stories and features, what fraction spikes, tests and risks.</td><td>defect 0.35, delivery 0.55, support 0.10</td><td>A member who mostly gets defects receives unplanned, urgent work; their hours look different from a feature developer's.</td><td>no task in the window · <span class="flagnote">family, blank</span></td></tr>
+<tr><td class="name">share_high_priority_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>tasks.priority</code></td><td>Fraction of those tasks marked HIGH or HIGHEST.</td><td>0.42</td><td>Urgent work gets done sooner and longer; a high share predicts more hours soon.</td><td>no task in the window · <span class="flagnote">blank</span></td></tr>
+<tr><td class="name">share_self_picked_13w, share_assigned_13w</td><td><span class="kind drv">computed</span></td><td>assignment date, <code>task_history.user_id</code> of the assignee row</td><td>How Sara's tasks reached her: she assigned them to herself, or a leader or colleague assigned them. Read from who wrote the assignment, over the tasks whose assigner is recorded.</td><td>self-picked 0.30, assigned 0.70</td><td>A self-picking member's workload follows their own pace; an assigned one follows the leader's planning.</td><td>no task in the window has a recorded assigner · <span class="flagnote">assigner, blank</span></td></tr>
+<tr><td class="name">reopen_rate_13w</td><td><span class="kind drv">computed</span></td><td>finish date, <code>tasks.reopened_from_done</code></td><td>Of the tasks Sara finished in the last 13 weeks, the fraction that had been reopened after being done.</td><td>0.08</td><td>Rework creates hours no plan announces.</td><td>she finished nothing in the window · <span class="flagnote">blank, as of today</span></td></tr>
 <tr class="section"><td colspan="7">What the member is carrying at the end of the week · open work and throughput</td></tr>
-<tr><td class="name">open_tasks</td><td><span class="kind drv">computed</span></td><td>assignment date, finish date</td><td>Tasks assigned to Sara by the end of the week and not finished by then. In the narrative this is said as "assigned and not finished", because the application's status <em>Open</em> means unassigned.</td><td>7 open tasks</td><td>The queue in front of her: more open work means more hours to come, up to a point.</td><td>never (zero is real) · <span class="flagnote">A</span></td></tr>
-<tr><td class="name">open_remaining_hrs</td><td><span class="kind drv">computed</span></td><td><code>original_estimate_hrs</code> − hours logged on the task by week end</td><td>The hours those open tasks still seem to need, by the module's own count.</td><td>52.5 h</td><td>The backlog in hours.</td><td>never · <span class="flagnote">E</span></td></tr>
-<tr><td class="name">overdue_open</td><td><span class="kind drv">computed</span></td><td>open tasks, <code>tasks.due_date</code></td><td>How many of those open tasks were already past their due date at the end of the week.</td><td>2</td><td>Late work gets pushed through; a member with overdue items tends to log more.</td><td>never · <span class="flagnote">G</span></td></tr>
+<tr><td class="name">open_tasks</td><td><span class="kind drv">computed</span></td><td>assignment date, finish date</td><td>Tasks assigned to Sara by the end of the week and not finished by then. In the narrative this is said as "assigned and not finished", because the application's status <em>Open</em> means unassigned.</td><td>7 open tasks</td><td>The queue in front of her: more open work means more hours to come, up to a point.</td><td>never (zero is real) · <span class="flagnote">history</span></td></tr>
+<tr><td class="name">open_remaining_hrs</td><td><span class="kind drv">computed</span></td><td><code>original_estimate_hrs</code> − hours logged on the task by week end</td><td>The hours those open tasks still seem to need, by the module's own count.</td><td>52.5 h</td><td>The backlog in hours.</td><td>never · <span class="flagnote">remaining</span></td></tr>
+<tr><td class="name">overdue_open</td><td><span class="kind drv">computed</span></td><td>open tasks, <code>tasks.due_date</code></td><td>How many of those open tasks were already past their due date at the end of the week.</td><td>2</td><td>Late work gets pushed through; a member with overdue items tends to log more.</td><td>never · <span class="flagnote">as of today</span></td></tr>
 <tr><td class="name">in_progress_tasks</td><td><span class="kind drv">computed</span></td><td>open tasks, start date</td><td>Of the open tasks, how many Sara had actually started.</td><td>3</td><td>Started work is the work whose hours land next; queued work may wait.</td><td>never</td></tr>
-<tr><td class="name">estimate_ratio_13w</td><td><span class="kind drv">computed</span></td><td>hours logged on finished tasks ÷ their estimates</td><td>Whether Sara's tasks take longer or shorter than estimated. 1.0 means spot on.</td><td>1.25: her tasks take a quarter longer than planned</td><td>Turns estimated hours in the queue into a realistic expectation of logged hours.</td><td>no finished task in the window has both an estimate and logged hours (was 1.0) · <span class="flagnote">F, G</span></td></tr>
-<tr><td class="name">cycle_days_13w</td><td><span class="kind drv">computed</span></td><td>assignment and finish dates of tasks finished in the window</td><td>Sara's typical number of days from receiving a task to finishing it (the median).</td><td>9 days</td><td>Fast turnaround means arrivals become hours sooner.</td><td>she finished nothing in the window · <span class="flagnote">A</span></td></tr>
+<tr><td class="name">estimate_ratio_13w</td><td><span class="kind drv">computed</span></td><td>hours logged on finished tasks ÷ their estimates</td><td>Whether Sara's tasks take longer or shorter than estimated. 1.0 means spot on.</td><td>1.25: her tasks take a quarter longer than planned</td><td>Turns estimated hours in the queue into a realistic expectation of logged hours.</td><td>no finished task in the window has both an estimate and logged hours · <span class="flagnote">blank, as of today</span></td></tr>
+<tr><td class="name">cycle_days_13w</td><td><span class="kind drv">computed</span></td><td>assignment and finish dates of tasks finished in the window</td><td>Sara's typical number of days from receiving a task to finishing it (the median).</td><td>9 days</td><td>Fast turnaround means arrivals become hours sooner.</td><td>she finished nothing in the window · <span class="flagnote">history</span></td></tr>
 <tr class="section"><td colspan="7">The team around the member</td></tr>
 <tr><td class="name">team_backlog_unassigned_hrs</td><td><span class="kind drv">computed</span></td><td>tasks of the team's and parent team's projects: created by week end, neither assigned nor finished; <code>original_estimate_hrs</code></td><td>Estimated hours of work sitting in the team's projects with nobody on it.</td><td>140 h unassigned across the team's projects</td><td>That pool is what will be handed out next; a large pool means more work coming to everyone.</td><td>never</td></tr>
-<tr><td class="name">proj_active</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code>, open tasks</td><td>How many of the team's ACTIVE projects still have work in them.</td><td>3</td><td>More live projects, more parallel demands on the same people.</td><td>never · <span class="flagnote">G</span></td></tr>
-<tr><td class="name">proj_planning</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code></td><td>How many of the team's projects are still in PLANNING.</td><td>1</td><td>The pipeline that will start producing tasks.</td><td>never · <span class="flagnote">G</span></td></tr>
+<tr><td class="name">proj_active</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code>, open tasks</td><td>How many of the team's ACTIVE projects still have work in them.</td><td>3</td><td>More live projects, more parallel demands on the same people.</td><td>never · <span class="flagnote">as of today</span></td></tr>
+<tr><td class="name">proj_planning</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code></td><td>How many of the team's projects are still in PLANNING.</td><td>1</td><td>The pipeline that will start producing tasks.</td><td>never · <span class="flagnote">as of today</span></td></tr>
 <tr class="section"><td colspan="7">Who the member is</td></tr>
 <tr><td class="name">member_id, team_id</td><td><span class="kind src">database</span></td><td><code>users.id</code>, the member's primary team from <code>team_members</code></td><td>Which person and which team this row belongs to, as categories.</td><td>Sara; team "Calibration"</td><td>Lets the booster learn each person's and each team's own level instead of one average for everyone.</td><td></td></tr>
 <tr><td class="name">role</td><td><span class="kind src">database</span></td><td><code>users.role</code></td><td>MEMBER or TEAM_LEADER.</td><td>MEMBER</td><td>Leaders log a different mix and fewer task hours.</td><td></td></tr>
@@ -380,35 +360,34 @@ ol.steps li { margin-bottom: 6px; }
 <tr><td class="name">tenure_weeks</td><td><span class="kind drv">computed</span></td><td><code>team_members.joined_at</code></td><td>Weeks since Sara joined her first team.</td><td>84 weeks</td><td>Newcomers ramp up; the model should not expect full hours from someone in their first month.</td><td></td></tr>
 <tr><td class="name">week_of_year</td><td><span class="kind drv">computed</span></td><td>the calendar</td><td>The ISO week number of the row's week.</td><td>36</td><td>Seasonality: summer and year-end weeks are lighter for most teams.</td><td></td></tr>
 <tr class="section"><td colspan="7">What is already known about the target week · one column per horizon h</td></tr>
-<tr><td class="name">due_hrs_h</td><td><span class="kind drv">computed</span></td><td>open tasks with <code>due_date</code> inside week w+h, their remaining hours by the module's count</td><td>Hours of Sara's open work that fall due in the target week.</td><td>16 h due in the week after next</td><td>Deadline pressure: hours due in a week tend to get logged in it.</td><td>never · <span class="flagnote">E, G</span></td></tr>
-<tr><td class="name">planned_hrs_h</td><td><span class="kind drv">computed</span></td><td>open tasks whose <code>planned_week</code> is the Monday of week w+h, their <code>original_estimate_hrs</code></td><td>Hours of Sara's open work that the leader has planned for the target week. Filled only when the leader sets a planned week, which is sometimes, and that is enough.</td><td>12 h planned for next week</td><td>The leader's own intention for the week is the most direct signal there is when it exists.</td><td>never (zero when nothing is planned) · <span class="flagnote">G, K</span></td></tr>
+<tr><td class="name">due_hrs_h</td><td><span class="kind drv">computed</span></td><td>open tasks with <code>due_date</code> inside week w+h, their remaining hours by the module's count</td><td>Hours of Sara's open work that fall due in the target week.</td><td>16 h due in the week after next</td><td>Deadline pressure: hours due in a week tend to get logged in it.</td><td>never · <span class="flagnote">remaining, as of today</span></td></tr>
+<tr><td class="name">planned_hrs_h</td><td><span class="kind drv">computed</span></td><td>open tasks whose <code>planned_week</code> is the Monday of week w+h, their <code>original_estimate_hrs</code></td><td>Hours of Sara's open work that the leader has planned for the target week. Filled only when the leader sets a planned week.</td><td>12 h planned for next week</td><td>The leader's own intention for the week is the most direct signal there is when it exists.</td><td>never (zero when nothing is planned) · <span class="flagnote">as of today, planned</span></td></tr>
 <tr><td class="name">working_days_h</td><td><span class="kind drv">computed</span></td><td><code>holidays</code> (CONFIRMED, active)</td><td>Weekdays in the target week that are not public holidays.</td><td>4 (a Monday holiday)</td><td>A four-day week cannot hold five days of hours.</td><td></td></tr>
-<tr><td class="name">absence_hrs_h</td><td><span class="kind drv">computed</span></td><td>APPROVED <code>personal_leaves</code> expanded into the target week's working days (section 6)</td><td>Hours Sara is away on leave in the target week.</td><td>17.6 h (two leave days), or 13.2 h when the second ends at noon</td><td>A leader cannot expect hours from someone on leave.</td><td>never (zero when no leave) · <span class="flagnote">leave rule</span></td></tr>
-<tr><td class="name">available_hrs_h</td><td><span class="kind drv">computed</span></td><td>44 h × working days / 5 − absence hours, never below 0</td><td>The hours Sara can work in the target week.</td><td>35.2 − 8.8 = 26.4 h</td><td>The ceiling on what can be logged. The most direct signal the model has about the target week.</td><td>never · <span class="flagnote">I</span></td></tr>
+<tr><td class="name">absence_hrs_h</td><td><span class="kind drv">computed</span></td><td>APPROVED <code>personal_leaves</code> expanded into the target week's working days (section 6)</td><td>Hours Sara is away on leave in the target week.</td><td>17.6 h (two leave days), or 13.2 h when the second ends at noon</td><td>A leader cannot expect hours from someone on leave.</td><td>never (zero when no leave) · <span class="flagnote">leave</span></td></tr>
+<tr><td class="name">available_hrs_h</td><td><span class="kind drv">computed</span></td><td>44 h × working days / 5 − absence hours, never below 0</td><td>The hours Sara can work in the target week.</td><td>35.2 − 8.8 = 26.4 h</td><td>The ceiling on what can be logged. The most direct signal the model has about the target week.</td><td>never · <span class="flagnote">44 h</span></td></tr>
 <tr class="section"><td colspan="7">The target</td></tr>
 <tr><td class="name">target_h</td><td><span class="kind target">target</span></td><td>sum of <code>time_logs.hours</code> in week w+h</td><td>What actually got logged h weeks later. Known for past rows (training), unknown for the origin rows (what is predicted).</td><td>37.0 h</td><td>It is the number the whole system exists to predict.</td><td>the target week is after the origin</td></tr>
 </tbody>
 </table>
 </div>
 
-<h2 id="rules">5 · The module's own rules and your rulings</h2>
-<p>No feature column is fabricated out of nothing: every one traces back to real table columns. But a handful of <em>rules</em> on the way are the module's own, not the application's. On 2026-09-16 you ruled on each; the ruling is now the rule, and the letter is the one the lineage diagram and the table carry.</p>
+<h2 id="rules">5 · The rules the forecast applies</h2>
+<p>No feature column is fabricated out of nothing: every one traces back to real table columns. But a handful of rules on the way are the forecast's own, not the application's. Each is named here by the word the lineage diagram and the table use.</p>
 <div class="callouts">
-  <div class="callout"><h4>A · The assignment date comes from the history</h4><p>WorkloadHub stores who a task is assigned to, not when. The module reads the latest <code>task_history</code> row whose <code>new_value</code> (a full name) resolves to the current assignee and takes its <code>changed_at</code>; when no such row exists it falls back to <code>created_date</code> and reports an unresolved assignment in the data-quality facts.</p><p class="q">Ruling: keep. The application will one day carry <code>tasks.assigned_at</code>; read it when it exists, not now. Logged in the backlog.</p></div>
-  <div class="callout"><h4>B · "Fresh" arrivals: the two-day rule</h4><p>A task is <em>fresh</em> when it was assigned less than two days after being created; otherwise it came from a backlog. Only fresh tasks count in <code>arrival_hrs_lag1..4</code> and <code>weeks_since_last_arrival</code>; every task counts in <code>arrivals_13w</code> and the shares.</p><p class="q">Ruling: keep. Whether work reaches a member fresh or late from the backlog is information you want.</p></div>
-  <div class="callout"><h4>C · Task families are a mapping</h4><p>Bug, Incident → defect; Story, New Feature, Task, Improvement, Change Request → delivery; Spike, Test, Risk → support; Epic → container; a Sub-task takes its parent's family. All twelve types of the application are named.</p><p class="q">Ruling: keep; a sub-task of a bug is bug work.</p></div>
-  <div class="callout"><h4>D · How a task was assigned is now a fact</h4><p>The <code>user_id</code> of the same <code>task_history</code> row that gives the assignment date is who assigned the task. Equal to the new assignee: self-picked. Anyone else: assigned. No row, or no user on it: unknown, and the task is left out of the two shares.</p><p class="q">Ruling: replace the guess with the fact. The old reporter-and-parent heuristic and the "project" mode are gone.</p></div>
-  <div class="callout"><h4>E · Remaining hours: two definitions on purpose</h4><p>The features use <em>estimate − hours logged by the row's week</em> for <code>open_remaining_hrs</code> and <code>due_hrs_h</code>, because a training row must see what was known then and <code>remaining_estimate_hrs</code> has no history. The facts the leader reads (<code>open_est_hours</code>, <code>due_hours</code>, the pressure figures) use the stored <code>remaining_estimate_hrs</code>, the application's own number.</p><p class="q">Ruling: keep both, documented.</p></div>
-  <div class="callout"><h4>F · Blank instead of invented</h4><p>Every ratio whose denominator is zero, and "weeks since" when there was no event, are left empty. XGBoost's trees learn a default direction for a missing value at each split from the training rows that lacked it, so a blank is its own branch, not a zero and not an average. Counts and sums stay zero, because zero is their true value.</p><p class="q">Ruling: go with the recommended logic, documented clearly. The full list is in section 4's last column, in <code>Features.java</code> and in the schema document.</p></div>
-  <div class="callout"><h4>G · Five fields are read as they stand today</h4><p>The history replay rewinds assignments, statuses and logs to the row's week, but <code>reopened_from_done</code>, <code>projects.status</code>, <code>due_date</code>, <code>original_estimate_hrs</code> and <code>planned_week</code> have no history. A row for last March "knows" a due date or a plan that may have been set in June. A task's current value is the best available stand-in, and the alternative is to drop the columns.</p><p class="q">Ruling: accept and document. Five, not four: <code>planned_week</code> joined the list.</p></div>
-  <div class="callout"><h4>H · No project deadline</h4><p><code>proj_first_due_weeks</code> stood in for a project end date that the database does not record.</p><p class="q">Ruling: removed. Projects will have no deadline or start date.</p></div>
-  <div class="callout"><h4>I · J · Capacity is the module's own formula</h4><p><code>user_capacity</code> and <code>team_capacity</code> are not read. Capacity is <code>whf.default-weekly-hours</code> (44) × the week's working days / 5, minus the member's approved leave hours; a day is 8.8 h minus its leave. The team's capacity is the sum over its members and is no longer shown as a separate block.</p><p class="q">Ruling: 44 h stays a setting with 44 as default; the two tables are ignored.</p></div>
-  <div class="callout"><h4>K · Planned weeks are read</h4><p><code>planned_hrs_h</code> sums the estimates of the member's open tasks planned for the target week, and the facts carry <code>planned_hours</code> per window so the narrative can say "12 h planned for this window" and the verifier can check it. The seed plans some tasks forward so the column is exercised.</p><p class="q">Ruling: reuse planned weeks; filled sometimes is good enough.</p></div>
+  <div class="callout"><h4>history · The assignment date comes from task_history</h4><p>WorkloadHub stores who a task is assigned to, not when. The module reads the latest <code>task_history</code> row whose <code>new_value</code> (a full name) resolves to the current assignee and takes its <code>changed_at</code>; when no such row exists it falls back to <code>created_date</code> and reports an unresolved assignment in the data-quality facts.</p><p class="q">When the application gains a <code>tasks.assigned_at</code> column, the forecast will read it instead.</p></div>
+  <div class="callout"><h4>fresh · Fresh arrivals: the two-day rule</h4><p>A task is <em>fresh</em> when it was assigned less than two days after being created; otherwise it came from a backlog. Only fresh tasks count in <code>arrival_hrs_lag1..4</code> and <code>weeks_since_last_arrival</code>; every task counts in <code>arrivals_13w</code> and the shares. The split tells whether work reaches a member fresh or late from the backlog.</p></div>
+  <div class="callout"><h4>family · Task types are grouped into families</h4><p>Bug, Incident → defect; Story, New Feature, Task, Improvement, Change Request → delivery; Spike, Test, Risk → support; Epic → container; a Sub-task takes its parent's family. All twelve types of the application are named.</p></div>
+  <div class="callout"><h4>assigner · How a task was assigned</h4><p>The <code>user_id</code> of the same <code>task_history</code> row that gives the assignment date is who assigned the task. Equal to the new assignee: self-picked. Anyone else: assigned. No row, or no user on it: unknown, and the task is left out of the two shares. This is why every assignment must write a history row with its <code>user_id</code>.</p></div>
+  <div class="callout"><h4>remaining · Remaining hours: two definitions on purpose</h4><p>The features use <em>estimate − hours logged by the row's week</em> for <code>open_remaining_hrs</code> and <code>due_hrs_h</code>, because a training row must see what was known then and <code>remaining_estimate_hrs</code> has no history. The facts the leader reads (<code>open_est_hours</code>, <code>due_hours</code>, the pressure figures) use the stored <code>remaining_estimate_hrs</code>, the application's own number.</p></div>
+  <div class="callout"><h4>blank · Blank instead of invented</h4><p>Every ratio whose denominator is zero, and "weeks since" when there was no event, are left empty. XGBoost's trees learn a default direction for a missing value at each split from the training rows that lacked it, so a blank is its own branch, not a zero and not an average. Counts and sums stay zero, because zero is their true value. The full list is in the last column of the table in section 4.</p></div>
+  <div class="callout"><h4>as of today · Five fields are read as they stand today</h4><p>The history replay rewinds assignments, statuses and logs to the row's week, but <code>reopened_from_done</code>, <code>projects.status</code>, <code>due_date</code>, <code>original_estimate_hrs</code> and <code>planned_week</code> have no history. A row for last March "knows" a due date or a plan that may have been set in June. A task's current value is the best available stand-in.</p></div>
+  <div class="callout"><h4>44 h · Capacity is the forecast's own formula</h4><p><code>user_capacity</code> and <code>team_capacity</code> are not read. Capacity is <code>whf.default-weekly-hours</code> (44) × the week's working days / 5, minus the member's approved leave hours; a day is 8.8 h minus its leave. The team's capacity is the sum over its members.</p></div>
+  <div class="callout"><h4>planned · Planned weeks are read</h4><p><code>planned_hrs_h</code> sums the estimates of the member's open tasks planned for the target week, and the facts carry <code>planned_hours</code> per window so the narrative can say "12 h planned for this window" and the verifier can check it. A planned week is filled only sometimes, and that is enough: an unplanned task simply counts zero.</p></div>
 </div>
 <h3>Recorded by the application but not used by the model</h3>
 <ul>
-  <li><code>tasks.remaining_estimate_hrs</code> is used by the leader-facing facts but not by any feature column (E).</li>
-  <li><code>absences</code> is legacy and never read; <code>user_capacity</code> and <code>team_capacity</code> are never read (I, J). All three stay in the schema files because the application still has the tables.</li>
+  <li><code>tasks.remaining_estimate_hrs</code> is used by the leader-facing facts but not by any feature column (rule "remaining").</li>
+  <li><code>absences</code>, <code>user_capacity</code> and <code>team_capacity</code> are never read (rule "44 h").</li>
   <li><code>personal_leaves</code> rows with status <code>REJECTED</code> or <code>CANCELLED</code> are not loaded; <code>PENDING</code> ones reach the facts only.</li>
   <li><code>task_comments</code>, <code>task_attachments</code>, <code>notifications</code>, <code>project_history</code>, <code>job_titles</code>, <code>job_title_role_mappings</code> and <code>user_roles</code> are never read.</li>
 </ul>
@@ -442,14 +421,14 @@ ol.steps li { margin-bottom: 6px; }
   <li><strong><code>absence_hrs_h</code> and <code>available_hrs_h</code>.</strong> The target week's leave hours over its working days, and 44 h × working days / 5 minus them.</li>
   <li><strong>The day placement (<code>offDays</code>).</strong> A day whose leave hours reach 8.8 h is a full leave day: no predicted hours land on it and the week's hours move to the other days. A half day is not off: the hours are still placed, against a halved capacity.</li>
   <li><strong>The day capacity shown to the leader (<code>dayCapacity</code>).</strong> 8.8 h minus that day's leave hours, never below zero; zero on a weekend or holiday.</li>
-  <li><strong>The facts.</strong> Each member's <code>absence_hours</code> per window keeps its name (the narrative's word is "absence", whatever the table), and <code>pending_leaves</code> lists the member's <code>PENDING</code> leaves that touch the horizon, with start, end, type and hours, served by the <code>get_member_capacity</code> tool: a risk to the window the narrative may mention, never a reduction of capacity.</li>
+  <li><strong>The facts.</strong> Each member's <code>absence_hours</code> per window, and <code>pending_leaves</code>, which lists the member's <code>PENDING</code> leaves that touch the horizon, with start, end, type and hours, served by the <code>get_member_capacity</code> tool: a risk to the window the narrative may mention, never a reduction of capacity.</li>
 </ol>
 <p>Nothing in the model's own history columns (<code>lag*</code>, <code>roll_*</code>, arrivals, open work, team, identity) reads leaves at all, so what the model learns from the past does not depend on the leave table; only the target week's availability, the placement on days and the leader's capacity figures do.</p>
-<p class="hint">Source of truth for this page: <code>Features.java</code>, <code>FeatureBuilder.java</code>, <code>WeeklySeries.java</code>, <code>Lifecycle.java</code>, <code>LeaveDays.java</code>, <code>CapacityRule.java</code>, <code>FactsBuilder.java</code>, <code>ForecastRunner.java</code> on <code>dev</code> at <code>2e7342c</code>; the spec <code>docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md</code> for the rulings; <code>docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md</code> for the column-by-column mapping. The page reviewed on 2026-09-16 is kept in the repository as <code>docs/design/2026-09-16-feature-matrix-review.html</code>.</p>
+<p class="hint">Source: <code>Features.java</code>, <code>FeatureBuilder.java</code>, <code>WeeklySeries.java</code>, <code>Lifecycle.java</code>, <code>LeaveDays.java</code>, <code>CapacityRule.java</code>, <code>FactsBuilder.java</code> and <code>ForecastRunner.java</code> of <code>forecast-core</code> on <code>dev</code> at <code>ee4dd97</code>; <code>docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md</code> for the column-by-column mapping.</p>
 
 <script>
 (function () {
-  // kind: src (table column), drv (derived), feat (feature), target; rule: letters of the 2026-09-16 rulings
+  // kind: src (table column), drv (derived), feat (feature), target; rule: the rule of section 5 the node depends on
   var nodes = [
     {id:'tl_hours', kind:'src', group:'time_logs', label:'hours · log_date · user_id · task_id'},
     {id:'t_est', kind:'src', group:'tasks', label:'original_estimate_hrs'},
@@ -458,7 +437,7 @@ ol.steps li { margin-bottom: 6px; }
     {id:'t_started', kind:'src', group:'tasks', label:'started_date'},
     {id:'t_finished', kind:'src', group:'tasks', label:'finished_date'},
     {id:'t_due', kind:'src', group:'tasks', label:'due_date'},
-    {id:'t_planned', kind:'src', group:'tasks', label:'planned_week (read since 2026-09-17)'},
+    {id:'t_planned', kind:'src', group:'tasks', label:'planned_week'},
     {id:'t_prio', kind:'src', group:'tasks', label:'priority'},
     {id:'t_type', kind:'src', group:'tasks', label:'task_type_id'},
     {id:'t_status', kind:'src', group:'tasks', label:'task_status_id'},
@@ -476,15 +455,15 @@ ol.steps li { margin-bottom: 6px; }
     {id:'h_rows', kind:'src', group:'holidays', label:'start_date · end_date · status · active'},
     {id:'pl_rows', kind:'src', group:'personal_leaves (APPROVED only)', label:'employee_id · dates · times · absence_hours'},
     // derived
-    {id:'d_assigned', kind:'drv', group:'per task', label:'assigned_at', rule:'A', note:'Latest task_history assignee row whose new_value resolves to the current assignee, else created_date.'},
+    {id:'d_assigned', kind:'drv', group:'per task', label:'assigned_at', rule:'history', note:'Latest task_history assignee row whose new_value resolves to the current assignee, else created_date.'},
     {id:'d_started', kind:'drv', group:'per task', label:'started_at', note:'tasks.started_date, else the first status transition into an IN_PROGRESS category.'},
     {id:'d_finished', kind:'drv', group:'per task', label:'finished_at', note:'tasks.finished_date, else the first transition into a DONE category; only when the task is DONE today.'},
-    {id:'d_fresh', kind:'drv', group:'per task', label:'fresh (assigned < 2 days after creation)', rule:'B', note:'The two-day backlog rule, kept by ruling B.'},
-    {id:'d_family', kind:'drv', group:'per task', label:'family (defect / delivery / support)', rule:'C', note:'Mapping of the twelve task type names; a sub-task takes its parent’s family.'},
-    {id:'d_mode', kind:'drv', group:'per task', label:'mode (self-picked / assigned / unknown)', rule:'D', note:'The user_id of the assignee row that gave assigned_at: equal to the assignee → self-picked; anyone else → assigned; none → unknown.'},
+    {id:'d_fresh', kind:'drv', group:'per task', label:'fresh (assigned < 2 days after creation)', rule:'fresh', note:'The two-day backlog rule, '},
+    {id:'d_family', kind:'drv', group:'per task', label:'family (defect / delivery / support)', rule:'family', note:'Mapping of the twelve task type names; a sub-task takes its parent’s family.'},
+    {id:'d_mode', kind:'drv', group:'per task', label:'mode (self-picked / assigned / unknown)', rule:'assigner', note:'The user_id of the assignee row that gave assigned_at: equal to the assignee → self-picked; anyone else → assigned; none → unknown.'},
     {id:'d_actual', kind:'drv', group:'per task', label:'actual hours of a finished task', note:'The assignee’s logged hours; when none, estimate − remaining (an "unlogged" task).'},
     {id:'d_open', kind:'drv', group:'per task and week', label:'open at week end', note:'assigned_at ≤ week end and not finished by then: assigned and not finished.'},
-    {id:'d_remain', kind:'drv', group:'per task and week', label:'remaining as of week end', rule:'E', note:'original_estimate_hrs − hours logged on the task by then, never below 0.'},
+    {id:'d_remain', kind:'drv', group:'per task and week', label:'remaining as of week end', rule:'remaining', note:'original_estimate_hrs − hours logged on the task by then, never below 0.'},
     {id:'d_logged', kind:'drv', group:'per member and week', label:'logged hours (weekly series)', note:'Sum of time_logs.hours per member and Monday week.'},
     {id:'d_arrival', kind:'drv', group:'per member and week', label:'fresh arrival hours (weekly series)', note:'Sum of original_estimate_hrs of fresh tasks by assignment week.'},
     {id:'d_cal', kind:'drv', group:'calendar', label:'working calendar', note:'Weekdays minus holidays that are CONFIRMED and active.'},
@@ -493,30 +472,30 @@ ol.steps li { margin-bottom: 6px; }
     // features
     {id:'f_lag', kind:'feat', group:'own history', label:'lag1 … lag4, lag8, lag13'},
     {id:'f_roll', kind:'feat', group:'own history', label:'roll_mean_4/8/13 · roll_std_4/8/13'},
-    {id:'f_arrlag', kind:'feat', group:'arrivals', label:'arrival_hrs_lag1 … 4', rule:'A B'},
-    {id:'f_since', kind:'feat', group:'arrivals', label:'weeks_since_last_arrival', rule:'A B F'},
-    {id:'f_n13', kind:'feat', group:'arrivals', label:'arrivals_13w', rule:'A'},
-    {id:'f_family', kind:'feat', group:'arrivals', label:'share_defect / delivery / support_13w', rule:'C F'},
-    {id:'f_prio', kind:'feat', group:'arrivals', label:'share_high_priority_13w', rule:'F'},
-    {id:'f_mode', kind:'feat', group:'arrivals', label:'share_self_picked / assigned_13w', rule:'D F'},
-    {id:'f_reopen', kind:'feat', group:'arrivals', label:'reopen_rate_13w', rule:'F G'},
-    {id:'f_open', kind:'feat', group:'open work', label:'open_tasks', rule:'A'},
-    {id:'f_openrem', kind:'feat', group:'open work', label:'open_remaining_hrs', rule:'E'},
-    {id:'f_overdue', kind:'feat', group:'open work', label:'overdue_open', rule:'G'},
+    {id:'f_arrlag', kind:'feat', group:'arrivals', label:'arrival_hrs_lag1 … 4', rule:'history, fresh'},
+    {id:'f_since', kind:'feat', group:'arrivals', label:'weeks_since_last_arrival', rule:'history, fresh, blank'},
+    {id:'f_n13', kind:'feat', group:'arrivals', label:'arrivals_13w', rule:'history'},
+    {id:'f_family', kind:'feat', group:'arrivals', label:'share_defect / delivery / support_13w', rule:'family, blank'},
+    {id:'f_prio', kind:'feat', group:'arrivals', label:'share_high_priority_13w', rule:'blank'},
+    {id:'f_mode', kind:'feat', group:'arrivals', label:'share_self_picked / assigned_13w', rule:'assigner, blank'},
+    {id:'f_reopen', kind:'feat', group:'arrivals', label:'reopen_rate_13w', rule:'blank, as of today'},
+    {id:'f_open', kind:'feat', group:'open work', label:'open_tasks', rule:'history'},
+    {id:'f_openrem', kind:'feat', group:'open work', label:'open_remaining_hrs', rule:'remaining'},
+    {id:'f_overdue', kind:'feat', group:'open work', label:'overdue_open', rule:'as of today'},
     {id:'f_inprog', kind:'feat', group:'open work', label:'in_progress_tasks'},
-    {id:'f_ratio', kind:'feat', group:'open work', label:'estimate_ratio_13w', rule:'F G'},
-    {id:'f_cycle', kind:'feat', group:'open work', label:'cycle_days_13w', rule:'A'},
+    {id:'f_ratio', kind:'feat', group:'open work', label:'estimate_ratio_13w', rule:'blank, as of today'},
+    {id:'f_cycle', kind:'feat', group:'open work', label:'cycle_days_13w', rule:'history'},
     {id:'f_backlog', kind:'feat', group:'team', label:'team_backlog_unassigned_hrs'},
-    {id:'f_pactive', kind:'feat', group:'team', label:'proj_active', rule:'G'},
-    {id:'f_pplan', kind:'feat', group:'team', label:'proj_planning', rule:'G'},
+    {id:'f_pactive', kind:'feat', group:'team', label:'proj_active', rule:'as of today'},
+    {id:'f_pplan', kind:'feat', group:'team', label:'proj_planning', rule:'as of today'},
     {id:'f_ident', kind:'feat', group:'identity', label:'member_id · team_id · role · job_title'},
     {id:'f_tenure', kind:'feat', group:'identity', label:'tenure_weeks'},
     {id:'f_woy', kind:'feat', group:'identity', label:'week_of_year'},
-    {id:'f_due', kind:'feat', group:'target week (per horizon)', label:'due_hrs_h', rule:'E G'},
-    {id:'f_planned', kind:'feat', group:'target week (per horizon)', label:'planned_hrs_h (new)', rule:'G K'},
+    {id:'f_due', kind:'feat', group:'target week (per horizon)', label:'due_hrs_h', rule:'remaining, as of today'},
+    {id:'f_planned', kind:'feat', group:'target week (per horizon)', label:'planned_hrs_h', rule:'as of today, planned'},
     {id:'f_wd', kind:'feat', group:'target week (per horizon)', label:'working_days_h'},
     {id:'f_abs', kind:'feat', group:'target week (per horizon)', label:'absence_hrs_h', rule:'leave'},
-    {id:'f_avail', kind:'feat', group:'target week (per horizon)', label:'available_hrs_h', rule:'I'},
+    {id:'f_avail', kind:'feat', group:'target week (per horizon)', label:'available_hrs_h', rule:'44 h'},
     {id:'f_target', kind:'target', group:'target', label:'target_h (logged hours in week w+h)'}
   ];
   var edges = [
@@ -548,7 +527,7 @@ ol.steps li { margin-bottom: 6px; }
   nodes.forEach(function (n) { byId[n.id] = n; });
   var colOf = {src: 0, drv: 1, feat: 2, target: 2};
   var colX = [20, 420, 800];
-  var colW = [330, 320, 310];
+  var colW = [330, 320, 350];
   var H = 22, GAP = 5, GGAP = 22, TOP = 44;
   var svgNS = 'http://www.w3.org/2000/svg';
   var svg = document.getElementById('lineage-svg');
@@ -569,7 +548,7 @@ ol.steps li { margin-bottom: 6px; }
     });
     maxY = Math.max(maxY, y);
   });
-  svg.setAttribute('viewBox', '0 0 1140 ' + (maxY + 10));
+  svg.setAttribute('viewBox', '0 0 1180 ' + (maxY + 10));
   var gEdges = el('g', {'class': 'edges'});
   var gNodes = el('g', {'class': 'nodes'});
   svg.appendChild(gEdges); svg.appendChild(gNodes);
@@ -590,7 +569,7 @@ ol.steps li { margin-bottom: 6px; }
   var nodeEls = {};
   nodes.forEach(function (n) {
     if (n.groupStart) gNodes.appendChild(el('text', {x: n.x, y: n.y - 5, 'class': 'group-label'}, n.group));
-    var g = el('g', {'class': 'node ' + n.kind + (n.rule ? ' flagged' : ''), tabindex: '0', role: 'button', 'aria-label': n.label + (n.rule ? ' (rule ' + n.rule + ')' : '')});
+    var g = el('g', {'class': 'node ' + n.kind + (n.rule ? ' flagged' : ''), tabindex: '0', role: 'button', 'aria-label': n.label + (n.rule ? ' (' + n.rule + ')' : '')});
     g.appendChild(el('rect', {x: n.x, y: n.y, width: n.w, height: H, rx: 3}));
     g.appendChild(el('text', {x: n.x + 8, y: n.y + 15}, n.label));
     if (n.rule) g.appendChild(el('text', {x: n.x + n.w - 6, y: n.y + 15, 'text-anchor': 'end', 'class': 'rule'}, n.rule));
@@ -616,7 +595,7 @@ ol.steps li { margin-bottom: 6px; }
     var outs = (down[id] || []).map(function (x) { return byId[x].label; });
     var html = '<b>' + n.label + '</b>';
     if (n.note) html += ' — ' + n.note;
-    if (n.rule) html += ' <span class="kind flag">rule ' + n.rule + '</span> <a href="#rules" style="color:var(--accent)">section 5</a>';
+    if (n.rule) html += ' <span class="kind flag">' + n.rule + '</span> <a href="#rules" style="color:var(--accent)">section 5</a>';
     if (ins.length) html += '<br>Built from: ' + ins.join(' · ');
     if (outs.length) html += '<br>Feeds: ' + outs.join(' · ');
     if (n.kind === 'src') html += '<br>A number as the application stores it.';

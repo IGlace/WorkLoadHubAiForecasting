@@ -8,11 +8,11 @@ in section 7 and must be answered before the implementation plan is written.
 
 ## 1. What the export contains, and what it does not
 
-The full diagram of the schema (every table, column, key and foreign key of the pg_dump of 2026-09-09, with the
-table and keys added after the base schema, the seven tables and two columns the module's own migrations add,
-and the columns the module reads highlighted) is
-`docs/design/2026-09-17-workloadhub-schema-diagram.html`; the feature matrix as it stands after the review of
-2026-09-16 is `docs/design/2026-09-17-feature-matrix-now.html`.
+The full diagram of the database with the module installed (every table, column, key and foreign key of the
+pg_dump of 2026-09-09 plus the seven tables and two columns the module's migrations add, what the module reads,
+what the data must contain and how the server integrates it) is
+`docs/design/2026-09-17-workloadhub-schema-diagram.html`; the feature matrix as it stands, with its rules, is
+`docs/design/2026-09-17-feature-matrix-now.html`. Both describe the current state only.
 
 | Table | Rows | Use in the forecast |
 |---|---|---|
