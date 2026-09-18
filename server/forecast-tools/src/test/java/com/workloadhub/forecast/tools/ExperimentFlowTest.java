@@ -76,6 +76,24 @@ class ExperimentFlowTest {
         assertFalse(Files.exists(outside));
     }
 
+    /**
+     * Real mode refuses an export that lacks a task status or type (design 2026-09-17, task 2c). Through the
+     * driver that is a bad request like any other: a bare message and exit 2, not a stack-trace line and exit 1.
+     */
+    @Test
+    void realModeRefusesAnIncompleteExportAsABadRequest(@TempDir Path dir) throws Exception {
+        String json = Files.readString(FIXTURE, StandardCharsets.UTF_8);
+        assertTrue(json.contains("\"name\": \"Done\""), "the fixture spells the Done status as expected");
+        Path partial = dir.resolve("partial-export.json");
+        Files.writeString(partial, json.replace("\"name\": \"Done\"", "\"name\": \"Finished\""), StandardCharsets.UTF_8);
+        Path outside = dir.resolve("real-seeded.json");
+        Run run = experiment("seed", "--export", partial.toString(), "--weeks", "8", "--out", outside.toString());
+        assertEquals(2, run.exit(), run.output());
+        assertTrue(run.output().contains("task_statuses lacks 'Done'"), run.output());
+        assertFalse(run.output().contains("Exception"), run.output());
+        assertFalse(Files.exists(outside));
+    }
+
     @Test
     void fixtureWritesTheSchemaAndTheRows(@TempDir Path dir) throws Exception {
         assertOk(experiment("fixture", "--out", dir.toString()), "seeded-rows.sql");

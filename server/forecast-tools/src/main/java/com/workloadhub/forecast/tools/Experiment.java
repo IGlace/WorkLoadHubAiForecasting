@@ -108,7 +108,8 @@ public final class Experiment {
                     yield 2;
                 }
             };
-        } catch (Bad e) {
+        } catch (Bad | IllegalArgumentException e) {
+            // Bad is the driver's own; the seed throws IllegalArgumentException for an incomplete real-mode export
             System.err.println("error: " + e.getMessage());
             return 2;
         } catch (ForecastException e) {
@@ -233,7 +234,7 @@ public final class Experiment {
     static final String DEFAULT_URL = "jdbc:postgresql://localhost:5432/workloadhub";
 
     static String setting(Args args, String option, String variable, String fallback) {
-        if (args.has(option) && !args.value(option).isEmpty()) {
+        if (args.has(option)) {
             return args.value(option);
         }
         String env = System.getenv(variable);

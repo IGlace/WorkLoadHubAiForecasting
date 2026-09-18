@@ -9,9 +9,9 @@ case $- in
 *i*)
     printf '\n\033[1;32mwhf-dev\033[0m  %s, %s\n' "$(java -version 2>&1 | head -1)" "$(mvn -v 2>/dev/null | head -1 | cut -d' ' -f1-3)" >&2
     printf '  /work   this repository, bind-mounted: edits here are edits on Windows\n' >&2
-    printf '  /data   for databases, seeds and exports — keep them out of /work, which is git\n' >&2
+    printf '  /data   for seeds and exports — keep them out of /work, which is git\n' >&2
     printf '  gate    cd /work/server && mvn -B verify        (PostgreSQL tests included)\n' >&2
-    printf '          cd /work && uv run --python 3.11 --with pytest pytest server/tools/tests\n' >&2
+    printf '  db      bash /work/scripts/postgres.sh up      (the local PostgreSQL, a sibling container)\n' >&2
     printf '  date    %s  (container clock; WHF_TZ sets it when the box is created)\n\n' "$(date '+%Y-%m-%d %H:%M %Z')" >&2
     ;;
 esac

@@ -187,9 +187,10 @@ do its work: `UUID`, `LocalDate`, `LocalDateTime` and `Boolean` are passed as th
 
 - the twenty-four `dialect.` call sites go: no `placeholder`, `bool`, `asBoolean`, `boolLiteral`;
 - the three private copies of `str`, `date`, `dateTime`, `num`, `uuid`, `dbl`, `time` and the two of `ph` and
-  `ts` collapse into what `getObject` returns; a small package-private `store.JdbcValues` keeps the two
-  readers that stay non-trivial (a nullable `Double` from a `Number`, a nullable `LocalDateTime` from a
-  `Timestamp` where a driver hands one back);
+  `ts` collapse into what `getObject` returns; a small package-private `store.JdbcValues` keeps only
+  `micros`, the truncation to the microsecond `timestamp(6)` stores (**amended 2026-09-18**: the two nullable
+  readers this section first kept turned out unneeded, `getObject(col, Double.class)` and
+  `getObject(col, LocalDateTime.class)` return null for NULL on their own);
 - `DefaultForecastService.requireTeam` and `JdbcGitHubTokenStore` bind a `UUID` instead of a cast string;
 - `JdbcRunStore` stops re-sorting in Java what its `ORDER BY user_id` already ordered (PostgreSQL orders
   `uuid` the way `Ids.UUID_ORDER` does), and its three hand-chunked batch loops become one call to

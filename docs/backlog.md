@@ -334,6 +334,43 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   already pinning it; about 300 lines. Spec section 10
   (`docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`).
 
+- **The JSON importer deletes `projects` under `replace`, which a real database refuses (2026-09-18).**
+  `ExportImporter.importAll(envelope, true)` issues `DELETE FROM projects` when the envelope carries the
+  table, while `SqlExportWriter` upserts `projects` by id and checks the two user-content tables first, and
+  `server/README.md` says the JSON import does the same. Against a database that holds `project_history`,
+  `task_comments` or `task_attachments` rows the delete dies on a foreign key, so the very next step of the
+  project — the real export through the seed into the local PostgreSQL — walks into it. Predates the
+  PostgreSQL plan (it comes from the 2026-09-17 seed-scope plan) and was found by that plan's whole-branch
+  review. Fix: the importer skips the delete on `projects`, upserts it `ON CONFLICT (id) DO UPDATE`, and
+  refuses when the user-content tables hold rows, exactly as the SQL script does; then the README sentence
+  becomes true.
+
+- **Leftovers of the PostgreSQL-only plan, none blocking (2026-09-18).** From the whole-branch review of
+  `docs/superpowers/plans/2026-09-17-postgresql-only-and-tools-module.md`, in the order worth taking them:
+  the second speed-up of spec section 5.4, `FactsBuilderTest` building a `Prepared` by hand instead of
+  fitting a booster (22 s of the gate's 693; the other six full-pipeline classes hold the rest, and the
+  gate only gets faster there); spec section 5.1's one database per test class with `TRUNCATE` between
+  tests, never implemented (`JdbcRunStoreTest` creates five databases and nothing truncates); no test for
+  a NULL `backtest_json` or for the `archived = FALSE` filter of `listRuns`; `ForecastRepository`'s five
+  row mappers can return null under `list()`; `Experiment.initDb`'s schema-exists query is privilege
+  filtered; `tools-classpath.sh` tests staleness on `*.java` only, so an edited
+  `schema/workloadhub-postgresql.sql` reaches `experiment.sh fixture` stale until a build; `check.sh` passes
+  a socket file nobody listens on (the first database test then fails, which is the right outcome late);
+  `ExportExporter.exportAll` writes `refresh_tokens` when the database holds them; `postgres.sh up` on an
+  existing container prints the port from the environment rather than the one it was created with, and
+  `-v "$volume:/var/lib/postgresql"` may be path-mangled by Git Bash on Windows (`MSYS_NO_PATHCONV=1`);
+  the two `DatabaseTestSupport` copies (core test, tools test) are held equal by a javadoc sentence only;
+  `DatabaseTestSupport.FIXTURES` and `FixtureFreshnessTest`'s path are relative to the module root;
+  `ExperimentFlowTest`'s stdout capture assumes sequential surefire (the helper is `synchronized`);
+  `WeeklySeries`' private constructor keeps an unused `members` parameter; the seed's parent/child team rule
+  has no fixture and its teamless-person rule no assertion; the fixture's `sort_order` values for To Do and
+  In Progress differ from `ReferenceData`'s; `realisticDataset()` in `WorkQueueTest` still generates a
+  36-user, 30-week population for one test (`aMembersWeekHasAShape`) that could read the committed
+  fixture instead; `Experiment.run` treats every `IllegalArgumentException` as a bad request (exit 2),
+  wider than the seed's incomplete-export refusal it was added for, so a typed exception from `Reference`
+  would keep a genuine defect from looking like a user error; a few imports are out of alphabetical order
+  (no check enforces it).
+
 - **`CapacityRule` builds its own calendar for the leave index while its callers pass one (2026-09-17).**
   `CapacityRule.indexFor` expands the approved leaves with `WorkingCalendar.fromHolidays(data.holidays())`,
   but every public method also takes a `WorkingCalendar` from its caller. The two agree today, because every

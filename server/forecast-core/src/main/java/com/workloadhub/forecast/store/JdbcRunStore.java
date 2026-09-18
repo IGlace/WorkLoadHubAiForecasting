@@ -158,7 +158,6 @@ public final class JdbcRunStore {
     }
 
     public Optional<String> backtestJson(UUID runId) {
-        return jdbc.sql("SELECT backtest_json FROM forecast_runs WHERE id = ?").param(runId).query(String.class).optional()
-                .filter(s -> s != null);
+        return jdbc.sql("SELECT backtest_json FROM forecast_runs WHERE id = ?").param(runId).query(String.class).optional();
     }
 }

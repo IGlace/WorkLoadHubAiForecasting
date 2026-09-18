@@ -2659,6 +2659,10 @@ and `copilotStatus` (no token stored, as expected without `--narrate`).
 5. **`tools-classpath.sh` resolves with `-pl forecast-tools -am -DskipTests package dependency:build-classpath`**
    rather than a plain `dependency:build-classpath`, because core's snapshot is never installed to the local
    repository and the reactor has to build it first.
+6. **The second speed-up of section 5.4 was not done.** `FactsBuilderTest` still fits a booster for the
+   three tests that only need a `TeamOutcome` shape; the file is untouched across the branch and the
+   whole-branch review found the omission. It stays open in the backlog with the other gate-time work,
+   under the seven full-pipeline classes above, where it belongs by measured cost (22 s of 693).
 
 ### Rulings during execution
 

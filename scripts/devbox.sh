@@ -29,6 +29,8 @@
 # WHF_DATA          host directory mounted at /data, for seeds and exports, which must stay out of
 #                   the repository (default ~/whf; created if missing). The database itself lives in
 #                   the whf-pg volume of scripts/postgres.sh.
+# WHF_PG_CONTAINER  the local PostgreSQL's container name, as scripts/postgres.sh reads it (default
+#                   whf-postgres); only `status` looks at it here.
 # WHF_M2_VOLUME     named volume for ~/.m2 (default whf-m2). Losing it costs a full re-resolve:
 #                   measured once at 9:45 for `mvn verify` against 5:47 with it.
 # WHF_CACHE_VOLUME  named volume for ~/.cache (default whf-cache), uv's download cache.
@@ -290,7 +292,8 @@ status)
     "$engine" inspect -f 'mounts:{{range .Mounts}}{{printf "\n  %s -> %s" .Source .Destination}}{{end}}' "$name"
     echo
     if running; then check_socket; fi
-    if "$engine" inspect -f '{{.State.Running}}' "${WHF_PG_CONTAINER:-whf-postgres}" 2>/dev/null | grep -q true; then echo "local PostgreSQL: whf-postgres is running (scripts/postgres.sh status)"; else echo "local PostgreSQL: not running (bash scripts/postgres.sh up)"; fi
+    pg="${WHF_PG_CONTAINER:-whf-postgres}"
+    if "$engine" inspect -f '{{.State.Running}}' "$pg" 2>/dev/null | grep -q true; then echo "local PostgreSQL: $pg is running (scripts/postgres.sh status)"; else echo "local PostgreSQL: $pg is not running (bash scripts/postgres.sh up)"; fi
     ;;
 stop)
     exists || {

@@ -7,7 +7,8 @@
 #        bash scripts/postgres.sh stop            stop it; `up` brings it back with its data
 #        bash scripts/postgres.sh rm [--volume]   remove the container; --volume also removes the data
 #        bash scripts/postgres.sh status          is it running, which port, does the database answer
-#        bash scripts/postgres.sh psql            open psql inside the container
+#        bash scripts/postgres.sh psql [args...]  open psql inside the container; extra arguments are psql's
+#                                                 own (-c, -f, ...), and a piped stdin is read as a script
 #        bash scripts/postgres.sh --help          this header
 #
 # The database is `workloadhub`, user `workloadhub`, password `workloadhub`, port 5432, reachable as
@@ -146,6 +147,11 @@ psql)
         echo "$name is not running; run: bash scripts/postgres.sh up" >&2
         exit 1
     }
-    exec "$engine" exec -it "$name" psql -U workloadhub -d workloadhub
+    # -t only when there is a terminal to pass on, as devbox.sh exec does: forcing it into a pipe fills the
+    # output with escape codes, and `postgres.sh psql < query.sql` must read the file, not end of file.
+    if [ -t 0 ] && [ -t 1 ]; then
+        exec "$engine" exec -it "$name" psql -U workloadhub -d workloadhub "${@:2}"
+    fi
+    exec "$engine" exec -i "$name" psql -U workloadhub -d workloadhub "${@:2}"
     ;;
 esac

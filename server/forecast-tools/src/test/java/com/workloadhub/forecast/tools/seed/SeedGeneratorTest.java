@@ -375,10 +375,9 @@ class SeedGeneratorTest {
 
     @Test
     void realModeOfTheFixtureImports() throws Exception {
-        // the fixture's own manager team is named exactly the way Directory.derive would name a fresh
-        // one ("CT2 · Lead One"), and its own project key ("CT2-CAL") is exactly the pattern
-        // ProjectPlanner.plan mints for the CT2 department: real mode must disambiguate both so the
-        // result still imports into teams.name/projects.key's UNIQUE constraints.
+        // the fixture's own project key ("CT2-CAL") is exactly the pattern ProjectPlanner.plan mints for
+        // the CT2 department: real mode must disambiguate it so the result still imports into
+        // projects.key's UNIQUE constraint (teams are the application's own in real mode, none is written).
         ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
         ExportEnvelope out = SeedGenerator.generate(real, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
         DataSource ds = DatabaseTestSupport.postgresWithSchema();
@@ -393,10 +392,7 @@ class SeedGeneratorTest {
         });
         new ExportImporter(ds).importAll(real.withData(directory), true);
         new ExportImporter(ds).importAll(out, false);
-        Set<String> teamNames = new HashSet<>();
-        for (var t : out.rows("teams")) {
-            assertTrue(teamNames.add((String) t.get("name")), "duplicate team name: " + t.get("name"));
-        }
+        // real mode writes no teams (it uses the application's own), so only the project keys are the generator's to keep unique
         Set<String> projectKeys = new HashSet<>();
         for (var p : out.rows("projects")) {
             assertTrue(projectKeys.add((String) p.get("key")), "duplicate project key: " + p.get("key"));
