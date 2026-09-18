@@ -41,8 +41,8 @@ public static final List<String> DEPENDENTS_OF_WORK = List.of("project_history",
 
 then inserts the envelope's rows in `TABLE_ORDER`, as today. For a full synthetic envelope (every table
 present) nothing changes: the three are carried and were already deleted. For a real-mode envelope the
-delete order is `task_attachments`, `task_comments`, `time_logs`, `task_history`, `project_history`,
-`tasks`, `projects`, `personal_leaves` — `TABLE_ORDER` reversed, filtered — so no foreign key is ever
+delete order is `personal_leaves`, `time_logs`, `task_attachments`, `task_comments`, `task_history`,
+`tasks`, `project_history`, `projects` — `TABLE_ORDER` reversed, filtered — so no foreign key is ever
 crossed, and the transaction is one, as today. `replace = false` is unchanged: insert only.
 
 ## 3. The writer
