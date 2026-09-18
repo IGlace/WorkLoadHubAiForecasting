@@ -348,8 +348,11 @@ the top of the class beside them):
 
 and the test method:
 
+This class has **no `DataSource` parameter resolver**. Its pattern is a plain helper taking the
+`DataSource`, plus a separate `@Test` with no parameters that hands it a brand-new database. Follow it
+exactly — a `@Test` with a `DataSource` parameter fails at run time with `ParameterResolutionException`:
+
 ```java
-    @Test
     void latestOfFindsTheUsersMostRecentRunAcrossTeamsAndIgnoresTheNilRequester(DataSource ds) {
         JdbcRunStore store = new JdbcRunStore(ds);
         store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
@@ -362,10 +365,15 @@ and the test method:
         assertFalse(store.latestOf(UUID.randomUUID()).isPresent(), "a user with no run");
         assertFalse(store.latestOf(JdbcRunStore.NIL).isPresent(), "a run created without a requester is nobody's run");
     }
+
+    @Test
+    void latestOfFindsTheUsersMostRecentRunAcrossTeamsAndIgnoresTheNilRequester() {
+        latestOfFindsTheUsersMostRecentRunAcrossTeamsAndIgnoresTheNilRequester(DatabaseTestSupport.postgresMigrated());
+    }
 ```
 
-Note the `DataSource ds` parameter: this test class already receives one per method through its existing
-extension — copy the annotation pattern from `lifecycle(DataSource ds)` in the same file exactly.
+`postgresMigrated()` gives a brand-new database per call, so the runs this test creates cannot be confused
+with another test's.
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -409,9 +417,14 @@ Do **not** create a `V2`. No database has applied `V1` yet (spec ruling E).
 That class asserts on tables today and on no index at all, so nothing would notice if the new line were
 dropped from `V1`. Add:
 
+This class takes its `DataSource` inside the method — there is no parameter resolver. Match
+`migratesAFreshDatabaseInOneStep` exactly:
+
 ```java
+    /** latestRunOf filters on requested_by and has no team, so forecast_runs_team_idx cannot serve it. */
     @Test
-    void forecastRunsCarriesBothItsIndexes(DataSource ds) {
+    void forecastRunsCarriesBothItsIndexes() throws Exception {
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         ForecastMigrations.run(ds);
         List<String> names = JdbcClient.create(ds)
                 .sql("SELECT indexname FROM pg_indexes WHERE tablename = 'forecast_runs' ORDER BY indexname")
@@ -421,7 +434,7 @@ dropped from `V1`. Add:
     }
 ```
 
-Copy the `DataSource ds` parameter style and the imports from the tests already in that file.
+Add `org.springframework.jdbc.core.simple.JdbcClient` to the imports if the file does not already have it.
 
 - [ ] **Step 6: Run the store and migration tests to verify they pass**
 
@@ -860,8 +873,9 @@ wrong.
 
 The fixture is 30 weeks ending 2026-09-06, so its last weeks are what Task 4 fixed:
 
+Generating and inspecting the fixture needs no database at all — these are file operations:
+
 ```bash
-cd /work && bash scripts/postgres.sh status >/dev/null 2>&1 || bash scripts/postgres.sh up
 grep -c "INSERT INTO task_service.time_logs" server/forecast-core/src/test/resources/fixtures/seeded-rows.sql
 grep -o "2026-09-0[1-6]" server/forecast-core/src/test/resources/fixtures/seeded-rows.sql | sort | uniq -c
 ```
