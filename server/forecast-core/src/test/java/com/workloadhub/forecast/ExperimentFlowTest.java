@@ -82,6 +82,13 @@ class ExperimentFlowTest {
         assertFalse(Files.exists(outside));
     }
 
+    @Test
+    void fixtureWritesTheSchemaAndTheRows(@TempDir Path dir) throws Exception {
+        assertOk(experiment("fixture", "--out", dir.toString()), "seeded-rows.sql");
+        assertTrue(Files.readString(dir.resolve("workloadhub-schema.sql")).contains("CREATE SCHEMA task_service;"));
+        assertTrue(Files.readString(dir.resolve("seeded-rows.sql")).startsWith("BEGIN;\nSET search_path TO task_service;\n"));
+    }
+
     /** A mistyped command or option is a bad request, not a stack trace and not a silent no-op. */
     @Test
     void unknownCommandsAndOptionsAreRefused() throws Exception {

@@ -27,7 +27,7 @@ import javax.sql.DataSource;
 import org.postgresql.ds.PGSimpleDataSource;
 
 /**
- * Builds an experiment database on PostgreSQL: the four things the owner does from a terminal that the
+ * Builds an experiment database on PostgreSQL: the five things the owner does from a terminal that the
  * WorkloadHub server never does.
  *
  * <p>This is not a Maven module and deliberately so. Until 2026-09-12 it was {@code forecast-cli}, a Spring Boot
@@ -67,6 +67,9 @@ public final class Experiment {
                        synthetic directory. Real mode (no --synthetic) needs --export and refuses to
                        write inside a git repository without --force: its output holds personal data.
 
+              fixture  [--out DIR]
+                       Regenerate forecast-core's seeded test fixture: workloadhub-schema.sql and seeded-rows.sql in DIR.
+
             Connection: --url, --user, --password; else WHF_DB_URL, WHF_DB_USER, WHF_DB_PASSWORD; else
             jdbc:postgresql://localhost:5432/workloadhub, workloadhub, workloadhub, which scripts/postgres.sh
             creates. Run this inside the development container (bash scripts/devbox.sh shell).
@@ -101,6 +104,7 @@ public final class Experiment {
                 case "export" -> export(Args.parse(rest, Set.of("url", "user", "password"), Set.of()));
                 case "seed" -> seed(Args.parse(rest, Set.of("url", "user", "password", "out", "export", "users", "weeks", "end", "seed", "format"),
                         Set.of("synthetic", "force")));
+                case "fixture" -> fixture(Args.parse(rest, Set.of("out", "url", "user", "password"), Set.of()));
                 default -> {
                     System.err.println("error: unknown command '" + command + "'\n");
                     System.err.println(USAGE);
@@ -119,7 +123,7 @@ public final class Experiment {
         }
     }
 
-    // ---- the four commands ------------------------------------------------------------------------------------
+    // ---- the five commands ------------------------------------------------------------------------------------
 
     private static int initDb(Args args) throws Exception {
         args.noFiles();
@@ -211,6 +215,21 @@ public final class Experiment {
                 System.out.printf("  %-18s %8d%n", table, rows);
             }
         }
+        return 0;
+    }
+
+    private static int fixture(Args args) throws Exception {
+        args.noFiles();
+        Path dir = Path.of(args.require("out"));
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("workloadhub-schema.sql"), WorkloadHubSchema.readResource("/schema/workloadhub-postgresql.sql"),
+                StandardCharsets.UTF_8);
+        ExportEnvelope env = SeedGenerator.generate(null, SeedGenerator.FIXTURE);
+        try (Writer w = Files.newBufferedWriter(dir.resolve("seeded-rows.sql"), StandardCharsets.UTF_8)) {
+            SqlExportWriter.write(env, w);
+        }
+        System.out.println("Wrote " + dir.resolve("workloadhub-schema.sql") + " and " + dir.resolve("seeded-rows.sql")
+                + " (" + env.rows("tasks").size() + " tasks, " + env.rows("time_logs").size() + " time logs)");
         return 0;
     }
 

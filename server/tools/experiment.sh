@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Runs server/tools/Experiment.java, which builds an experiment database on PostgreSQL.
 #
-#   bash server/tools/experiment.sh --help                                   # the four commands
+#   bash server/tools/experiment.sh --help                                   # the five commands
 #   bash server/tools/experiment.sh init-db
 #   bash server/tools/experiment.sh seed --synthetic --users 40 --out /tmp/seed.json
 #   bash server/tools/experiment.sh import /tmp/seed.json
+#   bash server/tools/experiment.sh fixture                                  # regenerate the committed test fixture
 #
 # Run it inside the development container (`bash scripts/devbox.sh shell`): that is where Java, Maven and
 # XGBoost's libgomp are. The database is --url/--user/--password, else WHF_DB_URL/WHF_DB_USER/WHF_DB_PASSWORD,
@@ -18,5 +19,11 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 classpath="$(bash "$here/core-classpath.sh")"
+
+# `fixture` writes forecast-core's committed test fixture; the path is the repository's, whatever the
+# working directory, unless --out says otherwise.
+if [ "${1:-}" = fixture ] && ! printf '%s\n' "$@" | grep -qx -- '--out'; then
+    set -- "$@" --out "$here/../forecast-core/src/test/resources/fixtures"
+fi
 
 exec java --class-path "$classpath" "$here/Experiment.java" "$@"

@@ -19,6 +19,9 @@ server/**/*.db-journal
 *seeded*.json
 *seeded*.sql
 workloadhub_export*.json
+# ...except the one seeded file that is committed on purpose: forecast-core's test fixture, which is
+# synthetic (no real identity) and is what the gate reads instead of generating the seed in process.
+!server/forecast-core/src/test/resources/fixtures/seeded-rows.sql
 
 # Python caches of the tools test
 __pycache__/

@@ -1,5 +1,9 @@
 package com.workloadhub.forecast.store;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -55,10 +59,28 @@ public final class DatabaseTestSupport {
         return ds;
     }
 
-    /** A new database holding schema task_service and the 24 WorkloadHub tables, nothing else. */
+    /** The two generated files core's tests read: the WorkloadHub schema and the seeded rows (`experiment.sh fixture`). */
+    public static final Path FIXTURES = Path.of("src/test/resources/fixtures");
+
+    /** Runs a whole SQL file in one statement; the driver splits it on semicolons and honours BEGIN and COMMIT inside it. */
+    public static void runScript(DataSource ds, Path file) {
+        String sql;
+        try {
+            sql = Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("cannot read " + file, e);
+        }
+        try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
+            st.execute(sql);
+        } catch (SQLException e) {
+            throw new IllegalStateException("script failed: " + file + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** A new database holding schema task_service and the 24 WorkloadHub tables, from the committed schema file. */
     public static DataSource postgresWithSchema() {
         DataSource ds = postgres();
-        WorkloadHubSchema.createPostgresql(ds);
+        runScript(ds, FIXTURES.resolve("workloadhub-schema.sql"));
         return ds;
     }
 

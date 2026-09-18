@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.testing.SeededData;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -21,6 +20,11 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 class ForecastRepositoryTest {
 
+    /** What the seeded database itself holds, now that the tests read the fixture rather than the envelope. */
+    static long count(DataSource ds, String sql) {
+        return JdbcClient.create(ds).sql(sql).query(Long.class).single();
+    }
+
     @Test
     void loadsCountedMembersWithTheirTeams() {
         ForecastData data = SeededData.data();
@@ -31,9 +35,8 @@ class ForecastRepositoryTest {
             assertTrue(m.teamIds().contains(m.primaryTeamId()));
             assertNotNull(m.joined());
         }
-        long rows = SeededData.envelope().rows("users").stream()
-                .filter(u -> List.of("MEMBER", "TEAM_LEADER").contains(u.get("role")) && Boolean.TRUE.equals(u.get("active")))
-                .count();
+        long rows = count(SeededData.dataSource(),
+                "SELECT COUNT(*) FROM users WHERE role IN ('MEMBER', 'TEAM_LEADER') AND active");
         assertTrue(data.members().size() <= rows && data.members().size() >= rows - 5, "counted members " + data.members().size() + " of " + rows);
     }
 
@@ -48,7 +51,7 @@ class ForecastRepositoryTest {
     @Test
     void tasksTransitionsAndLogsAreTypedAndOrdered() {
         ForecastData data = SeededData.data();
-        assertEquals(SeededData.envelope().rows("tasks").size(), data.tasks().size());
+        assertEquals(count(SeededData.dataSource(), "SELECT COUNT(*) FROM tasks WHERE archived = FALSE"), data.tasks().size());
         TaskRow first = data.tasks().get(0);
         assertNotNull(first.createdDate());
         assertTrue(Set.of("TO_DO", "IN_PROGRESS", "DONE").contains(first.statusCategory()));
@@ -60,7 +63,7 @@ class ForecastRepositoryTest {
         for (int i = 1; i < mine.size(); i++) {
             assertFalse(mine.get(i).changedAt().isBefore(mine.get(i - 1).changedAt()));
         }
-        assertEquals(SeededData.envelope().rows("time_logs").size(), data.timeLogs().size());
+        assertEquals(count(SeededData.dataSource(), "SELECT COUNT(*) FROM time_logs"), data.timeLogs().size());
         assertEquals(9, data.statusCategoryByName().size());
         assertEquals("DONE", data.statusCategoryByName().get("Done"));
     }
@@ -69,15 +72,15 @@ class ForecastRepositoryTest {
     void holidaysLeavesAndProjectsArePresentAndTheCapacityTablesAreNeverRead() {
         ForecastData data = SeededData.data();
         assertTrue(data.holidays().stream().anyMatch(h -> h.confirmed() && h.active()));
-        long approved = SeededData.envelope().rows("personal_leaves").stream().filter(l -> "APPROVED".equals(l.get("status"))).count();
-        long pending = SeededData.envelope().rows("personal_leaves").stream().filter(l -> "PENDING".equals(l.get("status"))).count();
+        long approved = count(SeededData.dataSource(), "SELECT COUNT(*) FROM personal_leaves WHERE status = 'APPROVED'");
+        long pending = count(SeededData.dataSource(), "SELECT COUNT(*) FROM personal_leaves WHERE status = 'PENDING'");
         assertEquals(approved, data.leaves().size());
         assertEquals(pending, data.pendingLeaves().size());
         assertTrue(data.leaves().stream().allMatch(l -> "APPROVED".equals(l.status()) && l.absenceHours() != null && l.absenceHours() > 0));
-        assertEquals(SeededData.envelope().rows("projects").size(), data.projects().size());
+        assertEquals(count(SeededData.dataSource(), "SELECT COUNT(*) FROM projects WHERE archived = FALSE"), data.projects().size());
         MemberRow m = data.members().get(0);
         assertFalse(data.projectIdsOfTeamAndParent(m.primaryTeamId()).isEmpty());
-        assertEquals(SeededData.envelope().rows("users").size(), data.users().size());
+        assertEquals(count(SeededData.dataSource(), "SELECT COUNT(*) FROM users"), data.users().size());
         for (int i = 1; i < data.leaves().size(); i++) {
             var prev = data.leaves().get(i - 1);
             var cur = data.leaves().get(i);
@@ -92,8 +95,7 @@ class ForecastRepositoryTest {
                     "holidays out of order at " + i);
         }
         // The three tables the module no longer reads: drop them and the load must still succeed.
-        DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        new ExportImporter(ds).importAll(SeededData.envelope(), true);
+        DataSource ds = SeededData.freshDataSource();
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
             st.execute("DROP TABLE user_capacity");
             st.execute("DROP TABLE team_capacity");
@@ -107,17 +109,14 @@ class ForecastRepositoryTest {
 
     @Test
     void rejectedAndCancelledLeavesAreNotLoadedAndTimesAreParsed() {
-        DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        new ExportImporter(ds).importAll(SeededData.envelope(), true);
-        String member = SeededData.envelope().rows("users").get(0).get("id").toString();
-        try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
-            st.execute("DELETE FROM personal_leaves");
-            for (String status : List.of("APPROVED", "PENDING", "REJECTED", "CANCELLED")) {
-                st.execute("INSERT INTO personal_leaves (id, employee_id, start_date, end_date, begin_time, end_time, absence_hours, status, leave_type)"
-                        + " VALUES ('" + UUID.randomUUID() + "', '" + member + "', '2026-09-07', '2026-09-09', '13:00:00', NULL, 22.0, '" + status + "', 'PAID_LEAVE')");
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException(e);
+        DataSource ds = SeededData.freshDataSource();
+        JdbcClient client = JdbcClient.create(ds);
+        UUID member = client.sql("SELECT id FROM users ORDER BY id LIMIT 1").query(UUID.class).single();
+        client.sql("DELETE FROM personal_leaves").update();
+        for (String status : List.of("APPROVED", "PENDING", "REJECTED", "CANCELLED")) {
+            client.sql("INSERT INTO personal_leaves (id, employee_id, start_date, end_date, begin_time, end_time, absence_hours, status, leave_type)"
+                    + " VALUES (?, ?, '2026-09-07', '2026-09-09', '13:00:00', NULL, 22.0, ?, 'PAID_LEAVE')")
+                    .param(UUID.randomUUID()).param(member).param(status).update();
         }
         ForecastData data = new ForecastRepository(JdbcClient.create(ds)).loadAll();
         assertEquals(1, data.leaves().size());

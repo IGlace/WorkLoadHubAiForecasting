@@ -8,7 +8,6 @@ import com.workloadhub.forecast.facts.FactsBuilder;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
-import com.workloadhub.forecast.seed.AbsencePlanner;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
@@ -27,7 +26,8 @@ public final class SeededFacts {
             ForecastData data = SeededData.data();
             UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
             // windows pinned to 2, the default, so these facts stay put across window-count experiments elsewhere.
-            ForecastRunner runner = new ForecastRunner(new CapacityRule(AbsencePlanner.BASE_HOURS), 2);
+            // 44 h, the seed's own week and the module's default
+            ForecastRunner runner = new ForecastRunner(new CapacityRule(44.0), 2);
             Prepared prepared = runner.prepare(data, SeededData.asOf(), (phase, percent, message) -> { });
             TeamOutcome outcome = runner.forTeam(prepared, team);
             json = FactsBuilder.toJson(FactsBuilder.build(outcome, RUN_ID, LocalDateTime.of(2026, 9, 6, 12, 0)));

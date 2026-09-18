@@ -2,8 +2,6 @@ package com.workloadhub.forecast.samplehost;
 
 import com.workloadhub.forecast.ai.CopilotGateway;
 import com.workloadhub.forecast.ai.FakeGateway;
-import com.workloadhub.forecast.data.ExportImporter;
-import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.testing.SeededData;
 import java.time.Clock;
 import java.time.ZoneOffset;
@@ -20,9 +18,7 @@ public class SampleHostApplication {
 
     @Bean
     DataSource dataSource() {
-        DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        new ExportImporter(ds).importAll(SeededData.envelope(), true);
-        return ds;
+        return SeededData.freshDataSource();
     }
 
     /** The host pins the run day to the seed's end so the horizon lands where the data is; a real host has none of this. */

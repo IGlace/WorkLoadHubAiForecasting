@@ -7,9 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.api.ForecastException;
-import com.workloadhub.forecast.data.ExportFiles;
-import com.workloadhub.forecast.data.ExportImporter;
-import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -20,9 +18,11 @@ class JdbcGitHubTokenStoreTest {
 
     static final UUID ENG = UUID.fromString("30000000-0000-0000-0000-000000000002");
 
-    static DataSource postgresWithFixture() throws Exception {
+    static DataSource postgresWithOneUser() {
         DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        new ExportImporter(ds).importAll(ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json")), true);
+        JdbcClient.create(ds).sql("INSERT INTO users (id, username, email, full_name, role, active, created_at, updated_at)"
+                + " VALUES (?, 'eng', 'eng@example.test', 'Eng Two', 'MEMBER', TRUE, ?, ?)")
+                .param(ENG).param(LocalDateTime.of(2026, 9, 1, 8, 0)).param(LocalDateTime.of(2026, 9, 1, 8, 0)).update();
         ForecastMigrations.run(ds);
         return ds;
     }
@@ -33,8 +33,8 @@ class JdbcGitHubTokenStoreTest {
     }
 
     @Test
-    void savesEncryptedAndLoadsForTheUser() throws Exception {
-        DataSource ds = postgresWithFixture();
+    void savesEncryptedAndLoadsForTheUser() {
+        DataSource ds = postgresWithOneUser();
         JdbcGitHubTokenStore s = store(ds);
         assertFalse(s.has(ENG));
         s.save(ENG, "gho_secret123");
@@ -49,8 +49,8 @@ class JdbcGitHubTokenStoreTest {
     }
 
     @Test
-    void refusesClassicTokensAndUnknownUsers() throws Exception {
-        JdbcGitHubTokenStore s = store(postgresWithFixture());
+    void refusesClassicTokensAndUnknownUsers() {
+        JdbcGitHubTokenStore s = store(postgresWithOneUser());
         ForecastException classic = assertThrows(ForecastException.class, () -> s.save(ENG, "ghp_old"));
         assertEquals("INVALID_REQUEST", classic.code());
         ForecastException unknown = assertThrows(ForecastException.class, () -> s.save(UUID.randomUUID(), "gho_x"));
@@ -58,8 +58,8 @@ class JdbcGitHubTokenStoreTest {
     }
 
     @Test
-    void refusesEmptyTokens() throws Exception {
-        DataSource ds = postgresWithFixture();
+    void refusesEmptyTokens() {
+        DataSource ds = postgresWithOneUser();
         JdbcGitHubTokenStore s = store(ds);
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> s.save(ENG, "")).code());
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> s.save(ENG, "   ")).code());
@@ -68,8 +68,8 @@ class JdbcGitHubTokenStoreTest {
     }
 
     @Test
-    void withoutKeyEveryCallFails() throws Exception {
-        DataSource ds = postgresWithFixture();
+    void withoutKeyEveryCallFails() {
+        DataSource ds = postgresWithOneUser();
         JdbcGitHubTokenStore s = new JdbcGitHubTokenStore(JdbcClient.create(ds), null);
         assertEquals("TOKEN_KEY_MISSING", assertThrows(ForecastException.class, () -> s.save(ENG, "gho_x")).code());
         assertEquals("TOKEN_KEY_MISSING", assertThrows(ForecastException.class, () -> s.load(ENG)).code());

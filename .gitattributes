@@ -17,3 +17,7 @@
 # Adding the attribute is not enough on its own: a worktree that already holds CRLF copies keeps
 # them until the files are checked out again (`git add --renormalize . && git checkout -- .`).
 * text=auto eol=lf
+
+# The seeded test fixture is generated (server/tools/experiment.sh fixture) and 2.8 MB; a regeneration
+# shows as one changed file, not as ten thousand changed lines.
+server/forecast-core/src/test/resources/fixtures/*.sql -diff

@@ -14,7 +14,6 @@ import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.calendar.Horizon;
-import com.workloadhub.forecast.data.ExportImporter;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.service.DefaultForecastService;
@@ -176,8 +175,7 @@ class ForecastAutoConfigurationTest {
 
     /** An auto-configured service over an isolated copy of the seeded database, run day fixed at {@code asOf}. */
     private static DefaultForecastService serviceWith(int windows, LocalDate asOf) {
-        DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        new ExportImporter(ds).importAll(SeededData.envelope(), true);
+        DataSource ds = SeededData.freshDataSource();
         Clock clock = Clock.fixed(asOf.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
         AtomicReference<DefaultForecastService> ref = new AtomicReference<>();
         new ApplicationContextRunner()
