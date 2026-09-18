@@ -1,6 +1,8 @@
-# The gate, the same step as scripts/check.sh and .github/workflows/ci.yml (which has no remote to fire
-# on): the Java module's `mvn verify`. Running this by hand is the only gate there is. A step whose tool
-# is missing is skipped with a message.
+# The gate, the same steps as scripts/check.sh and .github/workflows/ci.yml (which has no remote to fire
+# on): the Java modules' `mvn verify` (forecast-core and forecast-web), then the showcase front end's
+# `npm run check` (type check, unit tests, build) in server/forecast-web/ui. Running this by hand is the
+# only gate there is. A step whose tool is missing is skipped with a message, except that a missing
+# container engine fails the gate: the PostgreSQL tests need it and must never silently skip.
 # Unlike check.sh, which runs every step and reports each failure, this script stops at the first
 # failing step; both exit non-zero on any failure.
 #
@@ -16,6 +18,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 
 $root = Split-Path -Parent $PSScriptRoot
 $server = Join-Path $root "server"
+$ui = Join-Path $server "forecast-web/ui"
 
 # The database tests need an engine and fail without one; refuse at the door rather than after the build.
 $engine = $false
@@ -40,8 +43,14 @@ if (Get-Command mvn -ErrorAction SilentlyContinue) {
 } else {
     Write-Host "SKIP server (mvn verify): mvn not found on PATH" -ForegroundColor Yellow
 }
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+    Add-Step "ui (npm ci)" $ui "npm" @("ci", "--no-audit", "--no-fund", "--silent")
+    Add-Step "ui (npm run check)" $ui "npm" @("run", "check", "--silent")
+} else {
+    Write-Host "SKIP ui (npm run check): npm not found on PATH" -ForegroundColor Yellow
+}
 if ($steps.Count -eq 0) {
-    Write-Host "gate ran nothing: install mvn" -ForegroundColor Red
+    Write-Host "gate ran nothing: install mvn and npm" -ForegroundColor Red
     exit 1
 }
 

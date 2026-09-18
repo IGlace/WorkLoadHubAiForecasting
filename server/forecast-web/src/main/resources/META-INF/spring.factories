@@ -1,0 +1,3 @@
+org.springframework.boot.env.EnvironmentPostProcessor=\
+  com.workloadhub.forecastweb.host.WebSurfaceGuard,\
+  com.workloadhub.forecastweb.demo.TokenKeyFile

@@ -1,0 +1,33 @@
+# The showcase host. The whf.* block is what the production server sets (server/README.md, "Properties");
+# the forecast-web.* block is demo wiring (design 2026-09-18, section 3.4).
+server:
+  port: 8080
+
+whf:
+  token-key: ${WHF_TOKEN_KEY:}          # blank: forecast-web.token-key-file supplies one
+  work-dir: ${WHF_WORK_DIR:${user.home}/.workloadhub-forecast}
+  run-threads: 2
+  forecast:
+    windows: 2
+  flyway:
+    enabled: true
+  web:
+    enabled: false                       # this host has its own controllers: the module's trust requestedBy as given
+
+forecast-web:
+  database: ${FORECAST_WEB_DB:${user.home}/.workloadhub-forecast/forecast-web/workloadhub.db}
+  seed:
+    users: 120
+    weeks: 52
+    seed: 7
+    end: 2026-09-06
+  clock:
+    today: ${FORECAST_WEB_TODAY:2026-06-28}   # inside the seed's rich months; its last weeks taper (see the README)
+    adjustable: true
+  token-key-file: ${user.home}/.workloadhub-forecast/forecast-web/token.key
+  ui-dir: ${FORECAST_WEB_UI:ui/dist}
+
+logging:
+  level:
+    root: INFO
+    com.workloadhub.forecast: INFO
