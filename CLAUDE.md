@@ -258,7 +258,9 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 
 ## Toolchain
 
-- Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java.
+- Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java; Node 22 and
+  npm for `forecast-web`'s front end, resolving through AVL's Artifactory
+  (`https://arti.avl.com/artifactory/api/npm/npm-release/`, set in the development container's global npmrc).
 - The gate is one step: `cd server && mvn -B -q verify` (both modules; the database tests run PostgreSQL
   through Testcontainers and need Docker or podman: without an engine the gate fails, it never skips). It
   takes about twelve minutes as of 2026-09-18, and grows with the suite. `bash scripts/check.sh` and
@@ -273,7 +275,8 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
   run. Keep the three in step anyway, and restore the `push` and `pull_request` triggers, which the file
   carries as a comment, when the owner asks for CI back.
 - With no JDK on the machine, work inside the development container: `bash scripts/devbox.sh shell`. It
-  keeps an Ubuntu box running with the toolchain and this repository bind-mounted at `/work`, so the gate
+  keeps an Ubuntu box running with the toolchain — Java, Maven and, since 2026-09-19, Node 22 — and this
+  repository bind-mounted at `/work`, so the gate
   and the experiment driver run there exactly as on Linux, with the engine's socket mounted, which the gate
   needs. `bash scripts/check.sh` on the Windows host instead would skip the Maven step and still exit
   0, reporting success having compiled nothing. Details in `server/README.md`, "The development container".

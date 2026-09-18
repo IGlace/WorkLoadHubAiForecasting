@@ -5,9 +5,19 @@ serves a React front end that shows every feature of the forecast with the route
 `docs/superpowers/specs/2026-09-18-forecast-web-on-dev-design.md`.
 
 ```bash
-bash scripts/devbox.sh shell                 # the toolchain: Java 21, Maven, Node 22
+bash scripts/devbox.sh shell                 # the toolchain: Java 21, Maven, Node 22, npm via Artifactory
 bash server/forecast-web/run.sh              # builds the front end and the jar when stale, then http://localhost:8080
 ```
+
+> The image carried no Node before 2026-09-19, so a box built before then has none: run
+> `bash scripts/devbox.sh rebuild` once. `devbox.sh up` will not pick this up on its own — it builds only
+> when the image is absent, and the tag is unchanged. Without Node, `run.sh` starts the REST surface with
+> no front end and `scripts/check.sh` prints `SKIP ui (npm run check)`.
+>
+> npm inside the box resolves through `https://arti.avl.com/artifactory/api/npm/npm-release/`, set in the
+> image's global npmrc. Build the front end **inside** the container: `ui/node_modules` lives in the bind
+> mount, and Vite and esbuild install binaries for the platform that ran `npm ci`, so a tree installed on
+> Windows cannot be used by the container and the reverse.
 
 **It has no authentication.** Whoever reaches the port picks the user to act as, and `GET /api/system` names
 the seeded admin so the front end can start somewhere; the role rules are then enforced for that user, which

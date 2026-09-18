@@ -20,6 +20,7 @@ FROM docker.io/library/maven:3.9-eclipse-temurin-21
 # The rest is what working inside a shell needs. ca-certificates and curl fetch the uv installer
 # below; git and less read the repository; procps gives ps and kill; vim-tiny gives `vi` and no
 # `vim`; psql looks into the forecast database by hand; tzdata lets WHF_TZ set the clock;
+# xz-utils unpacks the Node tarball below;
 # python3 runs server/tools/translate-schema.py. Nothing here needs python3-venv: uv brings its own
 # Python and makes its own environments.
 #
@@ -34,6 +35,7 @@ RUN apt-get update \
       git less procps vim-tiny \
       postgresql-client \
       tzdata \
+      xz-utils \
       python3 \
       gh \
  && rm -rf /var/lib/apt/lists/*
@@ -44,6 +46,40 @@ RUN apt-get update \
 RUN curl -LsSf https://astral.sh/uv/install.sh \
     | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
  && uv --version
+
+# Node 22 for the showcase's front end (server/forecast-web/ui). scripts/check.sh runs `npm run check`
+# as its second step and server/forecast-web/run.sh builds ui/dist with it, so without Node in here the
+# gate printed `SKIP ui (npm run check)` and the front end could only be built outside the box — where
+# npm installs Vite's and esbuild's platform-specific binaries into the very node_modules the bind mount
+# shares with this container, leaving a tree neither side can run.
+#
+# The official tarball rather than a third-party apt source, for the same reason `gh` comes from Ubuntu's
+# own archive: no extra key or apt list to keep. SHASUMS256.txt is verified, so a truncated or corrupted
+# download fails here rather than somewhere inside a later `npm ci`.
+ARG NODE_VERSION=22.22.2
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) node_arch=x64 ;; \
+      arm64) node_arch=arm64 ;; \
+      *) echo "unsupported architecture for the Node tarball: $arch" >&2; exit 1 ;; \
+    esac; \
+    tarball="node-v${NODE_VERSION}-linux-${node_arch}.tar.xz"; \
+    cd /tmp; \
+    curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/${tarball}"; \
+    curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt"; \
+    grep " ${tarball}$" SHASUMS256.txt | sha256sum -c -; \
+    tar -xJf "${tarball}" -C /usr/local --strip-components=1 --no-same-owner; \
+    rm -f "${tarball}" SHASUMS256.txt; \
+    node --version; \
+    npm --version
+
+# npm resolves through AVL's Artifactory rather than registry.npmjs.org, because this box runs on the
+# company network. Written to the global npmrc (/usr/local/etc/npmrc) so that `npm ci` in
+# server/forecast-web/ui needs no file of its own and nothing registry-specific is committed under ui/.
+# A clone outside AVL overrides it with its own .npmrc or `npm config set registry`.
+RUN npm config set registry https://arti.avl.com/artifactory/api/npm/npm-release/ --location=global \
+ && npm config get registry
 
 # A prompt that says where you are, so a shell in here is never mistaken for one on Windows.
 RUN printf '%s\n' 'PS1="\[\e[1;32m\]whf-dev\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ "' >> /root/.bashrc
