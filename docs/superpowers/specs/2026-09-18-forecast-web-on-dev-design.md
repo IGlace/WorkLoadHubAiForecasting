@@ -70,6 +70,10 @@ deleted rather than ported.
 **D. A seed ends on the day it is generated, and its last weeks are as dense as its middle.** The
 application then reads the system clock and needs no pinned date. See section 6.
 
+**E. `V1` is edited in place; there is no `V2`.** Nothing has been run locally yet, so no database has
+applied the migration and there is no checksum to break. `V1` remains the module's schema as it stands on
+the day it first runs. See section 5.3.
+
 ## 3. The branch and the base
 
 Work starts from `dev` at `d28b1c1` and lands on `dev`, per the project's convention that everything lands
@@ -226,15 +230,19 @@ This spec adds a second method rather than pretending the first one covers it:
 Optional<RunSummary> latestRunOf(UUID userId);
 ```
 
-with an index in a new migration, `V2`:
+with its index added to `V1__forecast_tables.sql` itself, beside the one already there:
 
 ```sql
+CREATE INDEX forecast_runs_team_idx ON forecast_runs (team_id, created_at);
 CREATE INDEX forecast_runs_requested_by_idx ON forecast_runs (requested_by, created_at DESC);
 ```
 
-`V1` is not edited. It was collapsed into a single final migration by `e392603` on the understanding that
-nothing had shipped yet; the moment the showcase runs against a database somebody keeps, editing `V1` in
-place stops being safe, and a second file costs nothing.
+**`V1` is edited in place, and no `V2` is added** (owner, 2026-09-18). `e392603` collapsed the five paired
+migrations into one final `V1` because nothing had shipped, and that is still true: no database anywhere
+has run these migrations yet, so there is no applied checksum for Flyway to disagree with and no deployment
+to migrate forward. `V1` stays what it says it is — the module's schema as it stands on the day it first
+runs. The moment a database somebody keeps has applied it, this stops being available and the next change
+is a `V2`; that day has not come.
 
 ### 5.4 What this is, and what it is not
 
@@ -368,7 +376,7 @@ New tests this spec requires:
 - **`findRun` and `latestRunOf`** in `DefaultForecastServiceTest`: a run in `RUNNING` returns its summary
   from `findRun` while `getRun` still throws `RUN_NOT_DONE`; `latestRunOf` returns the most recent run
   across teams and empty for a user with none.
-- **`ForecastMigrationsTest`** covers `V2` and the new index.
+- **`ForecastMigrationsTest`** covers the second index in `V1`.
 - The web module's existing tests are ported, not rewritten: `ForecastWebIntegrationTest`, `TestBeans`,
   `ForecastAccessTest`, `HostForecastFacadeTest`. `DemoDatabaseTest` is deleted with its subject, and
   `RunRegistryTest` with its.
@@ -428,7 +436,8 @@ lines that cause it.
 
 1. Cherry-pick `a915ad4` (the leave-days floating-point fix). Gate.
 2. `DatabaseTestSupport` reads the two fixtures from the classpath (7.2).
-3. `ForecastService.findRun` and `latestRunOf`, migration `V2` and its index, with their tests (section 5).
+3. `ForecastService.findRun` and `latestRunOf`, the `requested_by` index added to `V1`, with their
+   tests (section 5).
 4. The seed: ACTIVE project starts across the whole window with continuous coverage, `--end` defaulting to
    today, the per-week tail property, and the fixture regenerated once (section 6).
 5. Bulk import of `server/forecast-web/`, plus hand-merged `server/pom.xml`, `scripts/check.sh` and
