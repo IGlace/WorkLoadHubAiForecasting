@@ -271,7 +271,7 @@ exec)
         exit 2
     }
     up >/dev/null
-    # -i always, or `devbox.sh exec sqlite3 /data/x.db < query.sql` reads end of file and succeeds
+    # -i always, or `devbox.sh exec psql -h localhost -U workloadhub workloadhub < query.sql` reads end of file and succeeds
     # having done nothing. -t only when there is a terminal to pass on: forcing it into a pipe
     # fills the output with escape codes and makes `devbox.sh exec ... | grep` useless.
     if [ -t 0 ]; then
