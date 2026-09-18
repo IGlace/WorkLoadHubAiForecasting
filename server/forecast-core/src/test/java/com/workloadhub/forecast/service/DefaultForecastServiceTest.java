@@ -414,4 +414,23 @@ class DefaultForecastServiceTest {
         assertEquals("TEAM_NOT_FOUND", assertThrows(ForecastException.class, () -> service.accuracy(UUID.randomUUID(), LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 2))).code());
     }
 
+    @Test
+    void findRunAnswersForARunThatIsNotDoneWhileGetRunStillRefuses() {
+        JdbcRunStore store = new JdbcRunStore(SeededData.dataSource());
+        UUID id = store.create(new RunRequest(team, member), SeededData.asOf(), LocalDateTime.of(2026, 9, 6, 8, 0));
+        store.markRunning(id);
+
+        RunSummary summary = service.findRun(id).orElseThrow();
+        assertEquals(team, summary.teamId());
+        assertEquals(member, summary.requestedBy());
+        assertEquals(RunStatus.RUNNING, summary.status());
+
+        ForecastException e = assertThrows(ForecastException.class, () -> service.getRun(id));
+        assertEquals("RUN_NOT_DONE", e.code());
+
+        assertFalse(service.findRun(UUID.randomUUID()).isPresent());
+        assertEquals(id, service.latestRunOf(member).orElseThrow().id());
+        assertFalse(service.latestRunOf(UUID.randomUUID()).isPresent());
+    }
+
 }

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.TreeSet;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 class ForecastMigrationsTest {
 
@@ -59,5 +60,17 @@ class ForecastMigrationsTest {
             rs.next();
             assertEquals(1, rs.getInt(1), "exactly one versioned migration applied");
         }
+    }
+
+    /** latestRunOf filters on requested_by and has no team, so forecast_runs_team_idx cannot serve it. */
+    @Test
+    void forecastRunsCarriesBothItsIndexes() throws Exception {
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
+        ForecastMigrations.run(ds);
+        List<String> names = JdbcClient.create(ds)
+                .sql("SELECT indexname FROM pg_indexes WHERE tablename = 'forecast_runs' ORDER BY indexname")
+                .query(String.class).list();
+        assertTrue(names.contains("forecast_runs_team_idx"), "listing by team: " + names);
+        assertTrue(names.contains("forecast_runs_requested_by_idx"), "latestRunOf has no team to filter on: " + names);
     }
 }

@@ -11,6 +11,7 @@ CREATE TABLE forecast_runs (
   finished_at   timestamp
 );
 CREATE INDEX forecast_runs_team_idx ON forecast_runs (team_id, created_at);
+CREATE INDEX forecast_runs_requested_by_idx ON forecast_runs (requested_by, created_at DESC);
 
 CREATE TABLE forecast_member_windows (
   run_id             uuid NOT NULL REFERENCES forecast_runs(id),

@@ -121,6 +121,18 @@ public final class JdbcRunStore {
                 .param(teamId).query(SUMMARY).list();
     }
 
+    /**
+     * The most recent run this user requested, across every team. NIL is the placeholder {@link #create}
+     * stores for a request with no requester, so every such run would otherwise answer as one phantom user.
+     */
+    public Optional<RunSummary> latestOf(UUID userId) {
+        if (userId == null || NIL.equals(userId)) {
+            return Optional.empty();
+        }
+        return jdbc.sql("SELECT " + RUN_COLUMNS + " FROM forecast_runs WHERE requested_by = ? ORDER BY created_at DESC, id DESC LIMIT 1")
+                .param(userId).query(SUMMARY).optional();
+    }
+
     /** PostgreSQL orders uuid by its bytes, which is the order of its canonical text and of {@code Ids.UUID_ORDER}: no re-sort here. */
     public List<MemberWindowForecast> memberWindows(UUID runId) {
         return jdbc.sql("SELECT " + WINDOW_COLUMNS + " FROM forecast_member_windows WHERE run_id = ? ORDER BY user_id, window_index")

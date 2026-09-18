@@ -214,6 +214,16 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     }
 
     @Override
+    public Optional<RunSummary> findRun(UUID runId) {
+        return store.find(runId);
+    }
+
+    @Override
+    public Optional<RunSummary> latestRunOf(UUID userId) {
+        return store.latestOf(userId);
+    }
+
+    @Override
     public List<CurrentDayForecast> currentForecast(UUID teamId, LocalDate from, LocalDate to) {
         if (teamId == null || from == null || to == null) {
             throw ForecastException.invalidRequest("teamId, from and to are required");

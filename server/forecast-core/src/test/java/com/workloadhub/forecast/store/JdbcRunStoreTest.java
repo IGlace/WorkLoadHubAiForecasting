@@ -28,6 +28,8 @@ class JdbcRunStoreTest {
 
     static final UUID TEAM = UUID.fromString("40000000-0000-0000-0000-000000000001");
     static final UUID USER = UUID.fromString("30000000-0000-0000-0000-000000000001");
+    static final UUID TEAM2 = UUID.fromString("40000000-0000-0000-0000-000000000002");
+    static final UUID USER2 = UUID.fromString("30000000-0000-0000-0000-000000000002");
     /** Sub-second precision on purpose: {@code ts()} must keep microseconds, not truncate to the second. */
     static final LocalDateTime T0 = LocalDateTime.of(2026, 9, 6, 10, 0, 0, 123456000);
 
@@ -208,5 +210,23 @@ class JdbcRunStoreTest {
     @Test
     void runDaysJoinTheRunDayOfEveryDoneRunInTheRange() {
         runDaysJoinTheRunDayOfEveryDoneRunInTheRange(DatabaseTestSupport.postgresMigrated());
+    }
+
+    void latestOfFindsTheUsersMostRecentRunAcrossTeamsAndIgnoresTheNilRequester(DataSource ds) {
+        JdbcRunStore store = new JdbcRunStore(ds);
+        store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
+        UUID newer = store.create(new RunRequest(TEAM2, USER), LocalDate.of(2026, 9, 6), T0.plusMinutes(5));
+        store.create(new RunRequest(TEAM, USER2), LocalDate.of(2026, 9, 6), T0.plusMinutes(9));
+        store.create(new RunRequest(TEAM, null), LocalDate.of(2026, 9, 6), T0.plusMinutes(20));
+
+        assertEquals(newer, store.latestOf(USER).orElseThrow().id(), "the most recent run, whatever its team");
+        assertEquals(RunStatus.QUEUED, store.latestOf(USER).orElseThrow().status(), "whatever its status");
+        assertFalse(store.latestOf(UUID.randomUUID()).isPresent(), "a user with no run");
+        assertFalse(store.latestOf(JdbcRunStore.NIL).isPresent(), "a run created without a requester is nobody's run");
+    }
+
+    @Test
+    void latestOfFindsTheUsersMostRecentRunAcrossTeamsAndIgnoresTheNilRequester() {
+        latestOfFindsTheUsersMostRecentRunAcrossTeamsAndIgnoresTheNilRequester(DatabaseTestSupport.postgresMigrated());
     }
 }
