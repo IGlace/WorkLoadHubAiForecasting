@@ -19,8 +19,8 @@ FROM docker.io/library/maven:3.9-eclipse-temurin-21
 #
 # The rest is what working inside a shell needs. ca-certificates and curl fetch the uv installer
 # below; git and less read the repository; procps gives ps and kill; vim-tiny gives `vi` and no
-# `vim`; sqlite3 and psql look into a forecast database by hand; tzdata lets WHF_TZ set the clock;
-# python3 is what server/tools/parity.sh runs. Nothing here needs python3-venv: uv brings its own
+# `vim`; psql looks into the forecast database by hand; tzdata lets WHF_TZ set the clock;
+# python3 runs server/tools/translate-schema.py. Nothing here needs python3-venv: uv brings its own
 # Python and makes its own environments.
 #
 # gh is here for the tokens, not for the repository: `gh auth login` then `gh auth token` yields a
@@ -32,7 +32,7 @@ RUN apt-get update \
       libgomp1 \
       ca-certificates curl \
       git less procps vim-tiny \
-      sqlite3 postgresql-client \
+      postgresql-client \
       tzdata \
       python3 \
       gh \

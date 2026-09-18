@@ -26,8 +26,9 @@
 # CONTAINER_ENGINE  podman or docker; the default is whichever is on PATH, podman first.
 # WHF_IMAGE         the image to build and run (default whf-dev:21).
 # WHF_CONTAINER     the container's name (default whf-dev).
-# WHF_DATA          host directory mounted at /data, for databases, seeds and exports, which must
-#                   stay out of the repository (default ~/whf; created if missing).
+# WHF_DATA          host directory mounted at /data, for seeds and exports, which must stay out of
+#                   the repository (default ~/whf; created if missing). The database itself lives in
+#                   the whf-pg volume of scripts/postgres.sh.
 # WHF_M2_VOLUME     named volume for ~/.m2 (default whf-m2). Losing it costs a full re-resolve:
 #                   measured once at 9:45 for `mvn verify` against 5:47 with it.
 # WHF_CACHE_VOLUME  named volume for ~/.cache (default whf-cache), uv's download cache.
@@ -40,8 +41,9 @@
 # WHF_TZ            the container's timezone (default UTC). It decides what "today" means to a
 #                   forecast run, so set it before creating the box if you run without --as-of.
 # CONTAINER_SOCK    the engine socket the box mounts so Testcontainers can start PostgreSQL as a
-#                   sibling container. The default is what podman reports for itself, or the usual
-#                   docker path. Set it to the empty string to leave the socket out.
+#                   sibling container. The gate needs it: without the socket every database test
+#                   fails. The default is what podman reports for itself, or the usual docker path.
+#                   Set it to the empty string to leave the socket out.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -173,12 +175,12 @@ ensure_image() {
 # only symptom is that the PostgreSQL tests quietly skip themselves. Say so at the door instead.
 check_socket() {
     if [ -z "$CONTAINER_SOCK" ]; then
-        echo "note: no engine socket mounted, so the PostgreSQL tests will skip themselves"
+        echo "note: no engine socket mounted, so the gate will fail: every database test needs the engine"
         return
     fi
     if ! "$engine" exec "$name" test -S /var/run/docker.sock; then
         echo "warning: /var/run/docker.sock in the box is not a socket, so Testcontainers has no" >&2
-        echo "         engine and the PostgreSQL tests will skip. CONTAINER_SOCK=$CONTAINER_SOCK" >&2
+        echo "         engine and the gate will fail: every database test needs the engine. CONTAINER_SOCK=$CONTAINER_SOCK" >&2
         if [ "$podman" -eq 1 ]; then
             echo "         podman reports: $("$engine" info --format '{{.Host.RemoteSocket.Path}}' 2>&1)" >&2
         fi
@@ -227,7 +229,7 @@ create() {
             echo "could not create $name. If the error above names" >&2
             echo "  $CONTAINER_SOCK" >&2
             echo "then that is CONTAINER_SOCK: the engine's socket is somewhere else, or pass" >&2
-            echo "CONTAINER_SOCK= to run the box without PostgreSQL." >&2
+            echo "CONTAINER_SOCK= to run the box without the gate." >&2
             if [ "$podman" -eq 1 ]; then
                 echo "podman reports: $("$engine" info --format '{{.Host.RemoteSocket.Path}}' 2>&1)" >&2
             fi
@@ -288,6 +290,7 @@ status)
     "$engine" inspect -f 'mounts:{{range .Mounts}}{{printf "\n  %s -> %s" .Source .Destination}}{{end}}' "$name"
     echo
     if running; then check_socket; fi
+    if "$engine" inspect -f '{{.State.Running}}' "${WHF_PG_CONTAINER:-whf-postgres}" 2>/dev/null | grep -q true; then echo "local PostgreSQL: whf-postgres is running (scripts/postgres.sh status)"; else echo "local PostgreSQL: not running (bash scripts/postgres.sh up)"; fi
     ;;
 stop)
     exists || {
