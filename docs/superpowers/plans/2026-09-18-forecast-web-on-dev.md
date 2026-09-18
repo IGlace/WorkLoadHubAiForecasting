@@ -47,6 +47,46 @@ Testcontainers, React + Vite (front end, ported unchanged).
 
 ---
 
+## Verification in the session that writes this code (2026-09-18)
+
+This plan is being executed in a remote container, not in `scripts/devbox.sh`. **Java 21, Maven, Node and
+npm are present and working; there is no reachable container engine.** Starting one was refused. The owner
+runs the gate locally.
+
+**A database test here fails with `no container engine is reachable: the gate needs Docker or podman`.
+That message is the environment, NOT a defect in your code. Do not try to fix it, do not weaken the test,
+do not reintroduce a skip, and do not report it as a failure.** `DatabaseTestSupport` fails rather than
+skips by the owner's ruling of 2026-09-17 (ruling G) and that stays.
+
+Run here, and a failure IS yours to fix:
+
+| what | command |
+|---|---|
+| compile, all modules, main sources | `mvn -B -q -DskipTests compile` |
+| compile, all modules, **test** sources | `mvn -B -q -DskipTests test-compile` |
+| Task 1 | `mvn -B -pl forecast-core -Dtest='LeaveDaysTest,LeaveDaysPropertyTest' test` |
+| Task 2 | `mvn -B -pl forecast-core -Dtest=DatabaseTestSupportTest test` |
+| Task 4 | `mvn -B -pl forecast-tools -Dtest=SeedTailPropertyTest test` |
+| Task 5 | `bash server/tools/experiment.sh fixture`, then `mvn -B -pl forecast-tools -Dtest=FixtureFreshnessTest test` |
+| Task 7 | `mvn -B -q -pl forecast-web dependency:tree` |
+| the front end | `cd server/forecast-web/ui && npm ci && npm run check` |
+
+**`mvn test-compile` over all three modules is mandatory at the end of every task that touches Java**,
+including the tasks whose tests cannot run: it is the one check that still catches a wrong signature, a
+missing import or a stale name, and it is what stops the owner receiving code that does not build.
+
+Hand over, unrun, clearly labelled in the task's commit body and in the closing notes:
+
+- Task 3 — `JdbcRunStoreTest`, `DefaultForecastServiceTest`, `ForecastMigrationsTest` (all need PostgreSQL)
+- Task 9 step 4 — starting the application against a real database
+- Task 10 — every `forecast-web` test
+- Task 12 — the gate itself
+
+Where a step below says to run one of those, **compile it, state plainly that it was not run and why, and
+move on.** Never write "tests pass" for something you did not execute.
+
+---
+
 ### Task 1: The leave-days floating-point fix
 
 The showcase branch carries a real fix to two `forecast-core` tests that has nothing to do with the web
