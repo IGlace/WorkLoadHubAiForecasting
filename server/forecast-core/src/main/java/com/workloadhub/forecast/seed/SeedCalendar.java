@@ -82,10 +82,6 @@ public final class SeedCalendar {
         return new SeedCalendar(days, all);
     }
 
-    public Set<LocalDate> holidays() {
-        return holidays;
-    }
-
     public List<LinkedHashMap<String, Object>> holidayRows() {
         return holidayRows;
     }

@@ -39,9 +39,9 @@ class WorkQueueTest {
         UUID e1 = UUID.fromString("30000000-0000-0000-0000-000000000002");
         UUID e2 = UUID.fromString("30000000-0000-0000-0000-000000000003");
         List<Person> people = List.of(
-                new Person(lead, "Lead One", "l@example.test", "Team Leader Calibration", "PTE / CT2", "CT2", null, "TEAM_LEADER", WorkFamily.CALIBRATION, CFG.firstMonday(), null),
-                new Person(e1, "Eng Two", "a@example.test", "Calibration Engineer", "PTE / CT2", "CT2", lead, "MEMBER", WorkFamily.CALIBRATION, CFG.firstMonday(), null),
-                new Person(e2, "Eng Three", "b@example.test", "Data Analyst & SW Developer", "PTE / CT2", "CT2", lead, "MEMBER", WorkFamily.DATA, CFG.firstMonday().plusWeeks(3), null));
+                new Person(lead, "Lead One", "Team Leader Calibration", "PTE / CT2", "CT2", null, "TEAM_LEADER", WorkFamily.CALIBRATION, CFG.firstMonday(), null),
+                new Person(e1, "Eng Two", "Calibration Engineer", "PTE / CT2", "CT2", lead, "MEMBER", WorkFamily.CALIBRATION, CFG.firstMonday(), null),
+                new Person(e2, "Eng Three", "Data Analyst & SW Developer", "PTE / CT2", "CT2", lead, "MEMBER", WorkFamily.DATA, CFG.firstMonday().plusWeeks(3), null));
         Map<UUID, Person> byId = new HashMap<>();
         Map<UUID, AbsencePlanner.Plan> plans = new HashMap<>();
         for (Person p : people) {
@@ -176,8 +176,8 @@ class WorkQueueTest {
         UUID lead = UUID.fromString("30000000-0000-0000-0000-000000000001");
         UUID e1 = UUID.fromString("30000000-0000-0000-0000-000000000002");
         List<Person> people = List.of(
-                new Person(lead, "Lead One", "l@example.test", "Team Leader Calibration", "PTE / CT2", "CT2", null, "TEAM_LEADER", WorkFamily.CALIBRATION, CFG.firstMonday(), null),
-                new Person(e1, "Eng Two", "a@example.test", "Calibration Engineer", "PTE / CT2", "CT2", lead, "MEMBER", WorkFamily.CALIBRATION, CFG.firstMonday(), null));
+                new Person(lead, "Lead One", "Team Leader Calibration", "PTE / CT2", "CT2", null, "TEAM_LEADER", WorkFamily.CALIBRATION, CFG.firstMonday(), null),
+                new Person(e1, "Eng Two", "Calibration Engineer", "PTE / CT2", "CT2", lead, "MEMBER", WorkFamily.CALIBRATION, CFG.firstMonday(), null));
         Map<UUID, Person> byId = new HashMap<>();
         Map<UUID, AbsencePlanner.Plan> plans = new HashMap<>();
         for (Person p : people) {
@@ -190,7 +190,7 @@ class WorkQueueTest {
         List<Team> teams = List.of(dept, team, exportTeam);
         UUID exportProjectId = UUID.fromString("80000000-0000-0000-0000-000000000099");
         Project exportProject = new Project(exportProjectId, "LEG", "Legacy platform", exportTeam.id(), lead, "ACTIVE",
-                CFG.firstMonday(), CFG.lastDay().plusWeeks(1), true, WorkFamily.UNKNOWN);
+                CFG.firstMonday(), CFG.lastDay().plusWeeks(1));
         List<Project> projects = new ArrayList<>();
         projects.add(exportProject);
         projects.addAll(ProjectPlanner.plan(teams, byId, List.of(), CFG, rnd));
@@ -278,20 +278,12 @@ class WorkQueueTest {
     }
 
     @Test
-    void openWorkRemainsAtTheEndAndAssignedHoursMatchEstimates() {
+    void openWorkRemainsAtTheEnd() {
         WorkQueue.Result r = run(6, WorkQueue.Rates.DEFAULT);
         UUID done = reference().statusIds().get("Done");
         long open = r.taskRows().stream().filter(t -> !done.toString().equals(t.get("task_status_id")) && t.get("assignee_id") != null).count();
         assertTrue(open > 0, "tasks still open at the as-of date");
         assertTrue(r.taskRows().stream().anyMatch(t -> t.get("assignee_id") == null), "backlog left unassigned at the end");
-        double fromRows = 0;
-        for (var t : r.taskRows()) {
-            if (t.get("assignee_id") != null && t.get("original_estimate_hrs") != null) {
-                fromRows += (Double) t.get("original_estimate_hrs");
-            }
-        }
-        double fromMap = r.assignedHours().values().stream().flatMap(m -> m.values().stream()).mapToDouble(Double::doubleValue).sum();
-        assertEquals(fromRows, fromMap, 1e-6);
         assertNull(r.taskRows().stream().filter(t -> t.get("original_estimate_hrs") == null).findFirst().orElseThrow().get("remaining_estimate_hrs"), "epics carry no estimate");
     }
 

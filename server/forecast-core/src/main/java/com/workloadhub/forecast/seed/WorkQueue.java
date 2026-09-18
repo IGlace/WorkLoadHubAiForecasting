@@ -27,7 +27,7 @@ public final class WorkQueue {
 
     public record Result(List<LinkedHashMap<String, Object>> taskRows, List<LinkedHashMap<String, Object>> historyRows,
             List<LinkedHashMap<String, Object>> timeLogRows, Map<UUID, Long> nextTaskNumber,
-            Map<UUID, Map<LocalDate, Double>> assignedHours, Map<UUID, Double> workedHours) {
+            Map<UUID, Double> workedHours) {
     }
 
     private static final int MAX_ACTIVE = 3;
@@ -86,7 +86,6 @@ public final class WorkQueue {
     private final List<LinkedHashMap<String, Object>> taskRows = new ArrayList<>();
     private final List<LinkedHashMap<String, Object>> historyRows = new ArrayList<>();
     private final List<LinkedHashMap<String, Object>> timeLogRows = new ArrayList<>();
-    private final Map<UUID, Map<LocalDate, Double>> assignedHours = new TreeMap<>();
     /** Per member, the sum of `give` across every {@link #logDay} allocation: the hours actually WORKED,
      * before {@link WorkStyle#logged} scales it down by discipline. Exists so tests can tell the recorded
      * (exported) hours apart from the worked hours discipline actually scales, without conflating that gap
@@ -125,7 +124,7 @@ public final class WorkQueue {
         for (Person p : counted) {
             q.simulate(p);
         }
-        return new Result(q.taskRows, q.historyRows, q.timeLogRows, q.nextNumber, q.assignedHours, q.workedHours);
+        return new Result(q.taskRows, q.historyRows, q.timeLogRows, q.nextNumber, q.workedHours);
     }
 
     private void createEpics() {
@@ -305,12 +304,6 @@ public final class WorkQueue {
                 }
             }
         }
-        // tasks still queued keep their state; remaining reflects the logs
-        for (Work w : queue) {
-            if (w.row.get("original_estimate_hrs") != null) {
-                w.row.put("remaining_estimate_hrs", Math.max(0.0, w.estimate - w.logged));
-            }
-        }
         // backlog tasks whose assignment week lies beyond the as-of date: created, not yet assigned
         for (; next < arrivals.size(); next++) {
             Arrival a = arrivals.get(next);
@@ -367,13 +360,11 @@ public final class WorkQueue {
         taskRows.add(row);
         UUID assigner = a.mode().equals("self") ? p.id() : leader;
         historyRows.add(Rows.history(rnd.uuid(), id, assigner, "assignee", null, p.fullName(), a.assignAt()));
-        assignedHours.computeIfAbsent(p.id(), k -> new TreeMap<>()).merge(SeedConfig.mondayOf(a.assignDay()), a.estimate(), Double::sum);
         Work w = new Work(row, a.estimate(), actual, a.assignAt());
         w.unlogged = rnd.chance(rates.unlogged());
         w.willBlock = rnd.chance(rates.blocked());
         w.unloggedDaysLeft = Math.max(1, cycleDays);
         if (rnd.chance(rates.reopen())) {
-            w.reopened = false;
             w.reopenOn = LocalDate.MIN; // marker: reopen once after the first finish
         }
         return w;

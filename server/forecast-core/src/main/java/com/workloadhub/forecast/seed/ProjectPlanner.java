@@ -85,7 +85,7 @@ public final class ProjectPlanner {
             UUID ownerId = row.get("owner_id") == null ? null : UUID.fromString((String) row.get("owner_id"));
             out.add(new Project(UUID.fromString((String) row.get("id")), (String) row.get("key"), (String) row.get("name"),
                     teamId, ownerId, String.valueOf(row.get("status")),
-                    cfg.firstMonday(), cfg.lastDay().plusWeeks(1), true, WorkFamily.UNKNOWN));
+                    cfg.firstMonday(), cfg.lastDay().plusWeeks(1)));
         }
         List<LocalDate> mondays = cfg.mondays();
         // global, not per department: projects.key is UNIQUE across the whole export, and the export's
@@ -132,7 +132,7 @@ public final class ProjectPlanner {
                 }
                 UUID owner = team.managerId() != null ? team.managerId() : fallbackOwner;
                 out.add(new Project(rnd.uuid(), key, String.format(t.name(), code, n), team.id(), owner,
-                        status, start, end, false, family));
+                        status, start, end));
             }
         }
         return out;

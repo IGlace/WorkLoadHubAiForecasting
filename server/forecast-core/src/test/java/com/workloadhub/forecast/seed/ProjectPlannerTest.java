@@ -18,10 +18,10 @@ class ProjectPlannerTest {
     static Map<UUID, Person> people(Team dept, Team mgr) {
         Map<UUID, Person> m = new HashMap<>();
         for (UUID id : dept.memberIds()) {
-            m.put(id, new Person(id, "Head " + id.toString().substring(0, 4), "h@example.test", "Skill Team Leader", "PTE / CT2", "CT2", null, "SKILL_TEAM_LEADER", WorkFamily.COORDINATION, CFG.firstMonday(), null));
+            m.put(id, new Person(id, "Head " + id.toString().substring(0, 4), "Skill Team Leader", "PTE / CT2", "CT2", null, "SKILL_TEAM_LEADER", WorkFamily.COORDINATION, CFG.firstMonday(), null));
         }
         for (UUID id : mgr.memberIds()) {
-            m.put(id, new Person(id, "Eng " + id.toString().substring(0, 4), "e@example.test", "Calibration Engineer", "PTE / CT2", "CT2", dept.managerId(), "MEMBER", WorkFamily.CALIBRATION, CFG.firstMonday(), null));
+            m.put(id, new Person(id, "Eng " + id.toString().substring(0, 4), "Calibration Engineer", "PTE / CT2", "CT2", dept.managerId(), "MEMBER", WorkFamily.CALIBRATION, CFG.firstMonday(), null));
         }
         return m;
     }
@@ -44,7 +44,6 @@ class ProjectPlannerTest {
                 assertEquals("ACTIVE", p.status());
                 assertTrue(!p.windowStart().isBefore(CFG.firstMonday()));
             }
-            assertEquals(WorkFamily.CALIBRATION, p.family());
         }
         assertEquals(projects.size(), projects.stream().map(Project::key).distinct().count(), "unique keys");
         assertEquals(projects, ProjectPlanner.projectsFor(mgr, List.of(dept, mgr), projects), "manager team sees its department's projects");
@@ -71,8 +70,8 @@ class ProjectPlannerTest {
         row.put("created_at", "2026-09-03T13:59:58");
         row.put("updated_at", "2026-09-03T13:59:58");
         Team existing = new Team(team, "Backend Team", owner, null, List.of(owner), false, null);
-        List<Project> projects = ProjectPlanner.plan(List.of(existing), Map.of(owner, new Person(owner, "O", "o@example.test", "Developer", null, null, null, "TEAM_LEADER", WorkFamily.UNKNOWN, CFG.firstMonday(), null)), List.of(row), CFG, new SeedRandom(1));
-        Project wh = projects.stream().filter(Project::existing).findFirst().orElseThrow();
+        List<Project> projects = ProjectPlanner.plan(List.of(existing), Map.of(owner, new Person(owner, "O", "Developer", null, null, null, "TEAM_LEADER", WorkFamily.UNKNOWN, CFG.firstMonday(), null)), List.of(row), CFG, new SeedRandom(1));
+        Project wh = projects.stream().filter(p -> p.key().equals("WH")).findFirst().orElseThrow();
         assertEquals(CFG.firstMonday(), wh.windowStart());
         assertTrue(wh.windowEnd().isAfter(CFG.lastDay()));
         LinkedHashMap<String, Object> out = ProjectPlanner.row(wh, row, 42, CFG);
@@ -87,9 +86,9 @@ class ProjectPlannerTest {
         UUID centerManager = UUID.randomUUID();
         Team dept = new Team(UUID.randomUUID(), "Unassigned", null, null, List.of(member), true, "GEN");
         Map<UUID, Person> people = new HashMap<>();
-        people.put(member, new Person(member, "Member", "m@example.test", "Generalist", null, null, null, "MEMBER",
+        people.put(member, new Person(member, "Member", "Generalist", null, null, null, "MEMBER",
                 WorkFamily.SUPPORT, CFG.firstMonday(), null));
-        people.put(centerManager, new Person(centerManager, "Center Manager", "cm@example.test", "Center Manager",
+        people.put(centerManager, new Person(centerManager, "Center Manager", "Center Manager",
                 null, null, null, "CENTER_MANAGER", WorkFamily.COORDINATION, CFG.firstMonday(), null));
         List<Project> projects = ProjectPlanner.plan(List.of(dept), people, List.of(), CFG, new SeedRandom(7));
         assertTrue(!projects.isEmpty(), "a headless department still gets projects");

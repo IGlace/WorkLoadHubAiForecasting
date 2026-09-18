@@ -88,7 +88,7 @@ public final class Directory {
             }
             String role = String.valueOf(u.get("role"));
             String title = (String) u.get("job_title");
-            people.put(id, new Person(id, (String) u.get("full_name"), (String) u.get("email"), title, dept,
+            people.put(id, new Person(id, (String) u.get("full_name"), title, dept,
                     deptCode(dept), manager, role, WorkFamily.classify(title), joined, left));
         }
 

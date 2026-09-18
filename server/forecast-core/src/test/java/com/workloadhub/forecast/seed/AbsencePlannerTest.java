@@ -18,7 +18,7 @@ class AbsencePlannerTest {
     }
 
     static Person person(LocalDate joined, LocalDate left) {
-        return new Person(UUID.fromString("30000000-0000-0000-0000-000000000003"), "Eng Three", "e@example.test",
+        return new Person(UUID.fromString("30000000-0000-0000-0000-000000000003"), "Eng Three",
                 "Calibration Engineer", "PTE / CT2", "CT2", null, "MEMBER", WorkFamily.CALIBRATION, joined, left);
     }
 
@@ -71,9 +71,5 @@ class AbsencePlannerTest {
         assertEquals(0.0, plan.hoursPresent(p, LocalDate.of(2026, 5, 2)), "Saturday");
         LocalDate anyAbsent = plan.absentDays().iterator().next();
         assertEquals(0.0, plan.hoursPresent(p, anyAbsent));
-        LocalDate monday = SeedConfig.mondayOf(anyAbsent);
-        assertTrue(plan.absenceHours(monday) >= AbsencePlanner.HOURS_PER_DAY);
-        long presentDays = cal.workingDaysOf(monday).stream().filter(d -> plan.hoursPresent(p, d) > 0).count();
-        assertEquals(AbsencePlanner.HOURS_PER_DAY * (cal.workingDays(monday) - presentDays), plan.absenceHours(monday), 1e-9);
     }
 }

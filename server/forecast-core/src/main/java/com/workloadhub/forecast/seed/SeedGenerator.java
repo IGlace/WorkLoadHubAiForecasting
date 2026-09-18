@@ -12,7 +12,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 
-/** Orchestrates the seed: directory, calendar, absences, projects, rhythm, work queue, capacity, envelope. */
+/** Orchestrates the seed: directory, calendar, absences, projects, rhythm, work queue, envelope. */
 public final class SeedGenerator {
 
     private SeedGenerator() {
@@ -232,7 +232,7 @@ public final class SeedGenerator {
         WorkQueue.Result work = WorkQueue.run(cfg, cal, dir.people(), plans, dir.teams(), projects, rhythm, ref,
                 WorkQueue.Rates.DEFAULT, rnd);
 
-        // 6. project rows with the next task number
+        // 5. project rows with the next task number
         Map<String, LinkedHashMap<String, Object>> existingById = new HashMap<>();
         for (LinkedHashMap<String, Object> r : projectRows) {
             existingById.put((String) r.get("id"), r);
@@ -244,7 +244,7 @@ public final class SeedGenerator {
             outProjects.add(ProjectPlanner.row(p, existingById.get(p.id().toString()), work.nextTaskNumber().getOrDefault(p.id(), 1L), cfg));
         }
 
-        // 7. envelope in table order: every table in synthetic mode (the experiment database is built from it),
+        // 6. envelope in table order: every table in synthetic mode (the experiment database is built from it),
         // the five work tables in real mode (the application's database holds the rest)
         LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>();
         List<String> excluded;

@@ -21,16 +21,6 @@ public final class AbsencePlanner {
         public double hoursPresent(Person p, LocalDate day) {
             return calendar.isWorkingDay(day) && p.employedOn(day) && !absentDays.contains(day) ? HOURS_PER_DAY : 0.0;
         }
-
-        public double absenceHours(LocalDate monday) {
-            int n = 0;
-            for (LocalDate d : calendar.workingDaysOf(monday)) {
-                if (absentDays.contains(d)) {
-                    n++;
-                }
-            }
-            return HOURS_PER_DAY * n;
-        }
     }
 
     private AbsencePlanner() {

@@ -18,9 +18,7 @@ public final class Rhythm {
 
     private final SeedConfig cfg;
     private final SeedCalendar cal;
-    private final Map<UUID, Person> people;
     private final Map<UUID, AbsencePlanner.Plan> plans;
-    private final List<Team> teams;
     private final SeedRandom rnd;
     private final Map<UUID, Double> baseFactor = new HashMap<>();
     private final Map<UUID, List<LocalDate>> eventWeeks = new HashMap<>();
@@ -30,9 +28,7 @@ public final class Rhythm {
             List<Team> teams, SeedRandom rnd) {
         this.cfg = cfg;
         this.cal = cal;
-        this.people = people;
         this.plans = plans;
-        this.teams = teams;
         this.rnd = rnd;
         List<UUID> ids = new ArrayList<>(people.keySet());
         ids.sort(null);
@@ -56,10 +52,6 @@ public final class Rhythm {
                 }
             }
         }
-    }
-
-    public SeedCalendar calendar() {
-        return cal;
     }
 
     public Team teamOf(Person p) {
