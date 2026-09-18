@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.util.List;
 import java.util.TreeSet;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
@@ -29,53 +30,34 @@ class ForecastMigrationsTest {
         }
     }
 
-    static void check(DataSource ds) throws Exception {
+    /** One migration creates the six module tables, the history table and the two users columns; running it twice is a no-op. */
+    @Test
+    void migratesAFreshDatabaseInOneStep() throws Exception {
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         ForecastMigrations.run(ds);
-        ForecastMigrations.run(ds); // idempotent
-        assertEquals(new TreeSet<>(java.util.List.of("forecast_current_days", "forecast_facts", "forecast_member_days", "forecast_member_windows",
+        ForecastMigrations.run(ds);
+        assertEquals(new TreeSet<>(List.of("forecast_current_days", "forecast_facts", "forecast_member_days", "forecast_member_windows",
                 "forecast_narratives", "forecast_runs", "forecast_schema_history")), tables(ds));
         assertTrue(hasColumn(ds, "users", "github_token"));
         assertTrue(hasColumn(ds, "users", "github_token_updated_at"));
-        assertTrue(hasColumn(ds, "forecast_narratives", "status"), "V2 recreated the narratives table");
+        assertTrue(hasColumn(ds, "forecast_runs", "mae"));
+        assertFalse(hasColumn(ds, "forecast_runs", "champion_model"), "the tournament columns never existed in the final V1");
+        assertTrue(hasColumn(ds, "forecast_narratives", "status"));
         assertTrue(hasColumn(ds, "forecast_narratives", "raw_text"));
         assertTrue(hasColumn(ds, "forecast_narratives", "tool_calls"));
-        assertTrue(hasColumn(ds, "forecast_member_windows", "demand_hrs"));
+        assertTrue(hasColumn(ds, "forecast_member_windows", "backlog_excess_hrs"));
+        assertTrue(hasColumn(ds, "forecast_member_windows", "due_excess_hrs"));
+        assertTrue(hasColumn(ds, "forecast_member_days", "working_day"));
         assertTrue(hasColumn(ds, "forecast_current_days", "forecast_at"));
-        assertTrue(hasColumn(ds, "forecast_runs", "mae"), "V4 adds the single MAE column");
-        assertFalse(hasColumn(ds, "forecast_runs", "forced_model"), "V4 drops the tournament columns");
-        assertFalse(hasColumn(ds, "forecast_runs", "champion_model"));
-        assertFalse(hasColumn(ds, "forecast_runs", "champion_mase"));
-        for (String table : java.util.List.of("forecast_member_windows", "forecast_member_days", "forecast_current_days")) {
-            assertFalse(hasColumn(ds, table, "open_hrs"), table + " no longer has the open/new/planned split");
-            assertFalse(hasColumn(ds, table, "new_hrs"), table);
-            assertFalse(hasColumn(ds, table, "planned_hrs"), table);
+        for (String table : List.of("forecast_member_windows", "forecast_member_days", "forecast_current_days")) {
+            assertFalse(hasColumn(ds, table, "open_hrs"), table + " never had the open/new/planned split");
         }
-    }
-
-    /** V1 alone first, then the whole set: the upgrade path a database that ran before the rolling horizon existed takes. */
-    static void checkStepwise(DataSource ds) throws Exception {
-        ForecastMigrations.run(ds, "1");
-        assertTrue(hasColumn(ds, "forecast_narratives", "narrative_json"), "V1 created the narratives table");
-        assertFalse(hasColumn(ds, "forecast_narratives", "status"), "V1 knows no status column");
-        ForecastMigrations.run(ds, "2");
-        assertTrue(hasColumn(ds, "forecast_narratives", "status"), "V2 applies on a database that already ran V1");
-        assertTrue(tables(ds).contains("forecast_member_weeks"), "V2 still knows the member-week table");
-        ForecastMigrations.run(ds);
-        assertTrue(hasColumn(ds, "forecast_narratives", "tool_calls"));
-        assertTrue(hasColumn(ds, "forecast_narratives", "raw_text"));
-        assertFalse(tables(ds).contains("forecast_member_weeks"), "V3 dropped the member-week table");
-        assertTrue(tables(ds).contains("forecast_current_days"));
-    }
-
-    @Test
-    void v3AppliesOnADatabaseThatRanV1AndV2Postgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        checkStepwise(ds);
-    }
-
-    @Test
-    void migratesPostgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        check(ds);
+        // type = 'SQL' excludes the baseline marker row, which Flyway also stamps with a non-null
+        // version (0, from baselineVersion("0")); "WHERE version IS NOT NULL" alone would count it too.
+        try (Connection c = ds.getConnection(); ResultSet rs = c.createStatement().executeQuery(
+                "SELECT COUNT(*) FROM forecast_schema_history WHERE type = 'SQL'")) {
+            rs.next();
+            assertEquals(1, rs.getInt(1), "exactly one versioned migration applied");
+        }
     }
 }
