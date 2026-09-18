@@ -232,7 +232,6 @@ class FeatureBuilderTest {
 
     @Test
     void targetHEqualsLoggedHoursHWeeksLaterWhereBothExist() {
-        ForecastData data = SeededData.data();
         FeatureMatrix m = seededMatrix();
         Map<MemberWeek, Integer> rowOf = new HashMap<>();
         for (int i = 0; i < m.rowCount(); i++) {
