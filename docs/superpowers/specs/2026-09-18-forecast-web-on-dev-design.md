@@ -68,7 +68,8 @@ deleted rather than ported.
 **C. The module gains a run lookup rather than the host keeping a shadow table.** See section 5.
 
 **D. A seed ends on the day it is generated, and its last weeks are as dense as its middle.** The
-application then reads the system clock and needs no pinned date. See section 6.
+first half is already the behaviour (6.4); the work is the second half. The application then reads the
+system clock and needs no pinned date. See section 6.
 
 **E. `V1` is edited in place; there is no `V2`.** Nothing has been run locally yet, so no database has
 applied the migration and there is no checksum to break. `V1` remains the module's schema as it stands on
@@ -317,18 +318,34 @@ backlog entry left it open whether the taper was intended; it is not. It is poin
 - The PLANNING fraction stays. It is realistic, the module reads `projects.status`, and the feature matrix
   expects some. It simply does not count toward the coverage guarantee.
 
-### 6.4 `end` defaults to today
+### 6.4 `end` already defaults to today
 
-`Experiment`'s `seed` command defaults `--end` to the system date when the flag is absent. The flag stays,
-so a fixed date is still available for anybody reproducing a past run.
+**Checked against the code on 2026-09-18: no change is needed here.** `Experiment.seed` already reads
 
-**The committed fixture is explicitly excluded.** `SeedGenerator.FIXTURE` stays
-`new SeedConfig(30, LocalDate.of(2026, 9, 6), 11, true, 36)`, `SeededData.AS_OF` stays `2026-09-06`, and
-`experiment.sh fixture` keeps regenerating exactly that. Every database test in `forecast-core` reads that
-fixture and needs it to be the same bytes on every machine on every day; a fixture that ended "today" would
-change under the gate daily and `FixtureFreshnessTest` would fail every night. The fixture will change once
-— because 6.3 changes the generator and `FixtureFreshnessTest` compares the committed file against the
-generator — and that regeneration is a task of this plan, not a side effect to be discovered.
+```java
+SeedConfig cfg = new SeedConfig(weeks, args.date("end") == null ? LocalDate.now() : args.date("end"),
+        args.whole("seed", 42), synthetic, users);
+```
+
+(`Experiment.java:190`), and `Args.date` returns `null` for an absent option, so omitting `--end` already
+ends the seed on the day it is generated. The flag stays for anybody reproducing a past run. The only
+change this section asks for is one line of `USAGE`, which lists `[--end ISO_DATE]` without saying what
+the default is.
+
+An earlier draft of this document listed the default as work to do. It was wrong, and the error is
+recorded here rather than silently removed, because it is the reason the requirement looked larger than it
+is: **the whole of ruling D is section 6.3.** Ending the seed today was never the problem; the taper was.
+
+**The committed fixture is already excluded, and stays so.** `experiment.sh fixture` calls
+`SeedGenerator.generate(null, SeedGenerator.FIXTURE)` explicitly (`Experiment.java:214`), so it never sees
+`--end`. `SeedGenerator.FIXTURE` stays `new SeedConfig(30, LocalDate.of(2026, 9, 6), 11, true, 36)` and
+`SeededData.AS_OF` stays `2026-09-06`. Every database test in `forecast-core` reads that fixture and needs
+the same bytes on every machine on every day; a fixture that ended "today" would change under the gate
+daily and `FixtureFreshnessTest` would fail every night.
+
+The fixture will nevertheless change **once**, because 6.3 changes the generator and `FixtureFreshnessTest`
+compares the committed file against what the generator now produces. That regeneration is a task of this
+plan, not a side effect to be discovered mid-gate.
 
 ## 7. Part D — the clock, and testing
 
