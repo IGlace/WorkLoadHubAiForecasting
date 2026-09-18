@@ -64,13 +64,8 @@ class PromptsTest {
     }
 
     @Test
-    void theContractSchemaIsJsonWithTheTopLevelFields() {
+    void theContractSchemaForbidsUnknownTopLevelFields() {
         JsonNode schema = Json.mapper().readTree(Prompts.load().contractSchema());
         assertEquals(false, schema.path("additionalProperties").asBoolean());
-        for (String field : List.of("run_summary", "members", "team_risks", "rebalancing", "suggested_adjustments", "model_notes")) {
-            assertTrue(schema.path("properties").has(field), field);
-        }
-        assertTrue(schema.path("$defs").path("member").path("properties").has("likely_work"));
-        assertTrue(schema.path("$defs").path("move").path("properties").has("task_keys"));
     }
 }

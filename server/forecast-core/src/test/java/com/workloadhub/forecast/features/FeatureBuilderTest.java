@@ -68,6 +68,19 @@ class FeatureBuilderTest {
         return m.keys().indexOf(new MemberWeek(ANA.id(), week));
     }
 
+    private static FeatureMatrix seeded;
+
+    /** The seeded matrix once per JVM: the two tests that read it only read it. */
+    static synchronized FeatureMatrix seededMatrix() {
+        if (seeded == null) {
+            ForecastData data = SeededData.data();
+            LocalDate origin = com.workloadhub.forecast.calendar.Weeks.lastCompleteWeek(SeededData.asOf());
+            seeded = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE, WINDOWS)
+                    .build(data.members(), origin);
+        }
+        return seeded;
+    }
+
     @Test
     void rowsRunFromTheJoinWeekToTheOriginWithAllColumns() {
         FeatureMatrix m = matrix(ana());
@@ -165,9 +178,7 @@ class FeatureBuilderTest {
     @Test
     void seededMatrixHasEveryFeatureColumnPopulated() {
         ForecastData data = SeededData.data();
-        LocalDate origin = com.workloadhub.forecast.calendar.Weeks.lastCompleteWeek(SeededData.asOf());
-        FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE, WINDOWS)
-                .build(data.members(), origin);
+        FeatureMatrix m = seededMatrix();
         assertTrue(m.rowCount() > data.members().size() * 20, "rows " + m.rowCount());
         List<String> expected = new ArrayList<>(Features.featureColumns(1));
         expected.removeAll(List.of("arrival_hrs_lag1", "arrival_hrs_lag2", "arrival_hrs_lag3", "arrival_hrs_lag4", "open_tasks",
@@ -222,9 +233,7 @@ class FeatureBuilderTest {
     @Test
     void targetHEqualsLoggedHoursHWeeksLaterWhereBothExist() {
         ForecastData data = SeededData.data();
-        LocalDate origin = com.workloadhub.forecast.calendar.Weeks.lastCompleteWeek(SeededData.asOf());
-        FeatureMatrix m = new FeatureBuilder(data, Lifecycle.derive(data), WorkingCalendar.fromHolidays(data.holidays()), RULE, WINDOWS)
-                .build(data.members(), origin);
+        FeatureMatrix m = seededMatrix();
         Map<MemberWeek, Integer> rowOf = new HashMap<>();
         for (int i = 0; i < m.rowCount(); i++) {
             rowOf.put(m.key(i), i);

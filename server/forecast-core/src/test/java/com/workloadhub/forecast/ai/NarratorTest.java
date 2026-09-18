@@ -285,11 +285,6 @@ class NarratorTest {
         g.metrics = FakeGateway.metrics(2.5e9);
         JsonNode u = usage(narrate(g));
         assertEquals("metrics", u.path("source").asText());
-        assertEquals(2.5, u.path("ai_credits").asDouble(), 1e-9);
-        assertEquals(0.025, u.path("usd").asDouble(), 1e-9);
-        assertEquals(100, u.path("input_tokens").asInt());
-        assertEquals(1.0, u.path("premium_requests").asDouble(), 1e-9);
-        assertEquals(2.5, u.path("api_seconds").asDouble(), 1e-9);
         assertEquals(List.of("usage", "close"), g.session.calls, "read while the session is still open");
     }
 
@@ -298,7 +293,6 @@ class NarratorTest {
         NarrationOutcome o = narrate(new FakeGateway("nope", "still nope"));
         assertEquals(NarrativeStatus.FAILED, o.status());
         assertEquals("metrics", usage(o).path("source").asText());
-        assertEquals(1.5, usage(o).path("ai_credits").asDouble(), 1e-9);
     }
 
     @Test

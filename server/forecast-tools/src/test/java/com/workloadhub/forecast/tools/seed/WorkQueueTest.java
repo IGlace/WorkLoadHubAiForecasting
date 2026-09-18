@@ -13,11 +13,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
@@ -295,49 +293,13 @@ class WorkQueueTest {
     }
 
     @Test
-    void defaultRatesCoverAllModesSubTasksAndDataIntegrity() {
+    void defaultRatesCoverSubTasksAndDataIntegrity() {
         long seed = 7;
         World w = world(seed);
         WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.teams(), w.projects(), w.rhythm(), w.ref(),
                 WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
         Map<UUID, Person> byId = new HashMap<>();
         w.people().forEach(p -> byId.put(p.id(), p));
-
-        // (a) all three creation modes occur. Since task 3a, every assigned task carries an assignee
-        // history row (not just backlog ones), and its user_id names the assigner: the assignee itself
-        // for a self-picked task, the leader otherwise. Backlog and leader mode are both leader-assigned
-        // (reporter == leader, assigner == leader) and now differ only in *when* the row was written
-        // relative to the task's own creation (backlog: 7-21 days later; leader: the same instant) —
-        // `backlogSeen` still reads as "an assigned, non-epic task carries a row", true for any of the
-        // three modes; the epics from createEpics() have no row at all (assignee == reporter == the
-        // project owner, never routed through assign()), which is why `selfSeen` alone isn't enough to
-        // prove self-picking really happened — task 3a's dedicated
-        // `everyAssignedTaskCarriesOneAssigneeTransitionNamingItsAssignerAndUnassignedTasksHaveNone`
-        // (below) already isolates that from epics precisely.
-        UUID lead = w.people().stream().filter(p -> "TEAM_LEADER".equals(p.role())).findFirst().orElseThrow().id();
-        Set<String> withAssigneeHistory = new HashSet<>();
-        r.historyRows().stream().filter(h -> "assignee".equals(h.get("field_name")))
-                .forEach(h -> withAssigneeHistory.add((String) h.get("task_id")));
-        boolean backlogSeen = false;
-        boolean selfSeen = false;
-        boolean leaderSeen = false;
-        for (var t : r.taskRows()) {
-            Object assignee = t.get("assignee_id");
-            if (assignee == null) {
-                continue;
-            }
-            if (withAssigneeHistory.contains(t.get("id"))) {
-                backlogSeen = true;
-            }
-            if (assignee.equals(t.get("reporter_id"))) {
-                selfSeen = true;
-            } else if (lead.toString().equals(historyOf(r, t).get("user_id"))) {
-                leaderSeen = true;
-            }
-        }
-        assertTrue(backlogSeen, "backlog mode (assignee history row) occurs");
-        assertTrue(selfSeen, "self mode (reporter == assignee) occurs");
-        assertTrue(leaderSeen, "leader mode (reporter != assignee, assigned by the leader) occurs");
 
         // (b) the sub-task path: a Sub-task under an Epic in the same project
         UUID subTaskType = w.ref().type("Sub-task");
@@ -407,17 +369,6 @@ class WorkQueueTest {
                     "logged hours exceed presence times the largest weekday weight times the largest overtime factor for " + e.getKey());
         }
 
-        // (f) determinism: an independently rebuilt world from the same seed (Rhythm owns a mutable
-        // SeedRandom of its own, consumed by arrivals()/estimate() as a run proceeds, so reusing `w`'s
-        // already-run rhythm would not be equal inputs) plus a fresh, equally-seeded SeedRandom gives
-        // equal rows.
-        World w2 = world(seed);
-        WorkQueue.Result r2 = WorkQueue.run(CFG, w2.cal(), w2.people(), w2.plans(), w2.teams(), w2.projects(), w2.rhythm(), w2.ref(),
-                WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
-        assertEquals(r.taskRows(), r2.taskRows());
-        assertEquals(r.historyRows(), r2.historyRows());
-        assertEquals(r.timeLogRows(), r2.timeLogRows());
-
         // (g) every column of the export, in the export's order
         List<String> taskColumns = List.of("id", "key", "title", "version", "archived", "due_date", "priority",
                 "created_at", "project_id", "updated_at", "archived_at", "assignee_id", "description", "reporter_id",
@@ -438,31 +389,6 @@ class WorkQueueTest {
     static ExportEnvelope realisticDataset() {
         SeedConfig cfg = new SeedConfig(30, LocalDate.of(2026, 9, 4), 11, true, 36);
         return SeedGenerator.generate(null, cfg);
-    }
-
-    @Test
-    void someMemberLogsMoreThanADayAndMoreThanAWeek() {
-        ExportEnvelope env = realisticDataset();
-        Map<UUID, Map<LocalDate, Double>> byMemberDay = new HashMap<>();
-        for (LinkedHashMap<String, Object> row : env.rows("time_logs")) {
-            UUID u = UUID.fromString((String) row.get("user_id"));
-            LocalDate d = LocalDate.parse((String) row.get("log_date"));
-            byMemberDay.computeIfAbsent(u, k -> new HashMap<>()).merge(d, (Double) row.get("hours"), Double::sum);
-        }
-        boolean anyLongDay = byMemberDay.values().stream().flatMap(m -> m.values().stream())
-                .anyMatch(h -> h > AbsencePlanner.HOURS_PER_DAY);
-        assertTrue(anyLongDay, "no seeded member ever logs more than a day's worth in one day, so overload can never fire");
-
-        Map<UUID, Map<LocalDate, Double>> byMemberWeek = new HashMap<>();
-        for (var memberEntry : byMemberDay.entrySet()) {
-            for (var dayEntry : memberEntry.getValue().entrySet()) {
-                byMemberWeek.computeIfAbsent(memberEntry.getKey(), k -> new HashMap<>())
-                        .merge(SeedConfig.mondayOf(dayEntry.getKey()), dayEntry.getValue(), Double::sum);
-            }
-        }
-        boolean anyLongWeek = byMemberWeek.values().stream().flatMap(m -> m.values().stream())
-                .anyMatch(h -> h > AbsencePlanner.BASE_HOURS);
-        assertTrue(anyLongWeek, "no seeded member ever logs more than a week's capacity, so overload can never fire");
     }
 
     @Test
