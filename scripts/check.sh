@@ -15,7 +15,7 @@ ran=0
 # The PostgreSQL tests are the database tests: without an engine they fail, they do not skip, so say so at
 # the door instead of seventeen minutes in. Inside the development box the engine is the mounted socket.
 engine_reachable() {
-    local sock="${DOCKER_HOST#unix://}"
+    local sock="${DOCKER_HOST:-}"; sock="${sock#unix://}"
     if [ -n "${DOCKER_HOST:-}" ] && [ -S "$sock" ]; then return 0; fi
     if [ -S /var/run/docker.sock ]; then return 0; fi
     if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then return 0; fi
