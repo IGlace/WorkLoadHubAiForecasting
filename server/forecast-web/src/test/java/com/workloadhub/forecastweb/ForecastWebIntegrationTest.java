@@ -38,9 +38,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import tools.jackson.databind.JsonNode;
 
 /**
- * The whole REST surface (design 2026-09-18, section 5), on the seeded in-memory database with the scripted Copilot
- * gateway: the acting user, the role matrix, a run through to its facts, the narration, the tokens, the demo clock
- * and the accuracy that a moved clock makes possible. Ordered because the runs are expensive and later tests read them.
+ * The whole REST surface (design 2026-09-18, section 5), on a dedicated Testcontainers PostgreSQL seeded from the
+ * committed fixture, with the scripted Copilot gateway: the acting user, the role matrix, a run through to its
+ * facts, the narration, the tokens, the demo clock and the accuracy that a moved clock makes possible. Ordered
+ * because the runs are expensive and later tests read them.
  */
 @SpringBootTest(classes = {ForecastWebApplication.class, TestBeans.class}, properties = {
         "forecast-web.database=", "forecast-web.token-key-file=", "forecast-web.ui-dir=target/no-ui",
@@ -155,7 +156,7 @@ class ForecastWebIntegrationTest {
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
 
         // A VIEWER, which the synthetic seed has none of: views everything, runs nothing.
-        jdbc.sql("UPDATE users SET role = 'VIEWER' WHERE id = ?").param(outsider.id().toString()).update();
+        jdbc.sql("UPDATE users SET role = 'VIEWER' WHERE id = ?").param(outsider.id()).update();
         try {
             JsonNode viewer = json(mvc.perform(as(get("/api/me"), outsider)).andExpect(status().isOk()).andReturn());
             for (JsonNode t : viewer.path("teams")) {
@@ -165,7 +166,7 @@ class ForecastWebIntegrationTest {
             mvc.perform(as(post("/api/teams/" + team.id() + "/forecast-runs"), outsider)).andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("FORBIDDEN")).andExpect(jsonPath("$.message").value("VIEWER may not run a forecast"));
         } finally {
-            jdbc.sql("UPDATE users SET role = 'MEMBER' WHERE id = ?").param(outsider.id().toString()).update();
+            jdbc.sql("UPDATE users SET role = 'MEMBER' WHERE id = ?").param(outsider.id()).update();
         }
         mvc.perform(as(post("/api/teams/" + team.id() + "/forecast-runs"), member)).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("MEMBER may not run a forecast"));

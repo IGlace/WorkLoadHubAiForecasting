@@ -53,12 +53,12 @@ public final class SeededUsers {
     }
 
     public static List<UUID> membersOf(UUID teamId) {
-        return jdbc().sql("SELECT user_id FROM team_members WHERE team_id = ?").param(teamId.toString()).query().listOfRows().stream()
+        return jdbc().sql("SELECT user_id FROM team_members WHERE team_id = ?").param(teamId).query().listOfRows().stream()
                 .map(r -> UUID.fromString(str(r, "user_id"))).toList();
     }
 
     public static List<UUID> teamsOf(UUID userId) {
-        return jdbc().sql("SELECT team_id FROM team_members WHERE user_id = ?").param(userId.toString()).query().listOfRows().stream()
+        return jdbc().sql("SELECT team_id FROM team_members WHERE user_id = ?").param(userId).query().listOfRows().stream()
                 .map(r -> UUID.fromString(str(r, "team_id"))).toList();
     }
 

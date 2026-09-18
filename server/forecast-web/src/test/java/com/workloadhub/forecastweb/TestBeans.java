@@ -7,7 +7,7 @@ import javax.sql.DataSource;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
-/** The seeded in-memory database of the core test jar (36 users, 30 weeks) and a scripted Copilot gateway. */
+/** A dedicated Testcontainers PostgreSQL seeded from the core test jar's committed fixture (36 users, 30 weeks) and a scripted Copilot gateway. */
 @TestConfiguration(proxyBeanMethods = false)
 public class TestBeans {
 
