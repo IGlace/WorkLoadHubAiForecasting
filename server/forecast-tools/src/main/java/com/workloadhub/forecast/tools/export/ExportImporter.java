@@ -59,13 +59,15 @@ public final class ExportImporter {
             c = dataSource.getConnection();
             c.setAutoCommit(false);
             if (replace) {
-                // Only the tables the envelope carries, children first: a five-table seed lands into a database
-                // that already holds the directory (design 2026-09-17, section 7.2).
+                // Only the tables the envelope carries, children first, so a five-table seed lands into a database
+                // that already holds the directory (design 2026-09-17, section 7.2); plus the application tables
+                // that reference the work tables, since the seed owns everything under projects (design 2026-09-18).
+                boolean work = envelope.data().containsKey("projects") || envelope.data().containsKey("tasks");
                 List<String> reverse = new ArrayList<>(WorkloadHubSchema.TABLE_ORDER);
                 java.util.Collections.reverse(reverse);
                 try (Statement st = c.createStatement()) {
                     for (String table : reverse) {
-                        if (envelope.data().containsKey(table)) {
+                        if (envelope.data().containsKey(table) || (work && WorkloadHubSchema.DEPENDENTS_OF_WORK.contains(table))) {
                             st.execute("DELETE FROM " + table);
                         }
                     }

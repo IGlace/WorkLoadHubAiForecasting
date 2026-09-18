@@ -27,6 +27,12 @@ public final class WorkloadHubSchema {
             "personal_leaves", "holidays", "user_capacity", "team_capacity", "notifications",
             "sync_metadata", "refresh_tokens");
 
+    /**
+     * Application tables that reference the seed's work tables: a replace of the work tables clears them first,
+     * children before parents, because the seed only ever targets the local database (design 2026-09-18).
+     */
+    public static final List<String> DEPENDENTS_OF_WORK = List.of("project_history", "task_comments", "task_attachments");
+
     /** Columns that are boolean in the schema: an export carries them as JSON booleans. */
     public static final Map<String, Set<String>> BOOLEAN_COLUMNS = Map.of(
             "holidays", Set.of("active"),
