@@ -18,7 +18,6 @@ import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunSummary;
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecastweb.SeededUsers;
 import com.workloadhub.forecastweb.SeededUsers.Team;
@@ -36,15 +35,25 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 /** The host's own rules, against a stub service: which phases count as in progress, and one team at a time for a skill team leader. */
 class HostForecastFacadeTest {
 
-    /** A service that starts runs instantly and reports the phase the test sets for each. */
+    /**
+     * A service that starts runs instantly and reports the phase the test sets for each. Tracks each run's team,
+     * requester and each requester's latest run, since {@link HostForecastFacade} now reads {@code findRun} and
+     * {@code latestRunOf} straight from the service (the facade no longer keeps its own registry).
+     */
     static final class StubService implements ForecastService {
         final Map<UUID, String> phases = new HashMap<>();
+        final Map<UUID, UUID> teamOfRun = new HashMap<>();
+        final Map<UUID, UUID> requesterOfRun = new HashMap<>();
+        final Map<UUID, UUID> latestRunOfUser = new HashMap<>();
         String nextPhase = "FEATURES";
 
         @Override
         public UUID startRun(RunRequest request) {
             UUID id = UUID.randomUUID();
             phases.put(id, nextPhase);
+            teamOfRun.put(id, request.teamId());
+            requesterOfRun.put(id, request.requestedBy());
+            latestRunOfUser.put(request.requestedBy(), id);
             return id;
         }
 
@@ -55,6 +64,25 @@ class HostForecastFacadeTest {
 
         @Override public RunResult getRun(UUID runId) { throw ForecastException.of("RUN_NOT_DONE", "stub"); }
         @Override public List<RunSummary> listRuns(UUID teamId, int limit) { return List.of(); }
+
+        @Override
+        public Optional<RunSummary> findRun(UUID runId) {
+            UUID team = teamOfRun.get(runId);
+            if (team == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new RunSummary(runId, team, requesterOfRun.get(runId), null, null, null, null, null, null));
+        }
+
+        @Override
+        public Optional<RunSummary> latestRunOf(UUID userId) {
+            UUID runId = latestRunOfUser.get(userId);
+            if (runId == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new RunSummary(runId, teamOfRun.get(runId), userId, null, null, null, null, null, null));
+        }
+
         @Override public List<CurrentDayForecast> currentForecast(UUID teamId, LocalDate from, LocalDate to) { return List.of(); }
         @Override public AccuracyResult accuracy(UUID teamId, LocalDate from, LocalDate to) { return null; }
         @Override public NarrativeResult narrate(NarrativeRequest request) { return null; }
@@ -82,11 +110,11 @@ class HostForecastFacadeTest {
 
     @Test
     void aSkillTeamLeaderRunsOneTeamAtATimeAndATeamLeaderIsNotLimited() throws Exception {
+        // Read-only (role and team lookups); the runs themselves live only in the stub, never touch the database.
         DataSource ds = SeededData.dataSource();
         JdbcClient jdbc = JdbcClient.create(ds);
         StubService service = new StubService();
-        HostForecastFacade facade = new HostForecastFacade(service, new ForecastAccess(jdbc, Dialect.of(ds)), new NoTokens(), new RunRegistry(jdbc),
-                Clock.systemUTC());
+        HostForecastFacade facade = new HostForecastFacade(service, new ForecastAccess(jdbc), new NoTokens(), Clock.systemUTC());
 
         ActingUser acting = SeededUsers.users().stream().filter(u -> u.role().equals("SKILL_TEAM_LEADER") && SeededUsers.headsADepartment(u.id()))
                 .findFirst().orElseThrow();

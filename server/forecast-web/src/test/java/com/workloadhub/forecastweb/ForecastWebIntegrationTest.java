@@ -10,12 +10,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.ai.CopilotGateway;
 import com.workloadhub.forecast.ai.FakeGateway;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecastweb.SeededUsers.Team;
 import com.workloadhub.forecastweb.host.ActingUser;
 import com.workloadhub.forecastweb.host.ActingUserException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -43,6 +45,9 @@ import tools.jackson.databind.JsonNode;
 @SpringBootTest(classes = {ForecastWebApplication.class, TestBeans.class}, properties = {
         "forecast-web.database=", "forecast-web.token-key-file=", "forecast-web.ui-dir=target/no-ui",
         "forecast-web.clock.today=2026-09-06", "whf.run-threads=1", "whf.token-key=" + TestBeans.KEY, "logging.level.root=WARN"})
+// forecast-web.clock.today above is pinned to SeededData.asOf() (2026-09-06), the fixture's last day: the
+// property must be a compile-time constant for the annotation, so the literal is asserted against the fixture
+// in pick() below rather than interpolated.
 @AutoConfigureMockMvc
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ForecastWebIntegrationTest {
@@ -68,6 +73,7 @@ class ForecastWebIntegrationTest {
 
     @BeforeAll
     static void pick() {
+        assertEquals(LocalDate.of(2026, 9, 6), SeededData.asOf(), "forecast-web.clock.today above must match the fixture's last day");
         users = SeededUsers.users();
         teams = SeededUsers.teams();
         leader = SeededUsers.withRole("TEAM_LEADER");
@@ -84,15 +90,16 @@ class ForecastWebIntegrationTest {
     }
 
     static JsonNode json(MvcResult r) throws Exception {
-        return ExportFiles.mapper().readTree(r.getResponse().getContentAsString());
+        return Json.mapper().readTree(r.getResponse().getContentAsString());
     }
 
     @Test
     @Order(1)
     void systemNeedsNoActingUserAndEverythingElseDoes() throws Exception {
+        // $.dialect, $.database and $.seededAtStart are gone from SystemView (PostgreSQL is the only engine now).
         mvc.perform(get("/api/system")).andExpect(status().isOk()).andExpect(jsonPath("$.today").value("2026-09-06"))
                 .andExpect(jsonPath("$.windows").value(2)).andExpect(jsonPath("$.defaultWeeklyHours").value(44.0))
-                .andExpect(jsonPath("$.dialect").value("SQLITE")).andExpect(jsonPath("$.actingUserHeader").value("X-Acting-User"))
+                .andExpect(jsonPath("$.actingUserHeader").value("X-Acting-User"))
                 .andExpect(jsonPath("$.bootstrapUserId").isEmpty());
         mvc.perform(get("/api/me")).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("ACTING_USER_MISSING"));
         mvc.perform(get("/api/me").header(ActingUserException.HEADER, "not-a-uuid")).andExpect(status().isUnauthorized())

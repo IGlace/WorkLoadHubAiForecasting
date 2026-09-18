@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecastweb.SeededUsers;
 import com.workloadhub.forecastweb.SeededUsers.Team;
@@ -22,8 +21,9 @@ class ForecastAccessTest {
 
     @BeforeAll
     static void setUp() {
+        // Read-only (role and team lookups): the JVM-wide shared database is fine here.
         DataSource ds = SeededData.dataSource();
-        access = new ForecastAccess(JdbcClient.create(ds), Dialect.of(ds));
+        access = new ForecastAccess(JdbcClient.create(ds));
     }
 
     @Test

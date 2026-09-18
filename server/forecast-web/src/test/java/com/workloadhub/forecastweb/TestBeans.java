@@ -15,7 +15,9 @@ public class TestBeans {
 
     @Bean
     DataSource dataSource() {
-        return SeededData.dataSource();
+        // A dedicated database, not the JVM-wide shared one: this test writes extensively (runs, tokens,
+        // role flips, a moved demo clock), and sharing would let a sibling test see rows it did not expect.
+        return SeededData.freshDataSource();
     }
 
     @Bean
