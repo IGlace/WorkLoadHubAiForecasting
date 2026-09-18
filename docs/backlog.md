@@ -34,6 +34,13 @@ first install straight away; the installer now seeds the data itself, see "Lande
 
 ## Landed
 
+- **The seed owns the work tables, local database only** (2026-09-18): the importer's replace clears
+  `project_history`, `task_comments` and `task_attachments` with the work tables, the SQL export format
+  with its guard and projects upsert is gone, by the owner's ruling that the real database is never seeded.
+  Found by the PostgreSQL plan's whole-branch review as a foreign-key failure the next step would have hit.
+  Spec `docs/superpowers/specs/2026-09-18-seed-owns-the-work-tables-design.md`, plan
+  `docs/superpowers/plans/2026-09-18-seed-owns-the-work-tables.md`.
+
 - **PostgreSQL only, one final migration, and the tools module** (2026-09-18): the module carried two
   database engines — every JDBC statement through a `Dialect`, five migrations written twice, the store's
   row helpers three times — and shipped a 2,348-line synthetic seed and a 992-line schema dump inside the
@@ -333,17 +340,6 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   helpers, three weekend tests and three working-day counts exist. Each is a pure refactor with a test
   already pinning it; about 300 lines. Spec section 10
   (`docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`).
-
-- **The JSON importer deletes `projects` under `replace`, which a real database refuses (2026-09-18).**
-  `ExportImporter.importAll(envelope, true)` issues `DELETE FROM projects` when the envelope carries the
-  table, while `SqlExportWriter` upserts `projects` by id and checks the two user-content tables first, and
-  `server/README.md` says the JSON import does the same. Against a database that holds `project_history`,
-  `task_comments` or `task_attachments` rows the delete dies on a foreign key, so the very next step of the
-  project — the real export through the seed into the local PostgreSQL — walks into it. Predates the
-  PostgreSQL plan (it comes from the 2026-09-17 seed-scope plan) and was found by that plan's whole-branch
-  review. Fix: the importer skips the delete on `projects`, upserts it `ON CONFLICT (id) DO UPDATE`, and
-  refuses when the user-content tables hold rows, exactly as the SQL script does; then the README sentence
-  becomes true.
 
 - **Leftovers of the PostgreSQL-only plan, none blocking (2026-09-18).** From the whole-branch review of
   `docs/superpowers/plans/2026-09-17-postgresql-only-and-tools-module.md`, in the order worth taking them:

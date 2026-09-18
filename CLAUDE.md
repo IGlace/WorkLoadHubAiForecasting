@@ -142,8 +142,8 @@ confirmed `absences` is legacy and `user_capacity`/`team_capacity` will not be u
 `personal_leaves` instead and computes capacity itself from `whf.default-weekly-hours` (44), the working
 days and the member's own APPROVED leave hours; the seed's real mode now writes only the five work tables
 (`projects`, `tasks`, `task_history`, `time_logs`, `personal_leaves`), with the application's own tables read
-from the export and left alone, `projects` upserted by id and the other four replaced child-first; and the
-owner walked the feature matrix on 2026-09-16 and ruled on every invented rule: `proj_first_due_weeks` is
+from the export and left alone, `projects` upserted by id and the other four replaced child-first (both
+retired the next day, below); and the owner walked the feature matrix on 2026-09-16 and ruled on every invented rule: `proj_first_due_weeks` is
 gone, `share_manual_13w`/`share_project_13w` are replaced by `share_assigned_13w` from the assignment's own
 `task_history.user_id`, `planned_hrs_h` returns as a per-horizon column, and every ratio or "weeks since"
 with nothing to measure is left blank instead of an invented sentinel, for 40 shared and 5 per-horizon
@@ -162,11 +162,18 @@ committed files under `forecast-core/src/test/resources/fixtures/` (`workloadhub
 host connect to, and `--db FILE` is gone from both; the gate now needs a container engine, failing without
 Docker or podman where it used to skip. Two tasks were added during execution (2b and 2c) because
 PostgreSQL enforces the foreign keys SQLite never did: real mode builds teams from the export's own teams
-and invents none, and refuses an export missing a task status or type. The gate stands at 438 tests (core
+and invents none, and refuses an export missing a task status or type. That plan's gate was 438 tests (core
 312, tools 126, the last one from the review's fix wave), 0 failures, 0 errors, 1 skipped, in 11m44s — the
 same wall time as before the test pruning
 of the last task, because 94% of the test time is seven full-pipeline classes and the caches removed only
 repeated work; the speed-up the spec hoped for did not happen.
+Then, the same day, the seed's landing path
+(`docs/superpowers/specs/2026-09-18-seed-owns-the-work-tables-design.md`): the owner ruled that only the
+local database is ever seeded, so the importer clears `project_history`, `task_comments` and
+`task_attachments` with the work tables it replaces, and `seed --format sql`, its user-content guard and
+the projects upsert are gone; the whole-branch review of the PostgreSQL plan had found the importer
+failing on those foreign keys against any database that holds history or comments. The gate stands at
+437 tests (core 312, tools 125), 0 failures, 0 errors, 1 skipped, in 11m45s.
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed into the
 local PostgreSQL, then the server's own integration code, against the sample host.
 The standing workflow for a plan:
@@ -196,7 +203,9 @@ fix wave, the gate green by hand in the development container, then fast-forward
 - English and French are both fully supported in the narrative; a user may switch freely. No third language.
   The experiment driver's own messages and help are English only, and it does not narrate; the sample host
   asks for one language or the other (`run-host-example.sh --lang en|fr`).
-- The real export and any real-mode seed output stay outside the repository.
+- The real export and any real-mode seed output stay outside the repository, and the seed only ever targets
+  the local database of `scripts/postgres.sh`: the real WorkloadHub database is never seeded (owner,
+  2026-09-18), and nothing of `forecast-tools` or the scripts ships to the application's developer.
 
 ## Layout
 

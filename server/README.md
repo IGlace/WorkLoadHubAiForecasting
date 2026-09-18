@@ -119,8 +119,8 @@ bash scripts/postgres.sh up
 $X init-db                                    # --force drops and recreates the schema
 
 # 2. a year of history for the real directory: the seed writes projects, tasks, task_history, time_logs and personal_leaves; the application's own tables are read from the export and left alone (the export holds personal data: keep it and the output outside git)
+# only the local database is ever seeded; nothing of this ships to the WorkloadHub developer
 $X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
-$X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --format sql --out ~/whf/seeded.sql
 
 # 3. load it
 $X import ~/whf/seeded.json
@@ -148,7 +148,7 @@ $X fixture
 | `init-db` | `[--force]` | Creates schema `task_service` with the 24 WorkloadHub tables and the module's tables; refuses an existing schema without `--force`. |
 | `import` | `<file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
 | `export` | `<file>` | Writes the database's WorkloadHub tables as a JSON export. |
-| `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. Real mode writes five tables; synthetic mode writes them all. |
+| `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. Real mode writes five tables; synthetic mode writes them all. |
 | `fixture` | `[--out <dir>]` | Regenerates `forecast-core`'s committed test fixture, `workloadhub-schema.sql` and `seeded-rows.sql`. Commit both. |
 | any of them | `[--url] [--user] [--password]` | Where to connect: the options, else `WHF_DB_URL`, `WHF_DB_USER`, `WHF_DB_PASSWORD`, else the local database of `scripts/postgres.sh` (`jdbc:postgresql://localhost:5432/workloadhub`, user and password `workloadhub`). |
 
@@ -167,17 +167,13 @@ calls the two modules' classes directly and needs no Spring context: the one tha
 (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`).
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
-Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
-`psql -d avl_workloadhub -f ~/whf/seeded.sql` (it runs inside one transaction and sets
-`search_path` to `task_service`; the script deletes the seeded work tables (time logs, history, tasks,
-leaves) child-first inside the transaction and upserts projects by id). Two things to know before running
-it: `DELETE FROM personal_leaves` removes the leaves of **every** employee in the database, not only those
-of the members the forecast counts; and the script refuses to run at all while `task_comments` or
-`task_attachments` hold rows — it opens with a guard that raises `task_comments or task_attachments is not
-empty: the seed never deletes user content; empty them first`, because those tables are user content the
-seed never writes and never deletes, and they reference the tasks it does delete. Nothing is applied when
-the guard fires. The JSON `import` with an existing database does the same: it replaces only the tables the
-file carries.
+Monday weeks ending in the week of that date. `import` with an existing database replaces only the tables
+the file carries, children first, plus the three application tables that reference them —
+`project_history`, `task_comments` and `task_attachments` — because the seed owns everything under
+`projects` on the one database it ever targets, the local one (design 2026-09-18). Two things to know:
+`DELETE FROM personal_leaves` removes the leaves of **every** employee in the database, not only those of
+the members the forecast counts, and a comment or attachment on a replaced task is gone with the task. There
+is no SQL output any more: the real database is never seeded.
 
 ## What the seed writes
 
@@ -187,7 +183,8 @@ ramps, team events and absences; tasks are created into the backlog or assigned 
 three at a time, logged day by day, reviewed, blocked or reopened at the design's rates, and a few
 finish without logs. Leaves are written as `personal_leaves` (paid leave blocks, one in five ending on a
 half day, sick days, and for one member in ten a pending request after the as-of date); no capacity rows
-are written, the module computes capacity itself. The invariants the tests hold
+are written, the module computes capacity itself. Loading it clears the application's own project
+history, comments and attachments of the rows it replaces (see above). The invariants the tests hold
 are listed in the design, section 4.8.
 
 ## Using the module from the WorkloadHub server

@@ -443,3 +443,11 @@ git push -u origin dev
 ## After the tasks
 
 A whole-branch review over the three commits, one fix wave if it finds anything, then the release (`bash scripts/release.sh`, fast-forwarding `main` to `dev`) when the owner asks for it.
+
+---
+
+## Closing notes
+
+Landed on `dev` on 2026-09-18, three tasks, each reviewed. Gate: 437 tests (core 312, tools 125), 0 failures,
+0 errors, 1 skipped, in 11m45s (705 s, `bash scripts/check.sh`). The committed fixture did not change.
+Deviations from the spec: none.
