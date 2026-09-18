@@ -11,7 +11,7 @@ import re
 import sys
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parents[1] / "forecast-core/src/main/resources/schema"
+OUT = Path(__file__).resolve().parents[1] / "forecast-tools/src/main/resources/schema"
 
 
 def clean_postgresql(src: str) -> str:

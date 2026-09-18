@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs server/tools/Experiment.java, which builds an experiment database on PostgreSQL.
+# Runs the experiment driver, which builds an experiment database on PostgreSQL.
 #
 #   bash server/tools/experiment.sh --help                                   # the five commands
 #   bash server/tools/experiment.sh init-db
@@ -11,14 +11,12 @@
 # XGBoost's libgomp are. The database is --url/--user/--password, else WHF_DB_URL/WHF_DB_USER/WHF_DB_PASSWORD,
 # else the local one. File arguments are resolved against your working directory, not the repository.
 #
-# No module is added to the build for this: the file is compiled by Java 21's single-file source launcher
-# (JEP 330) against forecast-core's own compiled classes and its runtime dependencies, the same way
-# server/examples/run-host-example.sh runs the sample host. Until 2026-09-12 this was forecast-cli, a second
-# Maven module wrapping picocli around core classes that are all public already.
+# The driver is a class of forecast-tools, compiled by the gate; this script only resolves the classpath and
+# runs it.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-classpath="$(bash "$here/core-classpath.sh")"
+classpath="$(bash "$here/tools-classpath.sh")"
 
 # `fixture` writes forecast-core's committed test fixture; the path is the repository's, whatever the
 # working directory, unless --out says otherwise.
@@ -26,4 +24,4 @@ if [ "${1:-}" = fixture ] && ! printf '%s\n' "$@" | grep -qx -- '--out'; then
     set -- "$@" --out "$here/../forecast-core/src/test/resources/fixtures"
 fi
 
-exec java --class-path "$classpath" "$here/Experiment.java" "$@"
+exec java --class-path "$classpath" com.workloadhub.forecast.tools.Experiment "$@"
