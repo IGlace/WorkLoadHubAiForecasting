@@ -27,10 +27,17 @@ public final class UiResources implements WebMvcConfigurer {
         return Files.isDirectory(dir) && Files.isRegularFile(dir.resolve("index.html"));
     }
 
-    /** What a request path resolves to: the file when it exists, index.html for a page route, nothing under /api. */
+    /**
+     * What a request path resolves to: the file when it exists, index.html for a page route, nothing under
+     * /api or for a path that tries to climb out of the directory. Containment is still checked by
+     * {@link PathResourceResolver#checkResource} below; this only decides which path to ask for.
+     */
     public static String resolve(String requestPath, Predicate<String> fileExists) {
         String path = requestPath.startsWith("/") ? requestPath.substring(1) : requestPath;
         if (path.startsWith("api/") || path.equals("api")) {
+            return null;
+        }
+        if (path.contains("..") || path.contains("\\")) {
             return null;
         }
         if (!path.isEmpty() && fileExists.test(path)) {
@@ -63,7 +70,10 @@ public final class UiResources implements WebMvcConfigurer {
                         return false;
                     }
                 });
-                return target == null ? null : location.createRelative(target);
+                // super, not createRelative: PathResourceResolver.getResource is what checks that the
+                // resolved resource is really inside the location (a symlink or an encoded traversal that
+                // survived Spring's own path sanitising would otherwise be served).
+                return target == null ? null : super.getResource(target, location);
             }
         });
     }

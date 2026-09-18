@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api'
 import { segments } from '../lib/highlight'
+import { pollAction } from '../lib/narration'
 import { dateTime, num } from '../lib/format'
 import { useActing } from '../state/acting'
 import type { NarrativeView, RunProgress } from '../types'
@@ -21,7 +22,6 @@ export function NarrationPanel({ runId }: { runId: string }) {
   const [progress, setProgress] = useState<RunProgress | null>(null)
   const [busy, setBusy] = useState(false)
   const [showUsage, setShowUsage] = useState(false)
-  const timer = useRef<number | null>(null)
 
   async function loadStored() {
     try {
@@ -38,23 +38,38 @@ export function NarrationPanel({ runId }: { runId: string }) {
   useEffect(() => {
     if (!busy) return
     let stopped = false
+    let timer = 0
+    let sawNarrating = false
+    const startedAt = Date.now()
     const tick = async () => {
       try {
         const p = await api.progress(runId)
         if (stopped) return
-        setProgress(p)
-        if (p.phase === 'NARRATED' || p.phase === 'NARRATION_FAILED' || p.phase === 'DONE' || p.phase === 'FAILED') {
+        const action = pollAction(p.phase, sawNarrating, Date.now() - startedAt)
+        if (action === 'running') {
+          sawNarrating = true
+          setProgress(p)
+        }
+        if (action === 'settled') {
           setBusy(false)
           await loadStored()
           return
         }
+        if (action === 'gave-up') {
+          setBusy(false)
+          setError(new Error('the narration did not start within a minute; reload to see whether it did'))
+          return
+        }
       } catch (e) {
-        if (!stopped) { setError(e); setBusy(false); return }
+        if (stopped) return
+        setError(e)
+        setBusy(false)
+        return
       }
-      timer.current = window.setTimeout(() => void tick(), 1000)
+      timer = window.setTimeout(() => void tick(), 1000)
     }
     void tick()
-    return () => { stopped = true; if (timer.current) window.clearTimeout(timer.current) }
+    return () => { stopped = true; if (timer) window.clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy])
 
@@ -94,7 +109,7 @@ export function NarrationPanel({ runId }: { runId: string }) {
         <code>POST /api/forecast-runs/{'{id}'}/narratives</code> → {reason}. Copilot reads the facts through tools and writes the narrative; deterministic code computed every figure. Every number it writes is verified against the facts, and an unverified one is reported, never promoted.
       </p>
       <ErrorNotice error={error} />
-      {busy && <ProgressBar progress={progress} />}
+      {busy && (progress ? <ProgressBar progress={progress} /> : <p className="muted">asked for; waiting for a narration worker…</p>)}
       {!busy && !narrative && !error && <p className="muted">No {lang} narrative stored for this run.</p>}
       {narrative && !busy && (
         <div className="narr">

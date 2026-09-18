@@ -5,7 +5,8 @@
  */
 export type Numeric = number | string | null | undefined
 
-function finite(v: Numeric): number | null {
+/** The value as a number, or null when it is absent or not finite (a NaN score arrives as the string "NaN"). */
+export function finite(v: Numeric): number | null {
   if (v === null || v === undefined) return null
   const n = typeof v === 'number' ? v : Number(v)
   return Number.isFinite(n) ? n : null

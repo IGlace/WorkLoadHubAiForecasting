@@ -31,4 +31,19 @@ class RunRegistryTest {
         assertTrue(second.teamOf(UUID.randomUUID()).isEmpty());
         assertTrue(second.latestRunOf(UUID.randomUUID()).isEmpty());
     }
+
+    @Test
+    void theLatestRunIsTheLastOneRegistered() {
+        // The caller writes started_at from the real clock, never from the module's Clock bean: this host's
+        // demo clock is pinned and an admin moves it backwards, and the one-at-a-time rule must still look at
+        // the run that is actually computing.
+        RunRegistry registry = new RunRegistry(JdbcClient.create(DatabaseTestSupport.sqliteInMemory()));
+        UUID user = UUID.randomUUID();
+        UUID team = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        registry.register(first, team, user, LocalDateTime.of(2026, 9, 18, 10, 0));
+        registry.register(second, team, user, LocalDateTime.of(2026, 9, 18, 10, 5));
+        assertEquals(Optional.of(second), registry.latestRunOf(user));
+    }
 }

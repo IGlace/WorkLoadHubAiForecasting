@@ -100,6 +100,12 @@ class ForecastWebIntegrationTest {
         mvc.perform(get("/api/me").header(ActingUserException.HEADER, UUID.randomUUID().toString())).andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("ACTING_USER_UNKNOWN"));
         mvc.perform(get("/api/directory/teams")).andExpect(status().isUnauthorized());
+        // The module's own controller is not mounted (whf.web.enabled stays false, and WebSurfaceGuard
+        // refuses to start with it on): it trusts requestedBy as given, so its routes must not exist here.
+        mvc.perform(get("/api/forecast/runs/" + UUID.randomUUID())).andExpect(status().isNotFound());
+        mvc.perform(post("/api/forecast/runs").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"teamId\": \"" + UUID.randomUUID() + "\", \"requestedBy\": \"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -218,6 +224,9 @@ class ForecastWebIntegrationTest {
         assertEquals("gho_sample", fake.tokenSeen, "the stored token reached the gateway");
 
         mvc.perform(as(post("/api/forecast-runs/" + run + "/narratives"), leader).contentType(MediaType.APPLICATION_JSON).content("{\"language\": \"de\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        mvc.perform(as(post("/api/forecast-runs/" + run + "/narratives"), leader).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"language\": \"en\", \"model\": \"gpt-4o; rm -rf /\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         mvc.perform(as(get("/api/forecast-runs/" + run + "/narratives/en"), leader)).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NARRATIVE_NOT_FOUND"));
 

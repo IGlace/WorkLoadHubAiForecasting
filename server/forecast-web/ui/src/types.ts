@@ -39,9 +39,9 @@ export interface CurrentDayForecast { teamId: string; userId: string; day: strin
 export interface ProgressLabel { en: string; fr: string }
 export interface RunProgress { runId: string; phase: string; percent: number; message: string; label: ProgressLabel }
 
-export interface AccuracyRow { userId: string; day: string; runId: string; lead: number; forecastHrs: number; loggedHrs: number; capacityHrs: number; forecastOverload: boolean; actualOverload: boolean }
-/** A score that could not be computed is NaN, which arrives as the string "NaN". */
+/** A number the module could not compute is NaN, which Jackson writes as the string "NaN". */
 export type Score = number | 'NaN'
+export interface AccuracyRow { userId: string; day: string; runId: string; lead: number; forecastHrs: Score; loggedHrs: Score; capacityHrs: Score; forecastOverload: boolean; actualOverload: boolean }
 export interface AccuracyScore { scope: 'team' | 'member' | 'lead'; key: string; n: number; mae: Score; bias: Score; mase: Score | null; maseN: number; overloadPrecision: Score; overloadRecall: Score }
 export interface AccuracyResult { teamId: string; from: string; to: string; evaluatedAt: string; current: AccuracyRow[]; scores: AccuracyScore[]; nonWorkingDays: number }
 

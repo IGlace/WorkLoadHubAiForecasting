@@ -3,8 +3,10 @@ package com.workloadhub.forecastweb.demo;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -32,7 +34,7 @@ public final class TokenKeyFile implements EnvironmentPostProcessor {
         environment.getPropertySources().addFirst(new MapPropertySource("forecast-web-token-key", Map.of("whf.token-key", readOrCreate(Path.of(file)))));
     }
 
-    /** The key in the file, or a fresh one written there (mode 0600 where the file system has modes). */
+    /** The key in the file, or a fresh one created there with mode 0600 where the file system has modes. */
     public static String readOrCreate(Path file) {
         try {
             if (Files.exists(file)) {
@@ -45,18 +47,42 @@ public final class TokenKeyFile implements EnvironmentPostProcessor {
             new SecureRandom().nextBytes(bytes);
             String key = Base64.getEncoder().encodeToString(bytes);
             Path parent = file.toAbsolutePath().getParent();
+            // The permissions come first, on creation: writing the key and then narrowing the mode leaves it
+            // world-readable for as long as the two calls take, and for good if the second one never runs.
             if (parent != null) {
-                Files.createDirectories(parent);
+                createDirectory(parent, "rwx------");
+            }
+            try {
+                Files.createFile(file, ownerOnly("rw-------"));
+            } catch (UnsupportedOperationException e) {
+                Files.createFile(file);   // a file system without POSIX modes (Windows)
             }
             Files.writeString(file, key + System.lineSeparator(), StandardCharsets.UTF_8);
-            try {
-                Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
-            } catch (UnsupportedOperationException ignored) {
-                // Windows: no POSIX modes
-            }
             return key;
         } catch (IOException e) {
             throw new UncheckedIOException("cannot read or create the token key file " + file, e);
+        }
+    }
+
+    private static FileAttribute<?>[] ownerOnly(String mode) {
+        return new FileAttribute<?>[] {PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString(mode))};
+    }
+
+    /** Creates the directory and every missing parent, the last one owner-only where the file system has modes. */
+    private static void createDirectory(Path dir, String mode) throws IOException {
+        if (Files.isDirectory(dir)) {
+            return;
+        }
+        Path parent = dir.getParent();
+        if (parent != null) {
+            createDirectory(parent, mode);
+        }
+        try {
+            Files.createDirectory(dir, ownerOnly(mode));
+        } catch (UnsupportedOperationException e) {
+            Files.createDirectory(dir);
+        } catch (FileAlreadyExistsException e) {
+            // another process won the race; its directory is good enough
         }
     }
 }

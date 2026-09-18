@@ -34,7 +34,11 @@ public final class RunRegistry {
                 .map(r -> UUID.fromString(String.valueOf(r.get("team_id"))));
     }
 
-    /** The run this user started most recently, whatever its state: the one-at-a-time rule looks at it. */
+    /**
+     * The run this user started most recently, whatever its state: the one-at-a-time rule looks at it.
+     * {@code started_at} is written by the caller from the real clock, not from the module's {@code Clock}
+     * bean, so that a demo clock an admin moves backwards cannot reorder the rows.
+     */
     public Optional<UUID> latestRunOf(UUID userId) {
         return jdbc.sql("SELECT run_id FROM " + TABLE + " WHERE requested_by = ? ORDER BY started_at DESC, run_id DESC")
                 .param(userId.toString()).query().listOfRows().stream().findFirst().map(r -> UUID.fromString(String.valueOf(r.get("run_id"))));

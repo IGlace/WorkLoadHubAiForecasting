@@ -15,11 +15,13 @@ import com.workloadhub.forecast.api.RunSummary;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,6 +47,8 @@ public final class HostForecastFacade implements AutoCloseable {
         return t;
     });
     private final Set<String> narrationsInFlight = ConcurrentHashMap.newKeySet();
+    /** One monitor per requesting user, so the one-at-a-time rule is a check-and-start rather than check-then-act. */
+    private final Map<UUID, Object> startLocks = new ConcurrentHashMap<>();
 
     public HostForecastFacade(ForecastService service, ForecastAccess access, GitHubTokenStore tokens, RunRegistry registry, Clock clock) {
         this.service = service;
@@ -67,15 +71,24 @@ public final class HostForecastFacade implements AutoCloseable {
         if (!decision.allowed()) {
             throw new HostForbidden(decision.reason());
         }
-        if (user.role().equals("SKILL_TEAM_LEADER")) {
-            Optional<UUID> latest = registry.latestRunOf(user.id());
-            if (latest.isPresent() && runInProgress(service.progress(latest.get()).phase())) {
-                throw new HostForbidden("one team at a time: run " + latest.get() + " is still in progress");
+        // Held for the whole check-and-start: two clicks of the same skill team leader would otherwise both
+        // read the same finished run, both pass the one-at-a-time rule and both start (design 2026-09-11,
+        // section 3.2). One monitor per user, so leaders never wait on each other. A host on several
+        // instances needs a database guard instead; this application is one instance by design.
+        synchronized (startLocks.computeIfAbsent(user.id(), k -> new Object())) {
+            if (user.role().equals("SKILL_TEAM_LEADER")) {
+                Optional<UUID> latest = registry.latestRunOf(user.id());
+                if (latest.isPresent() && runInProgress(service.progress(latest.get()).phase())) {
+                    throw new HostForbidden("one team at a time: run " + latest.get() + " is still in progress");
+                }
             }
+            UUID id = service.startRun(new RunRequest(teamId, user.id()));
+            // The host's own record of when it started the run, by the real clock and never by the module's
+            // Clock bean: this application's demo clock is pinned and an admin moves it backwards, which would
+            // make "the latest run" of the rule above the wrong one. The run day itself is RunSummary.asOf.
+            registry.register(id, teamId, user.id(), LocalDateTime.now(ZoneOffset.UTC));
+            return id;
         }
-        UUID id = service.startRun(new RunRequest(teamId, user.id()));
-        registry.register(id, teamId, user.id(), LocalDateTime.now(clock));
-        return id;
     }
 
     /** The team a run belongs to, from the registry; a run this host never started is not found. */
@@ -182,5 +195,6 @@ public final class HostForecastFacade implements AutoCloseable {
     public void close() throws InterruptedException {
         narrations.shutdown();
         narrations.awaitTermination(10, TimeUnit.SECONDS);
+        narrationsInFlight.clear();   // a narration that never returned must not keep its run and language refused
     }
 }

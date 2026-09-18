@@ -4,7 +4,7 @@ import { api } from '../api'
 import { Behind } from '../components/Behind'
 import { DayLines } from '../components/DayLines'
 import { ErrorNotice, Notice } from '../components/Notice'
-import { addDays, dayLabel, hours, num, pct, shortId, signed } from '../lib/format'
+import { addDays, dayLabel, finite, hours, num, pct, shortId, signed } from '../lib/format'
 import { useAsync } from '../lib/useAsync'
 import { useActing } from '../state/acting'
 import type { AccuracyScore } from '../types'
@@ -18,13 +18,17 @@ export function AccuracyPage() {
   const f = from || (today ? addDays(today, -28) : '')
   const t = to || (today ? addDays(today, -1) : '')
   const team = useAsync(() => api.team(id), [id, userId])
-  const acc = useAsync(() => (f && t ? api.accuracy(id, f, t) : Promise.reject(new Error('no dates'))), [id, userId, f, t])
+  // Null until GET /api/system has supplied today: the page shows its loading state rather than an error.
+  const acc = useAsync(() => (f && t ? api.accuracy(id, f, t) : Promise.resolve(null)), [id, userId, f, t])
   const names = useMemo(() => new Map((team.data?.members ?? []).map((m) => [m.id, m.fullName])), [team.data])
   const points = useMemo(() => {
     const byDay = new Map<string, { forecast: number; logged: number }>()
     for (const r of acc.data?.current ?? []) {
       const p = byDay.get(r.day) ?? { forecast: 0, logged: 0 }
-      p.forecast += r.forecastHrs; p.logged += r.loggedHrs
+      // finite(): a value the module could not compute arrives as the string "NaN", and adding that to a
+      // number would concatenate it into a string that silently drops the day from the chart.
+      p.forecast += finite(r.forecastHrs) ?? 0
+      p.logged += finite(r.loggedHrs) ?? 0
       byDay.set(r.day, p)
     }
     return Array.from(byDay.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([day, p]) => ({ day, ...p }))
@@ -68,7 +72,7 @@ export function AccuracyPage() {
                   <tr key={i}>
                     <td>{names.get(r.userId) ?? shortId(r.userId)}</td><td>{dayLabel(r.day)}</td><td className="mono small">{shortId(r.runId)}</td>
                     <td className="num">{r.lead}</td><td className="num">{hours(r.forecastHrs)}</td><td className="num">{hours(r.loggedHrs)}</td>
-                    <td className="num">{signed(r.forecastHrs - r.loggedHrs, 1)}</td><td className="num">{hours(r.capacityHrs)}</td>
+                    <td className="num">{signed(error(r.forecastHrs, r.loggedHrs), 1)}</td><td className="num">{hours(r.capacityHrs)}</td>
                     <td className="small">{r.forecastOverload ? 'forecast' : ''}{r.forecastOverload && r.actualOverload ? ' + ' : ''}{r.actualOverload ? 'actual' : ''}</td>
                   </tr>
                 ))}
@@ -81,6 +85,13 @@ export function AccuracyPage() {
       <Behind />
     </div>
   )
+}
+
+/** The day's error, or null when either side could not be computed. */
+function error(forecast: number | string, logged: number | string): number | null {
+  const f = finite(forecast)
+  const l = finite(logged)
+  return f === null || l === null ? null : f - l
 }
 
 function ScoreTable({ title, rows, label }: { title: string; rows: AccuracyScore[]; label: (key: string) => string }) {

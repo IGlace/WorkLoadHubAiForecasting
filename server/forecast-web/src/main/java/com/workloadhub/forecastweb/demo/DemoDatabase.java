@@ -46,6 +46,10 @@ public final class DemoDatabase {
         SQLiteDataSource ds = new SQLiteDataSource();
         ds.setUrl("jdbc:sqlite:" + file.toAbsolutePath());
         ds.setBusyTimeout(30_000);
+        // A run computes on the module's pool while the browser polls progress: in the default rollback
+        // journal every reader blocks the writer, so a poll can sit out the whole busy timeout.
+        ds.setJournalMode("WAL");
+        ds.setSynchronous("NORMAL");
         if (create) {
             LOG.info("seeding {}: {} synthetic users, {} weeks ending {}", file, seed.users(), seed.weeks(), seed.end());
             try {

@@ -9,6 +9,7 @@ import com.workloadhub.forecastweb.host.ActingUser;
 import com.workloadhub.forecastweb.host.HostForecastFacade;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +33,9 @@ public class NarrativeController {
         this.facade = facade;
     }
 
+    /** A model name as the SDK accepts them; blank means the account default (whf.copilot.model). */
+    private static final Pattern MODEL = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}");
+
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public NarrationStarted narrate(ActingUser user, @PathVariable UUID id, @RequestBody(required = false) NarrateBody body) {
@@ -39,7 +43,13 @@ public class NarrativeController {
         if (!language.equals("en") && !language.equals("fr")) {
             throw ForecastException.invalidRequest("language must be en or fr");
         }
-        facade.narrate(user, id, language, body == null ? null : body.model());
+        // The model reaches the SDK and is stored on the narration row, so it is checked rather than passed on
+        // as free text from whoever called.
+        String model = body == null || body.model() == null || body.model().isBlank() ? null : body.model().trim();
+        if (model != null && !MODEL.matcher(model).matches()) {
+            throw ForecastException.invalidRequest("model must be letters, digits and . _ : / - (at most 64 characters)");
+        }
+        facade.narrate(user, id, language, model);
         return new NarrationStarted(id, language, "NARRATING");
     }
 

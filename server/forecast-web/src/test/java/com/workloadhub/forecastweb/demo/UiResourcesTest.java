@@ -28,6 +28,17 @@ class UiResourcesTest {
     }
 
     @Test
+    void aPathThatClimbsOutResolvesToNothing() {
+        Set<String> files = Set.of("index.html");
+        assertNull(UiResources.resolve("../token.key", files::contains));
+        assertNull(UiResources.resolve("assets/../../secrets", files::contains));
+        assertNull(UiResources.resolve("..\\windows", files::contains));
+        // Deliberately blunt: any path holding two dots is refused rather than normalised, and a file named
+        // "a..b" is a price worth paying for a rule with nothing to reason about.
+        assertNull(UiResources.resolve("teams/a..b", files::contains));
+    }
+
+    @Test
     void presentOnlyWithAnIndex() throws Exception {
         assertFalse(new UiResources(dir.resolve("missing")).present());
         assertFalse(new UiResources(dir).present());

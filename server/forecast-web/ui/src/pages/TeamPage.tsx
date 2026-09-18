@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { Behind } from '../components/Behind'
@@ -23,12 +23,12 @@ export function TeamPage() {
   const [running, setRunning] = useState<string | null>(null)
   const [progress, setProgress] = useState<RunProgress | null>(null)
   const [startError, setStartError] = useState<unknown>(null)
-  const timer = useRef<number | null>(null)
 
   // The page polls progress once a second until the run ends, then reloads what the run changed.
   useEffect(() => {
     if (!running) return
     let stopped = false
+    let timer = 0
     const tick = async () => {
       try {
         const p = await api.progress(running)
@@ -41,12 +41,17 @@ export function TeamPage() {
           return
         }
       } catch (e) {
-        if (!stopped) { setStartError(e); setRunning(null); return }
+        // After the cleanup ran, a failed request must not reschedule: an unmounted page would otherwise keep
+        // polling for as long as the browser tab lives, once per second, and every visit would add a loop.
+        if (stopped) return
+        setStartError(e)
+        setRunning(null)
+        return
       }
-      timer.current = window.setTimeout(() => void tick(), 1000)
+      timer = window.setTimeout(() => void tick(), 1000)
     }
     void tick()
-    return () => { stopped = true; if (timer.current) window.clearTimeout(timer.current) }
+    return () => { stopped = true; if (timer) window.clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running])
 
