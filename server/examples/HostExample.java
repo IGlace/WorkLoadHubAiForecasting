@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.Banner;
 import org.springframework.boot.WebApplicationType;
@@ -37,13 +36,12 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.sqlite.SQLiteDataSource;
 import tools.jackson.databind.JsonNode;
 
 /**
  * Every call the WorkloadHub server makes into this module, in one runnable file.
  *
- * <p>Run it inside the development container, against the seeded SQLite database:
+ * <p>Run it inside the development container, against the local PostgreSQL scripts/postgres.sh runs:
  *
  * <pre>
  * bash scripts/devbox.sh shell
@@ -54,9 +52,10 @@ import tools.jackson.databind.JsonNode;
  * <p>What is real host code and what is only here so the example runs alone:
  *
  * <ul>
- *   <li><b>Real.</b> The two beans below ({@code DataSource}, and nothing else: the module's
- *       auto-configuration builds {@code ForecastService} and everything under it on top of the host's
- *       own {@code DataSource}), and every {@code ForecastService} call in {@link Calls}.
+ *   <li><b>Real.</b> Nothing but the properties: the module's auto-configuration builds
+ *       {@code ForecastService} and everything under it on top of the {@code DataSource} Spring Boot makes
+ *       from {@code spring.datasource.*}, which the server already has. Every {@code ForecastService} call
+ *       in {@link Calls} is real.
  *   <li><b>Only for the example.</b> The fixed {@link Clock} (the server leaves the module's default,
  *       {@code Clock.systemDefaultZone()}, alone — this one is pinned to the seed's last day so a run has
  *       history to learn from), the team listing in {@link #pickTeam}, and printing to stdout instead of
@@ -72,17 +71,6 @@ import tools.jackson.databind.JsonNode;
 public class HostExample {
 
     /**
-     * The host's own DataSource. In the server this is the application's PostgreSQL pool, configured by
-     * {@code spring.datasource.*} and never built by hand; the module reads the dialect off it.
-     */
-    @Bean
-    DataSource dataSource(@Value("${example.db}") String file) {
-        SQLiteDataSource ds = new SQLiteDataSource();
-        ds.setUrl("jdbc:sqlite:" + file);
-        return ds;
-    }
-
-    /**
      * Example only. {@code startRun} takes the run day from this clock, and the seeded database ends on
      * 2026-09-06; with the real clock a run would forecast from today, find no history and produce nothing
      * worth looking at. A server deletes this bean.
@@ -96,36 +84,45 @@ public class HostExample {
         Map<String, String> opts = options(args);
         if (opts.containsKey("help")) {
             System.out.println("""
-                    usage: run-host-example.sh [--db FILE] [--team UUID] [--as-of ISO_DATE] [--narrate] [--lang en|fr]
+                    usage: run-host-example.sh [--url JDBC_URL] [--user USER] [--password PASSWORD] [--team UUID] [--as-of ISO_DATE] [--narrate] [--lang en|fr]
 
-                      --db       SQLite file to read (default /data/workloadhub.db)
-                      --team     the team to forecast, one the listing marks TEAM_LEADER (the example acts as
-                                 that user); without it the example lists the teams and stops
-                      --as-of    the run day the fixed clock reports (default 2026-09-06, the seed's last day)
-                      --narrate  also ask Copilot for the narrative; needs WHF_TOKEN_KEY and a stored token
-                      --lang     narrative language, en or fr (default en)""");
+                      --url       the PostgreSQL database (default WHF_DB_URL, else jdbc:postgresql://localhost:5432/workloadhub)
+                      --user      (default WHF_DB_USER, else workloadhub)
+                      --password  (default WHF_DB_PASSWORD, else workloadhub)
+                      --team      the team to forecast, one the listing marks TEAM_LEADER (the example acts as
+                                  that user); without it the example lists the teams and stops
+                      --as-of     the run day the fixed clock reports (default 2026-09-06, the seed's last day)
+                      --narrate   also ask Copilot for the narrative; needs WHF_TOKEN_KEY and a stored token
+                      --lang      narrative language, en or fr (default en)""");
             return;
         }
-        String db = opts.getOrDefault("db", "/data/workloadhub.db");
+        String url = setting(opts, "url", "WHF_DB_URL", "jdbc:postgresql://localhost:5432/workloadhub");
+        String user = setting(opts, "user", "WHF_DB_USER", "workloadhub");
+        String password = setting(opts, "password", "WHF_DB_PASSWORD", "workloadhub");
         SpringApplicationBuilder app = new SpringApplicationBuilder(HostExample.class)
                 .web(WebApplicationType.NONE)      // this example has no HTTP surface; the server has its own
                 .bannerMode(Banner.Mode.OFF)
-                .properties(Map.of(
-                        "example.db", db,
-                        "example.as-of", opts.getOrDefault("as-of", "2026-09-06"),
+                .properties(Map.ofEntries(
+                        // The host's own pool, built by Spring Boot from these: exactly what the server has already.
+                        Map.entry("spring.datasource.url", url),
+                        Map.entry("spring.datasource.username", user),
+                        Map.entry("spring.datasource.password", password),
+                        // The WorkloadHub tables and the module's live in task_service.
+                        Map.entry("spring.datasource.hikari.data-source-properties.currentSchema", "task_service,public"),
+                        Map.entry("example.as-of", opts.getOrDefault("as-of", "2026-09-06")),
                         // The whf.* properties a host sets. run-threads 1 keeps the output in order; the server's
                         // default is 2. token-key is the base64 32-byte key that encrypts the stored GitHub tokens:
                         // without it a token can neither be saved nor read, which is all narration needs.
-                        "whf.run-threads", "1",
-                        "whf.token-key", System.getenv().getOrDefault("WHF_TOKEN_KEY", ""),
+                        Map.entry("whf.run-threads", "1"),
+                        Map.entry("whf.token-key", System.getenv().getOrDefault("WHF_TOKEN_KEY", "")),
                         // The rolling horizon: how many five-weekday windows a run forecasts, 1 to 6 (design
                         // 2026-09-13, section 4). This is the default already, set here only to show where a
                         // host would choose a different one.
-                        "whf.forecast.windows", "2",
+                        Map.entry("whf.forecast.windows", "2"),
                         // The module owns its own tables and migrates them at start-up. A host that runs the
                         // module's migrations itself sets this to false instead.
-                        "whf.flyway.enabled", "true",
-                        "logging.level.root", "WARN"));
+                        Map.entry("whf.flyway.enabled", "true"),
+                        Map.entry("logging.level.root", "WARN")));
         try (ConfigurableApplicationContext ctx = app.run()) {
             // The one bean the host talks to. Everything below is a call it could make from a controller.
             ForecastService service = ctx.getBean(ForecastService.class);
@@ -179,16 +176,24 @@ public class HostExample {
      */
     private static UUID leaderOf(JdbcClient jdbc, UUID team) {
         return jdbc.sql("SELECT u.id FROM users u JOIN team_members tm ON tm.user_id = u.id WHERE tm.team_id = ? AND u.role = 'TEAM_LEADER'")
-                .param(team.toString()).query(String.class).optional().map(UUID::fromString).orElse(null);
+                .param(team).query(String.class).optional().map(UUID::fromString).orElse(null);
     }
 
     /** Example only: the module answers in user ids, and the host already has the names. */
     private static Map<UUID, String> namesOf(JdbcClient jdbc) {
         Map<UUID, String> names = new HashMap<>();
         for (Map<String, Object> row : jdbc.sql("SELECT id, full_name FROM users").query().listOfRows()) {
-            names.put(UUID.fromString((String) row.get("id")), (String) row.get("full_name"));
+            names.put((UUID) row.get("id"), (String) row.get("full_name"));
         }
         return names;
+    }
+
+    private static String setting(Map<String, String> opts, String option, String variable, String fallback) {
+        if (opts.containsKey(option) && !opts.get(option).isEmpty()) {
+            return opts.get(option);
+        }
+        String env = System.getenv(variable);
+        return env == null || env.isBlank() ? fallback : env;
     }
 
     private static Map<String, String> options(String[] args) {

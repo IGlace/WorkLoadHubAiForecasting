@@ -9,60 +9,63 @@ import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.eval.RunDayForecast;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** The module's own tables: one row per run, the window and day tables, the current forecast and the facts, on SQLite or PostgreSQL. */
+/** The module's own tables: one row per run, the window and day tables, the current forecast and the facts. */
 public final class JdbcRunStore {
 
     public static final UUID NIL = new UUID(0L, 0L);
     /** The error a run left behind by a restart carries (design 2026-09-11, section 4.2). */
     public static final String INTERRUPTED = "interrupted by a restart";
-    static final int BATCH = 200;
     static final int ERROR_MAX = 500;
+
+    private static final String RUN_COLUMNS = "id, team_id, requested_by, as_of, status, mae, error, created_at, finished_at";
+    private static final String WINDOW_COLUMNS = "user_id, window_index, window_start, window_end, demand_hrs, low_hrs, high_hrs,"
+            + " capacity_hrs, overload_hrs, working_days, absence_hrs, backlog_excess_hrs, due_excess_hrs";
+    private static final String DAY_COLUMNS = "user_id, day, window_index, demand_hrs, capacity_hrs, overload_hrs, working_day";
+
+    private static final RowMapper<RunSummary> SUMMARY = (rs, i) -> new RunSummary(rs.getObject("id", UUID.class),
+            rs.getObject("team_id", UUID.class), rs.getObject("requested_by", UUID.class), rs.getObject("as_of", LocalDate.class),
+            RunStatus.valueOf(rs.getString("status")), rs.getObject("mae", Double.class), rs.getString("error"),
+            rs.getObject("created_at", LocalDateTime.class), rs.getObject("finished_at", LocalDateTime.class));
+    private static final RowMapper<MemberWindowForecast> WINDOW = (rs, i) -> new MemberWindowForecast(rs.getObject("user_id", UUID.class),
+            rs.getInt("window_index"), rs.getObject("window_start", LocalDate.class), rs.getObject("window_end", LocalDate.class),
+            rs.getDouble("demand_hrs"), rs.getDouble("low_hrs"), rs.getDouble("high_hrs"), rs.getDouble("capacity_hrs"),
+            rs.getDouble("overload_hrs"), rs.getInt("working_days"), rs.getDouble("absence_hrs"), rs.getDouble("backlog_excess_hrs"),
+            rs.getDouble("due_excess_hrs"));
+    private static final RowMapper<MemberDayForecast> DAY = (rs, i) -> new MemberDayForecast(rs.getObject("user_id", UUID.class),
+            rs.getObject("day", LocalDate.class), rs.getInt("window_index"), rs.getDouble("demand_hrs"), rs.getDouble("capacity_hrs"),
+            rs.getDouble("overload_hrs"), rs.getBoolean("working_day"));
 
     private final JdbcClient jdbc;
     private final JdbcTemplate jdbcTemplate;
-    private final Dialect dialect;
     private final TransactionTemplate tx;
 
-    public JdbcRunStore(DataSource dataSource, Dialect dialect) {
+    public JdbcRunStore(DataSource dataSource) {
         this.jdbc = JdbcClient.create(dataSource);
         this.jdbcTemplate = new JdbcTemplate(dataSource);
-        this.dialect = dialect;
         this.tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
-    }
-
-    private String ph(String type) {
-        return dialect.placeholder(type);
-    }
-
-    private static String ts(LocalDateTime t) {
-        return t == null ? null : t.truncatedTo(ChronoUnit.MICROS).toString();
     }
 
     public UUID create(RunRequest request, LocalDate asOf, LocalDateTime createdAt) {
         UUID id = UUID.randomUUID();
-        jdbc.sql("INSERT INTO forecast_runs (id, team_id, requested_by, as_of, status, created_at) VALUES ("
-                + ph("uuid") + ", " + ph("uuid") + ", " + ph("uuid") + ", " + ph("date") + ", ?, " + ph("timestamp") + ")")
-                .param(id.toString()).param(request.teamId().toString())
-                .param((request.requestedBy() == null ? NIL : request.requestedBy()).toString())
-                .param(asOf.toString()).param(RunStatus.QUEUED.name()).param(ts(createdAt))
+        jdbc.sql("INSERT INTO forecast_runs (id, team_id, requested_by, as_of, status, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+                .param(id).param(request.teamId()).param(request.requestedBy() == null ? NIL : request.requestedBy())
+                .param(asOf).param(RunStatus.QUEUED.name()).param(JdbcValues.micros(createdAt))
                 .update();
         return id;
     }
 
     public void markRunning(UUID runId) {
-        jdbc.sql("UPDATE forecast_runs SET status = ? WHERE id = " + ph("uuid")).param(RunStatus.RUNNING.name()).param(runId.toString()).update();
+        jdbc.sql("UPDATE forecast_runs SET status = ? WHERE id = ?").param(RunStatus.RUNNING.name()).param(runId).update();
     }
 
     public void fail(UUID runId, String error, LocalDateTime finishedAt) {
@@ -70,197 +73,92 @@ public final class JdbcRunStore {
         if (line.length() > ERROR_MAX) {
             line = line.substring(0, ERROR_MAX);
         }
-        jdbc.sql("UPDATE forecast_runs SET status = ?, error = ?, finished_at = " + ph("timestamp") + " WHERE id = " + ph("uuid"))
-                .param(RunStatus.FAILED.name()).param(line).param(ts(finishedAt)).param(runId.toString()).update();
+        jdbc.sql("UPDATE forecast_runs SET status = ?, error = ?, finished_at = ? WHERE id = ?")
+                .param(RunStatus.FAILED.name()).param(line).param(JdbcValues.micros(finishedAt)).param(runId).update();
     }
 
     /** After a restart nothing can still be running a QUEUED or RUNNING row (design 2026-09-11, section 4.2): fail them all, return how many. */
     public int failInterrupted(LocalDateTime now) {
-        return jdbc.sql("UPDATE forecast_runs SET status = ?, error = ?, finished_at = " + ph("timestamp") + " WHERE status IN (?, ?)")
-                .param(RunStatus.FAILED.name()).param(INTERRUPTED).param(ts(now))
+        return jdbc.sql("UPDATE forecast_runs SET status = ?, error = ?, finished_at = ? WHERE status IN (?, ?)")
+                .param(RunStatus.FAILED.name()).param(INTERRUPTED).param(JdbcValues.micros(now))
                 .param(RunStatus.QUEUED.name()).param(RunStatus.RUNNING.name()).update();
     }
 
     /** {@code mae} is {@code null}, not NaN, when the run had no scored backtest origin. */
     public void finish(UUID runId, Double mae, String backtestJson, List<MemberWindowForecast> windows, List<MemberDayForecast> days, String factsJson,
             LocalDateTime finishedAt) {
+        LocalDateTime at = JdbcValues.micros(finishedAt);
         tx.executeWithoutResult(status -> {
-            jdbc.sql("UPDATE forecast_runs SET status = ?, mae = ?, backtest_json = ?, finished_at = " + ph("timestamp") + " WHERE id = " + ph("uuid"))
+            jdbc.sql("UPDATE forecast_runs SET status = ?, mae = ?, backtest_json = ?, finished_at = ? WHERE id = ?")
                     .param(RunStatus.DONE.name()).param(mae == null || mae.isNaN() ? null : mae).param(backtestJson)
-                    .param(ts(finishedAt)).param(runId.toString()).update();
-            insertWindows(runId, windows);
-            insertDays(runId, days);
-            String teamId = jdbc.sql("SELECT team_id FROM forecast_runs WHERE id = " + ph("uuid")).param(runId.toString())
-                    .query().listOfRows().get(0).get("team_id").toString();
-            upsertCurrentDays(teamId, runId, days, finishedAt);
-            jdbc.sql("INSERT INTO forecast_facts (run_id, facts_json, created_at) VALUES (" + ph("uuid") + ", ?, " + ph("timestamp") + ")")
-                    .param(runId.toString()).param(factsJson).param(ts(finishedAt)).update();
+                    .param(at).param(runId).update();
+            jdbcTemplate.batchUpdate("INSERT INTO forecast_member_windows (run_id, " + WINDOW_COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    windows.stream().map(r -> new Object[] {runId, r.userId(), r.windowIndex(), r.windowStart(), r.windowEnd(), r.demandHrs(),
+                            r.lowHrs(), r.highHrs(), r.capacityHrs(), r.overloadHrs(), r.workingDays(), r.absenceHrs(), r.backlogExcessHrs(),
+                            r.dueExcessHrs()}).toList());
+            jdbcTemplate.batchUpdate("INSERT INTO forecast_member_days (run_id, " + DAY_COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    days.stream().map(r -> new Object[] {runId, r.userId(), r.day(), r.windowIndex(), r.demandHrs(), r.capacityHrs(),
+                            r.overloadHrs(), r.workingDay()}).toList());
+            UUID teamId = jdbc.sql("SELECT team_id FROM forecast_runs WHERE id = ?").param(runId).query(UUID.class).single();
+            // Every day of the run overwrites the team's current forecast for that member and day (all of them lie after the run day).
+            jdbcTemplate.batchUpdate("INSERT INTO forecast_current_days (team_id, user_id, day, run_id, demand_hrs, capacity_hrs,"
+                    + " overload_hrs, forecast_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (team_id, user_id, day) DO UPDATE SET"
+                    + " run_id = excluded.run_id, demand_hrs = excluded.demand_hrs, capacity_hrs = excluded.capacity_hrs,"
+                    + " overload_hrs = excluded.overload_hrs, forecast_at = excluded.forecast_at",
+                    days.stream().map(r -> new Object[] {teamId, r.userId(), r.day(), runId, r.demandHrs(), r.capacityHrs(), r.overloadHrs(), at})
+                            .toList());
+            jdbc.sql("INSERT INTO forecast_facts (run_id, facts_json, created_at) VALUES (?, ?, ?)")
+                    .param(runId).param(factsJson).param(at).update();
         });
     }
 
-    /** Batches of {@link #BATCH} rows, same typed placeholders and binding order as a single-row insert. */
-    private void insertWindows(UUID runId, List<MemberWindowForecast> rows) {
-        String insert = "INSERT INTO forecast_member_windows (run_id, user_id, window_index, window_start, window_end,"
-                + " demand_hrs, low_hrs, high_hrs, capacity_hrs, overload_hrs, working_days, absence_hrs, backlog_excess_hrs, due_excess_hrs) VALUES ("
-                + ph("uuid") + ", " + ph("uuid") + ", ?, " + ph("date") + ", " + ph("date") + ", ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        for (int start = 0; start < rows.size(); start += BATCH) {
-            List<MemberWindowForecast> chunk = rows.subList(start, Math.min(start + BATCH, rows.size()));
-            List<Object[]> args = new ArrayList<>(chunk.size());
-            for (MemberWindowForecast r : chunk) {
-                args.add(new Object[] {runId.toString(), r.userId().toString(), r.windowIndex(), r.windowStart().toString(), r.windowEnd().toString(),
-                        r.demandHrs(), r.lowHrs(), r.highHrs(), r.capacityHrs(), r.overloadHrs(), r.workingDays(), r.absenceHrs(),
-                        r.backlogExcessHrs(), r.dueExcessHrs()});
-            }
-            jdbcTemplate.batchUpdate(insert, args);
-        }
-    }
-
-    private void insertDays(UUID runId, List<MemberDayForecast> rows) {
-        String insert = "INSERT INTO forecast_member_days (run_id, user_id, day, window_index, demand_hrs, capacity_hrs,"
-                + " overload_hrs, working_day) VALUES (" + ph("uuid") + ", " + ph("uuid") + ", " + ph("date") + ", ?, ?, ?, ?, ?)";
-        for (int start = 0; start < rows.size(); start += BATCH) {
-            List<MemberDayForecast> chunk = rows.subList(start, Math.min(start + BATCH, rows.size()));
-            List<Object[]> args = new ArrayList<>(chunk.size());
-            for (MemberDayForecast r : chunk) {
-                args.add(new Object[] {runId.toString(), r.userId().toString(), r.day().toString(), r.windowIndex(), r.demandHrs(), r.capacityHrs(),
-                        r.overloadHrs(), dialect.bool(r.workingDay())});
-            }
-            jdbcTemplate.batchUpdate(insert, args);
-        }
-    }
-
-    /** Every day of the run overwrites the team's current forecast for that member and day (all of them lie after the run day). */
-    private void upsertCurrentDays(String teamId, UUID runId, List<MemberDayForecast> rows, LocalDateTime forecastAt) {
-        String upsert = "INSERT INTO forecast_current_days (team_id, user_id, day, run_id, demand_hrs, capacity_hrs,"
-                + " overload_hrs, forecast_at) VALUES (" + ph("uuid") + ", " + ph("uuid") + ", " + ph("date") + ", " + ph("uuid") + ", ?, ?, ?, "
-                + ph("timestamp") + ") ON CONFLICT (team_id, user_id, day) DO UPDATE SET run_id = excluded.run_id,"
-                + " demand_hrs = excluded.demand_hrs, capacity_hrs = excluded.capacity_hrs,"
-                + " overload_hrs = excluded.overload_hrs, forecast_at = excluded.forecast_at";
-        for (int start = 0; start < rows.size(); start += BATCH) {
-            List<MemberDayForecast> chunk = rows.subList(start, Math.min(start + BATCH, rows.size()));
-            List<Object[]> args = new ArrayList<>(chunk.size());
-            for (MemberDayForecast r : chunk) {
-                args.add(new Object[] {teamId, r.userId().toString(), r.day().toString(), runId.toString(),
-                        r.demandHrs(), r.capacityHrs(), r.overloadHrs(), ts(forecastAt)});
-            }
-            jdbcTemplate.batchUpdate(upsert, args);
-        }
-    }
-
     public Optional<RunSummary> find(UUID runId) {
-        return jdbc.sql("SELECT id, team_id, requested_by, as_of, status, mae, error, created_at, finished_at"
-                + " FROM forecast_runs WHERE id = " + ph("uuid")).param(runId.toString()).query().listOfRows().stream().findFirst().map(JdbcRunStore::summary);
+        return jdbc.sql("SELECT " + RUN_COLUMNS + " FROM forecast_runs WHERE id = ?").param(runId).query(SUMMARY).optional();
     }
 
     public List<RunSummary> list(UUID teamId, int limit) {
-        return jdbc.sql("SELECT id, team_id, requested_by, as_of, status, mae, error, created_at, finished_at"
-                + " FROM forecast_runs WHERE team_id = " + ph("uuid") + " ORDER BY created_at DESC, id DESC LIMIT " + Math.max(1, limit))
-                .param(teamId.toString()).query().listOfRows().stream().map(JdbcRunStore::summary).toList();
+        return jdbc.sql("SELECT " + RUN_COLUMNS + " FROM forecast_runs WHERE team_id = ? ORDER BY created_at DESC, id DESC LIMIT " + Math.max(1, limit))
+                .param(teamId).query(SUMMARY).list();
     }
 
+    /** PostgreSQL orders uuid by its bytes, which is the order of its canonical text and of {@code Ids.UUID_ORDER}: no re-sort here. */
     public List<MemberWindowForecast> memberWindows(UUID runId) {
-        List<MemberWindowForecast> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql("SELECT user_id, window_index, window_start, window_end, demand_hrs, low_hrs,"
-                + " high_hrs, capacity_hrs, overload_hrs, working_days, absence_hrs, backlog_excess_hrs, due_excess_hrs"
-                + " FROM forecast_member_windows WHERE run_id = " + ph("uuid")
-                + " ORDER BY user_id, window_index").param(runId.toString()).query().listOfRows()) {
-            out.add(new MemberWindowForecast(UUID.fromString(str(r, "user_id")), (int) num(r, "window_index"), date(r, "window_start"), date(r, "window_end"),
-                    num(r, "demand_hrs"), num(r, "low_hrs"), num(r, "high_hrs"),
-                    num(r, "capacity_hrs"), num(r, "overload_hrs"), (int) num(r, "working_days"), num(r, "absence_hrs"),
-                    num(r, "backlog_excess_hrs"), num(r, "due_excess_hrs")));
-        }
-        out.sort((a, b) -> a.userId().toString().equals(b.userId().toString()) ? Integer.compare(a.windowIndex(), b.windowIndex())
-                : a.userId().toString().compareTo(b.userId().toString()));
-        return out;
+        return jdbc.sql("SELECT " + WINDOW_COLUMNS + " FROM forecast_member_windows WHERE run_id = ? ORDER BY user_id, window_index")
+                .param(runId).query(WINDOW).list();
     }
 
     public List<MemberDayForecast> memberDays(UUID runId) {
-        List<MemberDayForecast> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql("SELECT user_id, day, window_index, demand_hrs, capacity_hrs, overload_hrs,"
-                + " working_day FROM forecast_member_days WHERE run_id = " + ph("uuid") + " ORDER BY user_id, day").param(runId.toString()).query().listOfRows()) {
-            out.add(new MemberDayForecast(UUID.fromString(str(r, "user_id")), date(r, "day"), (int) num(r, "window_index"),
-                    num(r, "demand_hrs"), num(r, "capacity_hrs"), num(r, "overload_hrs"),
-                    dialect.asBoolean(r.get("working_day"))));
-        }
-        out.sort((a, b) -> a.userId().toString().equals(b.userId().toString()) ? a.day().compareTo(b.day())
-                : a.userId().toString().compareTo(b.userId().toString()));
-        return out;
+        return jdbc.sql("SELECT " + DAY_COLUMNS + " FROM forecast_member_days WHERE run_id = ? ORDER BY user_id, day")
+                .param(runId).query(DAY).list();
     }
 
     /** The team's current forecast between two days inclusive, by member then day. */
     public List<CurrentDayForecast> currentDays(UUID teamId, LocalDate from, LocalDate to) {
-        List<CurrentDayForecast> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql("SELECT team_id, user_id, day, run_id, demand_hrs, capacity_hrs, overload_hrs,"
-                + " forecast_at FROM forecast_current_days WHERE team_id = " + ph("uuid") + " AND day >= " + ph("date") + " AND day <= " + ph("date")
-                + " ORDER BY user_id, day").param(teamId.toString()).param(from.toString()).param(to.toString()).query().listOfRows()) {
-            out.add(new CurrentDayForecast(UUID.fromString(str(r, "team_id")), UUID.fromString(str(r, "user_id")), date(r, "day"),
-                    UUID.fromString(str(r, "run_id")), num(r, "demand_hrs"),
-                    num(r, "capacity_hrs"), num(r, "overload_hrs"), dateTime(r, "forecast_at")));
-        }
-        out.sort((a, b) -> a.userId().toString().equals(b.userId().toString()) ? a.day().compareTo(b.day())
-                : a.userId().toString().compareTo(b.userId().toString()));
-        return out;
+        return jdbc.sql("SELECT team_id, user_id, day, run_id, demand_hrs, capacity_hrs, overload_hrs, forecast_at FROM forecast_current_days"
+                + " WHERE team_id = ? AND day >= ? AND day <= ? ORDER BY user_id, day")
+                .param(teamId).param(from).param(to)
+                .query((rs, i) -> new CurrentDayForecast(rs.getObject("team_id", UUID.class), rs.getObject("user_id", UUID.class),
+                        rs.getObject("day", LocalDate.class), rs.getObject("run_id", UUID.class), rs.getDouble("demand_hrs"),
+                        rs.getDouble("capacity_hrs"), rs.getDouble("overload_hrs"), rs.getObject("forecast_at", LocalDateTime.class)))
+                .list();
     }
 
     /** Every day row of the team's DONE runs between two days inclusive, with the run day it was made on; by run, member, day. */
     public List<RunDayForecast> runDays(UUID teamId, LocalDate from, LocalDate to) {
-        List<RunDayForecast> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql("SELECT d.run_id, r.as_of, d.user_id, d.day, d.window_index, d.demand_hrs,"
-                + " d.capacity_hrs, d.overload_hrs, d.working_day FROM forecast_member_days d JOIN forecast_runs r ON r.id = d.run_id"
-                + " WHERE r.team_id = " + ph("uuid") + " AND r.status = ? AND d.day >= " + ph("date") + " AND d.day <= " + ph("date")
-                + " ORDER BY d.run_id, d.user_id, d.day")
-                .param(teamId.toString()).param(RunStatus.DONE.name()).param(from.toString()).param(to.toString()).query().listOfRows()) {
-            out.add(new RunDayForecast(UUID.fromString(str(r, "run_id")), date(r, "as_of"),
-                    new MemberDayForecast(UUID.fromString(str(r, "user_id")), date(r, "day"), (int) num(r, "window_index"),
-                            num(r, "demand_hrs"), num(r, "capacity_hrs"), num(r, "overload_hrs"),
-                            dialect.asBoolean(r.get("working_day")))));
-        }
-        return out;
+        return jdbc.sql("SELECT d.run_id, r.as_of, d.user_id, d.day, d.window_index, d.demand_hrs, d.capacity_hrs, d.overload_hrs, d.working_day"
+                + " FROM forecast_member_days d JOIN forecast_runs r ON r.id = d.run_id"
+                + " WHERE r.team_id = ? AND r.status = ? AND d.day >= ? AND d.day <= ? ORDER BY d.run_id, d.user_id, d.day")
+                .param(teamId).param(RunStatus.DONE.name()).param(from).param(to)
+                .query((rs, i) -> new RunDayForecast(rs.getObject("run_id", UUID.class), rs.getObject("as_of", LocalDate.class), DAY.mapRow(rs, i)))
+                .list();
     }
 
     public Optional<String> facts(UUID runId) {
-        return jdbc.sql("SELECT facts_json FROM forecast_facts WHERE run_id = " + ph("uuid")).param(runId.toString())
-                .query().listOfRows().stream().findFirst().map(r -> str(r, "facts_json"));
+        return jdbc.sql("SELECT facts_json FROM forecast_facts WHERE run_id = ?").param(runId).query(String.class).optional();
     }
 
     public Optional<String> backtestJson(UUID runId) {
-        return jdbc.sql("SELECT backtest_json FROM forecast_runs WHERE id = " + ph("uuid")).param(runId.toString())
-                .query().listOfRows().stream().findFirst().map(r -> str(r, "backtest_json"));
-    }
-
-    private static RunSummary summary(Map<String, Object> r) {
-        Object mae = r.get("mae");
-        return new RunSummary(UUID.fromString(str(r, "id")), UUID.fromString(str(r, "team_id")), UUID.fromString(str(r, "requested_by")),
-                date(r, "as_of"), RunStatus.valueOf(str(r, "status")),
-                mae == null ? null : ((Number) mae).doubleValue(), str(r, "error"), dateTime(r, "created_at"), dateTime(r, "finished_at"));
-    }
-
-    private static String str(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        return v == null ? null : v.toString();
-    }
-
-    private static double num(Map<String, Object> r, String col) {
-        return ((Number) r.get(col)).doubleValue();
-    }
-
-    private static LocalDate date(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        if (v instanceof java.sql.Date d) {
-            return d.toLocalDate();
-        }
-        String s = v.toString();
-        return LocalDate.parse(s.length() > 10 ? s.substring(0, 10) : s);
-    }
-
-    private static LocalDateTime dateTime(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        if (v == null) {
-            return null;
-        }
-        if (v instanceof java.sql.Timestamp t) {
-            return t.toLocalDateTime();
-        }
-        return LocalDateTime.parse(v.toString().replace(' ', 'T'));
+        return jdbc.sql("SELECT backtest_json FROM forecast_runs WHERE id = ?").param(runId).query(String.class).optional()
+                .filter(s -> s != null);
     }
 }

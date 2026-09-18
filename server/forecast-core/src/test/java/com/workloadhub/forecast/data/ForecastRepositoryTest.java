@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.testing.SeededData;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -102,7 +101,7 @@ class ForecastRepositoryTest {
         } catch (SQLException e) {
             throw new IllegalStateException(e);
         }
-        ForecastData without = new ForecastRepository(JdbcClient.create(ds), Dialect.of(ds)).loadAll();
+        ForecastData without = new ForecastRepository(JdbcClient.create(ds)).loadAll();
         assertEquals(data.leaves().size(), without.leaves().size());
     }
 
@@ -120,7 +119,7 @@ class ForecastRepositoryTest {
         } catch (SQLException e) {
             throw new IllegalStateException(e);
         }
-        ForecastData data = new ForecastRepository(JdbcClient.create(ds), Dialect.of(ds)).loadAll();
+        ForecastData data = new ForecastRepository(JdbcClient.create(ds)).loadAll();
         assertEquals(1, data.leaves().size());
         assertEquals(1, data.pendingLeaves().size());
         assertEquals(java.time.LocalTime.of(13, 0), data.leaves().get(0).beginTime());

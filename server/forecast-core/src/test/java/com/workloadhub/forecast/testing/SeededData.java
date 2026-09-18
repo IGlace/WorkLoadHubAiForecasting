@@ -7,7 +7,6 @@ import com.workloadhub.forecast.data.ForecastRepository;
 import com.workloadhub.forecast.seed.SeedConfig;
 import com.workloadhub.forecast.seed.SeedGenerator;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
-import com.workloadhub.forecast.store.Dialect;
 import java.time.LocalDate;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -41,7 +40,7 @@ public final class SeededData {
     public static synchronized ForecastData data() {
         if (data == null) {
             DataSource ds = dataSource();
-            data = new ForecastRepository(JdbcClient.create(ds), Dialect.of(ds)).loadAll();
+            data = new ForecastRepository(JdbcClient.create(ds)).loadAll();
         }
         return data;
     }

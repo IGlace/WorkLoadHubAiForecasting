@@ -12,7 +12,6 @@ import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.service.DefaultForecastService;
 import com.workloadhub.forecast.service.RunProgressTracker;
 import com.workloadhub.forecast.store.AesGcmCipher;
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.ForecastMigrations;
 import com.workloadhub.forecast.store.JdbcGitHubTokenStore;
 import com.workloadhub.forecast.store.JdbcNarrativeStore;
@@ -41,12 +40,6 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 @Import(ForecastWebConfiguration.class)
 public class ForecastAutoConfiguration {
 
-    @Bean
-    @ConditionalOnMissingBean
-    Dialect forecastDialect(DataSource dataSource) {
-        return Dialect.of(dataSource);
-    }
-
     /** Runs the module's migrations before any other bean touches the tables. */
     @Bean
     ForecastMigrationsRunner forecastMigrationsRunner(DataSource dataSource, ForecastProperties properties) {
@@ -64,11 +57,11 @@ public class ForecastAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    GitHubTokenStore gitHubTokenStore(JdbcClient jdbc, Dialect dialect, ForecastProperties properties,
+    GitHubTokenStore gitHubTokenStore(JdbcClient jdbc, ForecastProperties properties,
             ForecastMigrationsRunner migrated) {
         String key = properties.getTokenKey();
         AesGcmCipher cipher = key == null || key.isBlank() ? null : AesGcmCipher.fromBase64Key(key);
-        return new JdbcGitHubTokenStore(jdbc, dialect, cipher);
+        return new JdbcGitHubTokenStore(jdbc, cipher);
     }
 
     @Bean
@@ -90,8 +83,8 @@ public class ForecastAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    JdbcRunStore jdbcRunStore(DataSource dataSource, Dialect dialect, ForecastMigrationsRunner migrated) {
-        return new JdbcRunStore(dataSource, dialect);
+    JdbcRunStore jdbcRunStore(DataSource dataSource, ForecastMigrationsRunner migrated) {
+        return new JdbcRunStore(dataSource);
     }
 
     @Bean
@@ -108,8 +101,8 @@ public class ForecastAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    JdbcNarrativeStore jdbcNarrativeStore(DataSource dataSource, Dialect dialect, ForecastMigrationsRunner migrated) {
-        return new JdbcNarrativeStore(dataSource, dialect);
+    JdbcNarrativeStore jdbcNarrativeStore(DataSource dataSource, ForecastMigrationsRunner migrated) {
+        return new JdbcNarrativeStore(dataSource);
     }
 
     @Bean
@@ -127,9 +120,9 @@ public class ForecastAutoConfiguration {
 
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
-    ForecastService forecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
+    ForecastService forecastService(DataSource dataSource, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
             ForecastProperties properties, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway, Clock clock) {
-        return new DefaultForecastService(dataSource, dialect, runner, store, progress, properties.getRunThreads(),
+        return new DefaultForecastService(dataSource, runner, store, progress, properties.getRunThreads(),
                 tokens, narratives, narrator, gateway, clock);
     }
 

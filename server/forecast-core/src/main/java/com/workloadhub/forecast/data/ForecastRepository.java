@@ -10,7 +10,6 @@ import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
 import com.workloadhub.forecast.data.rows.UserRef;
-import com.workloadhub.forecast.store.Dialect;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -23,162 +22,99 @@ import java.util.TreeMap;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/** Reads the WorkloadHub tables into typed rows. Read only; portable SQL only. */
+/** Reads the WorkloadHub tables into typed rows. Read only. */
 public final class ForecastRepository {
 
     private static final Set<String> COUNTED_ROLES = Set.of("MEMBER", "TEAM_LEADER");
 
     private final JdbcClient jdbc;
-    private final Dialect dialect;
 
-    public ForecastRepository(JdbcClient jdbc, Dialect dialect) {
+    public ForecastRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
-        this.dialect = dialect;
     }
 
     public ForecastData loadAll() {
-        List<Map<String, Object>> statusRows = rows("SELECT id, name, category FROM task_statuses");
         Map<String, String> categoryByName = new TreeMap<>();
-        Map<String, String> categoryById = new HashMap<>();
-        for (Map<String, Object> r : statusRows) {
-            categoryByName.put(str(r, "name"), str(r, "category"));
-            categoryById.put(str(r, "id"), str(r, "category"));
-        }
-        Map<String, String> typeNameById = new HashMap<>();
-        for (Map<String, Object> r : rows("SELECT id, name FROM task_types")) {
-            typeNameById.put(str(r, "id"), str(r, "name"));
-        }
-        List<TeamRow> teams = new ArrayList<>();
+        Map<UUID, String> categoryById = new HashMap<>();
+        jdbc.sql("SELECT id, name, category FROM task_statuses").query((rs, i) -> {
+            categoryByName.put(rs.getString("name"), rs.getString("category"));
+            categoryById.put(rs.getObject("id", UUID.class), rs.getString("category"));
+            return null;
+        }).list();
+        Map<UUID, String> typeNameById = new HashMap<>();
+        jdbc.sql("SELECT id, name FROM task_types").query((rs, i) -> typeNameById.put(rs.getObject("id", UUID.class), rs.getString("name"))).list();
+        List<TeamRow> teams = jdbc.sql("SELECT id, name, manager_id, parent_team_id FROM teams")
+                .query((rs, i) -> new TeamRow(rs.getObject("id", UUID.class), rs.getString("name"), rs.getObject("manager_id", UUID.class),
+                        rs.getObject("parent_team_id", UUID.class)))
+                .list();
         Map<UUID, TeamRow> teamById = new HashMap<>();
-        for (Map<String, Object> r : rows("SELECT id, name, manager_id, parent_team_id FROM teams")) {
-            TeamRow t = new TeamRow(uuid(r, "id"), str(r, "name"), uuid(r, "manager_id"), uuid(r, "parent_team_id"));
-            teams.add(t);
-            teamById.put(t.id(), t);
-        }
+        teams.forEach(t -> teamById.put(t.id(), t));
         Map<UUID, List<UUID>> teamsOfUser = new HashMap<>();
         Map<UUID, LocalDate> joinedOfUser = new HashMap<>();
-        for (Map<String, Object> r : rows("SELECT team_id, user_id, joined_at FROM team_members")) {
-            UUID user = uuid(r, "user_id");
-            teamsOfUser.computeIfAbsent(user, k -> new ArrayList<>()).add(uuid(r, "team_id"));
-            LocalDate joined = dateTime(r, "joined_at").toLocalDate();
-            joinedOfUser.merge(user, joined, (a, b) -> a.isBefore(b) ? a : b);
-        }
+        jdbc.sql("SELECT team_id, user_id, joined_at FROM team_members").query((rs, i) -> {
+            UUID user = rs.getObject("user_id", UUID.class);
+            teamsOfUser.computeIfAbsent(user, k -> new ArrayList<>()).add(rs.getObject("team_id", UUID.class));
+            joinedOfUser.merge(user, rs.getObject("joined_at", LocalDateTime.class).toLocalDate(), (a, b) -> a.isBefore(b) ? a : b);
+            return null;
+        }).list();
         List<UserRef> users = new ArrayList<>();
         List<MemberRow> members = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT id, full_name, email, username, role, job_title, active, deactivated_at FROM users")) {
-            UUID id = uuid(r, "id");
-            users.add(new UserRef(id, str(r, "full_name"), str(r, "email"), str(r, "username")));
-            boolean active = dialect.asBoolean(r.get("active"));
+        jdbc.sql("SELECT id, full_name, email, username, role, job_title, active, deactivated_at FROM users").query((rs, i) -> {
+            UUID id = rs.getObject("id", UUID.class);
+            users.add(new UserRef(id, rs.getString("full_name"), rs.getString("email"), rs.getString("username")));
             List<UUID> teamIds = teamsOfUser.getOrDefault(id, List.of());
-            if (!active || !COUNTED_ROLES.contains(str(r, "role")) || teamIds.isEmpty()) {
-                continue;
+            if (!rs.getBoolean("active") || !COUNTED_ROLES.contains(rs.getString("role")) || teamIds.isEmpty()) {
+                return null;
             }
             List<UUID> sorted = teamIds.stream().sorted(Ids.UUID_ORDER).toList();
             UUID primary = sorted.stream()
                     .filter(t -> teamById.containsKey(t) && teamById.get(t).parentId() != null)
                     .findFirst().orElse(sorted.get(0));
-            LocalDateTime left = dateTime(r, "deactivated_at");
-            members.add(new MemberRow(id, str(r, "full_name"), str(r, "email"), str(r, "role"), str(r, "job_title"),
+            LocalDateTime left = rs.getObject("deactivated_at", LocalDateTime.class);
+            members.add(new MemberRow(id, rs.getString("full_name"), rs.getString("email"), rs.getString("role"), rs.getString("job_title"),
                     sorted, primary, joinedOfUser.get(id), left == null ? null : left.toLocalDate()));
-        }
-        List<ProjectRow> projects = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT id, key, name, status, team_id FROM projects WHERE archived = " + dialect.boolLiteral(false))) {
-            projects.add(new ProjectRow(uuid(r, "id"), str(r, "key"), str(r, "name"), str(r, "status"), uuid(r, "team_id")));
-        }
-        List<TaskRow> tasks = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT id, key, title, project_id, assignee_id, reporter_id, parent_task_id, task_type_id,"
+            return null;
+        }).list();
+        List<ProjectRow> projects = jdbc.sql("SELECT id, key, name, status, team_id FROM projects WHERE archived = FALSE")
+                .query((rs, i) -> new ProjectRow(rs.getObject("id", UUID.class), rs.getString("key"), rs.getString("name"), rs.getString("status"),
+                        rs.getObject("team_id", UUID.class)))
+                .list();
+        List<TaskRow> tasks = jdbc.sql("SELECT id, key, title, project_id, assignee_id, reporter_id, parent_task_id, task_type_id,"
                 + " task_status_id, priority, original_estimate_hrs, remaining_estimate_hrs, created_date, started_date, finished_date,"
-                + " due_date, planned_week, reopened_from_done, archived FROM tasks")) {
-            if (dialect.asBoolean(r.get("archived"))) {
-                continue;
-            }
-            LocalDate pw = date(r, "planned_week");
-            tasks.add(new TaskRow(uuid(r, "id"), str(r, "key"), str(r, "title"), uuid(r, "project_id"), uuid(r, "assignee_id"),
-                    uuid(r, "reporter_id"), uuid(r, "parent_task_id"), typeNameById.get(str(r, "task_type_id")),
-                    categoryById.get(str(r, "task_status_id")), str(r, "priority"), dbl(r, "original_estimate_hrs"),
-                    dbl(r, "remaining_estimate_hrs"), dateTime(r, "created_date"), dateTime(r, "started_date"),
-                    dateTime(r, "finished_date"), date(r, "due_date"), pw == null ? null : Weeks.mondayOf(pw),
-                    dialect.asBoolean(r.get("reopened_from_done")), false));
-        }
-        List<TransitionRow> transitions = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT task_id, user_id, field_name, old_value, new_value, changed_at FROM task_history")) {
-            transitions.add(new TransitionRow(uuid(r, "task_id"), uuid(r, "user_id"), str(r, "field_name"), str(r, "old_value"),
-                    str(r, "new_value"), dateTime(r, "changed_at")));
-        }
-        List<TimeLogRow> logs = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT task_id, user_id, log_date, hours FROM time_logs")) {
-            logs.add(new TimeLogRow(uuid(r, "task_id"), uuid(r, "user_id"), date(r, "log_date"), dbl(r, "hours")));
-        }
+                + " due_date, planned_week, reopened_from_done FROM tasks WHERE archived = FALSE")
+                .query((rs, i) -> {
+                    LocalDate pw = rs.getObject("planned_week", LocalDate.class);
+                    return new TaskRow(rs.getObject("id", UUID.class), rs.getString("key"), rs.getString("title"), rs.getObject("project_id", UUID.class),
+                            rs.getObject("assignee_id", UUID.class), rs.getObject("reporter_id", UUID.class), rs.getObject("parent_task_id", UUID.class),
+                            typeNameById.get(rs.getObject("task_type_id", UUID.class)), categoryById.get(rs.getObject("task_status_id", UUID.class)),
+                            rs.getString("priority"), rs.getObject("original_estimate_hrs", Double.class), rs.getObject("remaining_estimate_hrs", Double.class),
+                            rs.getObject("created_date", LocalDateTime.class), rs.getObject("started_date", LocalDateTime.class),
+                            rs.getObject("finished_date", LocalDateTime.class), rs.getObject("due_date", LocalDate.class),
+                            pw == null ? null : Weeks.mondayOf(pw), rs.getBoolean("reopened_from_done"), false);
+                })
+                .list();
+        List<TransitionRow> transitions = jdbc.sql("SELECT task_id, user_id, field_name, old_value, new_value, changed_at FROM task_history")
+                .query((rs, i) -> new TransitionRow(rs.getObject("task_id", UUID.class), rs.getObject("user_id", UUID.class), rs.getString("field_name"),
+                        rs.getString("old_value"), rs.getString("new_value"), rs.getObject("changed_at", LocalDateTime.class)))
+                .list();
+        List<TimeLogRow> logs = jdbc.sql("SELECT task_id, user_id, log_date, hours FROM time_logs")
+                .query((rs, i) -> new TimeLogRow(rs.getObject("task_id", UUID.class), rs.getObject("user_id", UUID.class),
+                        rs.getObject("log_date", LocalDate.class), rs.getDouble("hours")))
+                .list();
         List<LeaveRow> leaves = new ArrayList<>();
         List<LeaveRow> pendingLeaves = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT employee_id, start_date, end_date, begin_time, end_time, absence_hours, status, leave_type"
-                + " FROM personal_leaves WHERE status IN ('APPROVED', 'PENDING')")) {
-            LeaveRow row = new LeaveRow(uuid(r, "employee_id"), date(r, "start_date"), date(r, "end_date"), time(r, "begin_time"),
-                    time(r, "end_time"), dbl(r, "absence_hours"), str(r, "status"), str(r, "leave_type"));
-            ("APPROVED".equals(row.status()) ? leaves : pendingLeaves).add(row);
-        }
-        List<HolidayRow> holidays = new ArrayList<>();
-        for (Map<String, Object> r : rows("SELECT start_date, end_date, status, active, title FROM holidays")) {
-            holidays.add(new HolidayRow(date(r, "start_date"), date(r, "end_date"), "CONFIRMED".equals(str(r, "status")),
-                    dialect.asBoolean(r.get("active")), str(r, "title")));
-        }
+        jdbc.sql("SELECT employee_id, start_date, end_date, begin_time, end_time, absence_hours, status, leave_type"
+                + " FROM personal_leaves WHERE status IN ('APPROVED', 'PENDING')").query((rs, i) -> {
+                    LeaveRow row = new LeaveRow(rs.getObject("employee_id", UUID.class), rs.getObject("start_date", LocalDate.class),
+                            rs.getObject("end_date", LocalDate.class), rs.getObject("begin_time", LocalTime.class), rs.getObject("end_time", LocalTime.class),
+                            rs.getObject("absence_hours", Double.class), rs.getString("status"), rs.getString("leave_type"));
+                    ("APPROVED".equals(row.status()) ? leaves : pendingLeaves).add(row);
+                    return null;
+                }).list();
+        List<HolidayRow> holidays = jdbc.sql("SELECT start_date, end_date, status, active, title FROM holidays")
+                .query((rs, i) -> new HolidayRow(rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class),
+                        "CONFIRMED".equals(rs.getString("status")), rs.getBoolean("active"), rs.getString("title")))
+                .list();
         return new ForecastData(members, teams, projects, tasks, transitions, logs, leaves, pendingLeaves, holidays, users, categoryByName);
-    }
-
-    private List<Map<String, Object>> rows(String sql) {
-        return jdbc.sql(sql).query().listOfRows();
-    }
-
-    static String str(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        return v == null ? null : v.toString();
-    }
-
-    static UUID uuid(Map<String, Object> r, String col) {
-        String s = str(r, col);
-        return s == null || s.isBlank() ? null : UUID.fromString(s);
-    }
-
-    static Double dbl(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        return v == null ? null : ((Number) v).doubleValue();
-    }
-
-    static LocalDate date(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        if (v == null) {
-            return null;
-        }
-        if (v instanceof java.sql.Date d) {
-            return d.toLocalDate();
-        }
-        String s = v.toString();
-        return LocalDate.parse(s.length() > 10 ? s.substring(0, 10) : s);
-    }
-
-    static LocalTime time(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        if (v == null) {
-            return null;
-        }
-        if (v instanceof java.sql.Time t) {
-            return t.toLocalTime();
-        }
-        if (v instanceof LocalTime t) {
-            return t;
-        }
-        return LocalTime.parse(v.toString().length() > 8 ? v.toString().substring(0, 8) : v.toString());
-    }
-
-    static LocalDateTime dateTime(Map<String, Object> r, String col) {
-        Object v = r.get(col);
-        if (v == null) {
-            return null;
-        }
-        if (v instanceof java.sql.Timestamp t) {
-            return t.toLocalDateTime();
-        }
-        String s = v.toString().replace(' ', 'T');
-        return s.length() == 10 ? LocalDate.parse(s).atStartOfDay() : LocalDateTime.parse(s);
     }
 }

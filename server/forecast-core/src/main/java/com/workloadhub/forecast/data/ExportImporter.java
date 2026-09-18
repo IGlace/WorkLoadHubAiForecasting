@@ -1,6 +1,5 @@
 package com.workloadhub.forecast.data;
 
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.WorkloadHubSchema;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -16,15 +15,13 @@ import java.util.Locale;
 import java.util.Map;
 import javax.sql.DataSource;
 
-/** Inserts an export's rows table by table, parents first, through plain JDBC on either engine. */
+/** Inserts an export's rows table by table, parents first, through plain JDBC. */
 public final class ExportImporter {
 
     private final DataSource dataSource;
-    private final Dialect dialect;
 
     public ExportImporter(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.dialect = Dialect.of(dataSource);
     }
 
     /** Column name to database type name, in table order, from the driver's metadata. */
@@ -34,7 +31,7 @@ public final class ExportImporter {
         try (ResultSet rs = md.getColumns(null, null, table, "%")) {
             while (rs.next()) {
                 String schema = rs.getString("TABLE_SCHEM");
-                if (schema != null && !schema.equals("task_service") && !schema.equals("main")) {
+                if (schema != null && !schema.equals("task_service")) {
                     continue;
                 }
                 out.put(rs.getString("COLUMN_NAME").toLowerCase(Locale.ROOT), rs.getString("TYPE_NAME"));
@@ -44,6 +41,15 @@ public final class ExportImporter {
             throw new IllegalStateException("Table not found: " + table);
         }
         return out;
+    }
+
+    /** A string bound into a uuid, date, time or timestamp column needs the cast; PostgreSQL will not coerce it. */
+    private static String placeholder(String columnTypeName) {
+        String t = columnTypeName.toLowerCase(Locale.ROOT);
+        if (t.equals("uuid") || t.startsWith("timestamp") || t.equals("date") || t.startsWith("time")) {
+            return "CAST(? AS " + (t.startsWith("timestamp") ? "timestamp" : t.startsWith("time") ? "time" : t) + ")";
+        }
+        return "?";
     }
 
     /** Inserts every table of the envelope that exists in the schema; with replace, deletes the envelope's own tables, children first. */
@@ -106,7 +112,7 @@ public final class ExportImporter {
         StringBuilder sql = new StringBuilder("INSERT INTO ").append(table).append(" (")
                 .append(String.join(", ", cols)).append(") VALUES (");
         for (int i = 0; i < cols.size(); i++) {
-            sql.append(i == 0 ? "" : ", ").append(dialect.placeholder(schemaColumns.get(cols.get(i))));
+            sql.append(i == 0 ? "" : ", ").append(placeholder(schemaColumns.get(cols.get(i))));
         }
         sql.append(")");
         int n = 0;
@@ -130,9 +136,9 @@ public final class ExportImporter {
         if (value == null) {
             ps.setNull(index, Types.NULL);
         } else if (value instanceof Boolean b) {
-            ps.setObject(index, dialect.bool(b));
+            ps.setBoolean(index, b);
         } else if (WorkloadHubSchema.isBoolean(table, column) && value instanceof Number num) {
-            ps.setObject(index, dialect.bool(num.intValue() != 0));
+            ps.setBoolean(index, num.intValue() != 0);
         } else if (value instanceof Long l) {
             ps.setLong(index, l);
         } else if (value instanceof Double d) {

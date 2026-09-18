@@ -34,7 +34,6 @@ import com.workloadhub.forecast.model.ModelUnavailable;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
 import com.workloadhub.forecast.run.TeamOutcome;
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.JdbcNarrativeStore;
 import com.workloadhub.forecast.store.JdbcRunStore;
 import java.time.Clock;
@@ -65,7 +64,6 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     static final int MAX_LIST = 200;
 
     private final DataSource dataSource;
-    private final Dialect dialect;
     private final ForecastRunner runner;
     private final JdbcRunStore store;
     private final RunProgressTracker progress;
@@ -79,11 +77,10 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     private final Narrator narrator;
     private final CopilotGateway gateway;
 
-    public DefaultForecastService(DataSource dataSource, Dialect dialect, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
+    public DefaultForecastService(DataSource dataSource, ForecastRunner runner, JdbcRunStore store, RunProgressTracker progress,
             int threads, GitHubTokenStore tokens, JdbcNarrativeStore narratives, Narrator narrator, CopilotGateway gateway,
             Clock clock) {
         this.dataSource = dataSource;
-        this.dialect = dialect;
         this.runner = runner;
         this.store = store;
         this.progress = progress;
@@ -139,8 +136,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     }
 
     private void requireTeam(UUID teamId) {
-        boolean exists = !JdbcClient.create(dataSource).sql("SELECT id FROM teams WHERE id = " + dialect.placeholder("uuid"))
-                .param(teamId.toString()).query().listOfRows().isEmpty();
+        boolean exists = !JdbcClient.create(dataSource).sql("SELECT id FROM teams WHERE id = ?").param(teamId).query().listOfRows().isEmpty();
         if (!exists) {
             throw ForecastException.of("TEAM_NOT_FOUND", "team " + teamId + " does not exist");
         }
@@ -151,7 +147,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         try {
             store.markRunning(id);
             progress.update(id, "LOADING", 2, "reading the WorkloadHub tables");
-            ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
+            ForecastData data = new ForecastRepository(JdbcClient.create(dataSource)).loadAll();
             Prepared prepared = runner.prepare(data, asOf, (phase, percent, message) -> progress.update(id, phase, percent, message));
             TeamOutcome outcome = runner.forTeam(prepared, request.teamId());
             progress.update(id, "FACTS", 85, "building the facts");
@@ -247,7 +243,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         if (from.isAfter(last)) {
             return Accuracy.evaluate(teamId, from, last, today, List.of(), List.of(), new TreeMap<>());
         }
-        ForecastData data = new ForecastRepository(JdbcClient.create(dataSource), dialect).loadAll();
+        ForecastData data = new ForecastRepository(JdbcClient.create(dataSource)).loadAll();
         return Accuracy.evaluate(teamId, from, last, today, store.currentDays(teamId, from, last), store.runDays(teamId, from, last),
                 Truth.realisedHoursByDay(data));
     }

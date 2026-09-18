@@ -1,6 +1,5 @@
 package com.workloadhub.forecast.data;
 
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.WorkloadHubSchema;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -20,11 +19,9 @@ import javax.sql.DataSource;
 public final class ExportExporter {
 
     private final DataSource dataSource;
-    private final Dialect dialect;
 
     public ExportExporter(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.dialect = Dialect.of(dataSource);
     }
 
     public ExportEnvelope exportAll() {
@@ -36,7 +33,7 @@ public final class ExportExporter {
         } catch (SQLException e) {
             throw new IllegalStateException("Export failed: " + e.getMessage(), e);
         }
-        String db = dialect == Dialect.SQLITE ? "sqlite" : "postgresql";
+        String db = "postgresql";
         return new ExportEnvelope(db, "task_service", LocalDateTime.now().withNano(0).toString(),
                 List.of(), data);
     }
@@ -61,9 +58,6 @@ public final class ExportExporter {
     Object jsonValue(String table, String column, Object v) {
         if (v == null) {
             return null;
-        }
-        if (WorkloadHubSchema.isBoolean(table, column)) {
-            return dialect.asBoolean(v);
         }
         if (v instanceof Timestamp ts) {
             return ts.toLocalDateTime().toString();

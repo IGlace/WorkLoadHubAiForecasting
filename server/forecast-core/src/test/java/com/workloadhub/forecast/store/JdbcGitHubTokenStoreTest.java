@@ -28,7 +28,7 @@ class JdbcGitHubTokenStoreTest {
     }
 
     static JdbcGitHubTokenStore store(DataSource ds) {
-        return new JdbcGitHubTokenStore(JdbcClient.create(ds), Dialect.of(ds),
+        return new JdbcGitHubTokenStore(JdbcClient.create(ds),
                 AesGcmCipher.fromBase64Key(Base64.getEncoder().encodeToString(new byte[32])));
     }
 
@@ -40,9 +40,8 @@ class JdbcGitHubTokenStoreTest {
         s.save(ENG, "gho_secret123");
         assertTrue(s.has(ENG));
         assertEquals("gho_secret123", s.load(ENG).orElseThrow());
-        Dialect dialect = Dialect.of(ds);
-        String stored = JdbcClient.create(ds).sql("SELECT github_token FROM users WHERE id = " + dialect.placeholder("uuid"))
-                .param(ENG.toString()).query(String.class).single();
+        String stored = JdbcClient.create(ds).sql("SELECT github_token FROM users WHERE id = ?")
+                .param(ENG).query(String.class).single();
         assertTrue(stored.startsWith("v1:"));
         assertNotEquals("gho_secret123", stored);
         s.clear(ENG);
@@ -71,7 +70,7 @@ class JdbcGitHubTokenStoreTest {
     @Test
     void withoutKeyEveryCallFails() throws Exception {
         DataSource ds = postgresWithFixture();
-        JdbcGitHubTokenStore s = new JdbcGitHubTokenStore(JdbcClient.create(ds), Dialect.of(ds), null);
+        JdbcGitHubTokenStore s = new JdbcGitHubTokenStore(JdbcClient.create(ds), null);
         assertEquals("TOKEN_KEY_MISSING", assertThrows(ForecastException.class, () -> s.save(ENG, "gho_x")).code());
         assertEquals("TOKEN_KEY_MISSING", assertThrows(ForecastException.class, () -> s.load(ENG)).code());
     }

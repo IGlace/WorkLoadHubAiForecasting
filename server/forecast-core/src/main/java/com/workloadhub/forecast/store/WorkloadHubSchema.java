@@ -27,7 +27,7 @@ public final class WorkloadHubSchema {
             "personal_leaves", "holidays", "user_capacity", "team_capacity", "notifications",
             "sync_metadata", "refresh_tokens");
 
-    /** Columns that are boolean in PostgreSQL and integer 0/1 on SQLite. */
+    /** Columns that are boolean in the schema: an export carries them as JSON booleans. */
     public static final Map<String, Set<String>> BOOLEAN_COLUMNS = Map.of(
             "holidays", Set.of("active"),
             "notifications", Set.of("is_read"),
@@ -123,11 +123,6 @@ public final class WorkloadHubSchema {
         return new ArrayList<>(columns);
     }
 
-    /** Creates the 24 tables on an empty SQLite database. */
-    public static void createSqlite(DataSource dataSource) {
-        runScript(dataSource, "/schema/workloadhub-sqlite.sql");
-    }
-
     /** Creates schema task_service and the 24 tables on an empty PostgreSQL database. */
     public static void createPostgresql(DataSource dataSource) {
         runScript(dataSource, "/schema/workloadhub-postgresql.sql");
@@ -162,7 +157,7 @@ public final class WorkloadHubSchema {
         return out.toString();
     }
 
-    static String readResource(String resource) {
+    public static String readResource(String resource) {
         try (InputStream in = WorkloadHubSchema.class.getResourceAsStream(resource)) {
             if (in == null) {
                 throw new IllegalStateException("Missing resource " + resource);

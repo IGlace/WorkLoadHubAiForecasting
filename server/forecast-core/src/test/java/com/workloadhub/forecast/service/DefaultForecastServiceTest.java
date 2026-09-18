@@ -32,7 +32,6 @@ import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.store.AesGcmCipher;
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.ForecastMigrations;
 import com.workloadhub.forecast.store.JdbcGitHubTokenStore;
 import com.workloadhub.forecast.store.JdbcNarrativeStore;
@@ -65,10 +64,9 @@ class DefaultForecastServiceTest {
     static UUID member;
 
     static DefaultForecastService build(DataSource ds, FakeGateway g, RunProgressTracker tracker, JdbcRunStore runs) {
-        Dialect dialect = Dialect.of(ds);
-        JdbcGitHubTokenStore t = new JdbcGitHubTokenStore(JdbcClient.create(ds), dialect, AesGcmCipher.fromBase64Key(KEY));
-        return new DefaultForecastService(ds, dialect, new ForecastRunner(new CapacityRule(40), 2), runs, tracker, 1, t,
-                new JdbcNarrativeStore(ds, dialect), new Narrator(g, Prompts.load(), Duration.ofSeconds(5), ""), g,
+        JdbcGitHubTokenStore t = new JdbcGitHubTokenStore(JdbcClient.create(ds), AesGcmCipher.fromBase64Key(KEY));
+        return new DefaultForecastService(ds, new ForecastRunner(new CapacityRule(40), 2), runs, tracker, 1, t,
+                new JdbcNarrativeStore(ds), new Narrator(g, Prompts.load(), Duration.ofSeconds(5), ""), g,
                 Clock.fixed(SeededData.asOf().atTime(12, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
     }
 
@@ -76,10 +74,9 @@ class DefaultForecastServiceTest {
     static void boot() {
         DataSource ds = SeededData.dataSource();
         ForecastMigrations.run(ds);
-        Dialect dialect = Dialect.of(ds);
         gateway = new FakeGateway();
-        tokens = new JdbcGitHubTokenStore(JdbcClient.create(ds), dialect, AesGcmCipher.fromBase64Key(KEY));
-        service = build(ds, gateway, new RunProgressTracker(), new JdbcRunStore(ds, dialect));
+        tokens = new JdbcGitHubTokenStore(JdbcClient.create(ds), AesGcmCipher.fromBase64Key(KEY));
+        service = build(ds, gateway, new RunProgressTracker(), new JdbcRunStore(ds));
         ForecastData data = SeededData.data();
         team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
         member = data.membersOfTeam(team).get(0).id();
@@ -211,7 +208,7 @@ class DefaultForecastServiceTest {
     @Test
     void narrateRefusesARunThatIsNotDone() {
         DataSource ds = SeededData.dataSource();
-        JdbcRunStore raw = new JdbcRunStore(ds, Dialect.of(ds));
+        JdbcRunStore raw = new JdbcRunStore(ds);
         UUID queued = raw.create(new RunRequest(team, member), SeededData.asOf(), LocalDateTime.now());
         tokens.save(member, "gho_test_token");
         assertEquals("RUN_NOT_DONE", assertThrows(ForecastException.class, () -> service.narrate(new NarrativeRequest(queued, member, "en", null))).code());
@@ -225,7 +222,7 @@ class DefaultForecastServiceTest {
         g.authenticated = false;
         RunProgressTracker tracker = new RunProgressTracker();
         DataSource ds = SeededData.dataSource();
-        DefaultForecastService svc = build(ds, g, tracker, new JdbcRunStore(ds, Dialect.of(ds)));
+        DefaultForecastService svc = build(ds, g, tracker, new JdbcRunStore(ds));
         try {
             assertEquals("TOKEN_REJECTED", assertThrows(ForecastException.class, () -> svc.narrate(new NarrativeRequest(r.run().id(), member, "en", null))).code());
             assertEquals("NARRATION_FAILED", tracker.get(r.run().id()).orElseThrow().phase());
@@ -277,8 +274,7 @@ class DefaultForecastServiceTest {
 
     @Test
     void getRunPreservesAStoredNullMaeAsNullNotNaN() {
-        Dialect dialect = Dialect.of(SeededData.dataSource());
-        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource(), dialect);
+        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource());
         UUID id = raw.create(new RunRequest(team, null), SeededData.asOf(), LocalDateTime.now());
         String backtest = "{\"scores\":[{\"origin\":\"2026-08-24\",\"horizon\":1,\"mae\":null}],\"mean_mae\":null}";
         raw.finish(id, Double.NaN, backtest, List.of(), List.of(), "{}", LocalDateTime.now());
@@ -289,8 +285,7 @@ class DefaultForecastServiceTest {
 
     @Test
     void progressOfARunEvictedFromTheTrackerFallsBackToTheStoredRow() throws Exception {
-        Dialect dialect = Dialect.of(SeededData.dataSource());
-        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource(), dialect);
+        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource());
         RunProgressTracker tracker = new RunProgressTracker();
         DefaultForecastService svc = build(SeededData.dataSource(), new FakeGateway(), tracker, raw);
         try {
@@ -334,8 +329,7 @@ class DefaultForecastServiceTest {
 
     @Test
     void interruptedRunsAreFailedWhenTheModuleStarts() {
-        Dialect dialect = Dialect.of(SeededData.dataSource());
-        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource(), dialect);
+        JdbcRunStore raw = new JdbcRunStore(SeededData.dataSource());
         UUID left = raw.create(new RunRequest(team, null), SeededData.asOf(), LocalDateTime.now());
         raw.markRunning(left);
         assertTrue(service.recoverInterruptedRuns() >= 1);

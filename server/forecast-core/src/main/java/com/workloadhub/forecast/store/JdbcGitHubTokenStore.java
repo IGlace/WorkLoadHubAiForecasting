@@ -11,12 +11,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 public final class JdbcGitHubTokenStore implements GitHubTokenStore {
 
     private final JdbcClient jdbc;
-    private final Dialect dialect;
     private final AesGcmCipher cipher; // null when whf.token-key is not configured
 
-    public JdbcGitHubTokenStore(JdbcClient jdbc, Dialect dialect, AesGcmCipher cipher) {
+    public JdbcGitHubTokenStore(JdbcClient jdbc, AesGcmCipher cipher) {
         this.jdbc = jdbc;
-        this.dialect = dialect;
         this.cipher = cipher;
     }
 
@@ -25,10 +23,6 @@ public final class JdbcGitHubTokenStore implements GitHubTokenStore {
             throw ForecastException.of("TOKEN_KEY_MISSING", "whf.token-key is not configured; tokens cannot be stored or read");
         }
         return cipher;
-    }
-
-    private String idPlaceholder() {
-        return dialect.placeholder("uuid");
     }
 
     @Override
@@ -41,12 +35,8 @@ public final class JdbcGitHubTokenStore implements GitHubTokenStore {
         if (!(t.startsWith("gho_") || t.startsWith("ghu_") || t.startsWith("github_pat_"))) {
             throw ForecastException.invalidRequest("token must be a gho_, ghu_ or github_pat_ token; classic ghp_ tokens are not accepted");
         }
-        int updated = jdbc.sql("UPDATE users SET github_token = ?, github_token_updated_at = " + dialect.placeholder("timestamp")
-                        + " WHERE id = " + idPlaceholder())
-                .param(c.encrypt(t))
-                .param(LocalDateTime.now().withNano(0).toString())
-                .param(userId.toString())
-                .update();
+        int updated = jdbc.sql("UPDATE users SET github_token = ?, github_token_updated_at = ? WHERE id = ?")
+                .param(c.encrypt(t)).param(LocalDateTime.now().withNano(0)).param(userId).update();
         if (updated == 0) {
             throw ForecastException.of("USER_NOT_FOUND", "No user " + userId);
         }
@@ -65,17 +55,12 @@ public final class JdbcGitHubTokenStore implements GitHubTokenStore {
 
     /** The raw (still encrypted) github_token column value for a user, or empty when unset. */
     private Optional<String> rawToken(UUID userId) {
-        return jdbc.sql("SELECT github_token FROM users WHERE id = " + idPlaceholder())
-                .param(userId.toString())
-                .query(String.class)
-                .optional()
+        return jdbc.sql("SELECT github_token FROM users WHERE id = ?").param(userId).query(String.class).optional()
                 .filter(v -> v != null && !v.isBlank());
     }
 
     @Override
     public void clear(UUID userId) {
-        jdbc.sql("UPDATE users SET github_token = NULL, github_token_updated_at = NULL WHERE id = " + idPlaceholder())
-                .param(userId.toString())
-                .update();
+        jdbc.sql("UPDATE users SET github_token = NULL, github_token_updated_at = NULL WHERE id = ?").param(userId).update();
     }
 }

@@ -12,6 +12,9 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -21,10 +24,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.sql.DataSource;
-import org.sqlite.SQLiteDataSource;
+import org.postgresql.ds.PGSimpleDataSource;
 
 /**
- * Builds an experiment database on SQLite: the four things the owner does from a terminal that the
+ * Builds an experiment database on PostgreSQL: the four things the owner does from a terminal that the
  * WorkloadHub server never does.
  *
  * <p>This is not a Maven module and deliberately so. Until 2026-09-12 it was {@code forecast-cli}, a Spring Boot
@@ -48,14 +51,14 @@ public final class Experiment {
     private static final String USAGE = """
             usage: experiment.sh <command> [options]
 
-              init-db  --db FILE [--force]
-                       Create the 24 WorkloadHub tables and the module's tables in a new SQLite file.
-                       --force deletes the file first if it exists.
+              init-db  [--force]
+                       Create the schema task_service with the 24 WorkloadHub tables and the module's tables in
+                       the database at --url. Refuses when task_service already exists; --force drops it first.
 
-              import   --db FILE <export.json>
+              import   <export.json>
                        Load a WorkloadHub JSON export (real or seeded), replacing existing rows.
 
-              export   --db FILE <out.json>
+              export   <out.json>
                        Write the database's WorkloadHub tables as a JSON export.
 
               seed     --out FILE [--export FILE] [--synthetic] [--users N] [--weeks N]
@@ -64,8 +67,9 @@ public final class Experiment {
                        synthetic directory. Real mode (no --synthetic) needs --export and refuses to
                        write inside a git repository without --force: its output holds personal data.
 
-            The default database is ./workloadhub.db. Run this inside the development container
-            (bash scripts/devbox.sh shell): that is where Java, Maven and XGBoost's libgomp are.
+            Connection: --url, --user, --password; else WHF_DB_URL, WHF_DB_USER, WHF_DB_PASSWORD; else
+            jdbc:postgresql://localhost:5432/workloadhub, workloadhub, workloadhub, which scripts/postgres.sh
+            creates. Run this inside the development container (bash scripts/devbox.sh shell).
             """;
 
     private Experiment() {
@@ -92,10 +96,10 @@ public final class Experiment {
         }
         try {
             return switch (command) {
-                case "init-db" -> initDb(Args.parse(rest, Set.of("db"), Set.of("force")));
-                case "import" -> importExport(Args.parse(rest, Set.of("db"), Set.of()));
-                case "export" -> export(Args.parse(rest, Set.of("db"), Set.of()));
-                case "seed" -> seed(Args.parse(rest, Set.of("out", "export", "users", "weeks", "end", "seed", "format"),
+                case "init-db" -> initDb(Args.parse(rest, Set.of("url", "user", "password"), Set.of("force")));
+                case "import" -> importExport(Args.parse(rest, Set.of("url", "user", "password"), Set.of()));
+                case "export" -> export(Args.parse(rest, Set.of("url", "user", "password"), Set.of()));
+                case "seed" -> seed(Args.parse(rest, Set.of("url", "user", "password", "out", "export", "users", "weeks", "end", "seed", "format"),
                         Set.of("synthetic", "force")));
                 default -> {
                     System.err.println("error: unknown command '" + command + "'\n");
@@ -118,25 +122,32 @@ public final class Experiment {
     // ---- the four commands ------------------------------------------------------------------------------------
 
     private static int initDb(Args args) throws Exception {
-        Path db = args.db();
-        if (Files.exists(db)) {
+        args.noFiles();
+        DataSource ds = dataSource(args);
+        boolean exists;
+        try (Connection c = ds.getConnection(); Statement st = c.createStatement();
+                ResultSet rs = st.executeQuery("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'task_service'")) {
+            exists = rs.next();
+        }
+        if (exists) {
             if (!args.flag("force")) {
-                System.err.println(db + " exists; use --force to recreate it");
+                System.err.println("schema task_service already exists in " + url(args) + "; use --force to drop and recreate it");
                 return 2;
             }
-            Files.delete(db);
+            try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
+                st.execute("DROP SCHEMA task_service CASCADE");
+            }
         }
-        DataSource ds = dataSource(db);
-        WorkloadHubSchema.createSqlite(ds);
+        WorkloadHubSchema.createPostgresql(ds);
         ForecastMigrations.run(ds);
-        System.out.println("Created " + db.toAbsolutePath() + " with the WorkloadHub schema and the forecast tables");
+        System.out.println("Created schema task_service in " + url(args) + " with the WorkloadHub schema and the forecast tables");
         return 0;
     }
 
     private static int importExport(Args args) throws Exception {
         Path file = args.onlyFile("the export file");
         ExportEnvelope envelope = ExportFiles.read(file);
-        Map<String, Integer> counts = new ExportImporter(dataSource(args.db())).importAll(envelope, true);
+        Map<String, Integer> counts = new ExportImporter(dataSource(args)).importAll(envelope, true);
         counts.forEach((table, n) -> {
             if (n > 0) {
                 System.out.printf("%-26s %7d%n", table, n);
@@ -148,7 +159,7 @@ public final class Experiment {
 
     private static int export(Args args) throws Exception {
         Path file = args.onlyFile("the output file");
-        ExportEnvelope envelope = new ExportExporter(dataSource(args.db())).exportAll();
+        ExportEnvelope envelope = new ExportExporter(dataSource(args)).exportAll();
         ExportFiles.write(file, envelope);
         System.out.println("Wrote " + file + " (" + envelope.data().values().stream().mapToInt(List::size).sum() + " rows)");
         return 0;
@@ -203,9 +214,26 @@ public final class Experiment {
         return 0;
     }
 
-    static DataSource dataSource(Path db) {
-        SQLiteDataSource ds = new SQLiteDataSource();
-        ds.setUrl("jdbc:sqlite:" + db.toAbsolutePath());
+    static final String DEFAULT_URL = "jdbc:postgresql://localhost:5432/workloadhub";
+
+    static String setting(Args args, String option, String variable, String fallback) {
+        if (args.has(option)) {
+            return args.value(option);
+        }
+        String env = System.getenv(variable);
+        return env == null || env.isBlank() ? fallback : env;
+    }
+
+    static String url(Args args) {
+        return setting(args, "url", "WHF_DB_URL", DEFAULT_URL);
+    }
+
+    static DataSource dataSource(Args args) {
+        PGSimpleDataSource ds = new PGSimpleDataSource();
+        ds.setUrl(url(args));
+        ds.setUser(setting(args, "user", "WHF_DB_USER", "workloadhub"));
+        ds.setPassword(setting(args, "password", "WHF_DB_PASSWORD", "workloadhub"));
+        ds.setCurrentSchema("task_service,public");
         return ds;
     }
 
@@ -283,10 +311,6 @@ public final class Experiment {
                 throw new Bad("--" + name + " is required");
             }
             return values.get(name);
-        }
-
-        Path db() {
-            return Path.of(string("db", "./workloadhub.db"));
         }
 
         int number(String name, int fallback) {

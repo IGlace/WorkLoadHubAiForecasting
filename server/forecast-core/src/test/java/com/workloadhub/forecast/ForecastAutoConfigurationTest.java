@@ -19,7 +19,6 @@ import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.service.DefaultForecastService;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.store.JdbcRunStore;
 import com.workloadhub.forecast.testing.SeededData;
 import java.time.Clock;
@@ -55,7 +54,6 @@ class ForecastAutoConfigurationTest {
                 .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
                 .withPropertyValues("whf.token-key=" + Base64.getEncoder().encodeToString(new byte[32]))
                 .run(ctx -> {
-                    assertEquals(Dialect.POSTGRESQL, ctx.getBean(Dialect.class));
                     assertNotNull(ctx.getBean(GitHubTokenStore.class));
                     ForecastProperties p = ctx.getBean(ForecastProperties.class);
                     assertEquals(44.0, p.getDefaultWeeklyHours());
@@ -98,7 +96,7 @@ class ForecastAutoConfigurationTest {
     @Test
     void interruptedRunsAreFailedOnceTheContextIsUp() {
         DataSource ds = DatabaseTestSupport.postgresMigrated();
-        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        JdbcRunStore store = new JdbcRunStore(ds);
         UUID run = store.create(new RunRequest(UUID.randomUUID(), null), LocalDate.of(2026, 9, 7), LocalDateTime.of(2026, 9, 7, 9, 0));
         store.markRunning(run);
         assertEquals(RunStatus.RUNNING, store.find(run).orElseThrow().status());

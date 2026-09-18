@@ -16,7 +16,6 @@ import com.workloadhub.forecast.api.NarrativeResult;
 import com.workloadhub.forecast.api.NarrativeStatus;
 import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.data.ExportFiles;
-import com.workloadhub.forecast.store.Dialect;
 import com.workloadhub.forecast.testing.SeededData;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -65,8 +64,7 @@ class JavaHostIntegrationTest {
     @BeforeAll
     void boot() {
         jdbc = JdbcClient.create(dataSource);
-        Dialect dialect = Dialect.of(dataSource);
-        access = new ForecastAccess(jdbc, dialect);
+        access = new ForecastAccess(jdbc);
         host = new HostForecastFacade(service, access, tokens);
         List<Map<String, Object>> teams = jdbc.sql("SELECT t.id AS id, t.manager_id AS leader, t.parent_team_id AS parent, p.manager_id AS head"
                 + " FROM teams t JOIN teams p ON p.id = t.parent_team_id"
@@ -83,9 +81,9 @@ class JavaHostIntegrationTest {
         member = SeededData.data().membersOfTeam(team).stream().map(m -> m.id()).filter(id -> role(id).equals("MEMBER")).findFirst().orElseThrow();
         viewer = userWithRole("VIEWER").or(() -> userWithRole("CENTER_MANAGER")).orElseThrow();
         admin = userWithRole("ADMIN");
-        teamUnderSameHead = jdbc.sql("SELECT t.id AS id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE p.manager_id = "
-                + dialect.placeholder("uuid") + " AND t.id <> " + dialect.placeholder("uuid")
-                + " AND EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id) ORDER BY t.id").param(head.toString()).param(team.toString())
+        teamUnderSameHead = jdbc.sql("SELECT t.id AS id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE p.manager_id = ?"
+                + " AND t.id <> ?"
+                + " AND EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id) ORDER BY t.id").param(head).param(team)
                 .query().listOfRows().stream().findFirst().map(r -> UUID.fromString(r.get("id").toString())).orElse(team);
         otherTeam = teams.stream().filter(t -> !t.get("head").toString().equals(head.toString())).findFirst().map(t -> UUID.fromString(t.get("id").toString()));
         outsider = otherTeam.flatMap(t -> SeededData.data().membersOfTeam(t).stream().map(m -> m.id()).filter(id -> role(id).equals("MEMBER")).findFirst());
@@ -102,9 +100,8 @@ class JavaHostIntegrationTest {
     }
 
     String role(UUID userId) {
-        Dialect dialect = Dialect.of(dataSource);
-        return jdbc.sql("SELECT role FROM users WHERE id = " + dialect.placeholder("uuid"))
-                .param(userId.toString()).query().listOfRows().get(0).get("role").toString();
+        return jdbc.sql("SELECT role FROM users WHERE id = ?")
+                .param(userId).query().listOfRows().get(0).get("role").toString();
     }
 
     @Test

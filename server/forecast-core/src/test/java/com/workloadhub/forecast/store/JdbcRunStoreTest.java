@@ -49,7 +49,7 @@ class JdbcRunStoreTest {
     }
 
     void lifecycle(DataSource ds) {
-        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        JdbcRunStore store = new JdbcRunStore(ds);
         UUID id = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         RunSummary queued = store.find(id).orElseThrow();
         assertEquals(RunStatus.QUEUED, queued.status());
@@ -92,7 +92,7 @@ class JdbcRunStoreTest {
         assertEquals(manyRows, store.memberWindows(bigRun), "450 rows survive a batched insert, in order");
     }
 
-    /** One window of each of {@code count} members, spanning more than one batch of {@link JdbcRunStore#BATCH}, in the store's own order. */
+    /** One window of each of {@code count} members, more than a driver batch holds, in the store's own order. */
     static List<MemberWindowForecast> manyRows(int count) {
         List<MemberWindowForecast> out = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
@@ -105,7 +105,7 @@ class JdbcRunStoreTest {
 
     /** Spec 2026-09-10, section 7: a later run overwrites the days ahead of it and leaves the days only the earlier run covered. */
     void aLaterRunOverwritesOnlyTheDaysItCovers(DataSource ds) {
-        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        JdbcRunStore store = new JdbcRunStore(ds);
         LocalDate wednesday = LocalDate.of(2026, 9, 2);
         LocalDate monday = LocalDate.of(2026, 9, 7);
         UUID first = store.create(new RunRequest(TEAM, USER), wednesday, T0);
@@ -137,7 +137,7 @@ class JdbcRunStoreTest {
     }
 
     void tiedCreatedAtOrdersByIdDescending(DataSource ds) {
-        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        JdbcRunStore store = new JdbcRunStore(ds);
         UUID a = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         UUID b = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         List<UUID> ordered = store.list(TEAM, 10).stream().map(RunSummary::id).toList();
@@ -151,7 +151,7 @@ class JdbcRunStoreTest {
     }
 
     void failInterruptedMarksQueuedAndRunningRowsOnly(DataSource ds) {
-        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        JdbcRunStore store = new JdbcRunStore(ds);
         UUID queued = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         UUID running = store.create(new RunRequest(TEAM, USER), LocalDate.of(2026, 9, 6), T0);
         store.markRunning(running);
@@ -177,7 +177,7 @@ class JdbcRunStoreTest {
     }
 
     void runDaysJoinTheRunDayOfEveryDoneRunInTheRange(DataSource ds) {
-        JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
+        JdbcRunStore store = new JdbcRunStore(ds);
         LocalDate wednesday = LocalDate.of(2026, 8, 19);
         UUID first = store.create(new RunRequest(TEAM, USER), wednesday, T0);
         store.markRunning(first);
@@ -193,9 +193,8 @@ class JdbcRunStoreTest {
         UUID reopened = store.create(new RunRequest(TEAM, USER), friday, T0.plusHours(5));
         store.markRunning(reopened);
         store.finish(reopened, 1.0, "{}", windows(), days(friday, 9), "{}", T0.plusHours(6));
-        Dialect dialect = Dialect.of(ds);
-        assertEquals(1, JdbcClient.create(ds).sql("UPDATE forecast_runs SET status = ? WHERE id = " + dialect.placeholder("uuid"))
-                .param(RunStatus.RUNNING.name()).param(reopened.toString()).update());
+        assertEquals(1, JdbcClient.create(ds).sql("UPDATE forecast_runs SET status = ? WHERE id = ?")
+                .param(RunStatus.RUNNING.name()).param(reopened).update());
 
         List<RunDayForecast> rows = store.runDays(TEAM, LocalDate.of(2026, 8, 24), LocalDate.of(2026, 8, 25));
         assertEquals(4, rows.size(), "two DONE runs, Monday and Tuesday each; the failed run wrote no day rows and the third run is no longer DONE");
