@@ -46,17 +46,16 @@ class ExperimentFlowTest {
     }
 
     @Test
-    void seedWritesJsonAndSqlThatImports(@TempDir Path dir) throws Exception {
+    void seedWritesJsonThatImports(@TempDir Path dir) throws Exception {
         String[] db = connection(DatabaseTestSupport.postgres());
         Path seeded = dir.resolve("seeded.json");
         assertOk(experiment("seed", "--synthetic", "--users", "12", "--weeks", "8", "--seed", "1", "--end", "2026-09-06",
                 "--out", seeded.toString()), "synthetic identities");
         assertOk(experiment(concat(db, "init-db")), "Created");
         assertOk(experiment(concat(db, "import", seeded.toString())), "Imported");
-        Path sql = dir.resolve("seeded.sql");
-        assertOk(experiment("seed", "--synthetic", "--users", "12", "--weeks", "8", "--seed", "1", "--end", "2026-09-06",
-                "--format", "sql", "--out", sql.toString()), "Wrote");
-        assertTrue(Files.readString(sql).contains("INSERT INTO tasks"));
+        assertEquals(2, experiment("seed", "--synthetic", "--users", "12", "--weeks", "8", "--format", "sql",
+                "--out", dir.resolve("seeded.sql").toString()).exit(), "--format went with the SQL export (design 2026-09-18)");
+        assertFalse(Files.exists(dir.resolve("seeded.sql")));
     }
 
     /**

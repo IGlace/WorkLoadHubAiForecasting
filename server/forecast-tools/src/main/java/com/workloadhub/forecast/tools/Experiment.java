@@ -59,7 +59,7 @@ public final class Experiment {
                        Write the database's WorkloadHub tables as a JSON export.
 
               seed     --out FILE [--export FILE] [--synthetic] [--users N] [--weeks N]
-                       [--end ISO_DATE] [--seed N] [--format json|sql] [--force]
+                       [--end ISO_DATE] [--seed N] [--force]
                        Generate an export with weeks of realistic history, from a real export or a
                        synthetic directory. Real mode (no --synthetic) needs --export and refuses to
                        write inside a git repository without --force: its output holds personal data.
@@ -99,7 +99,7 @@ public final class Experiment {
                 case "init-db" -> initDb(Args.parse(rest, Set.of("url", "user", "password"), Set.of("force")));
                 case "import" -> importExport(Args.parse(rest, Set.of("url", "user", "password"), Set.of()));
                 case "export" -> export(Args.parse(rest, Set.of("url", "user", "password"), Set.of()));
-                case "seed" -> seed(Args.parse(rest, Set.of("url", "user", "password", "out", "export", "users", "weeks", "end", "seed", "format"),
+                case "seed" -> seed(Args.parse(rest, Set.of("url", "user", "password", "out", "export", "users", "weeks", "end", "seed"),
                         Set.of("synthetic", "force")));
                 case "fixture" -> fixture(Args.parse(rest, Set.of("out", "url", "user", "password"), Set.of()));
                 default -> {
@@ -173,7 +173,6 @@ public final class Experiment {
         boolean synthetic = args.flag("synthetic");
         Path export = args.has("export") ? Path.of(args.value("export")) : null;
         int users = args.number("users", 0);
-        String format = args.string("format", "json");
         if (!synthetic && export == null) {
             System.err.println("Real mode needs --export <file>; or pass --synthetic");
             return 2;
@@ -186,22 +185,12 @@ public final class Experiment {
             System.err.println("Real-mode output holds personal data; write it outside the repository or pass --force");
             return 2;
         }
-        if (!format.equals("json") && !format.equals("sql")) {
-            System.err.println("--format must be json or sql");
-            return 2;
-        }
         ExportEnvelope input = export == null ? null : ExportFiles.read(export);
         int weeks = args.number("weeks", 52);
         SeedConfig cfg = new SeedConfig(weeks, args.date("end") == null ? LocalDate.now() : args.date("end"), args.whole("seed", 42), synthetic, users);
         long started = System.nanoTime();
         ExportEnvelope result = SeedGenerator.generate(input, cfg);
-        if (format.equals("sql")) {
-            try (Writer w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
-                SqlExportWriter.write(result, w);
-            }
-        } else {
-            ExportFiles.write(out, result);
-        }
+        ExportFiles.write(out, result);
         long ms = (System.nanoTime() - started) / 1_000_000;
         System.out.printf("Wrote %s in %d ms: %d weeks ending %s, seed %d, %s%n", out, ms, weeks, cfg.lastDay(), cfg.seed(),
                 synthetic ? "synthetic identities" : "real identities (do not commit)");

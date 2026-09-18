@@ -59,61 +59,19 @@ class SqlExportWriterTest {
         assertEquals(env.rows("tasks").size(), new ExportExporter(ds).exportAll().rows("tasks").size());
     }
 
+    /**
+     * The writer only ever inserts: a seed lands through the importer, and the script is the fixture's (design
+     * 2026-09-18, section 3). A real-mode envelope gets no deletes, no upsert and no guard either.
+     */
     @Test
-    void aFiveTableEnvelopeIsLandedWithDeletesAndAProjectsUpsert() throws Exception {
+    void aRealModeEnvelopeIsPlainInsertsToo() throws Exception {
         ExportEnvelope input = ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json"));
         ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
         StringWriter out = new StringWriter();
         SqlExportWriter.write(env, out);
         String sql = out.toString();
-        // the reverse of TABLE_ORDER, restricted to the envelope's tables other than projects
-        int deletes = sql.indexOf("DELETE FROM personal_leaves;\nDELETE FROM time_logs;\nDELETE FROM task_history;\nDELETE FROM tasks;\n");
-        assertTrue(deletes > 0 && deletes < sql.indexOf("INSERT INTO"), "children deleted first, before any insert: " + sql.substring(0, 200));
-        assertTrue(!sql.contains("DELETE FROM projects"));
-        assertTrue(sql.contains("INSERT INTO projects"));
-        assertTrue(sql.contains("ON CONFLICT (id) DO UPDATE SET"), "projects are upserted");
-        int guard = sql.indexOf(SqlExportWriter.USER_CONTENT_GUARD);
-        assertTrue(guard > 0, "the partial script guards user content: " + sql.substring(0, 200));
-        assertEquals("BEGIN;\nSET search_path TO task_service;\n".length(), guard, "right after the search_path");
-        assertTrue(guard < deletes, "the guard runs before the first delete");
-        assertTrue(!env.excludedTables().isEmpty() && !env.excludedTables().equals(List.of("refresh_tokens")),
-                "the envelope declares itself partial: " + env.excludedTables());
-        assertTrue(sql.contains("next_task_number = EXCLUDED.next_task_number"));
-        int tasksInsert = sql.indexOf("INSERT INTO tasks");
-        assertTrue(!sql.substring(tasksInsert, sql.indexOf(";\n", tasksInsert)).contains("ON CONFLICT"), "only projects carry the upsert");
-        assertTrue(!sql.contains("INSERT INTO users"));
-    }
-
-    @Test
-    void aSyntheticEnvelopeHasNoDeletes() throws Exception {
-        ExportEnvelope env = SeedGenerator.generate(null, new SeedConfig(8, LocalDate.of(2026, 9, 6), 5, true, 12));
-        assertEquals(List.of("refresh_tokens"), env.excludedTables());
-        assertTrue(env.data().keySet().containsAll(WorkloadHubSchema.TABLE_ORDER), "every table is present");
-        StringWriter out = new StringWriter();
-        SqlExportWriter.write(env, out);
-        assertTrue(!out.toString().contains("DELETE FROM"));
-        assertTrue(!out.toString().contains("ON CONFLICT"));
-        assertTrue(!out.toString().contains("RAISE EXCEPTION"), "nothing is deleted, so there is nothing to guard");
-    }
-
-    @Test
-    void aFiveTableScriptLandsTwiceOnPostgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        ExportEnvelope input = ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json"));
-        // the directory first, as the application's own database would hold it
-        StringWriter directory = new StringWriter();
-        SqlExportWriter.write(input, directory);
-        ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
-        StringWriter out = new StringWriter();
-        SqlExportWriter.write(env, out);
-        try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
-            st.execute(directory.toString());
-            st.execute(out.toString());
-            st.execute(out.toString());   // a second landing replaces, it does not duplicate
-        }
-        ExportEnvelope back = new ExportExporter(ds).exportAll();
-        assertEquals(env.rows("tasks").size(), back.rows("tasks").size());
-        assertEquals(env.rows("projects").size(), back.rows("projects").size());
-        assertEquals(2, back.rows("users").size(), "the directory is untouched");
+        assertTrue(!sql.contains("DELETE FROM") && !sql.contains("ON CONFLICT") && !sql.contains("RAISE EXCEPTION"), sql.substring(0, 200));
+        assertTrue(sql.contains("INSERT INTO projects") && sql.contains("INSERT INTO tasks") && !sql.contains("INSERT INTO users"),
+                "the five work tables and nothing of the directory");
     }
 }
