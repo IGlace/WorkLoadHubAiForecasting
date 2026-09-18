@@ -44,11 +44,14 @@ app with a Python service) is archived on the remote branch `archive/python-desk
   (every table of the database with the module installed, what the module adds, what it reads and what the
   data must contain, how the server integrates it) and `docs/design/2026-09-17-feature-matrix-now.html` (the
   features, the logic and the rules; the 2026-09-16 page is kept as the reviewed record).
-- `docs/superpowers/specs/2026-09-18-forecast-web-and-showcase-ui-design.md`: **implemented, landed on dev on
-  2026-09-18.** `forecast-web`, a second Maven module: the showcase host that calls `forecast-core` the way
-  the server will (the `host` package is what production copies, the `demo` package what it deletes) and
-  serves a React front end (`server/forecast-web/ui`) showing every feature with the route behind it. Its
-  section 2 lists the seven decisions the author took where the request left a choice.
+- `docs/superpowers/specs/2026-09-18-forecast-web-and-showcase-ui-design.md`: **implemented on the branch
+  `claude/forecast-web-showcase`, NOT on `dev`.** `forecast-web`, a second Maven module: the showcase host
+  that calls `forecast-core` the way the server will (the `host` package is what production copies, the
+  `demo` package what it deletes) and serves a React front end (`server/forecast-web/ui`) showing every
+  feature with the route behind it. Its section 2 lists the seven decisions the author took where the request
+  left a choice, and its section 8 what re-integrating it onto today's `dev` needs: the branch was built on
+  `c9bdc1c`, and `dev` has since become PostgreSQL-only with the seed, the export code and the schema moved
+  to a new `forecast-tools` module, so the module's demo wiring does not compile against it.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
 - `server/README.md`: build, running experiments, the seed, using the module from the server, narrating with
@@ -149,7 +152,9 @@ gone, `share_manual_13w`/`share_project_13w` are replaced by `share_assigned_13w
 `task_history.user_id`, `planned_hrs_h` returns as a per-horizon column, and every ratio or "weeks since"
 with nothing to measure is left blank instead of an invented sentinel, for 40 shared and 5 per-horizon
 feature columns. The gate stands at 450 tests, 0 failures, 14 skipped without Docker (the plan's closing notes).
-Then, on 2026-09-18, the showcase host and its front end
+Then, on 2026-09-18, the showcase host and its front end, **on the branch `claude/forecast-web-showcase`
+rather than on `dev`** (the owner's decision when the two were found to have diverged; see the end of this
+paragraph)
 (`docs/superpowers/specs/2026-09-18-forecast-web-and-showcase-ui-design.md`): `server/forecast-web`, a Spring
 Boot application with the host code of design 2026-09-11 in a `host` package (the acting user from an
 `X-Acting-User` header in place of a session, `ForecastAccess` with a reason per refusal, a run registry
@@ -175,6 +180,14 @@ One test of `forecast-core` was fixed on the way: `LeaveDaysPropertyTest`
 failed on a new random seed because its own expectation floored `26.4 / 8.8`, which is 2.9999999999999996 in
 binary, and then demanded that a full day be partial; the dealing was right, and an example test now pins the
 case deterministically.
+That work is **not on `dev`**: while it was being written, `dev` moved twenty-odd commits ahead — the module
+became PostgreSQL-only (`Dialect` and SQLite gone, real JDBC types bound, the five migrations collapsed into
+one V1), the seed, the export code, the schema and the sample host moved to a new `forecast-tools` module,
+the seeded test data became a committed fixture read into a Testcontainers PostgreSQL, and the gate now fails
+rather than skips without a container engine. `forecast-web`'s demo wiring rests on exactly what moved, so it
+does not compile against today's `dev`, and this session's container has no engine with which to run the new
+gate. The owner therefore had it pushed to `claude/forecast-web-showcase` and left `dev` alone. What
+re-integration needs is listed in section 8 of the spec and in the plan's closing notes.
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
 server's own integration code, against the showcase host.
 The standing workflow for a plan:
@@ -226,11 +239,12 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 
 - Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java; Node 22 with
   Vite, React 19, TypeScript and vitest for the showcase front end.
-- The gate is two steps: `cd server && mvn -B -q verify` (both modules; about seventeen minutes without
-  Docker as of 2026-09-14, and growing with the suite; PostgreSQL tests run through Testcontainers when
+- The gate is two steps **on this branch**: `cd server && mvn -B -q verify` (both modules; about eleven
+  minutes without Docker, and growing with the suite; PostgreSQL tests run through Testcontainers when
   Docker is present, else skip with a message), then `npm ci && npm run check` in `server/forecast-web/ui`
   (under a minute). `bash scripts/check.sh` and `pwsh scripts/check.ps1` run both, skipping a step whose
-  tool is missing with a message, and running one of them by hand is the only gate there is. **Read the result from
+  tool is missing with a message, and running one of them by hand is the only gate there is. On `dev` the
+  Maven step now **fails** rather than skips without a container engine, so that branch's gate needs one. **Read the result from
   `forecast-core/target/surefire-reports/TEST-*.xml`, never by summing the `*.txt` files**: a class that
   mixes JUnit `@Test` with jqwik `@Property` has both engines write the same `.txt` and the second
   overwrites the first, so the text total is short by about thirty. Wipe the report directory before a run

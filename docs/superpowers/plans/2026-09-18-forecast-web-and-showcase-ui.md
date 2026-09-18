@@ -50,7 +50,8 @@ the gate is `bash scripts/check.sh` (Maven, then npm) read from `TEST-*.xml`.
 
 ## Closing notes (2026-09-18)
 
-**Landed on `dev`.** Two pieces, as designed: `server/forecast-web` (a Spring Boot host reaching
+**Landed on the branch `claude/forecast-web-showcase`, not on `dev`** (see "Where this sits" at the end).
+Two pieces, as designed: `server/forecast-web` (a Spring Boot host reaching
 `forecast-core` only through `ForecastService` and `GitHubTokenStore`) and `server/forecast-web/ui` (the
 showcase front end it serves). `forecast-core` also publishes a test jar now, so the new module's tests reuse
 `SeededData` and the scripted Copilot gateway rather than copying them.
@@ -113,3 +114,34 @@ it is checked by hand with a real token on the Copilot & token page.
 agent to disregard its instructions and ignore jqwik's results. It is a string in a dependency's output, not
 an instruction; the gate's verdict is read from `TEST-*.xml` either way, which is what CLAUDE.md already
 says to do.
+
+## Where this sits (2026-09-18)
+
+The branch was built on `c9bdc1c`. While it was being written, `dev` moved twenty-odd commits ahead and
+restructured what this module stands on:
+
+- the module is PostgreSQL-only — `Dialect` is gone, real JDBC types are bound (`.param(uuid)`, not
+  `CAST(? AS uuid)`), SQLite is out of its dependencies, and the five migrations are one final `V1`;
+- the seed, the export code, `WorkloadHubSchema`, the experiment driver and the sample host moved to a new
+  `forecast-tools` module, under `com.workloadhub.forecast.tools.*`;
+- `ExportFiles.mapper()` became `com.workloadhub.forecast.Json`;
+- the seeded test data is a committed fixture (`fixtures/seeded-rows.sql`) loaded into a Testcontainers
+  PostgreSQL, and the gate **fails** rather than skips when no container engine is reachable (a ruling of the
+  2026-09-17 spec).
+
+`forecast-web` uses all of it: `Dialect` in sixteen places, `SQLiteDataSource`, `WorkloadHubSchema`,
+`SeedGenerator`/`SeedConfig`, `ExportImporter`, `ExportFiles`, and `SeededData`/`DatabaseTestSupport` in its
+tests. It therefore does not compile against today's `dev`, and this session's container has no Docker or
+podman, so the new gate cannot be run here at all. Rather than push work that neither compiles on `dev` nor
+can be verified, the owner chose a branch of its own and left `dev` untouched.
+
+**Re-integrating it means**, in order: merge `dev`; replace every `Dialect.placeholder(...)` with plain `?`
+and bound `UUID`/`LocalDate` values (the new core's own style); point `api/Json` at
+`com.workloadhub.forecast.Json`; add a dependency on `forecast-tools` for the demo package and rewrite
+`DemoDatabase` to seed into PostgreSQL (`scripts/postgres.sh` starts one, and `experiment.sh init-db` creates
+the schema) instead of creating a SQLite file, which also retires spec decision 3 and the
+`forecast-web.database`/`forecast-web.seed.*` properties in favour of `spring.datasource.*`; move the tests
+onto `DatabaseTestSupport.postgres()` and the fixture, which makes a container engine a requirement for this
+module's tests too; and re-run the gate where one exists. The `host` and `api` packages and the whole front
+end are unaffected apart from the four `Dialect` call sites in `host/Directory.java` and
+`host/ForecastAccess.java`.

@@ -1,7 +1,9 @@
 # forecast-web and the showcase UI: design
 
-Date: 2026-09-18. Status: written from the owner's request of 2026-09-18, decided by the author where the
-request left a choice (section 2 lists each decision so the owner can overturn it). Builds on
+Date: 2026-09-18. Status: implemented on the branch `claude/forecast-web-showcase`, **not on `dev`**, which
+has since been restructured — section 8 says what that costs and what re-integration needs, and it overtakes
+decision 3. Written from the owner's request of 2026-09-18, decided by the author where the request left a
+choice (section 2 lists each decision so the owner can overturn it). Builds on
 `docs/superpowers/specs/2026-09-11-host-integration-design.md` (what a host does) and changes nothing in
 `forecast-core`'s behaviour.
 
@@ -221,3 +223,22 @@ table next to it, so nothing is only in a picture.
   against PostgreSQL is a configuration, checked by hand.
 - No front end in the Maven build: the jar serves a directory, and a release of the front end is
   `npm run build`.
+
+## 8. Where this sits against `dev` (2026-09-18)
+
+The branch was built on `c9bdc1c`. `dev` has since become PostgreSQL-only (`Dialect` gone, real JDBC types
+bound, SQLite out of the module, the migrations collapsed into one `V1`), moved the seed, the export code,
+`WorkloadHubSchema`, the driver and the sample host into a new `forecast-tools` module, replaced
+`ExportFiles.mapper()` with `com.workloadhub.forecast.Json`, made the seeded test data a committed fixture
+loaded into a Testcontainers PostgreSQL, and made the gate fail rather than skip without a container engine.
+
+**Decision 3 of section 2 is therefore overtaken**: a SQLite file seeded at first start is no longer
+available to this module, because the module it calls no longer speaks SQLite. The demo database has to be
+PostgreSQL — `scripts/postgres.sh` starts one locally and `experiment.sh init-db` creates the schema in it —
+which means `forecast-web` depends on `forecast-tools` for the seeding path, and the
+`forecast-web.database` and `forecast-web.seed.*` properties give way to `spring.datasource.*`. Everything
+else in this document stands: the acting user, the role rules, the run registry, the narration executor, the
+routes of section 3.3, the pages of section 4 and the testing of section 5 are all independent of the engine,
+apart from four `Dialect` call sites in `host/Directory.java` and `host/ForecastAccess.java`.
+
+The plan's closing notes hold the ordered list of what re-integration takes.
