@@ -3,6 +3,12 @@
 server:
   port: 8080
 
+spring:
+  datasource:
+    url: ${FORECAST_WEB_DB_URL:jdbc:postgresql://localhost:5432/workloadhub}
+    username: ${FORECAST_WEB_DB_USER:workloadhub}
+    password: ${FORECAST_WEB_DB_PASSWORD:workloadhub}
+
 whf:
   token-key: ${WHF_TOKEN_KEY:}          # blank: forecast-web.token-key-file supplies one
   work-dir: ${WHF_WORK_DIR:${user.home}/.workloadhub-forecast}
@@ -15,14 +21,8 @@ whf:
     enabled: false                       # this host has its own controllers: the module's trust requestedBy as given
 
 forecast-web:
-  database: ${FORECAST_WEB_DB:${user.home}/.workloadhub-forecast/forecast-web/workloadhub.db}
-  seed:
-    users: 120
-    weeks: 52
-    seed: 7
-    end: 2026-09-06
   clock:
-    today: ${FORECAST_WEB_TODAY:2026-06-28}   # inside the seed's rich months; its last weeks taper (see the README)
+    today: ${FORECAST_WEB_TODAY:}   # blank: follow the system date. The seed ends on the day it was generated.
     adjustable: true
   token-key-file: ${user.home}/.workloadhub-forecast/forecast-web/token.key
   ui-dir: ${FORECAST_WEB_UI:ui/dist}
