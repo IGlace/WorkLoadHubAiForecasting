@@ -20,9 +20,7 @@ import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.service.DefaultForecastService;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.Dialect;
-import com.workloadhub.forecast.store.ForecastMigrations;
 import com.workloadhub.forecast.store.JdbcRunStore;
-import com.workloadhub.forecast.store.WorkloadHubSchema;
 import com.workloadhub.forecast.testing.SeededData;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -40,7 +38,7 @@ import org.springframework.context.annotation.Configuration;
 
 class ForecastAutoConfigurationTest {
 
-    static final DataSource DS = DatabaseTestSupport.sqliteInMemory();
+    static final DataSource DS = DatabaseTestSupport.postgresWithSchema();
 
     @Configuration
     static class HostConfig {
@@ -52,13 +50,12 @@ class ForecastAutoConfigurationTest {
 
     @Test
     void registersBeansAndRunsMigrations() {
-        WorkloadHubSchema.createSqlite(DS);
         new ApplicationContextRunner()
                 .withUserConfiguration(HostConfig.class)
                 .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
                 .withPropertyValues("whf.token-key=" + Base64.getEncoder().encodeToString(new byte[32]))
                 .run(ctx -> {
-                    assertEquals(Dialect.SQLITE, ctx.getBean(Dialect.class));
+                    assertEquals(Dialect.POSTGRESQL, ctx.getBean(Dialect.class));
                     assertNotNull(ctx.getBean(GitHubTokenStore.class));
                     ForecastProperties p = ctx.getBean(ForecastProperties.class);
                     assertEquals(44.0, p.getDefaultWeeklyHours());
@@ -71,8 +68,7 @@ class ForecastAutoConfigurationTest {
 
     @Test
     void registersTheServiceOnTopOfTheHostDataSource() {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
                 .withBean(DataSource.class, () -> ds)
@@ -89,8 +85,7 @@ class ForecastAutoConfigurationTest {
 
     @Test
     void aHostSuppliedGatewayReplacesTheSdkOne() {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         com.workloadhub.forecast.ai.FakeGateway fake = new com.workloadhub.forecast.ai.FakeGateway();
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
@@ -102,9 +97,7 @@ class ForecastAutoConfigurationTest {
     /** Reconciliation happens once the context is up, not inside the service's factory method (design 2026-09-11, section 4.2). */
     @Test
     void interruptedRunsAreFailedOnceTheContextIsUp() {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
-        ForecastMigrations.run(ds);
+        DataSource ds = DatabaseTestSupport.postgresMigrated();
         JdbcRunStore store = new JdbcRunStore(ds, Dialect.of(ds));
         UUID run = store.create(new RunRequest(UUID.randomUUID(), null), LocalDate.of(2026, 9, 7), LocalDateTime.of(2026, 9, 7, 9, 0));
         store.markRunning(run);
@@ -125,7 +118,7 @@ class ForecastAutoConfigurationTest {
     /** A database the module's tables are missing from is the host's business, not a reason to refuse to start. */
     @Test
     void startUpSurvivesAMissingTable() {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
+        DataSource ds = DatabaseTestSupport.postgres();
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
                 .withBean(DataSource.class, () -> ds)
@@ -162,8 +155,7 @@ class ForecastAutoConfigurationTest {
     /** Starts the auto-configured context on a fresh database with {@code whf.forecast.windows} set, throwing whatever
      * IllegalStateException the {@code forecastRunner} bean's validation raises rather than swallowing it as a startup failure. */
     private static void startContextWith(int windows) {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(ForecastAutoConfiguration.class))
                 .withBean(DataSource.class, () -> ds)
@@ -186,8 +178,7 @@ class ForecastAutoConfigurationTest {
 
     /** An auto-configured service over an isolated copy of the seeded database, run day fixed at {@code asOf}. */
     private static DefaultForecastService serviceWith(int windows, LocalDate asOf) {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         new ExportImporter(ds).importAll(SeededData.envelope(), true);
         Clock clock = Clock.fixed(asOf.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
         AtomicReference<DefaultForecastService> ref = new AtomicReference<>();

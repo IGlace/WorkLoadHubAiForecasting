@@ -65,7 +65,8 @@ class JavaHostIntegrationTest {
     @BeforeAll
     void boot() {
         jdbc = JdbcClient.create(dataSource);
-        access = new ForecastAccess(jdbc, Dialect.of(dataSource));
+        Dialect dialect = Dialect.of(dataSource);
+        access = new ForecastAccess(jdbc, dialect);
         host = new HostForecastFacade(service, access, tokens);
         List<Map<String, Object>> teams = jdbc.sql("SELECT t.id AS id, t.manager_id AS leader, t.parent_team_id AS parent, p.manager_id AS head"
                 + " FROM teams t JOIN teams p ON p.id = t.parent_team_id"
@@ -82,7 +83,8 @@ class JavaHostIntegrationTest {
         member = SeededData.data().membersOfTeam(team).stream().map(m -> m.id()).filter(id -> role(id).equals("MEMBER")).findFirst().orElseThrow();
         viewer = userWithRole("VIEWER").or(() -> userWithRole("CENTER_MANAGER")).orElseThrow();
         admin = userWithRole("ADMIN");
-        teamUnderSameHead = jdbc.sql("SELECT t.id AS id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE p.manager_id = ? AND t.id <> ?"
+        teamUnderSameHead = jdbc.sql("SELECT t.id AS id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE p.manager_id = "
+                + dialect.placeholder("uuid") + " AND t.id <> " + dialect.placeholder("uuid")
                 + " AND EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id) ORDER BY t.id").param(head.toString()).param(team.toString())
                 .query().listOfRows().stream().findFirst().map(r -> UUID.fromString(r.get("id").toString())).orElse(team);
         otherTeam = teams.stream().filter(t -> !t.get("head").toString().equals(head.toString())).findFirst().map(t -> UUID.fromString(t.get("id").toString()));
@@ -100,7 +102,9 @@ class JavaHostIntegrationTest {
     }
 
     String role(UUID userId) {
-        return jdbc.sql("SELECT role FROM users WHERE id = ?").param(userId.toString()).query().listOfRows().get(0).get("role").toString();
+        Dialect dialect = Dialect.of(dataSource);
+        return jdbc.sql("SELECT role FROM users WHERE id = " + dialect.placeholder("uuid"))
+                .param(userId.toString()).query().listOfRows().get(0).get("role").toString();
     }
 
     @Test

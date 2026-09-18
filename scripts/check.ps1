@@ -17,6 +17,19 @@ $PSNativeCommandUseErrorActionPreference = $false
 $root = Split-Path -Parent $PSScriptRoot
 $server = Join-Path $root "server"
 
+# The database tests need an engine and fail without one; refuse at the door rather than after the build.
+$engine = $false
+foreach ($cli in @("docker", "podman")) {
+    if (Get-Command $cli -ErrorAction SilentlyContinue) {
+        & $cli info *> $null
+        if ($LASTEXITCODE -eq 0) { $engine = $true; break }
+    }
+}
+if (-not $engine) {
+    Write-Host "no container engine is reachable: the gate needs Docker or podman (server/README.md, The development container)" -ForegroundColor Red
+    exit 1
+}
+
 $steps = [System.Collections.Generic.List[object]]::new()
 function Add-Step([string]$Name, [string]$Dir, [string]$Exe, [string[]]$Arguments) {
     $steps.Add([pscustomobject]@{ Name = $Name; Dir = $Dir; Exe = $Exe; Arguments = $Arguments })

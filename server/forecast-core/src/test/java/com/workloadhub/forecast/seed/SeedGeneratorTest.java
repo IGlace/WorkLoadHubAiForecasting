@@ -285,10 +285,9 @@ class SeedGeneratorTest {
     }
 
     @Test
-    void roundTripsThroughSqlite() {
+    void roundTripsThroughPostgresql() {
         ExportEnvelope env = generated();
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         new ExportImporter(ds).importAll(env, true);
         ExportEnvelope back = new ExportExporter(ds).exportAll();
         for (String table : WorkloadHubSchema.TABLE_ORDER) {
@@ -371,15 +370,24 @@ class SeedGeneratorTest {
     }
 
     @Test
-    void realModeOfTheFixtureImportsIntoSqlite() throws Exception {
+    void realModeOfTheFixtureImports() throws Exception {
         // the fixture's own manager team is named exactly the way Directory.derive would name a fresh
         // one ("CT2 · Lead One"), and its own project key ("CT2-CAL") is exactly the pattern
         // ProjectPlanner.plan mints for the CT2 department: real mode must disambiguate both so the
         // result still imports into teams.name/projects.key's UNIQUE constraints.
         ExportEnvelope real = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
         ExportEnvelope out = SeedGenerator.generate(real, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
+        // Real mode writes only the five work tables and leaves the application's own tables alone (design
+        // 2026-09-17, section 7.1): land the fixture's directory first, as the application's own database
+        // already holds it, then the generated work tables on top, the way a real host would receive them.
+        LinkedHashMap<String, List<LinkedHashMap<String, Object>>> directory = new LinkedHashMap<>();
+        real.data().forEach((table, rows) -> {
+            if (!SeedGenerator.REAL_MODE_TABLES.contains(table)) {
+                directory.put(table, rows);
+            }
+        });
+        new ExportImporter(ds).importAll(real.withData(directory), true);
         new ExportImporter(ds).importAll(out, false);
         Set<String> teamNames = new HashSet<>();
         for (var t : out.rows("teams")) {

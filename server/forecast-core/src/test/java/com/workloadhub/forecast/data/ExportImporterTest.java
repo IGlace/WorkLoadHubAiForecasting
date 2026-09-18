@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.workloadhub.forecast.seed.SeedConfig;
 import com.workloadhub.forecast.seed.SeedGenerator;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
-import com.workloadhub.forecast.store.WorkloadHubSchema;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import javax.sql.DataSource;
@@ -15,8 +14,7 @@ class ExportImporterTest {
 
     @Test
     void replaceDeletesOnlyTheTablesTheEnvelopeCarries() throws Exception {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         ExportEnvelope input = ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json"));
         new ExportImporter(ds).importAll(input, true);
         ExportEnvelope seeded = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));

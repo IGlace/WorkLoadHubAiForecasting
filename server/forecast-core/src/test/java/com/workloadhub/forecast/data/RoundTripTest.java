@@ -56,23 +56,14 @@ class RoundTripTest {
     }
 
     @Test
-    void roundTripsOnSqlite() throws Exception {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
-        roundTrip(ds);
-    }
-
-    @Test
     void roundTripsOnPostgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         roundTrip(ds);
     }
 
     @Test
     void additiveImportKeepsExistingRowsAndFailsOnDuplicates() throws Exception {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         ExportEnvelope in = ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json"));
 
         // importing into an empty schema with replace=false behaves like a replacing import

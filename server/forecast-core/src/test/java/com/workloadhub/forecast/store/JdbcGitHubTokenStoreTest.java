@@ -20,9 +20,8 @@ class JdbcGitHubTokenStoreTest {
 
     static final UUID ENG = UUID.fromString("30000000-0000-0000-0000-000000000002");
 
-    static DataSource sqliteWithFixture() throws Exception {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+    static DataSource postgresWithFixture() throws Exception {
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         new ExportImporter(ds).importAll(ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json")), true);
         ForecastMigrations.run(ds);
         return ds;
@@ -35,13 +34,15 @@ class JdbcGitHubTokenStoreTest {
 
     @Test
     void savesEncryptedAndLoadsForTheUser() throws Exception {
-        DataSource ds = sqliteWithFixture();
+        DataSource ds = postgresWithFixture();
         JdbcGitHubTokenStore s = store(ds);
         assertFalse(s.has(ENG));
         s.save(ENG, "gho_secret123");
         assertTrue(s.has(ENG));
         assertEquals("gho_secret123", s.load(ENG).orElseThrow());
-        String stored = JdbcClient.create(ds).sql("SELECT github_token FROM users WHERE id = ?").param(ENG.toString()).query(String.class).single();
+        Dialect dialect = Dialect.of(ds);
+        String stored = JdbcClient.create(ds).sql("SELECT github_token FROM users WHERE id = " + dialect.placeholder("uuid"))
+                .param(ENG.toString()).query(String.class).single();
         assertTrue(stored.startsWith("v1:"));
         assertNotEquals("gho_secret123", stored);
         s.clear(ENG);
@@ -50,7 +51,7 @@ class JdbcGitHubTokenStoreTest {
 
     @Test
     void refusesClassicTokensAndUnknownUsers() throws Exception {
-        JdbcGitHubTokenStore s = store(sqliteWithFixture());
+        JdbcGitHubTokenStore s = store(postgresWithFixture());
         ForecastException classic = assertThrows(ForecastException.class, () -> s.save(ENG, "ghp_old"));
         assertEquals("INVALID_REQUEST", classic.code());
         ForecastException unknown = assertThrows(ForecastException.class, () -> s.save(UUID.randomUUID(), "gho_x"));
@@ -59,7 +60,7 @@ class JdbcGitHubTokenStoreTest {
 
     @Test
     void refusesEmptyTokens() throws Exception {
-        DataSource ds = sqliteWithFixture();
+        DataSource ds = postgresWithFixture();
         JdbcGitHubTokenStore s = store(ds);
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> s.save(ENG, "")).code());
         assertEquals("INVALID_REQUEST", assertThrows(ForecastException.class, () -> s.save(ENG, "   ")).code());
@@ -69,7 +70,7 @@ class JdbcGitHubTokenStoreTest {
 
     @Test
     void withoutKeyEveryCallFails() throws Exception {
-        DataSource ds = sqliteWithFixture();
+        DataSource ds = postgresWithFixture();
         JdbcGitHubTokenStore s = new JdbcGitHubTokenStore(JdbcClient.create(ds), Dialect.of(ds), null);
         assertEquals("TOKEN_KEY_MISSING", assertThrows(ForecastException.class, () -> s.save(ENG, "gho_x")).code());
         assertEquals("TOKEN_KEY_MISSING", assertThrows(ForecastException.class, () -> s.load(ENG)).code());

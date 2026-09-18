@@ -69,15 +69,8 @@ class SchemaFilesTest {
     }
 
     @Test
-    void createsAllTablesOnSqlite() throws SQLException {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
-        assertEquals(24, countTables(ds));
-    }
-
-    @Test
     void createsAllTablesOnPostgresql() throws SQLException {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
+        DataSource ds = DatabaseTestSupport.postgres();
         WorkloadHubSchema.createPostgresql(ds);
         assertEquals(24, countTables(ds));
     }

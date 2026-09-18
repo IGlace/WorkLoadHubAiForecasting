@@ -31,9 +31,4 @@ class DialectTest {
         assertEquals("?", Dialect.POSTGRESQL.placeholder("varchar"));
         assertEquals("?", Dialect.SQLITE.placeholder("TEXT"));
     }
-
-    @Test
-    void detectsSqlite() {
-        assertEquals(Dialect.SQLITE, Dialect.of(DatabaseTestSupport.sqliteInMemory()));
-    }
 }

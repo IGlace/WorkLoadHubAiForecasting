@@ -21,13 +21,6 @@ class JdbcNarrativeStoreTest {
     static final UUID USER = UUID.fromString("30000000-0000-0000-0000-000000000001");
     static final LocalDateTime T0 = LocalDateTime.of(2026, 9, 10, 9, 0, 0, 123456000);
 
-    static DataSource sqlite() {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
-        ForecastMigrations.run(ds);
-        return ds;
-    }
-
     static NarrationOutcome ok() {
         return new NarrationOutcome(NarrativeStatus.OK, null, "{\"run_summary\":\"fine\"}", null, "{\"checked\":2,\"unverified\":[]}",
                 "{\"source\":\"metrics\"}", "gpt-5", 1, List.of("get_run_overview", "get_member_forecast"), null);
@@ -73,15 +66,7 @@ class JdbcNarrativeStoreTest {
     }
 
     @Test
-    void sqliteLifecycle() {
-        lifecycle(sqlite());
-    }
-
-    @Test
-    void postgresLifecycle() {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
-        ForecastMigrations.run(ds);
-        lifecycle(ds);
+    void lifecycle() {
+        lifecycle(DatabaseTestSupport.postgresMigrated());
     }
 }

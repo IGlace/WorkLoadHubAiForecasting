@@ -31,13 +31,6 @@ class JdbcRunStoreTest {
     /** Sub-second precision on purpose: {@code ts()} must keep microseconds, not truncate to the second. */
     static final LocalDateTime T0 = LocalDateTime.of(2026, 9, 6, 10, 0, 0, 123456000);
 
-    static DataSource sqlite() {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
-        ForecastMigrations.run(ds);
-        return ds;
-    }
-
     static List<MemberWindowForecast> windows() {
         return List.of(
                 new MemberWindowForecast(USER, 1, LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 11), 17.5, 15, 20, 40, 0, 5, 0, 12.5, 3),
@@ -134,29 +127,13 @@ class JdbcRunStoreTest {
     }
 
     @Test
-    void sqliteOverwrite() {
-        aLaterRunOverwritesOnlyTheDaysItCovers(sqlite());
+    void lifecycle() {
+        lifecycle(DatabaseTestSupport.postgresMigrated());
     }
 
     @Test
-    void postgresOverwrite() {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
-        ForecastMigrations.run(ds);
-        aLaterRunOverwritesOnlyTheDaysItCovers(ds);
-    }
-
-    @Test
-    void sqliteLifecycle() {
-        lifecycle(sqlite());
-    }
-
-    @Test
-    void postgresLifecycle() {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
-        ForecastMigrations.run(ds);
-        lifecycle(ds);
+    void aLaterRunOverwritesOnlyTheDaysItCovers() {
+        aLaterRunOverwritesOnlyTheDaysItCovers(DatabaseTestSupport.postgresMigrated());
     }
 
     void tiedCreatedAtOrdersByIdDescending(DataSource ds) {
@@ -169,16 +146,8 @@ class JdbcRunStoreTest {
     }
 
     @Test
-    void sqliteTiedCreatedAtOrdersByIdDescending() {
-        tiedCreatedAtOrdersByIdDescending(sqlite());
-    }
-
-    @Test
-    void postgresTiedCreatedAtOrdersByIdDescending() {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
-        ForecastMigrations.run(ds);
-        tiedCreatedAtOrdersByIdDescending(ds);
+    void tiedCreatedAtOrdersByIdDescending() {
+        tiedCreatedAtOrdersByIdDescending(DatabaseTestSupport.postgresMigrated());
     }
 
     void failInterruptedMarksQueuedAndRunningRowsOnly(DataSource ds) {
@@ -203,16 +172,8 @@ class JdbcRunStoreTest {
     }
 
     @Test
-    void sqliteFailInterrupted() {
-        failInterruptedMarksQueuedAndRunningRowsOnly(sqlite());
-    }
-
-    @Test
-    void postgresFailInterrupted() {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
-        ForecastMigrations.run(ds);
-        failInterruptedMarksQueuedAndRunningRowsOnly(ds);
+    void failInterruptedMarksQueuedAndRunningRowsOnly() {
+        failInterruptedMarksQueuedAndRunningRowsOnly(DatabaseTestSupport.postgresMigrated());
     }
 
     void runDaysJoinTheRunDayOfEveryDoneRunInTheRange(DataSource ds) {
@@ -246,15 +207,7 @@ class JdbcRunStoreTest {
     }
 
     @Test
-    void sqliteRunDays() {
-        runDaysJoinTheRunDayOfEveryDoneRunInTheRange(sqlite());
-    }
-
-    @Test
-    void postgresRunDays() {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
-        ForecastMigrations.run(ds);
-        runDaysJoinTheRunDayOfEveryDoneRunInTheRange(ds);
+    void runDaysJoinTheRunDayOfEveryDoneRunInTheRange() {
+        runDaysJoinTheRunDayOfEveryDoneRunInTheRange(DatabaseTestSupport.postgresMigrated());
     }
 }

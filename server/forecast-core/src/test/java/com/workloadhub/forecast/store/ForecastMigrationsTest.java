@@ -68,30 +68,14 @@ class ForecastMigrationsTest {
     }
 
     @Test
-    void v3AppliesOnADatabaseThatRanV1AndV2Sqlite() throws Exception {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
-        checkStepwise(ds);
-    }
-
-    @Test
     void v3AppliesOnADatabaseThatRanV1AndV2Postgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         checkStepwise(ds);
-    }
-
-    @Test
-    void migratesSqlite() throws Exception {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
-        check(ds);
     }
 
     @Test
     void migratesPostgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         check(ds);
     }
 }

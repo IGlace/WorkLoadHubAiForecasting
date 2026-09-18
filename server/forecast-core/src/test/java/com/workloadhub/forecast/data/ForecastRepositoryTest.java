@@ -9,7 +9,6 @@ import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.Dialect;
-import com.workloadhub.forecast.store.WorkloadHubSchema;
 import com.workloadhub.forecast.testing.SeededData;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -94,8 +93,7 @@ class ForecastRepositoryTest {
                     "holidays out of order at " + i);
         }
         // The three tables the module no longer reads: drop them and the load must still succeed.
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         new ExportImporter(ds).importAll(SeededData.envelope(), true);
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
             st.execute("DROP TABLE user_capacity");
@@ -110,8 +108,7 @@ class ForecastRepositoryTest {
 
     @Test
     void rejectedAndCancelledLeavesAreNotLoadedAndTimesAreParsed() {
-        DataSource ds = DatabaseTestSupport.sqliteInMemory();
-        WorkloadHubSchema.createSqlite(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         new ExportImporter(ds).importAll(SeededData.envelope(), true);
         String member = SeededData.envelope().rows("users").get(0).get("id").toString();
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {

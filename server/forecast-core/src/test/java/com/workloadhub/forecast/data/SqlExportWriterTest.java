@@ -38,8 +38,7 @@ class SqlExportWriterTest {
 
     @Test
     void scriptLoadsIntoPostgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         ExportEnvelope env = ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json"));
         StringWriter out = new StringWriter();
         SqlExportWriter.write(env, out);
@@ -51,8 +50,7 @@ class SqlExportWriterTest {
 
     @Test
     void scriptOfASeededDatasetLoadsIntoPostgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         ExportEnvelope env = SeedGenerator.generate(null, new SeedConfig(12, LocalDate.of(2026, 9, 6), 5, true, 24));
         StringWriter out = new StringWriter();
         SqlExportWriter.write(env, out);
@@ -101,8 +99,7 @@ class SqlExportWriterTest {
 
     @Test
     void aFiveTableScriptLandsTwiceOnPostgresql() throws Exception {
-        DataSource ds = DatabaseTestSupport.postgresOrSkip();
-        WorkloadHubSchema.createPostgresql(ds);
+        DataSource ds = DatabaseTestSupport.postgresWithSchema();
         ExportEnvelope input = ExportFiles.read(Path.of("src/test/resources/fixtures/mini-export.json"));
         // the directory first, as the application's own database would hold it
         StringWriter directory = new StringWriter();

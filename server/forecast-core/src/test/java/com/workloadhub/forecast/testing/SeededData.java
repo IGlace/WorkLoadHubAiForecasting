@@ -8,7 +8,6 @@ import com.workloadhub.forecast.seed.SeedConfig;
 import com.workloadhub.forecast.seed.SeedGenerator;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.Dialect;
-import com.workloadhub.forecast.store.WorkloadHubSchema;
 import java.time.LocalDate;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -33,8 +32,7 @@ public final class SeededData {
 
     public static synchronized DataSource dataSource() {
         if (dataSource == null) {
-            dataSource = DatabaseTestSupport.sqliteInMemory();
-            WorkloadHubSchema.createSqlite(dataSource);
+            dataSource = DatabaseTestSupport.postgresWithSchema();
             new ExportImporter(dataSource).importAll(envelope(), true);
         }
         return dataSource;
