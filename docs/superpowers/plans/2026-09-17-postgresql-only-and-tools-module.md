@@ -2562,7 +2562,9 @@ review, each ending on a green gate.
 | tests, `forecast-tools` | 125 | 125 |
 | failures, errors, skipped | 0, 0, 1 | 0, 0, 1 |
 
-Read from `TEST-*.xml` in both modules. `dev` before the plan ran one module and 450 tests; the difference
+Read from `TEST-*.xml` in both modules. The review's fix wave added one test to `forecast-tools` (the
+driver's exit code on an incomplete export), for 438 in 11m44s on the final gate. `dev` before the plan ran
+one module and 450 tests; the difference
 is what sections 5.2 and 5.3 removed, not coverage silently lost — every deletion was checked against a
 live caller first. The single skip is the opt-in `-Dseed.full=true` seed timing.
 

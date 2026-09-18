@@ -162,8 +162,9 @@ committed files under `forecast-core/src/test/resources/fixtures/` (`workloadhub
 host connect to, and `--db FILE` is gone from both; the gate now needs a container engine, failing without
 Docker or podman where it used to skip. Two tasks were added during execution (2b and 2c) because
 PostgreSQL enforces the foreign keys SQLite never did: real mode builds teams from the export's own teams
-and invents none, and refuses an export missing a task status or type. The gate stands at 437 tests (core
-312, tools 125), 0 failures, 0 errors, 1 skipped, in 11m38s — the same wall time as before the test pruning
+and invents none, and refuses an export missing a task status or type. The gate stands at 438 tests (core
+312, tools 126, the last one from the review's fix wave), 0 failures, 0 errors, 1 skipped, in 11m44s — the
+same wall time as before the test pruning
 of the last task, because 94% of the test time is seven full-pipeline classes and the caches removed only
 repeated work; the speed-up the spec hoped for did not happen.
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed into the

@@ -46,8 +46,8 @@ first install straight away; the installer now seeds the data itself, see "Lande
   `fixtures/seeded-rows.sql` (2,831,643 B), written by `bash server/tools/experiment.sh fixture` and held
   fresh by `FixtureFreshnessTest` in the tools module. `scripts/postgres.sh` runs the local PostgreSQL the
   driver and the sample host connect to — `--db FILE` is gone from both — and the gate now needs Docker or
-  podman: the database tests fail without an engine instead of skipping themselves. The gate stands at 437
-  tests (core 312, tools 125), 0 failures, 0 errors, 1 skipped, in 11m38s, the same wall time as before the
+  podman: the database tests fail without an engine instead of skipping themselves. The gate stands at 438
+  tests (core 312, tools 126), 0 failures, 0 errors, 1 skipped, in 11m44s, the same wall time as before the
   test pruning that came with it. Spec
   `docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`, plan
   `docs/superpowers/plans/2026-09-17-postgresql-only-and-tools-module.md` (closing notes there).
