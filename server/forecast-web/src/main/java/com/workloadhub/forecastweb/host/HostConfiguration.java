@@ -10,7 +10,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-/** The host's beans on top of the module's: the directory, the access rules, the registry, the facade and the acting-user resolver. */
+/** The host's beans on top of the module's: the directory, the access rules, the facade and the acting-user resolver. */
 @Configuration(proxyBeanMethods = false)
 public class HostConfiguration {
 

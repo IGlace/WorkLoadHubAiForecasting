@@ -10,9 +10,6 @@ export interface SystemView {
   windows: number
   defaultWeeklyHours: number
   runThreads: number
-  dialect: string
-  database: string
-  seededAtStart: boolean
   actingUserHeader: string
   bootstrapUserId: string | null
 }

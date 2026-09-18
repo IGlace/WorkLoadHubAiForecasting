@@ -27,7 +27,6 @@ export function ClockPage() {
           <div className="stat"><div className="label">Today</div><div className="value">{system?.today ?? '–'}</div></div>
           <div className="stat"><div className="label">Pinned</div><div className="value small">{system ? (system.clockPinned ? 'yes' : 'no, system date') : '–'}</div></div>
           <div className="stat"><div className="label">Adjustable</div><div className="value small">{system ? String(system.clockAdjustable) : '–'}</div></div>
-          <div className="stat"><div className="label">Database</div><div className="value small">{system?.database ?? '–'}{system?.seededAtStart ? ' (seeded at this start)' : ''}</div></div>
         </div>
         {!isAdmin && <Notice kind="warn">Only an ADMIN may move the clock (<code>POST /api/system/clock</code> answers 403 otherwise). Act as the seed's admin to try it.</Notice>}
         <div className="row">

@@ -21,8 +21,8 @@ export interface Endpoint {
 
 export const ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/api/system', group: 'System', who: 'anyone, no acting user', production: false,
-    purpose: 'The day the host runs on, the module\'s settings (windows, weekly hours, run threads), the database and whether it was seeded at this start.',
-    response: '{today, clockPinned, clockAdjustable, windows, defaultWeeklyHours, runThreads, dialect, database, seededAtStart, actingUserHeader}', errors: [] },
+    purpose: 'The day the host runs on and the module\'s settings (windows, weekly hours, run threads).',
+    response: '{today, clockPinned, clockAdjustable, windows, defaultWeeklyHours, runThreads, actingUserHeader}', errors: [] },
   { method: 'POST', path: '/api/system/clock', group: 'System', who: 'ADMIN, while forecast-web.clock.adjustable is true', production: false,
     purpose: 'Demo only: moves the day a run starts from. Run at an earlier date, move forward, run again, and the accuracy page has weekdays that were forecast before they arrived.',
     body: '{today: "YYYY-MM-DD" | null}   (null releases the pin to the system date)', response: 'the same body as GET /api/system', errors: ['403 FORBIDDEN'] },

@@ -25,8 +25,7 @@ export function Layout() {
         {system && (
           <div className="small muted" style={{ padding: '18px 10px 0' }}>
             today <b>{system.today}</b>{system.clockPinned ? ' (pinned)' : ''}<br />
-            {system.windows} windows · {system.defaultWeeklyHours} h/week<br />
-            {system.dialect.toLowerCase()}
+            {system.windows} windows · {system.defaultWeeklyHours} h/week
           </div>
         )}
       </aside>

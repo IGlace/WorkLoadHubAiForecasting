@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * The host's service in front of the module (design 2026-09-11, sections 3.3 to 3.6): the role check before
- * every call, one run at a time for a skill team leader, the run registry, narration on the host's own
+ * every call, one run at a time for a skill team leader, narration on the host's own
  * two-thread executor with one narration per run and language in flight, and the token calls of the settings
  * page. This is the class the production server writes; the controllers above it only translate HTTP.
  */
@@ -85,7 +85,7 @@ public final class HostForecastFacade implements AutoCloseable {
     /** The team a run belongs to, from the module's own record; a run that was never started is not found. */
     public UUID teamOf(UUID runId) {
         return service.findRun(runId).map(RunSummary::teamId)
-                .orElseThrow(() -> ForecastException.of("RUN_NOT_FOUND", "run " + runId + " was not started by this host"));
+                .orElseThrow(() -> ForecastException.of("RUN_NOT_FOUND", "run " + runId + " does not exist"));
     }
 
     public RunProgress progress(ActingUser user, UUID runId) {
