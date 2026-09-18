@@ -332,6 +332,60 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **`forecast-web` narration keys clear only when the call returns (2026-09-18).** The in-flight set that
+  refuses a second narration of the same run and language is cleared in the submitted task's `finally`, so a
+  Copilot call that never returns would keep that run and language refused for the life of the process
+  (`close()` clears the set, which only helps at shutdown). The module's own `whf.copilot.timeout-seconds`
+  bounds the call, so this needs the SDK to hang past its own timeout; a start timestamp per key, treating an
+  entry older than the timeout as free, would close it.
+
+- **The seed's tail taper, closed (2026-09-18).** A run made on the seed's own last day used to forecast near
+  zero for everybody, and it was not an intended wind-down: `ProjectPlanner` dealt every ACTIVE project's
+  start from the first 60% of the window, while `WorkQueue.planArrivals` gives a member no work in a week
+  where none of their projects is active, so projects begun early expired through the tail with nothing to
+  replace them. Fixed on the `forecast-web` port (commits `05e2f61`, `779958c`): ACTIVE starts are now dealt
+  across the whole window and a department's last project always runs past the as-of date. A new property
+  test, `SeedTailPropertyTest`, holds the last-eight-weeks-to-middle-weeks mean ratio above 0.60; on the
+  120-user, 52-week, seed-7 fixture it went from 0.53 to 0.76 (the remaining gap to 1.0 on that fixture is
+  seasonal leave in weeks 30-34, not a defect).
+
+- **The showcase's host layer duplicates the sample host in `forecast-core`'s tests (2026-09-18).**
+  `samplehost/ForecastAccess` (58 lines) and `samplehost/HostForecastFacade` (152) in core's test tree
+  against `forecastweb/host/ForecastAccess` and `forecastweb/host/HostForecastFacade`, which add reason
+  strings a page can show. Until 2026-09-18 they also differed by a `Dialect` parameter; with one engine
+  that difference is gone and keeping both is now a choice rather than an accident.
+
+- **`forecast-core/pom.xml` declares `org.postgresql:postgresql` twice, pre-existing (2026-09-18).** Line 28
+  (`runtime`, optional) and line 35 (`test`); Maven's uniqueness key is `groupId:artifactId:type:classifier`
+  and does not include scope, so the two collide and every build prints a malformed-model warning that
+  future Maven versions may refuse such projects. One declaration silently wins, so the driver's effective
+  scope is ambiguous. Present already at `cd9a4d4`, the commit before the `forecast-web` port began; not
+  caused by it.
+
+- **`forecast-core`'s test-jar carries the committed fixture and the sample host (2026-09-18).**
+  `forecast-web`'s own tests reuse `SeededData`, `DatabaseTestSupport` and `FakeGateway` from `forecast-core`'s
+  test tree, so that module now publishes a test-jar (`maven-jar-plugin`, bound to `package`); it bundles the
+  3.4 MB seeded fixture and the sample-host classes, about 912 KB compressed, fetched by every consumer.
+  Acceptable — test scope, never shipped — but worth knowing before another module reaches for it.
+
+- **`ui/src/pages/DocsPage.tsx`'s stale `RunRegistry`/SQLite wording, fixed (2026-09-18).** The documentation
+  pass that rewrote `server/forecast-web/README.md`, `CLAUDE.md` and this file had found it but was scoped
+  away from `ui/`; a later pass made the four wording-only edits directly in the JSX text (no props, no
+  structure touched): the module-and-host card now describes authorising a poll through
+  `ForecastService.findRun(runId)` instead of a registry table, the "demo only" line and the
+  `forecast-web.*` properties row no longer mention a seeded SQLite file (there is none; the `demo` package
+  holds the clock, the token key file and the served front end), the run-start step no longer claims the
+  host "records the run in its registry", and the section-1 reference line points at
+  `2026-09-18-forecast-web-on-dev-design.md`, which exists, instead of the non-existent
+  `...-and-showcase-ui-design.md`.
+
+- **The Java/TypeScript boundary is unchecked in both directions (2026-09-18).** `ui/src/types.ts` casts the
+  REST response rather than validating it, so `npm run check` passes while the front end is broken. This bit
+  twice during the `forecast-web` port: dropping `dialect`, `database` and `seededAtStart` from `SystemView`
+  white-screened the whole SPA (`Layout.tsx` read `system.dialect` with no optional chaining, in the
+  component every route wraps), and nothing downstream of the change caught it because no later task touched
+  `ui/`.
+
 - **Duplication folds the 2026-09-17 audits found outside the store (2026-09-17).** `NumberVerifier` parses
   each token twice and walks the facts tree twice per verification; `SdkCopilotGateway` hand-parses two
   properties files and repeats one timeout-and-interrupt block four times; the Copilot sign-in check exists

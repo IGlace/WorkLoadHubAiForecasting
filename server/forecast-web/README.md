@@ -2,7 +2,7 @@
 
 A Spring Boot application that calls `forecast-core` the way the WorkloadHub server will in production, and
 serves a React front end that shows every feature of the forecast with the route behind it. Design:
-`docs/superpowers/specs/2026-09-18-forecast-web-and-showcase-ui-design.md`.
+`docs/superpowers/specs/2026-09-18-forecast-web-on-dev-design.md`.
 
 ```bash
 bash scripts/devbox.sh shell                 # the toolchain: Java 21, Maven, Node 22
@@ -16,17 +16,41 @@ the server brings. The tokens its settings page stores are real GitHub credentia
 you trust (`--server.address=127.0.0.1` binds it to the loopback interface; a container needs `0.0.0.0` to be
 reachable from its host, which is why that is the default).
 
-The first start creates and seeds a synthetic SQLite database (120 users, 52 weeks ending 2026-09-06, no
-personal data) under `~/.workloadhub-forecast/forecast-web/`, generates a token key file next to it, and
-pins the demo clock to **2026-06-28**. Delete the database file to seed again.
+**This application creates and seeds nothing.** It connects to the local PostgreSQL of `scripts/postgres.sh`
+through Spring Boot's own `spring.datasource.*`, exactly as the WorkloadHub server will, and expects the work
+tables to already be filled. Prepare it once, from the root of the repository inside the development
+container:
+
+```bash
+bash scripts/postgres.sh up
+bash server/tools/experiment.sh init-db
+bash server/tools/experiment.sh seed --synthetic --users 120 --weeks 52 --seed 7 --out /tmp/seed.json
+bash server/tools/experiment.sh import /tmp/seed.json
+```
+
+`--end` is not given above, so the seed's history ends on the day it is generated: there is no fixed demo
+date, and the application's own clock follows the system date until the Demo clock page's admin pins it (see
+"Properties" below). `server/README.md`, "Running experiments" covers the driver's other verbs, including
+seeding from a real export. Run `bash server/forecast-web/run.sh` again once the database is loaded; without
+it the script refuses to start, with the four commands above printed to stderr.
+
+To reseed — a fresh population, or the same one after `--end` has moved on — drop the schema and repeat the
+last three commands:
+
+```bash
+bash scripts/postgres.sh psql -c 'DROP SCHEMA task_service CASCADE'
+bash server/tools/experiment.sh init-db
+bash server/tools/experiment.sh seed --synthetic --users 120 --weeks 52 --seed 7 --out /tmp/seed.json
+bash server/tools/experiment.sh import /tmp/seed.json
+```
 
 ## What is what
 
 | package | what | production |
 |---|---|---|
-| `host` | `ActingUser` (the `X-Acting-User` header, resolved against `users`), `ForecastAccess` (the role rules with reasons), `RunRegistry` (`forecast_web_runs`), `HostForecastFacade` (role check, one run at a time, narration executor, tokens), `ApiExceptionHandler` | **copies it**, replacing the header with its session |
+| `host` | `ActingUser` (the `X-Acting-User` header, resolved against `users`), `ForecastAccess` (the role rules with reasons), `HostForecastFacade` (role check, one run at a time, narration executor, tokens), `ApiExceptionHandler` | **copies it**, replacing the header with its session |
 | `api` | the controllers under `/api` and the response views (names joined, JSON strings parsed) | copies the routes it wants |
-| `demo` | the seeded SQLite file, the demo clock, the token key file, the served front end | deletes it |
+| `demo` | the demo clock, the token key file, the served front end | deletes it |
 | `ui` | Vite + React + TypeScript, no component library, SVG charts | picks what to build in its own pages |
 
 The module's own optional controller (`whf.web.enabled`) stays off: it trusts `requestedBy` as given, and
@@ -52,28 +76,27 @@ Every page ends with "Behind this page": the calls it made, their status and tim
 ## Properties
 
 `whf.*` are the module's (`server/README.md`, "Properties"); `application.yml` sets `whf.web.enabled=false`
-and reads `whf.token-key` from `WHF_TOKEN_KEY`. The demo wiring:
+and reads `whf.token-key` from `WHF_TOKEN_KEY`, blank by default, in which case `forecast-web.token-key-file`
+supplies one. The demo wiring, from `ForecastWebProperties`:
 
 | property | default | what it does |
 |---|---|---|
-| `forecast-web.database` | `~/.workloadhub-forecast/forecast-web/workloadhub.db` (`FORECAST_WEB_DB`) | The SQLite file, seeded when missing; blank means the application's own `spring.datasource.*` (PostgreSQL), and no seeding |
-| `forecast-web.seed.users` / `weeks` / `seed` / `end` | 120 / 52 / 7 / 2026-09-06 | The synthetic population written when the file is created |
-| `forecast-web.clock.today` | `2026-06-28` (`FORECAST_WEB_TODAY`) | The demo clock's date; blank follows the system date |
-| `forecast-web.clock.adjustable` | `true` | Whether `POST /api/system/clock` is accepted (an `ADMIN` only) |
-| `forecast-web.token-key-file` | `~/.workloadhub-forecast/forecast-web/token.key` | Where a key is generated when `WHF_TOKEN_KEY` is blank |
-| `forecast-web.ui-dir` | `ui/dist` (`FORECAST_WEB_UI`) | The built front end, served at `/` when present |
+| `forecast-web.clock.today` | blank (`FORECAST_WEB_TODAY`) | The demo clock's pinned date; blank means it follows the system date. Set from the Demo clock page as an `ADMIN`, or here at start-up. |
+| `forecast-web.clock.adjustable` | `true` | Whether `POST /api/system/clock` is accepted (an `ADMIN` only). |
+| `forecast-web.token-key-file` | `~/.workloadhub-forecast/forecast-web/token.key` | Where a key is generated when `WHF_TOKEN_KEY` is blank. |
+| `forecast-web.ui-dir` | `ui/dist` (`FORECAST_WEB_UI`) | The built front end, served at `/` when present. |
 
-Why June and not the seed's last day: the synthetic history's logged hours peak from March to June and
-taper over its last eight weeks (fewer tasks are created near the end), so a run on 2026-09-06 forecasts
-near zero for everyone, while a run on 2026-06-28 has two months of real logs after it, which the accuracy
-page can score once the clock is moved forward (`docs/backlog.md`, "Java migration").
+`spring.datasource.url` / `.username` / `.password` (`FORECAST_WEB_DB_URL`, `FORECAST_WEB_DB_USER`,
+`FORECAST_WEB_DB_PASSWORD`) point at the database — `jdbc:postgresql://localhost:5432/workloadhub` by
+default, the same local PostgreSQL `server/tools/experiment.sh` writes to. There is no database-file property
+and no built-in seeding: fill the database first, as "Setup" above describes.
 
 ## Checks
 
-- The gate (`bash scripts/check.sh`) runs the module's tests with `mvn verify` (21 tests: the role rules
-  with their reasons, the registry, the facade's one-at-a-time rule, the demo pieces, and one ordered
-  integration test over the whole REST surface on the seeded in-memory database with the scripted Copilot
-  gateway) and the front end's `npm run check` (`tsc`, 16 vitest tests on the pure functions, `vite build`).
+- The gate (`bash scripts/check.sh`) runs the module's tests with `mvn verify` (the role rules with their
+  reasons, the facade's one-at-a-time rule, the demo pieces, and one ordered integration test over the whole
+  REST surface on the seeded database with the scripted Copilot gateway) and the front end's `npm run check`
+  (`tsc`, vitest on the pure functions, `vite build`).
 - A manual end-to-end check drives the built pages in a headless browser: `ui/e2e/smoke.mjs` (its header
   says how to run it). No automated test talks to Copilot; the live narration is checked by hand with a real
   token on the Copilot & token page.

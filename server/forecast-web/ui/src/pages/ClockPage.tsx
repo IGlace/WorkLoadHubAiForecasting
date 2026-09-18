@@ -21,7 +21,7 @@ export function ClockPage() {
   return (
     <div>
       <h1>Demo clock</h1>
-      <p className="lead">A run starts from "today" by the module's <code>Clock</code> bean, and the seeded history ends on a fixed day, so this host pins the date (<code>forecast-web.clock.today</code>) and lets an <b>ADMIN</b> move it. The production server deletes this bean and keeps the module's default: there is nothing to configure there.</p>
+      <p className="lead">A run starts from "today" by the module's <code>Clock</code> bean. This host's clock follows the system date by default and lets an <b>ADMIN</b> pin it to another day (<code>forecast-web.clock.today</code>, or the buttons below), so the accuracy page can be filled without waiting for real days to pass. The production server deletes this bean and keeps the module's default: there is nothing to configure there.</p>
       <div className="card">
         <div className="stats">
           <div className="stat"><div className="label">Today</div><div className="value">{system?.today ?? '–'}</div></div>
@@ -44,7 +44,7 @@ export function ClockPage() {
           <li>Open a <Link to="/teams">team</Link> and start a forecast on today's date: it predicts the two windows after that day.</li>
           <li>Acting as the admin, move today forward four weeks (2026-07-26).</li>
           <li>Open the team's accuracy page: every weekday between the run day and the new today was forecast before it arrived, and is now scored against the hours actually logged on it. Start another run to cover the days after the new today.</li>
-          <li>The seeded history ends on 2026-09-06 and its last weeks taper off (fewer tasks are created near the end), which is why the demo starts in June rather than on the last day.</li>
+          <li>The seed's history ends on the day it was generated, with no taper toward the end, so moving today forward by a few weeks opens up days for the accuracy page to score no matter where the seed started.</li>
         </ol>
         <p className="small muted">Progress labels keep rotating while the date is pinned, because the clock keeps the system's time of day; only the date is fixed.</p>
       </div>

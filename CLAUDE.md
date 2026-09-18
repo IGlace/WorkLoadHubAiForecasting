@@ -8,8 +8,9 @@ application's own PostgreSQL database, compares them with capacity (44 h/week de
 minus public holidays and approved personal leaves), and uses each user's own GitHub Copilot seat to explain
 patterns, warn about overload and suggest rebalancing. The host calls a Java interface or an optional REST
 surface; a second Maven module, `forecast-tools`, holds the seed and the experiment driver, run by hand
-against a local PostgreSQL. The first version (a Windows desktop app with a Python service) is archived on
-the remote branch `archive/python-desktop-v1`.
+against a local PostgreSQL; a third, `forecast-web`, is a showcase Spring Boot application with a React front
+end that calls the module the same way a real host will, against the same local PostgreSQL. The first version
+(a Windows desktop app with a Python service) is archived on the remote branch `archive/python-desktop-v1`.
 
 ## Read these first
 
@@ -175,6 +176,35 @@ local database is ever seeded, so the importer clears `project_history`, `task_c
 the projects upsert are gone; the whole-branch review of the PostgreSQL plan had found the importer
 failing on those foreign keys against any database that holds history or comments. The gate stands at
 437 tests (core 312, tools 125), 0 failures, 0 errors, 1 skipped, in 11m45s.
+Then, also on 2026-09-18, the forecast-web showcase
+(`docs/superpowers/specs/2026-09-18-forecast-web-on-dev-design.md`,
+`docs/superpowers/plans/2026-09-18-forecast-web-on-dev.md`): a third Maven module, ported from a stale
+showcase branch that predated the two plans above, so its 90 files arrived verbatim and did not compile —
+they named `Dialect`, `SeedConfig`, the `forecast.seed` package and the export classes, all of which had
+since moved to `forecast-tools` or been deleted outright. Those internal dependencies were removed rather
+than restored, because a host — this showcase included — depends on `forecast-core` alone; `forecast-web`
+now adds only that (plus its test-jar, for the seeded fixture and the sample-host classes its own tests
+reuse), connects to the same local PostgreSQL `server/tools/experiment.sh` fills, and creates and seeds
+nothing itself. The `RunRegistry`/`DemoDatabase` pair that used to seed and pin its own SQLite file is gone:
+`ShowcaseConfiguration` replaces the deleted `DemoConfiguration`, and `HostForecastFacade` finds a run
+through `ForecastService.findRun`/`latestRunOf` rather than a registry table. The demo clock no longer pins
+a date by default — it follows the system date until an `ADMIN` sets one from the Demo clock page — and the
+seed itself carries no fixed end any more: `seed`'s `--end` defaults to today, so a fresh seed already has a
+full history up to the day it was generated rather than to a date baked into an old fixture. The port also
+surfaced a real seed defect: `ProjectPlanner` had dealt every ACTIVE project's start from the first 60% of
+the window while `WorkQueue.planArrivals` gives a member no work in a week where none of their projects is
+active, so projects begun early expired through the tail with nothing to replace them and a run on the
+seed's own last day forecast near zero for everybody — not an intended wind-down. Fixed (commits `05e2f61`,
+`779958c`): ACTIVE starts are now dealt across the whole window and every department's last project runs
+past the as-of date, raising the last-eight-weeks-to-middle ratio a property test now holds from 0.53 to
+0.76 (the remaining gap to 1.0 on this fixture is seasonal leave in weeks 30-34, not a code defect).
+Documentation was corrected to match throughout — `server/forecast-web/README.md` rewritten, `server/README.md`
+and this file updated, and `docs/backlog.md`'s "Java migration" section revised, closing the two
+registry-shaped items the stale branch would otherwise have reintroduced and opening the ones specific to
+this port (the host layer's duplication of `forecast-core`'s sample host, the pre-existing duplicate
+`org.postgresql:postgresql` declaration in `forecast-core/pom.xml`, the test-jar's size, and the unchecked
+Java/TypeScript boundary). Task 12 of the plan — the whole-branch review, one fix wave and the gate — is
+next.
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed into the
 local PostgreSQL, then the server's own integration code, against the sample host.
 The standing workflow for a plan:
@@ -214,7 +244,10 @@ fix wave, the gate green by hand in the development container, then fast-forward
 server/    Java 21 modules: `forecast-core`, the library the host adds and the only artifact; `forecast-tools`,
            never shipped: the seed, the import and export of a WorkloadHub database, `Experiment` (the
            driver: init-db, import, export, seed, fixture) and `HostExample` (what a host does through
-           `ForecastService`), run through `server/tools/experiment.sh` and `server/examples/run-host-example.sh`
+           `ForecastService`), run through `server/tools/experiment.sh` and `server/examples/run-host-example.sh`;
+           `forecast-web`, never shipped: a showcase Spring Boot application and React front end that depends
+           on `forecast-core` alone and calls it the way a real host will, run through
+           `server/forecast-web/run.sh` against a database filled beforehand by `server/tools/experiment.sh`
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
            dev), `test-release.sh` (the release script's self-test), `devbox.sh` (the development

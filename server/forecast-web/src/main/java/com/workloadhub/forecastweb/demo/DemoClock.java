@@ -8,10 +8,10 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 
 /**
- * Demo only. A run starts from "today" by the module's {@code Clock} bean, and a seeded history ends on a fixed
- * day, so this clock pins the date and keeps the system's time of day (the progress labels rotate on it). An
- * admin moves the date from the UI: run at an earlier date, move forward, run again, and the accuracy page has
- * weekdays that were forecast before they arrived. Production deletes this bean and keeps the module's default.
+ * Demo only. A run starts from "today" by the module's {@code Clock} bean; this clock follows the system date
+ * until an admin pins it from the UI, and keeps the system's time of day either way (the progress labels rotate
+ * on it). Pin an earlier date, move forward, run again, and the accuracy page has weekdays that were forecast
+ * before they arrived. Production deletes this bean and keeps the module's default.
  */
 public final class DemoClock extends Clock {
 

@@ -1,8 +1,10 @@
 # WorkloadHub forecast: the Java module
 
-Two Maven modules: `forecast-core`, the library the WorkloadHub Spring Boot application adds as a
-dependency, and `forecast-tools`, never shipped, which holds the seed, the import and export of a
-WorkloadHub database, the experiment driver and the sample host.
+Three Maven modules: `forecast-core`, the library the WorkloadHub Spring Boot application adds as a
+dependency; `forecast-tools`, never shipped, which holds the seed, the import and export of a WorkloadHub
+database, the experiment driver and the sample host; and `forecast-web`, also never shipped, a showcase
+Spring Boot application with a React front end that depends on `forecast-core` alone ("Running the showcase"
+below).
 Design:
 `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`,
 `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`.
@@ -186,6 +188,26 @@ half day, sick days, and for one member in ten a pending request after the as-of
 are written, the module computes capacity itself. Loading it clears the application's own project
 history, comments and attachments of the rows it replaces (see above). The invariants the tests hold
 are listed in the design, section 4.8.
+
+## Running the showcase
+
+`forecast-web`, a third Maven module, is a Spring Boot application with a React front end that calls
+`forecast-core` the way the WorkloadHub server will and shows every feature of the forecast with the route
+behind it — a page per role rule, per run, per narration, for someone to click through rather than read
+about. It depends on `forecast-core` only, the same one dependency a real host adds, so it demonstrates
+exactly what shipping the module gets a host and nothing that `forecast-tools` adds for development.
+It targets the same local PostgreSQL as "Running experiments" above and creates and seeds nothing itself, so
+run `init-db`, `seed` and `import` first:
+
+```bash
+bash scripts/postgres.sh up
+bash server/tools/experiment.sh init-db
+bash server/tools/experiment.sh seed --synthetic --users 120 --weeks 52 --seed 7 --out /tmp/seed.json
+bash server/tools/experiment.sh import /tmp/seed.json
+bash server/forecast-web/run.sh          # builds the front end and the jar when stale, then http://localhost:8080
+```
+
+Details, the page inventory, the REST surface and the no-authentication warning: `server/forecast-web/README.md`.
 
 ## Using the module from the WorkloadHub server
 
