@@ -60,6 +60,7 @@ public final class Experiment {
 
               seed     --out FILE [--export FILE] [--synthetic] [--users N] [--weeks N]
                        [--end ISO_DATE] [--seed N] [--force]
+                       --end defaults to today, so a seed ends on the day it is generated.
                        Generate an export with weeks of realistic history, from a real export or a
                        synthetic directory. Real mode (no --synthetic) needs --export and refuses to
                        write inside a git repository without --force: its output holds personal data.

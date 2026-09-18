@@ -104,6 +104,49 @@ public final class ProjectPlanner {
             WorkFamily family = dominantFamily(team, teams, people);
             List<Template> templates = TEMPLATES.get(family);
             int count = rnd.between(2, 4);
+
+            // Which slots are PLANNING, keeping at least one ACTIVE: a department with no active project
+            // produces no work at all, which is the defect this guarantee exists to prevent.
+            boolean[] planning = new boolean[count];
+            int activeCount = 0;
+            for (int i = 0; i < count; i++) {
+                planning[i] = rnd.chance(1.0 / 6);
+                if (!planning[i]) {
+                    activeCount++;
+                }
+            }
+            if (activeCount == 0) {
+                planning[0] = false;
+                activeCount = 1;
+            }
+
+            // The active slots' starts, dealt evenly across the WHOLE window. Before 2026-09-18 every
+            // ACTIVE project started in its first 60%, so the projects begun early expired through the tail
+            // with nothing to replace them and WorkQueue stopped giving those members work at all.
+            int lastMonday = mondays.size() - 1;
+            int[] startIndex = new int[count];
+            int[] nextActiveStart = new int[count];
+            int dealt = 0;
+            for (int i = 0; i < count; i++) {
+                if (!planning[i]) {
+                    startIndex[i] = (int) ((long) dealt * lastMonday / activeCount);
+                    dealt++;
+                }
+            }
+            int following = lastMonday + 1;
+            for (int i = count - 1; i >= 0; i--) {
+                if (!planning[i]) {
+                    nextActiveStart[i] = following;
+                    following = startIndex[i];
+                }
+            }
+            int lastActiveSlot = -1;
+            for (int i = 0; i < count; i++) {
+                if (!planning[i]) {
+                    lastActiveSlot = i;
+                }
+            }
+
             for (int i = 0; i < count; i++) {
                 Template t = templates.get(i % templates.size());
                 int n = 1;
@@ -113,20 +156,27 @@ public final class ProjectPlanner {
                     key = code + "-" + t.suffix() + n;
                 }
                 used.add(key);
-                boolean planning = rnd.chance(1.0 / 6);
                 LocalDate start;
                 LocalDate end;
                 String status;
-                if (planning) {
+                if (planning[i]) {
                     start = cfg.lastDay().plusWeeks(rnd.between(1, 8));
                     end = start.plusWeeks(rnd.between(12, 40));
                     status = "PLANNING";
                 } else {
-                    int startIndex = rnd.between(0, Math.max(0, (int) (mondays.size() * 0.6) - 1));
-                    start = mondays.get(startIndex);
-                    end = start.plusWeeks(rnd.between(12, 40));
-                    if (end.isAfter(cfg.lastDay().plusWeeks(1))) {
+                    start = mondays.get(startIndex[i]);
+                    if (i == lastActiveSlot) {
+                        // The department's last project always runs past the as-of date, so the final week
+                        // of the window is covered and the horizon's own features have work to measure.
                         end = cfg.lastDay().plusWeeks(1);
+                    } else {
+                        // At least four weeks past the next project's start: its window opens inside this
+                        // one, so the department's coverage is continuous.
+                        int minWeeks = Math.max(12, nextActiveStart[i] - startIndex[i] + 4);
+                        end = start.plusWeeks(rnd.between(minWeeks, Math.max(40, minWeeks)));
+                        if (end.isAfter(cfg.lastDay().plusWeeks(1))) {
+                            end = cfg.lastDay().plusWeeks(1);
+                        }
                     }
                     status = "ACTIVE";
                 }
