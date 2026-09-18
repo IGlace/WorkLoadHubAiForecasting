@@ -285,6 +285,12 @@ resolver handles it.
 
 ## 7. The seed's scope and how its output lands
 
+> **Sections 7.2 and 7.3 superseded on 2026-09-18** by `2026-09-18-seed-owns-the-work-tables-design.md`: the
+> owner ruled that only the local database is ever seeded, so the projects upsert, the user-content guard and
+> the `seed --format sql` / `psql -f` recipe are gone; the importer clears `project_history`, `task_comments`
+> and `task_attachments` with the work tables it replaces. Section 7.1 (what real mode writes) still holds;
+> the rest of this section is history.
+
 ### 7.1 Real mode writes five tables
 
 With `--export`, `SeedGenerator.generate` returns an envelope whose `data` holds only `projects`, `tasks`,
@@ -298,10 +304,6 @@ directory tables; `absences`, `user_capacity` and `team_capacity` are present an
 
 ### 7.2 Projects are upserted, the rest replaced
 
-> **Superseded on 2026-09-18** by `2026-09-18-seed-owns-the-work-tables-design.md`: the owner ruled that only the
-> local database is ever seeded, so the upsert and the user-content guard below are gone; the importer clears
-> `project_history`, `task_comments` and `task_attachments` with the work tables, and `--format sql` no longer
-> exists. The rest of this section is history.
 
 `projects` is the one table that mixes rows the application already has (re-emitted with `next_task_number`
 refreshed) and rows the seed mints. The other four tables are the seed's alone.

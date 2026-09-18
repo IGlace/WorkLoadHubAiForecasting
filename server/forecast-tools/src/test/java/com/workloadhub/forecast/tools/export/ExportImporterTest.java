@@ -50,13 +50,18 @@ class ExportImporterTest {
             st.execute("INSERT INTO task_comments (id, task_id, user_id, content, created_at, updated_at)"
                     + " VALUES ('a0000000-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000001',"
                     + " '30000000-0000-0000-0000-000000000001', 'a comment on a task the seed replaces', now(), now())");
+            st.execute("INSERT INTO task_attachments (id, task_id, uploaded_by, file_size, content_type, storage_path,"
+                    + " original_file_name, stored_file_name, created_at, updated_at)"
+                    + " VALUES ('a0000000-0000-0000-0000-000000000003', '90000000-0000-0000-0000-000000000001',"
+                    + " '30000000-0000-0000-0000-000000000001', 12, 'text/plain', '/attachments/a3', 'notes.txt', 'a3.txt',"
+                    + " now(), now())");
         }
         ExportEnvelope seeded = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
         new ExportImporter(ds).importAll(seeded, true);
         ExportEnvelope back = new ExportExporter(ds).exportAll();
         assertEquals(0, back.rows("project_history").size(), "the history of the replaced projects goes with them");
         assertEquals(0, back.rows("task_comments").size(), "the comments on the replaced tasks go with them");
-        assertEquals(0, back.rows("task_attachments").size());
+        assertEquals(0, back.rows("task_attachments").size(), "the attachments on the replaced tasks go with them");
         assertEquals(ids(seeded, "projects"), ids(back, "projects"), "projects are the seed's, no more, no less");
         assertEquals(input.rows("users").size(), back.rows("users").size(), "the directory is untouched");
     }

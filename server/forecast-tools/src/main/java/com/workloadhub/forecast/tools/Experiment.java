@@ -308,10 +308,6 @@ public final class Experiment {
             return values.get(name);
         }
 
-        String string(String name, String fallback) {
-            return has(name) ? values.get(name) : fallback;
-        }
-
         String require(String name) {
             if (!has(name)) {
                 throw new Bad("--" + name + " is required");

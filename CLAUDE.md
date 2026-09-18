@@ -143,7 +143,8 @@ confirmed `absences` is legacy and `user_capacity`/`team_capacity` will not be u
 days and the member's own APPROVED leave hours; the seed's real mode now writes only the five work tables
 (`projects`, `tasks`, `task_history`, `time_logs`, `personal_leaves`), with the application's own tables read
 from the export and left alone, `projects` upserted by id and the other four replaced child-first (both
-retired the next day, below); and the owner walked the feature matrix on 2026-09-16 and ruled on every invented rule: `proj_first_due_weeks` is
+retired the next day, below); and the owner walked the feature matrix on 2026-09-16 and ruled on every
+invented rule: `proj_first_due_weeks` is
 gone, `share_manual_13w`/`share_project_13w` are replaced by `share_assigned_13w` from the assignment's own
 `task_history.user_id`, `planned_hrs_h` returns as a per-horizon column, and every ratio or "weeks since"
 with nothing to measure is left blank instead of an invented sentinel, for 40 shared and 5 per-horizon

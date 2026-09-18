@@ -450,4 +450,14 @@ A whole-branch review over the three commits, one fix wave if it finds anything,
 
 Landed on `dev` on 2026-09-18, three tasks, each reviewed. Gate: 437 tests (core 312, tools 125), 0 failures,
 0 errors, 1 skipped, in 11m45s (705 s, `bash scripts/check.sh`). The committed fixture did not change.
-Deviations from the spec: none.
+
+Deviations from the spec, all in the tests of section 5 and none in behaviour: `aSyntheticEnvelopeHasNoDeletes`
+was deleted rather than renamed `aScriptHasNoDeletes`, and `aRealModeEnvelopeIsPlainInsertsToo` added in its
+place (`writesQuotedInsertsInDependencyOrder` still pins "no delete, no guard" on a full envelope);
+`replaceDeletesOnlyTheTablesTheEnvelopeCarries` did not gain the dependents, a second test
+`replaceClearsTheApplicationTablesUnderTheWorkTables` holds them, with one row behind each of the three
+zero-assertions after the whole-branch review. Section 6 named section 7.2 of the 2026-09-17 spec; its
+section 7.3 described the same SQL recipe, so the supersede note now heads section 7 as a whole. The
+whole-branch review approved with those and two more one-liners (a dead `Args.string`, a long line in
+`CLAUDE.md`), applied in one fix wave; it left in the backlog the mirror case the dependents rule does not
+cover, a re-import of a real export that omits `refresh_tokens` into a database that holds them.

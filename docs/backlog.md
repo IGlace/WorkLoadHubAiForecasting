@@ -362,7 +362,9 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   has no fixture and its teamless-person rule no assertion; the fixture's `sort_order` values for To Do and
   In Progress differ from `ReferenceData`'s; `realisticDataset()` in `WorkQueueTest` still generates a
   36-user, 30-week population for one test (`aMembersWeekHasAShape`) that could read the committed
-  fixture instead; `Experiment.run` treats every `IllegalArgumentException` as a bad request (exit 2),
+  fixture instead; the importer's dependents rule covers the work tables only, so re-importing a real export
+  that omits `refresh_tokens` into a local database that holds them still dies on `DELETE FROM users`
+  (2026-09-18; the driver's own imports never hit it); `Experiment.run` treats every `IllegalArgumentException` as a bad request (exit 2),
   wider than the seed's incomplete-export refusal it was added for, so a typed exception from `Reference`
   would keep a genuine defect from looking like a user error; a few imports are out of alphabetical order
   (no check enforces it).
