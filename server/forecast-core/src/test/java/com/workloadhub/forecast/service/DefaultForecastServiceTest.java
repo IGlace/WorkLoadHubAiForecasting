@@ -416,21 +416,35 @@ class DefaultForecastServiceTest {
 
     @Test
     void findRunAnswersForARunThatIsNotDoneWhileGetRunStillRefuses() {
-        JdbcRunStore store = new JdbcRunStore(SeededData.dataSource());
-        UUID id = store.create(new RunRequest(team, member), SeededData.asOf(), LocalDateTime.of(2026, 9, 6, 8, 0));
-        store.markRunning(id);
+        // Isolated on its own database: SeededData.dataSource() is shared by every other method in this class,
+        // whose runs for `member` are stamped with the real clock (DefaultForecastService.enqueue), all newer
+        // than the 2026-09-06 timestamp this test creates its run with, which would make latestRunOf(member)
+        // answer with a sibling's run instead of this one.
+        DataSource ds = SeededData.freshDataSource();
+        JdbcRunStore isolated = new JdbcRunStore(ds);
+        DefaultForecastService svc = build(ds, new FakeGateway(), new RunProgressTracker(), isolated);
+        try {
+            UUID id = isolated.create(new RunRequest(team, member), SeededData.asOf(), LocalDateTime.of(2026, 9, 6, 8, 0));
+            isolated.markRunning(id);
 
-        RunSummary summary = service.findRun(id).orElseThrow();
-        assertEquals(team, summary.teamId());
-        assertEquals(member, summary.requestedBy());
-        assertEquals(RunStatus.RUNNING, summary.status());
+            RunSummary summary = svc.findRun(id).orElseThrow();
+            assertEquals(team, summary.teamId());
+            assertEquals(member, summary.requestedBy());
+            assertEquals(RunStatus.RUNNING, summary.status());
 
-        ForecastException e = assertThrows(ForecastException.class, () -> service.getRun(id));
-        assertEquals("RUN_NOT_DONE", e.code());
+            ForecastException e = assertThrows(ForecastException.class, () -> svc.getRun(id));
+            assertEquals("RUN_NOT_DONE", e.code());
 
-        assertFalse(service.findRun(UUID.randomUUID()).isPresent());
-        assertEquals(id, service.latestRunOf(member).orElseThrow().id());
-        assertFalse(service.latestRunOf(UUID.randomUUID()).isPresent());
+            assertFalse(svc.findRun(UUID.randomUUID()).isPresent());
+            assertEquals(id, svc.latestRunOf(member).orElseThrow().id());
+            assertFalse(svc.latestRunOf(UUID.randomUUID()).isPresent());
+        } finally {
+            try {
+                svc.close();
+            } catch (Exception ignored) {
+                // test teardown
+            }
+        }
     }
 
 }
