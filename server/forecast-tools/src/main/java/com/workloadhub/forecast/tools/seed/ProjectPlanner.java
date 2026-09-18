@@ -166,8 +166,10 @@ public final class ProjectPlanner {
                 } else {
                     start = mondays.get(startIndex[i]);
                     if (i == lastActiveSlot) {
-                        // The department's last project always runs past the as-of date, so the final week
-                        // of the window is covered and the horizon's own features have work to measure.
+                        // The department's last project always runs past the as-of date, so the horizon's
+                        // first future week is covered; `activeOn` is half-open and this end is exactly
+                        // lastDay + 1 week, so only that first week is ever covered here, not the +2 or +3
+                        // weeks WorkQueue.planArrivals also looks at.
                         end = cfg.lastDay().plusWeeks(1);
                     } else {
                         // At least four weeks past the next project's start: its window opens inside this

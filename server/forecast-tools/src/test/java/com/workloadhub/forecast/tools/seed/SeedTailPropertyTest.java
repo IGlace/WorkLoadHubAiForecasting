@@ -18,12 +18,16 @@ import net.jqwik.api.Property;
  * Measured per week, not as a mean over the whole window: WorkFamilyPropertyTest already averages over all
  * 52 weeks, which is exactly why it could not see the taper that a live run on 2026-09-14 found. Fixture
  * size: 120 users, 52 weeks, seed 7 — the showcase's own demo population.
+ *
+ * The measured ratio for this fixture includes four summer-leave weeks (`AbsencePlanner`'s weeks 30 to 34,
+ * 2026-07-27..08-17), where distinct logging members fall from 98 to 60: that is seasonal leave, not an
+ * incomplete fix. A seed ending outside that period (e.g. 64 weeks ending in November) scores near 1.0.
  */
 class SeedTailPropertyTest {
 
     private static final SeedConfig CFG = new SeedConfig(52, LocalDate.of(2026, 9, 6), 7, true, 120);
 
-    /** Weeks at each end that a partial first week or the horizon's own edge makes uneven. */
+    /** Weeks at the start that a partial first week makes uneven. */
     private static final int EDGE = 2;
 
     /** The tail this property is about. */
@@ -46,16 +50,18 @@ class SeedTailPropertyTest {
 
         // 1. No week inside the window is empty.
         Map<LocalDate, Double> empty = new HashMap<>();
-        for (int i = EDGE; i < n - EDGE; i++) {
+        for (int i = EDGE; i < n; i++) {
             if (weeks.get(i).getValue() <= 0.0) {
                 empty.put(weeks.get(i).getKey(), weeks.get(i).getValue());
             }
         }
         assertTrue(empty.isEmpty(), "weeks inside the window with no logged hours at all: " + empty);
 
-        // 2. The last eight weeks carry at least 60% of the middle's weekly mean.
+        // 2. The last eight weeks, inclusive of the seed's own last week, carry at least 60% of the
+        // middle's weekly mean. This must include the last week: a run is made on the seed's as-of date,
+        // so the weeks immediately before it are exactly what a forecast is made against.
         double middle = mean(weeks, EDGE, n - TAIL);
-        double tail = mean(weeks, n - TAIL, n - EDGE);
+        double tail = mean(weeks, n - TAIL, n);
         assertTrue(tail >= 0.60 * middle,
                 "the seed tapers: last " + TAIL + " weeks mean " + Math.round(tail) + " h/week against a middle mean of "
                         + Math.round(middle) + " h/week (ratio " + String.format("%.2f", tail / middle) + ")");
