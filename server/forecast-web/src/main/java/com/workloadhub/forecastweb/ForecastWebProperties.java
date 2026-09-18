@@ -18,7 +18,7 @@ public class ForecastWebProperties {
 
     public static class ClockSettings {
         /** The demo clock's date; null or blank means the system date. */
-        private String today = "2026-06-28";
+        private String today = "";
         private boolean adjustable = true;
         public String getToday() { return today; }
         public void setToday(String today) { this.today = today; }

@@ -34,7 +34,6 @@ export function ClockPage() {
           <button className="primary" disabled={!isAdmin || !day} onClick={() => void set(day)}>Set</button>
           {system && <button disabled={!isAdmin} onClick={() => void set(addDays(system.today, -28))}>back 4 weeks</button>}
           {system && <button disabled={!isAdmin} onClick={() => void set(addDays(system.today, 28))}>forward 4 weeks</button>}
-          <button disabled={!isAdmin} onClick={() => void set('2026-06-28')}>demo default (2026-06-28)</button>
           <button disabled={!isAdmin} onClick={() => void set(null)}>release to the system date</button>
         </div>
         <ErrorNotice error={error} />
@@ -42,7 +41,7 @@ export function ClockPage() {
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Filling the accuracy page</h2>
         <ol>
-          <li>Open a <Link to="/teams">team</Link> and start a forecast on today's date (2026-06-28 by default): it predicts the two windows after that day.</li>
+          <li>Open a <Link to="/teams">team</Link> and start a forecast on today's date: it predicts the two windows after that day.</li>
           <li>Acting as the admin, move today forward four weeks (2026-07-26).</li>
           <li>Open the team's accuracy page: every weekday between the run day and the new today was forecast before it arrived, and is now scored against the hours actually logged on it. Start another run to cover the days after the new today.</li>
           <li>The seeded history ends on 2026-09-06 and its last weeks taper off (fewer tasks are created near the end), which is why the demo starts in June rather than on the last day.</li>
