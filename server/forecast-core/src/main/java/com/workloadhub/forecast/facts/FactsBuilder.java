@@ -5,7 +5,7 @@ import com.workloadhub.forecast.api.MemberDayForecast;
 import com.workloadhub.forecast.api.MemberWindowForecast;
 import com.workloadhub.forecast.calendar.ForecastWindow;
 import com.workloadhub.forecast.calendar.Weeks;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.LeaveRow;
@@ -45,7 +45,7 @@ public final class FactsBuilder {
     }
 
     public static String toJson(Map<String, Object> facts) {
-        return ExportFiles.mapper().writeValueAsString(facts);
+        return Json.mapper().writeValueAsString(facts);
     }
 
     public static Map<String, Object> build(TeamOutcome out, UUID runId, LocalDateTime generatedAt) {

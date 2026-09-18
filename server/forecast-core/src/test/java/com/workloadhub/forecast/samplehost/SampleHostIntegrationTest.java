@@ -12,7 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.workloadhub.forecast.ai.CopilotGateway;
 import com.workloadhub.forecast.ai.FakeGateway;
 import com.workloadhub.forecast.api.ForecastService;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.testing.SeededData;
@@ -44,7 +44,7 @@ class SampleHostIntegrationTest {
     CopilotGateway gateway;
 
     static JsonNode json(MvcResult r) throws Exception {
-        return ExportFiles.mapper().readTree(r.getResponse().getContentAsString());
+        return Json.mapper().readTree(r.getResponse().getContentAsString());
     }
 
     @Test
@@ -84,7 +84,7 @@ class SampleHostIntegrationTest {
                 .andExpect(jsonPath("$.hasToken").value(true)).andExpect(jsonPath("$.authenticated").value(true)).andExpect(jsonPath("$.login").value("sara"));
 
         fake.replies.clear();
-        fake.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(result.path("factsJson").asText())));
+        fake.replies.add(FakeGateway.goodNarrative(Json.mapper().readTree(result.path("factsJson").asText())));
         mvc.perform(post("/api/forecast/runs/" + run + "/narratives").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"requestedBy\": \"" + member + "\", \"language\": \"en\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OK")).andExpect(jsonPath("$.language").value("en"));

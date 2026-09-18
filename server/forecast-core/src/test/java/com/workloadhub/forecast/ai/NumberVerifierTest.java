@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.ai.NarrativeContract.Narrative;
 import com.workloadhub.forecast.ai.NumberVerifier.Report;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -17,7 +17,7 @@ class NumberVerifierTest {
     static final String A = "aaaaaaaa-0000-0000-0000-000000000004";
     static final String B = "aaaaaaaa-0000-0000-0000-000000000005";
 
-    static final JsonNode FACTS = ExportFiles.mapper().readTree("""
+    static final JsonNode FACTS = Json.mapper().readTree("""
             {"run": {"id": "r", "windows": [{"index": 1, "start": "2026-09-07", "end": "2026-09-11"}], "generated_at": "2026-09-03T10:00:00", "horizons": [1, 2]},
              "team": {"id": "t", "totals": [{"window": 1, "start": "2026-09-07", "demand": 72.5, "capacity": 88.0}]},
              "members": [
@@ -199,7 +199,7 @@ class NumberVerifierTest {
         assertTrue(r.unverified().stream().anyMatch(u -> u.contains("members[0].likely_work[0].evidence") && u.contains("19.5")), r.unverified().toString());
     }
 
-    static final JsonNode ROUNDING_FACTS = ExportFiles.mapper().readTree("""
+    static final JsonNode ROUNDING_FACTS = Json.mapper().readTree("""
             {"run": {"id": "r", "windows": [{"index": 1, "start": "2026-09-07", "end": "2026-09-11"}], "generated_at": "2026-09-03T10:00:00", "horizons": [1, 2]},
              "team": {"id": "t", "totals": [{"window": 1, "start": "2026-09-07", "demand": 12.347, "capacity": 88.0}]},
              "members": []}
@@ -262,7 +262,7 @@ class NumberVerifierTest {
     void aFactAtAnExactRoundingTieVerifiesUnderEitherConvention() {
         // 35.05 is exactly the HALF_EVEN/HALF_UP tie; round1's HALF_EVEN gives 35.0, but "35.1" (the
         // ordinary round-half-up reading) is an equally correct description of the same raw value.
-        JsonNode facts = ExportFiles.mapper().readTree(
+        JsonNode facts = Json.mapper().readTree(
                 "{\"run\": {}, \"team\": {\"totals\": [{\"window\": 1, \"start\": \"2026-09-07\", \"demand\": 35.05}]}, \"members\": []}");
         Report r = NumberVerifier.verify(NarrativeContract.parse(
                 "{\"run_summary\": \"Team demand is 35.1 h.\", \"members\": []}"), facts);
@@ -271,7 +271,7 @@ class NumberVerifierTest {
 
     @Test
     void aFabricationNearATieIsStillUnverified() {
-        JsonNode facts = ExportFiles.mapper().readTree(
+        JsonNode facts = Json.mapper().readTree(
                 "{\"run\": {}, \"team\": {\"totals\": [{\"window\": 1, \"start\": \"2026-09-07\", \"demand\": 35.05}]}, \"members\": []}");
         Report r = NumberVerifier.verify(NarrativeContract.parse(
                 "{\"run_summary\": \"Team demand is 35.3 h.\", \"members\": []}"), facts);
@@ -280,7 +280,7 @@ class NumberVerifierTest {
 
     @Test
     void aNumberInsideAMembersOwnNameIsNotReadAsACitation() {
-        JsonNode facts = ExportFiles.mapper().readTree("""
+        JsonNode facts = Json.mapper().readTree("""
                 {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
                 """.formatted(A));
         String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Hind Haddad 24\", "
@@ -293,7 +293,7 @@ class NumberVerifierTest {
 
     @Test
     void aFabricatedNumberAfterAMembersNameIsStillCaught() {
-        JsonNode facts = ExportFiles.mapper().readTree("""
+        JsonNode facts = Json.mapper().readTree("""
                 {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
                 """.formatted(A));
         String json = "{\"run_summary\": \"ok\", \"members\": [{\"member_id\": \"" + A + "\", \"name\": \"Hind Haddad 24\", "
@@ -305,7 +305,7 @@ class NumberVerifierTest {
 
     @Test
     void theNameMaskUsesTheFactsNameNotTheNarrativesOwn() {
-        JsonNode facts = ExportFiles.mapper().readTree("""
+        JsonNode facts = Json.mapper().readTree("""
                 {"run": {}, "members": [{"id": "%s", "name": "Hind Haddad 24", "forecast": [{"window": 1, "demand": 29.1}]}]}
                 """.formatted(A));
         // The model writes a different, crafted "name" for the same member, with a fabricated number (52.5)
@@ -324,7 +324,7 @@ class NumberVerifierTest {
 
     @Test
     void theNameMaskDoesNotConsumePartOfALongerNumberAfterTheName() {
-        JsonNode facts = ExportFiles.mapper().readTree("""
+        JsonNode facts = Json.mapper().readTree("""
                 {"run": {}, "members": [{"id": "%s", "name": "Karim Fassi 23", "forecast": [{"window": 1, "demand": 29.1}]}]}
                 """.formatted(A));
         // A plain String.replace of "Karim Fassi 23" would match as a literal prefix of "Karim Fassi 235.5"

@@ -1,5 +1,6 @@
 package com.workloadhub.forecast.data;
 
+import com.workloadhub.forecast.Json;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -13,33 +14,12 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import tools.jackson.core.util.DefaultIndenter;
-import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.SerializationFeature;
-import tools.jackson.databind.json.JsonMapper;
 
 /** Reads and writes the export envelope. Numbers become Long or Double, nothing else. */
 public final class ExportFiles {
 
-    /**
-     * "\n" line endings regardless of platform, so the written file is byte-identical on Windows and
-     * Linux: the default pretty printer's indenter otherwise uses {@code line.separator}.
-     */
-    private static final DefaultIndenter LF_INDENTER = new DefaultIndenter("  ", "\n");
-
-    private static final JsonMapper MAPPER = JsonMapper.builder()
-            .enable(SerializationFeature.INDENT_OUTPUT)
-            .defaultPrettyPrinter(new DefaultPrettyPrinter()
-                    .withObjectIndenter(LF_INDENTER)
-                    .withArrayIndenter(LF_INDENTER))
-            .build();
-
     private ExportFiles() {
-    }
-
-    public static JsonMapper mapper() {
-        return MAPPER;
     }
 
     /** Reads a file as UTF-8, or as Windows-1252 when the bytes are not valid UTF-8 (the real export is). */
@@ -58,7 +38,7 @@ public final class ExportFiles {
     }
 
     public static ExportEnvelope parse(String json) {
-        JsonNode root = MAPPER.readTree(json);
+        JsonNode root = Json.mapper().readTree(json);
         LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>();
         JsonNode tables = root.path("data");
         for (Iterator<Map.Entry<String, JsonNode>> it = tables.properties().iterator(); it.hasNext();) {
@@ -110,7 +90,7 @@ public final class ExportFiles {
         root.put("exported_at", envelope.exportedAt());
         root.put("excluded_tables", envelope.excludedTables());
         root.put("data", envelope.data());
-        return MAPPER.writeValueAsString(root);
+        return Json.mapper().writeValueAsString(root);
     }
 
     public static void write(Path file, ExportEnvelope envelope) throws IOException {

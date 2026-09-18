@@ -16,7 +16,7 @@ import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunSummary;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -281,7 +281,7 @@ public class HostExample {
         private void result(UUID runId) throws Exception {
             RunResult r = service.getRun(runId);
             RunSummary run = r.run();
-            JsonNode model = ExportFiles.mapper().readTree(r.factsJson()).path("model");
+            JsonNode model = Json.mapper().readTree(r.factsJson()).path("model");
             System.out.printf("%ngetRun: mae %s, mean_actual_hours %s, confidence %s, status %s, %d member-windows, %d member-days%n",
                     run.mae(), model.path("mean_actual_hours").asString("null"), model.path("confidence").asString("null"), run.status(),
                     r.memberWindows().size(), r.memberDays().size());

@@ -15,7 +15,7 @@ import com.workloadhub.forecast.api.GitHubTokenStore;
 import com.workloadhub.forecast.api.NarrativeResult;
 import com.workloadhub.forecast.api.NarrativeStatus;
 import com.workloadhub.forecast.api.RunProgress;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.testing.SeededData;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -160,7 +160,7 @@ class JavaHostIntegrationTest {
         tokens.save(head, "gho_host_sample");
         FakeGateway fake = (FakeGateway) gateway;
         fake.replies.clear();
-        fake.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(service.getRun(second).factsJson())));
+        fake.replies.add(FakeGateway.goodNarrative(Json.mapper().readTree(service.getRun(second).factsJson())));
         host.narrate(head, second, "en").get(2, TimeUnit.MINUTES);
         assertEquals("NARRATED", host.progress(head, second).phase());
         UUID third = assertDoesNotThrow(() -> host.startRun(head, teamUnderSameHead), "the narration of a done run is not a run in progress");
@@ -176,7 +176,7 @@ class JavaHostIntegrationTest {
         tokens.save(leader, "gho_host_sample");
         FakeGateway fake = (FakeGateway) gateway;
         fake.replies.clear();
-        fake.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(service.getRun(run).factsJson())));
+        fake.replies.add(FakeGateway.goodNarrative(Json.mapper().readTree(service.getRun(run).factsJson())));
         NarrativeResult result = host.narrate(leader, run, "fr").get(2, TimeUnit.MINUTES);
         assertEquals(NarrativeStatus.OK, result.status());
         assertEquals("fr", result.language());
@@ -202,7 +202,7 @@ class JavaHostIntegrationTest {
         tokens.save(leader, "gho_host_sample");
         FakeGateway fake = (FakeGateway) gateway;
         fake.replies.clear();
-        fake.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(service.getRun(run).factsJson())));
+        fake.replies.add(FakeGateway.goodNarrative(Json.mapper().readTree(service.getRun(run).factsJson())));
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch gate = new CountDownLatch(1);
         fake.askStarted = started;

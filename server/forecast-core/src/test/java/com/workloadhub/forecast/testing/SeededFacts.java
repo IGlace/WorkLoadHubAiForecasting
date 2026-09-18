@@ -1,7 +1,7 @@
 package com.workloadhub.forecast.testing;
 
 import com.workloadhub.forecast.capacity.CapacityRule;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.facts.FactsBuilder;
@@ -36,6 +36,6 @@ public final class SeededFacts {
     }
 
     public static JsonNode facts() {
-        return ExportFiles.mapper().readTree(factsJson());
+        return Json.mapper().readTree(factsJson());
     }
 }

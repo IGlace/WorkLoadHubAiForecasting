@@ -3,7 +3,7 @@ package com.workloadhub.forecast.ai;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.ai.NumberVerifier.Report;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.util.List;
 import java.util.StringJoiner;
 import net.jqwik.api.ForAll;
@@ -19,7 +19,7 @@ class NumberVerifierPropertyTest {
         for (double v : values) {
             totals.add("{\"week\": \"2026-09-07\", \"demand\": " + v + "}");
         }
-        return ExportFiles.mapper().readTree("{\"run\": {\"weeks\": [\"2026-09-07\"]}, \"team\": {\"totals\": [" + totals + "]}, \"members\": []}");
+        return Json.mapper().readTree("{\"run\": {\"weeks\": [\"2026-09-07\"]}, \"team\": {\"totals\": [" + totals + "]}, \"members\": []}");
     }
 
     static NarrativeContract.Narrative withSummary(String runSummary) {

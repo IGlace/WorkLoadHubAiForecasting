@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.workloadhub.forecast.ai.NarrationProgress.Step;
 import com.workloadhub.forecast.api.ForecastException;
 import com.workloadhub.forecast.api.NarrativeStatus;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.testing.SeededFacts;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -61,7 +61,7 @@ class NarratorTest {
     }
 
     static JsonNode usage(NarrationOutcome o) {
-        return ExportFiles.mapper().readTree(o.usageJson());
+        return Json.mapper().readTree(o.usageJson());
     }
 
     @Test
@@ -358,7 +358,7 @@ class NarratorTest {
     @Test
     void aFailureWhileCheckingIsAModelErrorThatStillKeepsTheCost() {
         JsonNode broken = SeededFacts.facts();
-        ((ObjectNode) broken.path("run")).set("windows", ExportFiles.mapper().createArrayNode().add(ExportFiles.mapper().createObjectNode().put("start", "2026-09")));
+        ((ObjectNode) broken.path("run")).set("windows", Json.mapper().createArrayNode().add(Json.mapper().createObjectNode().put("start", "2026-09")));
         FakeGateway g = new FakeGateway(FakeGateway.goodNarrative(broken));
         NarrationOutcome o = narrator(g).narrate(broken, "en", null, "gho_x", NarrationProgress.none());
         assertEquals(NarrativeStatus.FAILED, o.status(), "a broken fact must not escape narrate: the seat was billed");

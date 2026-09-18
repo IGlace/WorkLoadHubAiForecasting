@@ -24,7 +24,7 @@ import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.capacity.CapacityRule;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TeamRow;
@@ -161,7 +161,7 @@ class DefaultForecastServiceTest {
         RunResult r = service.runNow(new RunRequest(team, member));
         tokens.save(member, "gho_test_token");
         gateway.replies.clear();
-        gateway.replies.add(FakeGateway.goodNarrative(ExportFiles.mapper().readTree(r.factsJson())));
+        gateway.replies.add(FakeGateway.goodNarrative(Json.mapper().readTree(r.factsJson())));
         NarrativeResult result = service.narrate(new NarrativeRequest(r.run().id(), member, "EN", null));
         assertEquals(NarrativeStatus.OK, result.status());
         assertEquals("en", result.language());

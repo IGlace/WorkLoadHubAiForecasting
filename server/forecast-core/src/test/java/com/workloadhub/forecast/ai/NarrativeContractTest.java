@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.ai.NarrativeContract.ContractException;
 import com.workloadhub.forecast.ai.NarrativeContract.Narrative;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +33,7 @@ class NarrativeContractTest {
             """.formatted(A, B);
 
     static JsonNode facts() {
-        return ExportFiles.mapper().readTree(FACTS);
+        return Json.mapper().readTree(FACTS);
     }
 
     static ObjectNode good() {
@@ -52,11 +52,11 @@ class NarrativeContractTest {
                  "suggested_adjustments": [],
                  "model_notes": "xgboost booster, MAE 2.3 h against a mean of 31.4 h logged."}
                 """.formatted(A, B, A, A, B);
-        return (ObjectNode) ExportFiles.mapper().readTree(json);
+        return (ObjectNode) Json.mapper().readTree(json);
     }
 
     static String text(JsonNode n) {
-        return ExportFiles.mapper().writeValueAsString(n);
+        return Json.mapper().writeValueAsString(n);
     }
 
     @Test

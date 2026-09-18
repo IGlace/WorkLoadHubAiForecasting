@@ -1,6 +1,6 @@
 package com.workloadhub.forecast.ai;
 
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -39,7 +39,7 @@ final class NarrativeContract {
             String modelNotes, JsonNode tree) {
 
         String toJson() {
-            return ExportFiles.mapper().writeValueAsString(tree);
+            return Json.mapper().writeValueAsString(tree);
         }
     }
 
@@ -93,7 +93,7 @@ final class NarrativeContract {
         }
         JsonNode tree;
         try {
-            tree = ExportFiles.mapper().readTree(body.substring(start, end + 1));
+            tree = Json.mapper().readTree(body.substring(start, end + 1));
         } catch (RuntimeException e) {
             throw new ContractException(List.of("the answer is not valid JSON: " + firstLine(e.getMessage())));
         }

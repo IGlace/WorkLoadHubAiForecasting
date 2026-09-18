@@ -2,7 +2,7 @@ package com.workloadhub.forecast.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -19,7 +19,7 @@ class ContractSchemaTest {
 
     @Test
     void theValidatorAndTheSchemaNameTheSameFields() {
-        JsonNode schema = ExportFiles.mapper().readTree(Prompts.load().contractSchema());
+        JsonNode schema = Json.mapper().readTree(Prompts.load().contractSchema());
         Map<String, Set<String>> fields = NarrativeContract.FIELDS;
         assertEquals(fields.get("narrative"), keys(schema));
         for (String def : new String[] {"member", "pattern", "likely_work", "team_risk", "move", "adjustment"}) {

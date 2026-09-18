@@ -24,7 +24,7 @@ import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.backtest.Backtest;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.ForecastRepository;
 import com.workloadhub.forecast.eval.Accuracy;
@@ -186,7 +186,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         root.put("scores", scores);
         root.put("mean_mae", finite(p.backtest().meanMae()));
         root.put("origins", p.backtestOrigins().stream().map(LocalDate::toString).toList());
-        return ExportFiles.mapper().writeValueAsString(root);
+        return Json.mapper().writeValueAsString(root);
     }
 
     private static Double finite(double v) {
@@ -199,7 +199,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         if (run.status() != RunStatus.DONE) {
             throw ForecastException.of("RUN_NOT_DONE", "run " + runId + " is " + run.status());
         }
-        JsonNode bt = ExportFiles.mapper().readTree(store.backtestJson(runId).orElse("{}"));
+        JsonNode bt = Json.mapper().readTree(store.backtestJson(runId).orElse("{}"));
         List<BacktestScore> scores = new ArrayList<>();
         for (JsonNode s : bt.path("scores")) {
             scores.add(new BacktestScore(LocalDate.parse(s.path("origin").asText()), s.path("horizon").asInt(),
@@ -283,7 +283,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         // The one place the module reads a user's token.
         String token = tokens.load(request.requestedBy())
                 .orElseThrow(() -> ForecastException.of("TOKEN_MISSING", "no GitHub token stored for user " + request.requestedBy()));
-        JsonNode facts = ExportFiles.mapper().readTree(store.facts(runId).orElse("{}"));
+        JsonNode facts = Json.mapper().readTree(store.facts(runId).orElse("{}"));
         NarrationProgress live = progress.narrationProgress(runId);
         NarrationOutcome outcome;
         try {
@@ -345,7 +345,7 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
                         auth.message() != null ? auth.message() : "the token is not accepted by Copilot");
             }
             Optional<Map<String, Object>> quota = connection.quota(QUOTA_TIMEOUT);
-            String quotaJson = quota.map(q -> ExportFiles.mapper().writeValueAsString(q)).orElse(null);
+            String quotaJson = quota.map(q -> Json.mapper().writeValueAsString(q)).orElse(null);
             String message = "signed in as " + auth.login() + (quota.isPresent() ? "" : "; quota unavailable");
             return new CopilotStatus(userId, true, true, rt.path(), rt.version(), true, auth.login(), quotaJson, message);
         }

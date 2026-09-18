@@ -1,6 +1,6 @@
 package com.workloadhub.forecast.ai;
 
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +51,7 @@ final class FactsTools {
     }
 
     private static Object plain(JsonNode node) {
-        return node.isMissingNode() ? null : ExportFiles.mapper().treeToValue(node, Object.class);
+        return node.isMissingNode() ? null : Json.mapper().treeToValue(node, Object.class);
     }
 
     private static Map<String, Object> map(Object... kv) {

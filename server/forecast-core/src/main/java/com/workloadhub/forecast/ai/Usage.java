@@ -1,6 +1,6 @@
 package com.workloadhub.forecast.ai;
 
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -111,6 +111,6 @@ final class Usage {
     }
 
     static String toJson(Map<String, Object> usage) {
-        return ExportFiles.mapper().writeValueAsString(usage);
+        return Json.mapper().writeValueAsString(usage);
     }
 }

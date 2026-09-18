@@ -7,7 +7,7 @@ import com.workloadhub.forecast.ai.NarrativeContract.Move;
 import com.workloadhub.forecast.ai.NarrativeContract.Narrative;
 import com.workloadhub.forecast.ai.NarrativeContract.PatternFinding;
 import com.workloadhub.forecast.ai.NarrativeContract.TeamRisk;
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -64,7 +64,7 @@ final class NumberVerifier {
             m.put("checked", checked);
             m.put("unverified", unverified);
             m.put("fields", fields);
-            return ExportFiles.mapper().writeValueAsString(m);
+            return Json.mapper().writeValueAsString(m);
         }
     }
 

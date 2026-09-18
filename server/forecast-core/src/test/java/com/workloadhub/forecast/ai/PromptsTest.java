@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.workloadhub.forecast.data.ExportFiles;
+import com.workloadhub.forecast.Json;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -22,7 +22,7 @@ class PromptsTest {
             """;
 
     static JsonNode facts() {
-        return ExportFiles.mapper().readTree(FACTS);
+        return Json.mapper().readTree(FACTS);
     }
 
     @Test
@@ -46,7 +46,7 @@ class PromptsTest {
         assertTrue(en.contains("forecast windows 2026-09-07..2026-09-11 and 2026-09-14..2026-09-18"), en);
         assertTrue(en.contains("member_id aaaaaaaa-0000-0000-0000-000000000004 (Sara Tazi, TEAM_LEADER)"));
         assertTrue(en.contains("member_id aaaaaaaa-0000-0000-0000-000000000005 (Omar Benali, MEMBER)"));
-        JsonNode roleless = ExportFiles.mapper().readTree(FACTS.replace("\"role\": \"MEMBER\"", "\"role\": null"));
+        JsonNode roleless = Json.mapper().readTree(FACTS.replace("\"role\": \"MEMBER\"", "\"role\": null"));
         assertTrue(p.userPrompt(roleless, "en").contains("(Omar Benali, member)"), "a null role is the default, never the word null");
         assertTrue(en.contains("get_run_overview") && en.contains("get_likely_work") && en.contains("get_rebalancing_candidates"));
         assertTrue(en.contains(p.contractSchema()));
@@ -65,7 +65,7 @@ class PromptsTest {
 
     @Test
     void theContractSchemaIsJsonWithTheTopLevelFields() {
-        JsonNode schema = ExportFiles.mapper().readTree(Prompts.load().contractSchema());
+        JsonNode schema = Json.mapper().readTree(Prompts.load().contractSchema());
         assertEquals(false, schema.path("additionalProperties").asBoolean());
         for (String field : List.of("run_summary", "members", "team_risks", "rebalancing", "suggested_adjustments", "model_notes")) {
             assertTrue(schema.path("properties").has(field), field);
