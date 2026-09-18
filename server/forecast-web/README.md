@@ -9,6 +9,13 @@ bash scripts/devbox.sh shell                 # the toolchain: Java 21, Maven, No
 bash server/forecast-web/run.sh              # builds the front end and the jar when stale, then http://localhost:8080
 ```
 
+**It has no authentication.** Whoever reaches the port picks the user to act as, and `GET /api/system` names
+the seeded admin so the front end can start somewhere; the role rules are then enforced for that user, which
+is the point of the permissions pages, but nothing decides which user a caller may be — that is the session
+the server brings. The tokens its settings page stores are real GitHub credentials, so keep it on a machine
+you trust (`--server.address=127.0.0.1` binds it to the loopback interface; a container needs `0.0.0.0` to be
+reachable from its host, which is why that is the default).
+
 The first start creates and seeds a synthetic SQLite database (120 users, 52 weeks ending 2026-09-06, no
 personal data) under `~/.workloadhub-forecast/forecast-web/`, generates a token key file next to it, and
 pins the demo clock to **2026-06-28**. Delete the database file to seed again.

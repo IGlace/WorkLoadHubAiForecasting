@@ -161,8 +161,20 @@ teams, team, run (windows, days, backtest, pressure lists, facts, narration with
 flagged), accuracy, Copilot & token, permissions, demo clock and integration-guide pages, each ending with
 the calls it made. The demo clock defaults to 2026-06-28 because the synthetic history tapers over its last
 eight weeks (`docs/backlog.md`). `forecast-core` now publishes a test jar (`SeededData`, `FakeGateway`) for
-the new module's tests, and the gate gained an npm step. The gate stands at 471 Maven tests (450 core + 21
-web, 0 failures, 14 skipped without Docker) and 16 vitest tests.
+the new module's tests, and the gate gained an npm step. The whole-branch review's fix wave then corrected
+thirteen defects the pages themselves could not show (the narration poll stopping on the run's own `DONE`
+before a worker had the narration, two poll loops rescheduling from their failure path after cleanup, the
+one-at-a-time rule as check-then-act, "the latest run" ordered by a clock an admin moves backwards, the token
+key file narrowed to 0600 only after being written, a resource resolver skipping its own containment check,
+an unchecked model string, a `"NaN"` score concatenated into a chart's arithmetic) and added
+`WebSurfaceGuard`, which refuses to start with `whf.web.enabled=true`, since the module's own controller
+trusts `requestedBy` and would let any caller narrate with another user's token. The plan's closing notes
+hold the rest; `docs/backlog.md` what was left open. The gate stands at 476 Maven tests (451 core + 25 web,
+0 failures, 14 skipped without Docker) and 20 vitest tests.
+One test of `forecast-core` was fixed on the way: `LeaveDaysPropertyTest`
+failed on a new random seed because its own expectation floored `26.4 / 8.8`, which is 2.9999999999999996 in
+binary, and then demanded that a full day be partial; the dealing was right, and an example test now pins the
+case deterministically.
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
 server's own integration code, against the showcase host.
 The standing workflow for a plan:

@@ -307,6 +307,29 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **`forecast-web`'s run registry is created outside Flyway (2026-09-18).** `RunRegistry`'s constructor runs
+  `CREATE TABLE IF NOT EXISTS forecast_web_runs (... TEXT ...)` at bean construction. It works on both
+  dialects and the columns are text on purpose (the host writes ids and timestamps as strings), but three
+  things follow: the production server needs DDL rights on its schema at start-up, there is no migration
+  record of the table, and its text ids cannot be joined to the module's `uuid` columns without a cast.
+  Two instances starting together on PostgreSQL can also collide, since `CREATE TABLE IF NOT EXISTS` is not
+  atomic there. When the WorkloadHub server adopts this code, the table belongs in its own migrations.
+
+- **`forecast-web` registers a run after starting it (2026-09-18).** `HostForecastFacade.startRun` calls
+  `service.startRun` and then `registry.register`. If the insert fails (a busy SQLite file, a duplicate key),
+  the run is already computing but has no registry row, so every later poll of it answers 404
+  `RUN_NOT_FOUND` and nobody can authorise it. The run id only exists after the module has accepted the
+  request, so registering first means reserving a row and updating it, or a transaction around both. Found by
+  the whole-branch review of 2026-09-18 and left as it is: this host is one instance, and the failure needs a
+  database error to appear.
+
+- **`forecast-web` narration keys clear only when the call returns (2026-09-18).** The in-flight set that
+  refuses a second narration of the same run and language is cleared in the submitted task's `finally`, so a
+  Copilot call that never returns would keep that run and language refused for the life of the process
+  (`close()` now clears the set, which only helps at shutdown). The module's own
+  `whf.copilot.timeout-seconds` bounds the call, so this needs the SDK to hang past its timeout; a start
+  timestamp per key, treating an entry older than the timeout as free, would close it.
+
 - **The synthetic seed's work supply tapers over the last eight weeks of its history (2026-09-18).** Found
   while building the showcase host on the default demo population (120 users, 52 weeks, seed 7, ending
   2026-09-06): the population logs about 3,000 h a week from March to June (some 30 h per logging member,

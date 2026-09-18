@@ -10,6 +10,14 @@
 # Run it inside the development container (`bash scripts/devbox.sh shell`), where Java, Maven, Node and
 # XGBoost's libgomp are. Delete the database file to seed again. Front-end development instead:
 # `cd server/forecast-web/ui && npm run dev` (Vite on :5173, proxying /api to :8080).
+#
+# THIS APPLICATION HAS NO AUTHENTICATION. It is the showcase: whoever can reach the port chooses the user to
+# act as (the `X-Acting-User` header), and `GET /api/system` even names the seeded admin so the front end can
+# start somewhere. The role rules are enforced for the chosen user, which is what there is to try out, but
+# nothing decides *which* user a caller may be -- that is the session the WorkloadHub server brings. Keep it
+# on a machine you trust, and remember that the tokens stored through its settings page are real GitHub
+# credentials: `--server.address=127.0.0.1` binds it to the loopback interface (a container needs 0.0.0.0 to
+# be reachable from its host, which is why that is the default).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
