@@ -14,8 +14,6 @@ import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunSummary;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -39,7 +37,6 @@ public final class HostForecastFacade implements AutoCloseable {
     private final ForecastService service;
     private final ForecastAccess access;
     private final GitHubTokenStore tokens;
-    private final RunRegistry registry;
     private final Clock clock;
     private final ExecutorService narrations = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "forecast-narration");
@@ -50,11 +47,10 @@ public final class HostForecastFacade implements AutoCloseable {
     /** One monitor per requesting user, so the one-at-a-time rule is a check-and-start rather than check-then-act. */
     private final Map<UUID, Object> startLocks = new ConcurrentHashMap<>();
 
-    public HostForecastFacade(ForecastService service, ForecastAccess access, GitHubTokenStore tokens, RunRegistry registry, Clock clock) {
+    public HostForecastFacade(ForecastService service, ForecastAccess access, GitHubTokenStore tokens, Clock clock) {
         this.service = service;
         this.access = access;
         this.tokens = tokens;
-        this.registry = registry;
         this.clock = clock;
     }
 
@@ -77,23 +73,19 @@ public final class HostForecastFacade implements AutoCloseable {
         // instances needs a database guard instead; this application is one instance by design.
         synchronized (startLocks.computeIfAbsent(user.id(), k -> new Object())) {
             if (user.role().equals("SKILL_TEAM_LEADER")) {
-                Optional<UUID> latest = registry.latestRunOf(user.id());
+                Optional<UUID> latest = service.latestRunOf(user.id()).map(RunSummary::id);
                 if (latest.isPresent() && runInProgress(service.progress(latest.get()).phase())) {
                     throw new HostForbidden("one team at a time: run " + latest.get() + " is still in progress");
                 }
             }
-            UUID id = service.startRun(new RunRequest(teamId, user.id()));
-            // The host's own record of when it started the run, by the real clock and never by the module's
-            // Clock bean: this application's demo clock is pinned and an admin moves it backwards, which would
-            // make "the latest run" of the rule above the wrong one. The run day itself is RunSummary.asOf.
-            registry.register(id, teamId, user.id(), LocalDateTime.now(ZoneOffset.UTC));
-            return id;
+            return service.startRun(new RunRequest(teamId, user.id()));
         }
     }
 
-    /** The team a run belongs to, from the registry; a run this host never started is not found. */
+    /** The team a run belongs to, from the module's own record; a run that was never started is not found. */
     public UUID teamOf(UUID runId) {
-        return registry.teamOf(runId).orElseThrow(() -> ForecastException.of("RUN_NOT_FOUND", "run " + runId + " was not started by this host"));
+        return service.findRun(runId).map(RunSummary::teamId)
+                .orElseThrow(() -> ForecastException.of("RUN_NOT_FOUND", "run " + runId + " was not started by this host"));
     }
 
     public RunProgress progress(ActingUser user, UUID runId) {

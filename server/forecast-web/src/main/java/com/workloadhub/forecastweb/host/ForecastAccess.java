@@ -1,6 +1,5 @@
 package com.workloadhub.forecastweb.host;
 
-import com.workloadhub.forecast.store.Dialect;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -18,15 +17,13 @@ public final class ForecastAccess {
     }
 
     private final JdbcClient jdbc;
-    private final Dialect dialect;
 
-    public ForecastAccess(JdbcClient jdbc, Dialect dialect) {
+    public ForecastAccess(JdbcClient jdbc) {
         this.jdbc = jdbc;
-        this.dialect = dialect;
     }
 
     public String roleOf(UUID userId) {
-        return jdbc.sql("SELECT role FROM users WHERE id = " + dialect.placeholder("uuid")).param(userId.toString()).query().listOfRows().stream()
+        return jdbc.sql("SELECT role FROM users WHERE id = ?").param(userId).query().listOfRows().stream()
                 .findFirst().map(r -> String.valueOf(r.get("role"))).orElseThrow(() -> new HostForbidden("unknown user " + userId));
     }
 
@@ -69,17 +66,17 @@ public final class ForecastAccess {
     }
 
     boolean manages(UUID userId, UUID teamId) {
-        return !jdbc.sql("SELECT id FROM teams WHERE id = " + dialect.placeholder("uuid") + " AND manager_id = " + dialect.placeholder("uuid"))
-                .param(teamId.toString()).param(userId.toString()).query().listOfRows().isEmpty();
+        return !jdbc.sql("SELECT id FROM teams WHERE id = ? AND manager_id = ?")
+                .param(teamId).param(userId).query().listOfRows().isEmpty();
     }
 
     boolean managesParentOf(UUID userId, UUID teamId) {
-        return !jdbc.sql("SELECT t.id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE t.id = " + dialect.placeholder("uuid")
-                + " AND p.manager_id = " + dialect.placeholder("uuid")).param(teamId.toString()).param(userId.toString()).query().listOfRows().isEmpty();
+        return !jdbc.sql("SELECT t.id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE t.id = ?"
+                + " AND p.manager_id = ?").param(teamId).param(userId).query().listOfRows().isEmpty();
     }
 
     boolean memberOf(UUID userId, UUID teamId) {
-        return !jdbc.sql("SELECT team_id FROM team_members WHERE team_id = " + dialect.placeholder("uuid") + " AND user_id = " + dialect.placeholder("uuid"))
-                .param(teamId.toString()).param(userId.toString()).query().listOfRows().isEmpty();
+        return !jdbc.sql("SELECT team_id FROM team_members WHERE team_id = ? AND user_id = ?")
+                .param(teamId).param(userId).query().listOfRows().isEmpty();
     }
 }

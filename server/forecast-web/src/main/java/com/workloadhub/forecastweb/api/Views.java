@@ -18,7 +18,7 @@ public final class Views {
     }
 
     public record SystemView(LocalDate today, boolean clockPinned, boolean clockAdjustable, int windows, double defaultWeeklyHours, int runThreads,
-            String dialect, String database, boolean seededAtStart, String actingUserHeader, UUID bootstrapUserId) {
+            String actingUserHeader, UUID bootstrapUserId) {
     }
 
     public record ClockBody(LocalDate today) {

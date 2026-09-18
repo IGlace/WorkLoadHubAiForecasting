@@ -1,6 +1,5 @@
 package com.workloadhub.forecastweb.host;
 
-import com.workloadhub.forecast.store.Dialect;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,15 +24,13 @@ public final class Directory {
     }
 
     private final JdbcClient jdbc;
-    private final Dialect dialect;
 
-    public Directory(JdbcClient jdbc, Dialect dialect) {
+    public Directory(JdbcClient jdbc) {
         this.jdbc = jdbc;
-        this.dialect = dialect;
     }
 
     public Optional<ActingUser> user(UUID id) {
-        return jdbc.sql("SELECT id, full_name, role, job_title FROM users WHERE id = " + dialect.placeholder("uuid")).param(id.toString())
+        return jdbc.sql("SELECT id, full_name, role, job_title FROM users WHERE id = ?").param(id)
                 .query().listOfRows().stream().findFirst()
                 .map(r -> new ActingUser(uuid(r.get("id")), str(r.get("full_name")), str(r.get("role")), str(r.get("job_title"))));
     }
@@ -80,8 +77,8 @@ public final class Directory {
     }
 
     public List<UUID> membersOf(UUID teamId) {
-        return jdbc.sql("SELECT tm.user_id FROM team_members tm JOIN users u ON u.id = tm.user_id WHERE tm.team_id = " + dialect.placeholder("uuid")
-                + " ORDER BY u.full_name").param(teamId.toString()).query().listOfRows().stream().map(r -> uuid(r.get("user_id"))).toList();
+        return jdbc.sql("SELECT tm.user_id FROM team_members tm JOIN users u ON u.id = tm.user_id WHERE tm.team_id = ?"
+                + " ORDER BY u.full_name").param(teamId).query().listOfRows().stream().map(r -> uuid(r.get("user_id"))).toList();
     }
 
     static UUID uuid(Object o) {

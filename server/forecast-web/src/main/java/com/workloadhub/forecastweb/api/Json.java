@@ -1,6 +1,5 @@
 package com.workloadhub.forecastweb.api;
 
-import com.workloadhub.forecast.data.ExportFiles;
 import tools.jackson.databind.JsonNode;
 
 /** Parses the JSON strings the module stores (facts, narrative, verification, usage) so the response carries objects. */
@@ -13,6 +12,7 @@ final class Json {
         if (json == null || json.isBlank()) {
             return null;
         }
-        return ExportFiles.mapper().readTree(json);
+        // Fully qualified: this class's own name shadows the module's, which cannot therefore be imported.
+        return com.workloadhub.forecast.Json.mapper().readTree(json);
     }
 }

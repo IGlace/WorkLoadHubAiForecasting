@@ -5,9 +5,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
- * The showcase host: a Spring Boot application with the module on its classpath, its own {@code DataSource}, and
- * the host code of design 2026-09-11 (role rules, run registry, narration executor) in {@code host}. Everything in
- * {@code demo} exists so the application runs alone on a seeded SQLite file; the production server deletes it.
+ * The showcase host: a Spring Boot application with the module on its classpath, its own {@code DataSource}
+ * (Spring Boot's own, from {@code spring.datasource.*}), and the host code of design 2026-09-11 (role rules,
+ * narration executor) in {@code host}. Everything in {@code demo} is showcase wiring on top of the module;
+ * the production server deletes it. The PostgreSQL database it connects to is filled beforehand by a
+ * separate command-line tool ({@code server/tools/experiment.sh}), never seeded by this application.
  *
  * <p>The package is deliberately not under {@code com.workloadhub.forecast}: component scanning would otherwise
  * pick up the module's own optional controller, which trusts {@code requestedBy} as given.

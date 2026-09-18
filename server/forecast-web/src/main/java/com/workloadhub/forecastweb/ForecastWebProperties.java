@@ -1,41 +1,20 @@
 package com.workloadhub.forecastweb;
 
-import java.time.LocalDate;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** Every forecast-web.* property (design 2026-09-18, section 3.4). All of it is demo wiring; the whf.* properties are the module's. */
 @ConfigurationProperties(prefix = "forecast-web")
 public class ForecastWebProperties {
 
-    private String database = System.getProperty("user.home") + "/.workloadhub-forecast/forecast-web/workloadhub.db";
     private String tokenKeyFile = System.getProperty("user.home") + "/.workloadhub-forecast/forecast-web/token.key";
     private String uiDir = "ui/dist";
-    private final Seed seed = new Seed();
     private final ClockSettings clock = new ClockSettings();
 
-    public String getDatabase() { return database; }
-    public void setDatabase(String database) { this.database = database; }
     public String getTokenKeyFile() { return tokenKeyFile; }
     public void setTokenKeyFile(String tokenKeyFile) { this.tokenKeyFile = tokenKeyFile; }
     public String getUiDir() { return uiDir; }
     public void setUiDir(String uiDir) { this.uiDir = uiDir; }
-    public Seed getSeed() { return seed; }
     public ClockSettings getClock() { return clock; }
-
-    public static class Seed {
-        private int users = 120;
-        private int weeks = 52;
-        private long seed = 7;
-        private LocalDate end = LocalDate.of(2026, 9, 6);
-        public int getUsers() { return users; }
-        public void setUsers(int users) { this.users = users; }
-        public int getWeeks() { return weeks; }
-        public void setWeeks(int weeks) { this.weeks = weeks; }
-        public long getSeed() { return seed; }
-        public void setSeed(long seed) { this.seed = seed; }
-        public LocalDate getEnd() { return end; }
-        public void setEnd(LocalDate end) { this.end = end; }
-    }
 
     public static class ClockSettings {
         /** The demo clock's date; null or blank means the system date. */
