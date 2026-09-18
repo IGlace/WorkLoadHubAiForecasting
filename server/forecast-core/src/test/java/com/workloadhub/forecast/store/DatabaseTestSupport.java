@@ -1,9 +1,8 @@
 package com.workloadhub.forecast.store;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -59,28 +58,38 @@ public final class DatabaseTestSupport {
         return ds;
     }
 
-    /** The two generated files core's tests read: the WorkloadHub schema and the seeded rows (`experiment.sh fixture`). */
-    public static final Path FIXTURES = Path.of("src/test/resources/fixtures");
+    /** The WorkloadHub schema, written by `experiment.sh fixture` and read from the test classpath. */
+    public static final String SCHEMA_SQL = "/fixtures/workloadhub-schema.sql";
 
-    /** Runs a whole SQL file in one statement; the driver splits it on semicolons and honours BEGIN and COMMIT inside it. */
-    public static void runScript(DataSource ds, Path file) {
+    /** The seeded rows, written by `experiment.sh fixture` and read from the test classpath. */
+    public static final String SEEDED_ROWS_SQL = "/fixtures/seeded-rows.sql";
+
+    /**
+     * Runs a whole SQL resource in one statement; the driver splits it on semicolons and honours BEGIN and
+     * COMMIT inside it. The resource is read from the classpath, not from the working directory, so a module
+     * that reuses this class through forecast-core's test-jar finds it too.
+     */
+    public static void runScript(DataSource ds, String resource) {
         String sql;
-        try {
-            sql = Files.readString(file, StandardCharsets.UTF_8);
+        try (InputStream in = DatabaseTestSupport.class.getResourceAsStream(resource)) {
+            if (in == null) {
+                throw new IllegalStateException("not on the classpath: " + resource);
+            }
+            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new IllegalStateException("cannot read " + file, e);
+            throw new IllegalStateException("cannot read " + resource, e);
         }
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
             st.execute(sql);
         } catch (SQLException e) {
-            throw new IllegalStateException("script failed: " + file + ": " + e.getMessage(), e);
+            throw new IllegalStateException("script failed: " + resource + ": " + e.getMessage(), e);
         }
     }
 
     /** A new database holding schema task_service and the 24 WorkloadHub tables, from the committed schema file. */
     public static DataSource postgresWithSchema() {
         DataSource ds = postgres();
-        runScript(ds, FIXTURES.resolve("workloadhub-schema.sql"));
+        runScript(ds, SCHEMA_SQL);
         return ds;
     }
 

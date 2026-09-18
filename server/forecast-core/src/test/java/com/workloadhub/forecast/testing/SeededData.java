@@ -34,7 +34,7 @@ public final class SeededData {
     /** A new database with the WorkloadHub tables, the seeded rows and the module's tables, for a test that changes rows. */
     public static DataSource freshDataSource() {
         DataSource ds = DatabaseTestSupport.postgresWithSchema();
-        DatabaseTestSupport.runScript(ds, DatabaseTestSupport.FIXTURES.resolve("seeded-rows.sql"));
+        DatabaseTestSupport.runScript(ds, DatabaseTestSupport.SEEDED_ROWS_SQL);
         ForecastMigrations.run(ds);
         return ds;
     }
