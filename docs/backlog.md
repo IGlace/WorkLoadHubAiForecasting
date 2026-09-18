@@ -1,7 +1,7 @@
 # Backlog
 
 Open items after version 1 (plans 1 to 4 and the deferred-items hardening pass). Nothing here blocks using
-version 1. Dated 2026-09-04, last updated 2026-09-17; update this file when an item lands.
+version 1. Dated 2026-09-04, last updated 2026-09-18; update this file when an item lands.
 
 Backlog items that name the desktop app, the installer, the Python service or Windows verification apply to
 the archived first version only — including the whole "Verification on Windows" section below. Their
@@ -33,6 +33,24 @@ been fixed; see "Landed" below. The owner began the Windows verification on 2026
 first install straight away; the installer now seeds the data itself, see "Landed" below.
 
 ## Landed
+
+- **PostgreSQL only, one final migration, and the tools module** (2026-09-18): the module carried two
+  database engines — every JDBC statement through a `Dialect`, five migrations written twice, the store's
+  row helpers three times — and shipped a 2,348-line synthetic seed and a 992-line schema dump inside the
+  library jar. PostgreSQL 18 is now the only engine on one `V1` migration; `Dialect`, the SQLite migrations
+  and the SQLite dependency are gone. A second Maven module that is never shipped, `forecast-tools`, holds
+  the seed, the import and export code, the WorkloadHub schema script, the driver (`Experiment`: `init-db`,
+  `import`, `export`, `seed`, `fixture`) and the sample host (`HostExample`), so `forecast-core`'s jar fell
+  from 438,713 B over 243 entries to 317,615 B over 196, none of them seed, schema or SQLite. Core's tests
+  read their seeded rows from two committed files, `fixtures/workloadhub-schema.sql` (34,564 B) and
+  `fixtures/seeded-rows.sql` (2,831,643 B), written by `bash server/tools/experiment.sh fixture` and held
+  fresh by `FixtureFreshnessTest` in the tools module. `scripts/postgres.sh` runs the local PostgreSQL the
+  driver and the sample host connect to — `--db FILE` is gone from both — and the gate now needs Docker or
+  podman: the database tests fail without an engine instead of skipping themselves. The gate stands at 437
+  tests (core 312, tools 125), 0 failures, 0 errors, 1 skipped, in 11m38s, the same wall time as before the
+  test pruning that came with it. Spec
+  `docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`, plan
+  `docs/superpowers/plans/2026-09-17-postgresql-only-and-tools-module.md` (closing notes there).
 
 - **`forecast-cli` removed; evaluation is a module feature** (2026-09-12): the trim earlier that day left five
   commands that build and score an experiment database — 408 lines of flag parsing over `forecast-core`
@@ -307,6 +325,15 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Duplication folds the 2026-09-17 audits found outside the store (2026-09-17).** `NumberVerifier` parses
+  each token twice and walks the facts tree twice per verification; `SdkCopilotGateway` hand-parses two
+  properties files and repeats one timeout-and-interrupt block four times; the Copilot sign-in check exists
+  in both `Narrator` and `DefaultForecastService` with the same two messages; the seed builds rows with
+  ten-line put ladders in six files and rebuilds the person map three times; two medians, four rounding
+  helpers, three weekend tests and three working-day counts exist. Each is a pure refactor with a test
+  already pinning it; about 300 lines. Spec section 10
+  (`docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`).
+
 - **`CapacityRule` builds its own calendar for the leave index while its callers pass one (2026-09-17).**
   `CapacityRule.indexFor` expands the approved leaves with `WorkingCalendar.fromHolidays(data.holidays())`,
   but every public method also takes a `WorkingCalendar` from its caller. The two agree today, because every
@@ -449,11 +476,8 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   library is missing. The two-model question is closed; do not reopen it.
 - **Over-engineering survey (2026-09-12).** Found while scoping the single-model change; each item needs its own
   brainstorm before any work. Ranked by size:
-  1. **`seed/` ships inside the library.** 2,300 lines over 18 files, about a fifth of `forecast-core`'s main
-     source, whose only consumers are `src/test` and `server/tools/Experiment.java`. `forecast-core/pom.xml` has
-     no jar exclusions, so every host that adds the dependency also ships the synthetic-data generator
-     (`WorkQueue` alone is 509 lines). Candidate fixes: a second Maven module, or `src/test` plus a test-jar on
-     the driver's classpath. Structural, no behaviour changes. The largest single win.
+  1. **`seed/` ships inside the library.** Closed on 2026-09-18: it is `forecast-tools` now
+     (`docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`).
   2. **Two ways to reach Copilot.** `whf.copilot.cli-path` switches `SdkCopilotGateway` from the in-process SDK
      runtime to a CLI subprocess (`SdkCopilotGateway:254-257`). This was a deliberate ruling of the narration
      plan (2026-09-10, section 15, recorded below), not an accident — but it is a second path that the hard rule
@@ -500,8 +524,8 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   `Truth.realisedHours` (weekly) has no production caller;
   `JdbcRunStore.finish` re-reads the team id and re-sorts what `ORDER BY` already ordered; a window row's
   `absence_hours` comes from the day rows while its capacity may come from the application's week row;
-  `CapacityRule`'s identity-keyed index is mutated from run threads (predates this branch) and two concurrent
-  `finish` calls on SQLite contend for the write lock (a `busy_timeout` when SQLite is used for real).
+  `CapacityRule`'s identity-keyed index is mutated from run threads (predates this branch; the SQLite
+  write-lock contention this list also named went with SQLite on 2026-09-18).
 - Seed realism to revisit after the first forecast on seeded data: per-department rhythms, the share of
   reopened and unlogged tasks, and whether department teams (people without a manager) should run their own
   forecast.

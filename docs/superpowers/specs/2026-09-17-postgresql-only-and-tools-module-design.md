@@ -1,7 +1,8 @@
 # PostgreSQL only, one final migration, and a tools module for what the host never runs
 
 **Date:** 2026-09-17
-**Status:** approved by the owner in conversation on 2026-09-17; not yet planned
+**Status:** implemented, landed on dev on 2026-09-18 (plan
+`docs/superpowers/plans/2026-09-17-postgresql-only-and-tools-module.md`, closing notes there)
 **Supersedes:** the two-engine parts of `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`
 (the SQLite experiment path of its sections 2, 3 and 12, and the paired migrations of its section 3); the
 "Over-engineering survey (2026-09-12)" item 1 in `docs/backlog.md`, which this closes; the SQLite-based
@@ -221,8 +222,9 @@ bash scripts/postgres.sh psql      open psql inside the container
 ```
 
 It runs `postgres:18-alpine` as container `whf-postgres` with the named volume `whf-pg` on
-`/var/lib/postgresql/data`, publishes `5432` on the host, and sets `POSTGRES_DB`, `POSTGRES_USER` and
-`POSTGRES_PASSWORD` to `workloadhub`. `WHF_PG_IMAGE`, `WHF_PG_CONTAINER`, `WHF_PG_VOLUME` and `WHF_PG_PORT`
+`/var/lib/postgresql` (**corrected 2026-09-18**: not `/var/lib/postgresql/data`, which the image's own
+entrypoint reads as leftover data from before an upgrade and refuses to start on), publishes `5432` on the
+host, and sets `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` to `workloadhub`. `WHF_PG_IMAGE`, `WHF_PG_CONTAINER`, `WHF_PG_VOLUME` and `WHF_PG_PORT`
 override those, in the way `devbox.sh` names its own. The development box runs with `--network host`, so from
 inside it the database is `localhost:5432`, the same address as from Windows.
 
@@ -347,17 +349,20 @@ Twenty-five core test classes build their data through the seed, and the seed no
 depends on core; Maven allows no cycle, and moving those tests out of core would cost them their
 package-private access. The fixture is the way through:
 
-- `forecast-core/src/test/resources/fixtures/seeded-workloadhub.sql` is one generated file: the WorkloadHub
-  schema script followed by the rows of the synthetic seed that `SeededData` builds today (36 users, 30 weeks,
-  seed 11, last day 2026-09-06), in the `INSERT ... ON CONFLICT` form `SqlExportWriter` already writes.
-- `experiment.sh fixture` writes it (the `fixture` command of section 4.3), from the same generator and
-  the same constants, so it is reproducible byte for byte.
-- `FixtureFreshnessTest` in the tools module regenerates it in memory and compares; a difference fails the
+- `forecast-core/src/test/resources/fixtures/` holds two generated files (**amended 2026-09-18**, where this
+  section first said one): `workloadhub-schema.sql`, the WorkloadHub schema script the fixture command
+  copies, and `seeded-rows.sql`, the rows of the synthetic seed that `SeededData` builds today (36 users,
+  30 weeks, seed 11, last day 2026-09-06), in the `INSERT ... ON CONFLICT` form `SqlExportWriter` already
+  writes. Two files rather than one, so a test that needs only the empty schema does not load 2.8 MB of
+  rows; both are written by the fixture command and both are checked by the freshness test.
+- `experiment.sh fixture` writes them (the `fixture` command of section 4.3), from the same generator and
+  the same constants, so they are reproducible byte for byte.
+- `FixtureFreshnessTest` in the tools module regenerates them in memory and compares; a difference fails the
   gate with "run `bash server/tools/experiment.sh fixture` and commit the result". The test writes nothing.
-- `SeededData` in core runs the file once per JVM into a fresh database, then `ForecastMigrations.run`, and
+- `SeededData` in core runs the two files once per JVM into a fresh database, then `ForecastMigrations.run`, and
   loads `ForecastData` through the real repository as today. `SeededFacts` and the sample-host tests are
   unchanged above it.
-- The file is checked in with `-diff` in `.gitattributes`, so a regeneration shows as one changed binary,
+- The files are checked in with `-diff` in `.gitattributes`, so a regeneration shows as a changed binary,
   not as ten thousand changed lines. Measured on 2026-09-17 with the current generator at `c9bdc1c`: the
   seed's SQL export is 2.8 MB uncompressed and 0.54 MB as git stores it, for 1,506 tasks, 4,496 history
   rows, 4,739 time logs and 66 leaves; the schema script adds about 40 KB. A JSON export of the same seed is

@@ -1,8 +1,8 @@
 # WorkloadHub forecast: the Java module
 
-One Maven module, `forecast-core`: the library the WorkloadHub Spring Boot application adds as a
-dependency. Experiments — building a SQLite database and scoring the model on it — are driven by
-`tools/experiment.sh`, which is not a module but a single Java file the launcher compiles on the spot.
+Two Maven modules: `forecast-core`, the library the WorkloadHub Spring Boot application adds as a
+dependency, and `forecast-tools`, never shipped, which holds the seed, the import and export of a
+WorkloadHub database, the experiment driver and the sample host.
 Design:
 `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`,
 `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`.
@@ -21,15 +21,20 @@ Or, on a machine that has neither and cannot easily be given them, the developme
 `bash scripts/devbox.sh shell` opens a shell in an Ubuntu box that already has the whole toolchain,
 with this repository mounted. See "The development container" below.
 
-A container engine is optional for the build itself. When the tests can reach one the PostgreSQL
-tests run against a real database; otherwise they skip themselves with a message.
+A container engine (Docker or podman) is required: the database tests run PostgreSQL 18 through
+Testcontainers and the gate fails without one. The same engine runs the local database of
+`scripts/postgres.sh`.
 
 ## Build and test
 
 ```bash
 cd server
-mvn -B verify                 # compiles, runs every test, builds forecast-core/target/workloadhub-forecast-core-0.1.0-SNAPSHOT.jar
+mvn -B verify                 # both modules: compiles, runs every test, builds forecast-core/target/workloadhub-forecast-core-0.1.0-SNAPSHOT.jar
 mvn -B verify -Dseed.full=true   # also times the 264-user, 52-week seed
+```
+
+```bash
+bash scripts/check.sh            # the gate: checks for the engine, then mvn verify
 ```
 
 ## The development container
@@ -52,8 +57,10 @@ bash scripts/devbox.sh --help    # the script's header, which is the reference f
 
 Inside the box, `/work` is this repository **bind-mounted, not copied**: an edit made in the box is
 an edit on Windows and the other way round, so an editor on the host and a shell in the box work on
-the same files. `/data` is `~/whf` on the host, for the databases, seeds and exports that must stay
-out of the repository. Five named volumes hold what is expensive to fetch again — `~/.m2`,
+the same files. `/data` is `~/whf` on the host, for the seeds and exports that must stay
+out of the repository. The database is not a file: `scripts/postgres.sh` runs it as a sibling
+container, reachable from the box as `localhost:5432`. Five named volumes hold what is
+expensive to fetch again — `~/.m2`,
 `~/.cache`, `~/.local/share/uv` (where uv keeps its downloaded Pythons, not in `~/.cache`),
 `~/.copilot` (where the SDK unpacks its runtime) and `~/.config/gh` (the token `gh auth login`
 obtained, so a rebuild does not cost another browser sign-in) — so all of it survives a `rm` or a
@@ -62,7 +69,7 @@ documents every variable that overrides a default, and which of them are read on
 created.
 
 The image is `maven:3.9-eclipse-temurin-21` — Ubuntu 24.04 with Java 21 and Maven 3.9 — plus
-`libgomp1`, git, less, ps, psql, sqlite3, uv, gh (for a Copilot token, see "Narrating with Copilot")
+`libgomp1`, git, less, ps, psql, uv, gh (for a Copilot token, see "Narrating with Copilot")
 and `vi` (vim-tiny, so `vim` is not a command).
 `libgomp1` is not optional: XGBoost4J loads a native
 library that needs the OpenMP runtime, and without it sixteen tests fail, four of them as two-minute
@@ -70,9 +77,9 @@ library that needs the OpenMP runtime, and without it sixteen tests fail, four o
 loading.
 
 The box mounts the engine's own socket, so Testcontainers starts PostgreSQL as a sibling container
-and the database tests **run** rather than skip. `devbox.sh` checks that mount from inside and warns
-if it is not a socket, because a wrong path is created as an empty directory and the only symptom
-would be tests quietly skipping. Testcontainers' reaper is switched off rather than given the
+and the database tests run; without that mount the gate fails, since nothing skips any more.
+`devbox.sh` checks the mount from inside and warns if it is not a socket, because a wrong path is
+created as an empty directory. Testcontainers' reaper is switched off rather than given the
 privileges it asks for (`TESTCONTAINERS_RYUK_PRIVILEGED`), which keeps one setting fewer per engine
 at the cost of a run killed part way leaving a `postgres` container behind: `podman ps`.
 
@@ -100,18 +107,23 @@ host skips the Maven step and still exits 0, reporting success having compiled n
 
 ## Running experiments
 
-```bash
-X="bash tools/experiment.sh"
+From the root of the repository, inside the development container:
 
-# 1. a database with the WorkloadHub schema and the module's tables
-$X init-db --db ~/whf/workloadhub.db
+```bash
+X="bash server/tools/experiment.sh"
+
+# 0. the local database, once
+bash scripts/postgres.sh up
+
+# 1. the schema task_service with the 24 WorkloadHub tables and the module's tables
+$X init-db                                    # --force drops and recreates the schema
 
 # 2. a year of history for the real directory: the seed writes projects, tasks, task_history, time_logs and personal_leaves; the application's own tables are read from the export and left alone (the export holds personal data: keep it and the output outside git)
 $X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
 $X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --format sql --out ~/whf/seeded.sql
 
 # 3. load it
-$X import --db ~/whf/workloadhub.db ~/whf/seeded.json
+$X import ~/whf/seeded.json
 
 # 4. or a synthetic population with no personal data, for tests and demos
 # team size is emergent (ReferenceData.syntheticUsers: perDept = n / 9, capped at 10 members per team), so a
@@ -122,32 +134,37 @@ $X import --db ~/whf/workloadhub.db ~/whf/seeded.json
 # well above it; a seed averaging in the low twenties predates the 2026-09-15 weekly-supply correction and
 # is stale.
 $X seed --synthetic --users 120 --weeks 52 --seed 7 --end 2026-09-06 --out /tmp/synthetic.json
+$X import /tmp/synthetic.json
 
-# 5. dump a database back to JSON
-$X export --db ~/whf/workloadhub.db /tmp/dump.json
+# 5. dump the database back to JSON
+$X export /tmp/dump.json
+
+# 6. regenerate forecast-core's committed test fixture after a change to the seed
+$X fixture
 ```
 
 | command | options | what it does |
 |---|---|---|
-| `init-db` | `[--db] [--force]` | Creates the 24 WorkloadHub tables and the module's tables in a new SQLite file; refuses an existing file without `--force`. |
-| `import` | `[--db] <file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
-| `export` | `[--db] <file>` | Writes the database's WorkloadHub tables as a JSON export. |
+| `init-db` | `[--force]` | Creates schema `task_service` with the 24 WorkloadHub tables and the module's tables; refuses an existing schema without `--force`. |
+| `import` | `<file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
+| `export` | `<file>` | Writes the database's WorkloadHub tables as a JSON export. |
 | `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--format json\|sql] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. Real mode writes five tables; synthetic mode writes them all. |
+| `fixture` | `[--out <dir>]` | Regenerates `forecast-core`'s committed test fixture, `workloadhub-schema.sql` and `seeded-rows.sql`. Commit both. |
+| any of them | `[--url] [--user] [--password]` | Where to connect: the options, else `WHF_DB_URL`, `WHF_DB_USER`, `WHF_DB_PASSWORD`, else the local database of `scripts/postgres.sh` (`jdbc:postgresql://localhost:5432/workloadhub`, user and password `workloadhub`). |
 
-Those four are the whole of it: they build and move an experiment database. Everything a
+Those five are the whole of it: they build and move an experiment database, and freeze the seeded test
+fixture. Everything a
 *host* does — starting a run and polling its progress, reading the run, the current forecast, the run list,
-accuracy, `copilotStatus` and a narration — is in `examples/HostExample.java`, run through
-`examples/run-host-example.sh` ("Integrating from the server's own code" below).
+accuracy, `copilotStatus` and a narration — is in `HostExample`, a class of `forecast-tools`, run through
+`server/examples/run-host-example.sh` ("Integrating from the server's own code" below).
 
-`tools/experiment.sh` runs `tools/Experiment.java` the same way: Java 21's single-file source launcher
-(JEP 330) compiles it against `forecast-core`'s own classes and its runtime dependencies, resolved by
-`tools/core-classpath.sh`, which compiles the module first if the sources are newer. There is no second
-Maven module and no jar — until 2026-09-12 there was one, `forecast-cli`, wrapping picocli around core
-classes that are all public anyway. File arguments are resolved against your working directory. Every verb calls `forecast-core` classes
-directly and needs no Spring context: the one that booted the module was `eval`, removed on 2026-09-14
-with the evaluation harness (`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`).
-`ExperimentFlowTest` in `forecast-core` drives the whole file as a subprocess, so it is covered by
-`mvn verify` like anything else.
+`server/tools/experiment.sh` runs `com.workloadhub.forecast.tools.Experiment`, a class of `forecast-tools`,
+against the classpath `server/tools/tools-classpath.sh` resolves (it compiles both modules first when the sources
+are newer). `ExperimentFlowTest` in `forecast-tools` drives every verb in process, so the driver is covered
+by `mvn verify` like anything else. File arguments are resolved against your working directory. Every verb
+calls the two modules' classes directly and needs no Spring context: the one that booted the module was
+`eval`, removed on 2026-09-14 with the evaluation harness
+(`docs/superpowers/specs/2026-09-14-evaluation-removal-design.md`).
 
 `--seed` fixes the output byte for byte; `--end` is the as-of date, and the history covers `--weeks`
 Monday weeks ending in the week of that date. Loading the SQL script into PostgreSQL:
@@ -256,14 +273,14 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
 - **Errors**: `ForecastException.code()`: `*_NOT_FOUND` → 404, `INVALID_REQUEST` → 400, everything else → 409; a
   refused role check is your 403.
 - **Try the calls first**: `bash server/examples/run-host-example.sh --team <uuid>` (from the root of the
-  repository, inside the development container) runs `examples/HostExample.java`, a standalone Spring Boot
-  application on the seeded SQLite file that makes every one of those calls and prints what comes back — a run
+  repository, inside the development container) runs `HostExample`, a standalone Spring Boot
+  application on the local PostgreSQL that makes every one of those calls and prints what comes back — a run
   with its progress labels, the windows and the overload, the current forecast, the run list, accuracy and
   `copilotStatus`. Without `--team` it lists the teams, marking which of them have a `TEAM_LEADER`: the example
   acts as that user, and refuses a team that has none, since it has no session to take a user from. With
   `--narrate` it also calls the model, which is the live Copilot check ("Narrating with Copilot" below). It is
-  compiled by Java's single-file source launcher against `forecast-core`'s classes, so it adds no module to the
-  build and can be edited and re-run in a few seconds. What it deliberately leaves out is the host's own work:
+  a class of `forecast-tools`, so the gate compiles it; its `DataSource` is the one Spring Boot builds from
+  `spring.datasource.*`, exactly as in the server. What it deliberately leaves out is the host's own work:
   the role check, the one-run-at-a-time rule and the narration executor, which are in the sample facade above.
 - **One instance**: progress and the run executor live in the JVM. Once every bean is up (after your own
   Flyway, whichever owns the module's tables) the module marks runs left `QUEUED` or `RUNNING` by the previous
@@ -315,6 +332,17 @@ credentials — by declaring one of its own; the sample host does exactly that
   **older** Jackson 2 can break the SDK's deserialisation: check it after upgrading either side.
 - `spring-webmvc` is optional and `jakarta.servlet-api` is `provided`: neither reaches a host that does not
   already have them, and the controller class is never loaded without Spring MVC and `whf.web.enabled`.
+- Nothing of the seed, the schema scripts or the driver: they live in `forecast-tools`, which the host never
+  adds.
+
+## The tools module
+
+`forecast-tools` depends on `forecast-core` and is never shipped. It holds the seed (`tools.seed`), the
+import and export of a WorkloadHub database and the schema script (`tools.export`), the driver
+(`tools.Experiment`) and the sample host (`examples.HostExample`). Its tests are the seed's, the
+export code's, the driver's and `FixtureFreshnessTest`, which fails the gate when
+`forecast-core/src/test/resources/fixtures/` no longer matches what the generator produces: run
+`bash server/tools/experiment.sh fixture` and commit the two files.
 
 ## Narrating with Copilot
 
@@ -327,20 +355,20 @@ Narration uses the requesting user's own GitHub Copilot seat through `copilot-sd
 Tokens are stored encrypted on `users.github_token` with the key in `whf.token-key`: a base64 AES-256 key,
 `openssl rand -base64 32`. Accepted tokens: `gho_`, `ghu_`, `github_pat_`; classic `ghp_` tokens are refused.
 
-The experiment driver does not narrate. The live path is exercised by the sample host,
-`examples/HostExample.java`, which reads the key from `WHF_TOKEN_KEY` (into `whf.token-key`) and the user's
+The experiment driver does not narrate. The live path is exercised by the sample host, `HostExample` in
+`forecast-tools`, which reads the key from `WHF_TOKEN_KEY` (into `whf.token-key`) and the user's
 token from `WHF_EXAMPLE_GH_TOKEN`, saving it through `GitHubTokenStore.save` as a settings page would.
 
-It needs a seeded database, and its default is `/data/workloadhub.db`. `/data` is the box's data mount, the
-host's `~/whf`; it is **not** the `~/whf` that "Running experiments" above writes to, which inside the box is
-`/root/whf`. So either run that recipe with `--db /data/workloadhub.db` in place of `~/whf/workloadhub.db`
-(`init-db`, then `seed`, then `import`), or leave it where it is and point the example at it with its own
-`--db`. Then, from the root of the repository inside the development container:
+It needs a seeded database, and its default is the local PostgreSQL of `scripts/postgres.sh`, the same one
+the driver writes to: run "Running experiments" above (`init-db`, then `seed`, then `import`) and the
+example finds the result with no argument. It reads `--url`, `--user` and `--password`, then `WHF_DB_URL`,
+`WHF_DB_USER` and `WHF_DB_PASSWORD`, exactly as the driver does, so another database is one option away.
+Then, from the root of the repository inside the development container:
 
 ```bash
 export WHF_TOKEN_KEY="$(openssl rand -base64 32)"   # keep it: the stored tokens are unreadable without it
 export WHF_EXAMPLE_GH_TOKEN="gho_..."               # the user's own token
-bash server/examples/run-host-example.sh                                   # lists the teams of /data/workloadhub.db
+bash server/examples/run-host-example.sh                                   # lists the teams in the local database
 bash server/examples/run-host-example.sh --team <uuid> --narrate --lang fr
 ```
 

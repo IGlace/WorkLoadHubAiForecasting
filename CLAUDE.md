@@ -7,8 +7,9 @@ two by default) from the team's task history in the
 application's own PostgreSQL database, compares them with capacity (44 h/week default over the working days,
 minus public holidays and approved personal leaves), and uses each user's own GitHub Copilot seat to explain
 patterns, warn about overload and suggest rebalancing. The host calls a Java interface or an optional REST
-surface; a single-file Java driver runs the same code on SQLite for experiments. The first version (a Windows desktop
-app with a Python service) is archived on the remote branch `archive/python-desktop-v1`.
+surface; a second Maven module, `forecast-tools`, holds the seed and the experiment driver, run by hand
+against a local PostgreSQL. The first version (a Windows desktop app with a Python service) is archived on
+the remote branch `archive/python-desktop-v1`.
 
 ## Read these first
 
@@ -44,13 +45,16 @@ app with a Python service) is archived on the remote branch `archive/python-desk
   (every table of the database with the module installed, what the module adds, what it reads and what the
   data must contain, how the server integrates it) and `docs/design/2026-09-17-feature-matrix-now.html` (the
   features, the logic and the rules; the 2026-09-16 page is kept as the reviewed record).
+- `docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`: **implemented, landed on
+  dev on 2026-09-18.** PostgreSQL is the only database, one final `V1` migration, the seed and the driver in
+  `forecast-tools`, core tests on a committed seeded fixture, a local PostgreSQL in `scripts/postgres.sh`.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
 - `server/README.md`: build, running experiments, the seed, using the module from the server, narrating with
   Copilot.
 - Documents dated before 2026-09-09 describe the archived version; each carries a note saying so.
 
-## Where the project stands (2026-09-17)
+## Where the project stands (2026-09-18)
 
 Plans 1 to 4 landed on `dev` and `main` (foundation and seed; pipeline core; run, eval and parity; Copilot
 narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Then the
@@ -144,8 +148,26 @@ gone, `share_manual_13w`/`share_project_13w` are replaced by `share_assigned_13w
 `task_history.user_id`, `planned_hrs_h` returns as a per-horizon column, and every ratio or "weeks since"
 with nothing to measure is left blank instead of an invented sentinel, for 40 shared and 5 per-horizon
 feature columns. The gate stands at 450 tests, 0 failures, 14 skipped without Docker (the plan's closing notes).
-Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
-server's own integration code, against the sample host.
+Then, on 2026-09-18, PostgreSQL only, one final migration and the tools module
+(`docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`,
+`docs/superpowers/plans/2026-09-17-postgresql-only-and-tools-module.md`): SQLite is gone from the module,
+the five paired migrations became one `V1` for PostgreSQL alone, and `Dialect` and the row helpers written
+three times went with them; everything the host never runs — the seed, the import and export code, the
+WorkloadHub schema script, the experiment driver and the sample host — moved to a second Maven module,
+`forecast-tools`, which is never shipped, so the library jar fell from 438,713 B over 243 entries to
+317,615 B over 196, none of them seed, schema or SQLite. Core's tests read their seeded rows from two
+committed files under `forecast-core/src/test/resources/fixtures/` (`workloadhub-schema.sql`, 34,564 B, and
+`seeded-rows.sql`, 2,831,643 B), written by `bash server/tools/experiment.sh fixture` and held fresh by
+`FixtureFreshnessTest`; `scripts/postgres.sh` runs the local PostgreSQL 18 that the driver and the sample
+host connect to, and `--db FILE` is gone from both; the gate now needs a container engine, failing without
+Docker or podman where it used to skip. Two tasks were added during execution (2b and 2c) because
+PostgreSQL enforces the foreign keys SQLite never did: real mode builds teams from the export's own teams
+and invents none, and refuses an export missing a task status or type. The gate stands at 437 tests (core
+312, tools 125), 0 failures, 0 errors, 1 skipped, in 11m38s — the same wall time as before the test pruning
+of the last task, because 94% of the test time is seven full-pipeline classes and the caches removed only
+repeated work; the speed-up the spec hoped for did not happen.
+Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed into the
+local PostgreSQL, then the server's own integration code, against the sample host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, the gate green by hand in the development container, then fast-forward `main`.
@@ -178,40 +200,44 @@ fix wave, the gate green by hand in the development container, then fast-forward
 ## Layout
 
 ```text
-server/    Java 21 module: `forecast-core`, the library the host adds and the only artifact. Two single-file
-           programs are run by the launcher, not built: `server/examples/HostExample.java` (what a host does
-           through `ForecastService`) and `server/tools/Experiment.java` (experiments on SQLite: init-db,
-           import, export, seed)
+server/    Java 21 modules: `forecast-core`, the library the host adds and the only artifact; `forecast-tools`,
+           never shipped: the seed, the import and export of a WorkloadHub database, `Experiment` (the
+           driver: init-db, import, export, seed, fixture) and `HostExample` (what a host does through
+           `ForecastService`), run through `server/tools/experiment.sh` and `server/examples/run-host-example.sh`
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
            dev), `test-release.sh` (the release script's self-test), `devbox.sh` (the development
-           container, built from `scripts/container/Containerfile`)
+           container, built from `scripts/container/Containerfile`), `postgres.sh` (the local PostgreSQL the
+           driver connects to)
 .claude/   skills, agents, hooks, settings
 ```
 
 ## Toolchain
 
 - Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java.
-- The gate is one step: `cd server && mvn -B -q verify` (about seventeen minutes without Docker as of
-  2026-09-14, and growing with the suite; PostgreSQL tests run through Testcontainers when Docker is
-  present, else skip with a message). `bash scripts/check.sh` and `pwsh scripts/check.ps1` run it, and
-  running one of them by hand is the only gate there is. **Read the result from
-  `forecast-core/target/surefire-reports/TEST-*.xml`, never by summing the `*.txt` files**: a class that
+- The gate is one step: `cd server && mvn -B -q verify` (both modules; the database tests run PostgreSQL
+  through Testcontainers and need Docker or podman: without an engine the gate fails, it never skips). It
+  takes about twelve minutes as of 2026-09-18, and grows with the suite. `bash scripts/check.sh` and
+  `pwsh scripts/check.ps1` run it, and running one of them by hand is the only gate there is. **Read the
+  result from `forecast-core/target/surefire-reports/TEST-*.xml` and
+  `forecast-tools/target/surefire-reports/TEST-*.xml`, never by summing the `*.txt` files**: a class that
   mixes JUnit `@Test` with jqwik `@Property` has both engines write the same `.txt` and the second
-  overwrites the first, so the text total is short by about thirty. Wipe the report directory before a run
-  you intend to trust.
+  overwrites the first, so the text total is short by about thirty. Wipe both report directories before a
+  run you intend to trust.
   `.github/workflows/ci.yml` describes the same step but is paused: on 2026-09-14 the owner asked for no
   CI until the work has progressed much further, so only `workflow_dispatch` is left and no push starts a
   run. Keep the three in step anyway, and restore the `push` and `pull_request` triggers, which the file
   carries as a comment, when the owner asks for CI back.
 - With no JDK on the machine, work inside the development container: `bash scripts/devbox.sh shell`. It
   keeps an Ubuntu box running with the toolchain and this repository bind-mounted at `/work`, so the gate
-  and the experiment driver run there exactly as on Linux, with the engine's socket mounted so the PostgreSQL tests
-  still run. `bash scripts/check.sh` on the Windows host instead would skip the Maven step and still exit
+  and the experiment driver run there exactly as on Linux, with the engine's socket mounted, which the gate
+  needs. `bash scripts/check.sh` on the Windows host instead would skip the Maven step and still exit
   0, reporting success having compiled nothing. Details in `server/README.md`, "The development container".
   Every text file stays LF (`.gitattributes`): Linux bash rejects a CRLF script with a message that names
   nothing it is about, and `core.autocrlf` is Windows-side, so CRLF copies make git inside the box see the
   whole tree as modified.
+- `bash scripts/postgres.sh up` starts the local PostgreSQL 18 (database, user and password `workloadhub`,
+  port 5432); `bash server/tools/experiment.sh init-db` creates the schema in it.
 - `bash scripts/release.sh` or `pwsh scripts/release.ps1` runs the gate and fast-forwards `main` to `dev`;
   either is the only thing that can refuse a bad release, because git has no pre-merge hook for a
   fast-forward. Both refuse to run unless mvn is on PATH, so the whole gate runs; neither pushes.

@@ -6,6 +6,10 @@ review. Supersedes, for the server, the desktop design of `2026-09-03-workload-f
 builds on `docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md` (the schema mapping)
 and `docs/design/2026-09-07-forecasting-internals.md` (the algorithms).
 
+**Superseded in part (2026-09-17):** the SQLite experiment path and the paired migrations of sections 2, 3
+and 12 are gone; PostgreSQL is the only database and the driver lives in `forecast-tools`
+(`docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`).
+
 ## 1. Goal and owner decisions
 
 The forecast moves from a Windows desktop application with a Python service into a Java module that

@@ -11,7 +11,7 @@ needs were copied.
 
 | Subagent | Category | Used for |
 |----------|----------|----------|
-| cli-developer | developer experience | the experiment driver, `server/tools/Experiment.java` |
+| cli-developer | developer experience | the experiment driver, `Experiment` in `forecast-tools` (`server/tools/experiment.sh`) |
 | data-scientist | data and AI | feature matrix, models, backtest |
 | data-engineer | data and AI | schema mapping, seed generator, import and export |
 | ai-engineer | data and AI | Copilot session, tools, contract and verification |

@@ -2115,6 +2115,7 @@ the seeded fixture (spec 2026-09-17, section 2.2)."
 
 **Interfaces:**
 - Produces: a PostgreSQL 18 container `whf-postgres` on port 5432 with database, user and password `workloadhub`, on the named volume `whf-pg`; `postgres.sh up|stop|rm [--volume]|status|psql|--help`.
+- Corrected on 2026-09-18, in the snippet below and in spec section 4.1: the volume mounts at `/var/lib/postgresql`, not `/var/lib/postgresql/data`. `postgres:18` moved `PGDATA` into a version subdirectory, and its entrypoint reads a separate mount landing on `.../data` as leftover data from before an image upgrade and refuses to start, on an empty volume as well as a full one.
 
 - [ ] **Step 1: The script**
 
@@ -2205,7 +2206,7 @@ up)
     "$engine" run -d --name "$name" --restart unless-stopped \
         -p "$port:5432" \
         -e POSTGRES_DB=workloadhub -e POSTGRES_USER=workloadhub -e POSTGRES_PASSWORD=workloadhub \
-        -v "$volume:/var/lib/postgresql/data" \
+        -v "$volume:/var/lib/postgresql" \
         "$image" >/dev/null
     echo "waiting for the database to answer"
     for _ in $(seq 1 30); do
@@ -2545,3 +2546,146 @@ gate's need for an engine; the measurements are in the plan's closing notes."
 ## After the tasks
 
 The standing workflow: a review per task during execution, a whole-branch review at the end, one fix wave, the gate green by hand in the development container (`bash scripts/check.sh`, with the engine socket mounted), then `main` fast-forwarded to `dev` with `bash scripts/release.sh`. Push `dev` after each task's commit (`git push -u origin dev`).
+---
+
+## Closing notes
+
+Landed on `dev` on 2026-09-18, eleven tasks plus two added during execution (2b and 2c), each with a
+review, each ending on a green gate.
+
+### The gate
+
+| | before task 10 | after task 10 |
+|---|---|---|
+| wall time of `mvn -B -q verify` | 11m41s | 11m38s |
+| tests, `forecast-core` | 312 | 312 |
+| tests, `forecast-tools` | 125 | 125 |
+| failures, errors, skipped | 0, 0, 1 | 0, 0, 1 |
+
+Read from `TEST-*.xml` in both modules. `dev` before the plan ran one module and 450 tests; the difference
+is what sections 5.2 and 5.3 removed, not coverage silently lost — every deletion was checked against a
+live caller first. The single skip is the opt-in `-Dseed.full=true` seed timing.
+
+The suite-level time is 693 s of the 698 s wall (the sum of the `<testsuite time>` attributes; an earlier
+grep summed the testcase times as well and produced 1343 s — that figure is wrong, do not quote it).
+
+**Ruling E asked for a gate faster by measured cost; it did not get faster.** The caches of task 10 removed
+repeated work, but the delta between 11m41s and 11m38s is noise. The reason is in the distribution: seven
+full-pipeline classes hold 94% of the test time — `DefaultForecastServiceTest` 260 s,
+`JavaHostIntegrationTest` 181 s, `ForecastRunnerTest` 78 s, `ForecastAutoConfigurationTest` 69 s,
+`SampleHostIntegrationTest` 24 s, `FactsBuilderTest` 22 s, `SdkCopilotGatewayTest` 22 s — while the whole of
+`forecast-tools` is 11 s and seed generation, which the fixture was expected to save, was only 4.8 s to
+begin with. Any future speed-up has to come from those seven: fewer booster fits, or one prepared context
+shared across the classes that each build their own.
+
+### The tests that went (against spec section 5.2)
+
+Engine and dead-subject removals, tasks 1 to 5: `DialectTest`; `SchemaFilesTest` (three of its tests were
+not about SQLite and were restored in `forecast-tools` at task 8, as `SchemaDumpTest` and
+`WorkloadHubSchemaTest`); the stepwise-upgrade half of `ForecastMigrationsTest`; `JdbcRunStoreTest`'s eight
+engine wrappers, now the four scenarios they wrapped; `TruthTest` and the twin-equality test of
+`WeeklySeriesTest`; two assertions in `AbsencePlannerTest`; the tautological assignment assertion in
+`WorkQueueTest`; the codebooks test of `FeatureBuilderTest`; `MetricsTest`'s `mae` assertions, which now
+read `Numbers.mae` since `Metrics.mae` was the duplicate.
+
+Redundancy removals, task 10: `WorkQueueTest` parts (a) and (f) of `defaultRatesCoverAllModesSubTasksAndDataIntegrity`
+and `someMemberLogsMoreThanADayAndMoreThanAWeek`; two assertions in `SeedGeneratorTest` that
+`syntheticModeStillWritesEveryTable` subsumes; five usage assertions plus one in `NarratorTest` that
+`UsageTest` owns; the key loop and two `$defs` assertions in `PromptsTest` that `ContractSchemaTest`
+subsumes. The "any day over 8.8 h" half of `realisticDataset()` moved onto the fixture as
+`FixtureFreshnessTest.someMemberLogsMoreThanADay`, so the count is unchanged in that module.
+
+`realisticDataset()` itself stays: `aMembersWeekHasAShape` still calls it. Section 5.2 is half met there.
+
+### What `forecast-core` stopped shipping
+
+| | before (`c9bdc1c`, `clean package`) | after |
+|---|---|---|
+| `workloadhub-forecast-core` jar | 438,713 B | 317,615 B |
+| entries | 243 | 196 |
+| seed, schema or SQLite entries | 38 | 0 |
+
+`workloadhub-forecast-tools` is 134,858 B and is never published.
+
+### The fixture
+
+`server/forecast-core/src/test/resources/fixtures/workloadhub-schema.sql` is 34,564 B and
+`seeded-rows.sql` is 2,831,643 B, on disk and as git stores them (`git cat-file -s` on both blobs returns
+the same figures: the `-diff` attribute keeps them out of textual diffs, it does not compress them).
+`bash server/tools/experiment.sh fixture` regenerates both; `FixtureFreshnessTest` fails the gate when they
+drift from the generator.
+
+### The hand check of task 9
+
+Eleven commands from the repository root, Docker as the engine: `postgres.sh up`, `status`,
+`experiment.sh init-db`, `init-db` again (refused, exit 2), `seed --synthetic --users 40 --weeks 26`,
+`import` (9,603 rows), `export` (9,603 rows), `run-host-example.sh` (29 teams listed, several marked
+`TEAM_LEADER`), `run-host-example.sh --team <uuid>`, `postgres.sh stop && up && status` (the 40 seeded
+users still there, so the volume survives a stop), `postgres.sh rm --volume` (container and data removed).
+The sample host's first lines:
+
+```
+acting as Hamza Guessous 38 (this team's leader; a server passes the session's own user)
+startRun -> d9a46115-e538-4095-8d6b-886f113ebcab  (run day 2026-09-06, the fixed clock's today)
+  progress QUEUED         0%  queued / en attente
+  progress BACKTEST      25%  scoring the models / évaluation des modèles
+  progress FORECAST      60%  predicting the coming weeks / prévision des semaines à venir
+  progress DONE         100%  forecast ready / prévision prête
+```
+
+It went on through `getRun` (mae, backtest scores, no overloaded member for that seed and team),
+`currentForecast`, `listRuns`, `accuracy` (0 rows: only one run exists, so nothing was forecast before it)
+and `copilotStatus` (no token stored, as expected without `--narrate`).
+
+### Deviations from the spec
+
+1. **The volume mounts at `/var/lib/postgresql`, not `/var/lib/postgresql/data`** (section 4.1).
+   `postgres:18` moved `PGDATA` into a version subdirectory, and its entrypoint reads a separate mount
+   landing on `.../data` as leftover data from before an image upgrade and refuses to start — on an empty
+   volume as well. The image's own documentation recommends the single mount at `/var/lib/postgresql`.
+   Section 4.1 and task 9 above are corrected.
+2. **The fixture is two files, not one** (section 5.3): `workloadhub-schema.sql` and `seeded-rows.sql`, so
+   that a test needing only the empty schema does not load 2.8 MB of rows. Both are written by the fixture
+   command and both are checked by the freshness test. Section 5.3 is amended.
+3. **Two tasks were added, 2b and 2c.** The first PostgreSQL run of the suite found two foreign-key
+   failures that existed on unmodified `dev` and that SQLite had hidden, because it never enforced the
+   keys: real mode invented a team for `projects.team_id`, and it substituted a task status and type from
+   `ReferenceData` that a partial export never carries. Real mode now builds teams from the export's own
+   teams and invents none (2b), and refuses an export missing a status or type, naming them (2c). Synthetic
+   output stayed byte-identical through both.
+4. **Migrations went PostgreSQL-only at task 4, one task before the driver left SQLite at task 5.** The gate
+   at that boundary showed two `ExperimentFlowTest` failures, ruled a known ordering gap and closed by task
+   5. Nothing user-visible reached `dev` between the two commits in a state anyone ran.
+5. **`tools-classpath.sh` resolves with `-pl forecast-tools -am -DskipTests package dependency:build-classpath`**
+   rather than a plain `dependency:build-classpath`, because core's snapshot is never installed to the local
+   repository and the reactor has to build it first.
+
+### Rulings during execution
+
+- The seeded fixture is two files, not one: a test needing the empty schema must not load 2.8 MB of rows.
+- `forecast-tools` carries its own thirty-line copy of `DatabaseTestSupport`; a test-jar of core for one
+  class is heavier. The two copies are kept in step by hand, and the image tag is the one thing that drifts.
+- `SqlExportWriterTest`'s foreign-key failure is pre-existing on `dev`, not caused by task 1: reproduced
+  three times on the base commit. Fixed as task 2b before task 3 made PostgreSQL mandatory.
+- Task 1's gate was accepted as not literally green at that boundary, for the same pre-existing failure.
+- The second foreign-key failure behind the same test is fixed as task 2c: real mode refuses an incomplete
+  export rather than substituting reference rows the database will reject.
+- The plan's `check.sh` engine snippet was wrong — it read `${DOCKER_HOST#unix://}` before testing that the
+  variable is set, which aborts the gate under `set -u` wherever `DOCKER_HOST` is unset; fixed in task 3.
+- The two `ExperimentFlowTest` failures at task 4 are a plan-ordering gap closed by task 5 (deviation 4).
+  In the same test, the migration-history query reads `type = 'SQL'` because Flyway's baseline row carries
+  version 0 rather than null.
+- `SchemaFilesTest` carried three tests that were not about SQLite; they were restored in `forecast-tools`
+  at task 8 rather than lost with the file at task 5.
+
+### Left open
+
+- `realisticDataset()` and the half-met section 5.2, above.
+- The deferred minors each review recorded: `devbox.sh status` hardcodes `whf-postgres` in its messages
+  while inspecting `$WHF_PG_CONTAINER`, and `WHF_PG_CONTAINER` is undocumented in its header;
+  `postgres.sh psql` ignores extra arguments and forces `-it`; `up` on an existing container prints the
+  port from the environment rather than the one it was created with; the two `DatabaseTestSupport` copies
+  are held equal by a javadoc sentence only; `ExperimentFlowTest`'s stdout capture assumes sequential
+  surefire.
+- A new backlog item under "Java migration": the duplication folds the 2026-09-17 audits found outside the
+  store, about 300 lines of pure refactor (spec section 10).
