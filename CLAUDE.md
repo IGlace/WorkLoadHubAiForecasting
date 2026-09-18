@@ -44,6 +44,11 @@ app with a Python service) is archived on the remote branch `archive/python-desk
   (every table of the database with the module installed, what the module adds, what it reads and what the
   data must contain, how the server integrates it) and `docs/design/2026-09-17-feature-matrix-now.html` (the
   features, the logic and the rules; the 2026-09-16 page is kept as the reviewed record).
+- `docs/superpowers/specs/2026-09-18-forecast-web-and-showcase-ui-design.md`: **implemented, landed on dev on
+  2026-09-18.** `forecast-web`, a second Maven module: the showcase host that calls `forecast-core` the way
+  the server will (the `host` package is what production copies, the `demo` package what it deletes) and
+  serves a React front end (`server/forecast-web/ui`) showing every feature with the route behind it. Its
+  section 2 lists the seven decisions the author took where the request left a choice.
 - `docs/superpowers/plans/`: the reviewed plans, each with closing notes and rulings; `docs/backlog.md`: open
   items and the rulings under "Java migration".
 - `server/README.md`: build, running experiments, the seed, using the module from the server, narrating with
@@ -144,8 +149,22 @@ gone, `share_manual_13w`/`share_project_13w` are replaced by `share_assigned_13w
 `task_history.user_id`, `planned_hrs_h` returns as a per-horizon column, and every ratio or "weeks since"
 with nothing to measure is left blank instead of an invented sentinel, for 40 shared and 5 per-horizon
 feature columns. The gate stands at 450 tests, 0 failures, 14 skipped without Docker (the plan's closing notes).
+Then, on 2026-09-18, the showcase host and its front end
+(`docs/superpowers/specs/2026-09-18-forecast-web-and-showcase-ui-design.md`): `server/forecast-web`, a Spring
+Boot application with the host code of design 2026-09-11 in a `host` package (the acting user from an
+`X-Acting-User` header in place of a session, `ForecastAccess` with a reason per refusal, a run registry
+table, one run at a time for a skill team leader, the narration executor, `{code, message}` errors with 401
+and 403 on top of the module's mapping) and demo wiring in a `demo` package (a synthetic SQLite file seeded
+at first start, a demo clock an admin moves from the UI, a generated token key file, the served front end).
+The front end (`server/forecast-web/ui`, Vite + React + TypeScript, no component or chart library) has the
+teams, team, run (windows, days, backtest, pressure lists, facts, narration with the unverified numbers
+flagged), accuracy, Copilot & token, permissions, demo clock and integration-guide pages, each ending with
+the calls it made. The demo clock defaults to 2026-06-28 because the synthetic history tapers over its last
+eight weeks (`docs/backlog.md`). `forecast-core` now publishes a test jar (`SeededData`, `FakeGateway`) for
+the new module's tests, and the gate gained an npm step. The gate stands at 471 Maven tests (450 core + 21
+web, 0 failures, 14 skipped without Docker) and 16 vitest tests.
 Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed, then the
-server's own integration code, against the sample host.
+server's own integration code, against the showcase host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, the gate green by hand in the development container, then fast-forward `main`.
@@ -178,10 +197,12 @@ fix wave, the gate green by hand in the development container, then fast-forward
 ## Layout
 
 ```text
-server/    Java 21 module: `forecast-core`, the library the host adds and the only artifact. Two single-file
-           programs are run by the launcher, not built: `server/examples/HostExample.java` (what a host does
-           through `ForecastService`) and `server/tools/Experiment.java` (experiments on SQLite: init-db,
-           import, export, seed)
+server/    Java 21 modules: `forecast-core`, the library the host adds and the artifact it depends on;
+           `forecast-web`, the showcase host (Spring Boot, calls the library like the server will, serves the
+           React front end in `forecast-web/ui`, run by `forecast-web/run.sh`). Two single-file programs are
+           run by the launcher, not built: `server/examples/HostExample.java` (what a host does through
+           `ForecastService`) and `server/tools/Experiment.java` (experiments on SQLite: init-db, import,
+           export, seed)
 docs/      requirements, research, design documents, specs, plans, evaluation results, reports, backlog
 scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1` (gate, then fast-forward main to
            dev), `test-release.sh` (the release script's self-test), `devbox.sh` (the development
@@ -191,11 +212,13 @@ scripts/   `check.ps1` and `check.sh` (the gate), `release.sh` and `release.ps1`
 
 ## Toolchain
 
-- Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java.
-- The gate is one step: `cd server && mvn -B -q verify` (about seventeen minutes without Docker as of
-  2026-09-14, and growing with the suite; PostgreSQL tests run through Testcontainers when Docker is
-  present, else skip with a message). `bash scripts/check.sh` and `pwsh scripts/check.ps1` run it, and
-  running one of them by hand is the only gate there is. **Read the result from
+- Java 21, Maven 3.9, Spring Boot 4.1, JUnit 6, jqwik, Flyway, XGBoost4J, copilot-sdk-java; Node 22 with
+  Vite, React 19, TypeScript and vitest for the showcase front end.
+- The gate is two steps: `cd server && mvn -B -q verify` (both modules; about seventeen minutes without
+  Docker as of 2026-09-14, and growing with the suite; PostgreSQL tests run through Testcontainers when
+  Docker is present, else skip with a message), then `npm ci && npm run check` in `server/forecast-web/ui`
+  (under a minute). `bash scripts/check.sh` and `pwsh scripts/check.ps1` run both, skipping a step whose
+  tool is missing with a message, and running one of them by hand is the only gate there is. **Read the result from
   `forecast-core/target/surefire-reports/TEST-*.xml`, never by summing the `*.txt` files**: a class that
   mixes JUnit `@Test` with jqwik `@Property` has both engines write the same `.txt` and the second
   overwrites the first, so the text total is short by about thirty. Wipe the report directory before a run

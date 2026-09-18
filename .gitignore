@@ -23,3 +23,7 @@ workloadhub_export*.json
 # Python caches of the tools test
 __pycache__/
 .pytest_cache/
+
+# forecast-web front end: dependencies and build output (the application serves ui/dist when it exists)
+server/forecast-web/ui/node_modules/
+server/forecast-web/ui/dist/

@@ -1,8 +1,10 @@
 # WorkloadHub forecast: the Java module
 
-One Maven module, `forecast-core`: the library the WorkloadHub Spring Boot application adds as a
-dependency. Experiments — building a SQLite database and scoring the model on it — are driven by
-`tools/experiment.sh`, which is not a module but a single Java file the launcher compiles on the spot.
+Two Maven modules: `forecast-core`, the library the WorkloadHub Spring Boot application adds as a
+dependency, and `forecast-web`, the showcase host — a Spring Boot application that calls the library the
+way the server will and serves a front end that shows every feature (`forecast-web/README.md`). Experiments
+— building a SQLite database and scoring the model on it — are driven by `tools/experiment.sh`, which is
+not a module but a single Java file the launcher compiles on the spot.
 Design:
 `docs/superpowers/specs/2026-09-09-java-forecast-module-design.md`,
 `docs/superpowers/specs/2026-09-13-weekly-hours-forecast-design.md`.
@@ -28,8 +30,9 @@ tests run against a real database; otherwise they skip themselves with a message
 
 ```bash
 cd server
-mvn -B verify                 # compiles, runs every test, builds forecast-core/target/workloadhub-forecast-core-0.1.0-SNAPSHOT.jar
+mvn -B verify                 # compiles, runs every test, builds forecast-core/target/workloadhub-forecast-core-0.1.0-SNAPSHOT.jar and the forecast-web jar
 mvn -B verify -Dseed.full=true   # also times the 264-user, 52-week seed
+cd forecast-web/ui && npm ci && npm run check   # the front end: tsc, vitest, vite build (the gate runs this too)
 ```
 
 ## The development container
@@ -172,6 +175,16 @@ finish without logs. Leaves are written as `personal_leaves` (paid leave blocks,
 half day, sick days, and for one member in ten a pending request after the as-of date); no capacity rows
 are written, the module computes capacity itself. The invariants the tests hold
 are listed in the design, section 4.8.
+
+## The showcase host: forecast-web
+
+`bash server/forecast-web/run.sh` (inside the development container) builds the front end and the jar when
+they are stale and starts http://localhost:8080 on a synthetic SQLite database it seeds at first start. Pick
+a user to act as (there is no sign-in; the id travels in the `X-Acting-User` header), run a forecast for a
+team, read the windows, the facts and the narrative, store a token and check the seat, test what each role
+may do, move the demo clock and read the accuracy of past forecasts. The "Integration guide & API" page
+documents every route with a "try it". `forecast-web/README.md` has the pages, the properties and what
+production copies (the `host` package) versus what it deletes (the `demo` package).
 
 ## Using the module from the WorkloadHub server
 

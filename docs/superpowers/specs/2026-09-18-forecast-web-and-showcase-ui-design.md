@@ -46,7 +46,9 @@ documentation the developer can pick from"). These choices were left to the auth
    what the production server does; the application then seeds nothing.
 4. **The clock is a demo clock.** A run starts from "today" by the module's `Clock` bean, and a seeded
    history ends on 2026-09-06, so `forecast-web` pins today to `forecast-web.clock.today` (default
-   2026-09-06) and lets an `ADMIN` move it from the UI. Moving it is how accuracy gets something to score:
+   2026-06-28: the synthetic history's logged hours peak from March to June and taper over its last eight
+   weeks, so a run on the last day forecasts near zero, while a run in late June has two months of real
+   logs after it for the accuracy page) and lets an `ADMIN` move it from the UI. Moving it is how accuracy gets something to score:
    run at an earlier date, move the clock forward, run again, and every weekday in between has a forecast
    made before it arrived. The production server deletes this bean and keeps the module's default, exactly
    as `HostExample` says of its fixed clock.
@@ -110,7 +112,7 @@ All paths under `/api`; every request except `GET /api/system` carries `X-Acting
 
 | route | who | in | out |
 |---|---|---|---|
-| `GET /system` | anyone | | `{today, windows, defaultWeeklyHours, runThreads, dialect, database, clockAdjustable, seeded}` |
+| `GET /system` | anyone | | `{today, clockPinned, clockAdjustable, windows, defaultWeeklyHours, runThreads, dialect, database, seededAtStart, actingUserHeader, bootstrapUserId}`; `bootstrapUserId` is the seed's `ADMIN` on the demo database, so the front end can read the directory before anyone is chosen, and null elsewhere |
 | `POST /system/clock` | `ADMIN`, and only when adjustable | `{today}` | 200, the same body as `GET /system` |
 | `GET /directory/users` | any acting user | | `[{id, fullName, role, jobTitle, department, active, teams: [{teamId, name, relation}]}]` where `relation` is `manages`, `member` or `manages-parent` |
 | `GET /directory/teams` | any acting user | | `[{id, name, managerId, managerName, parentTeamId, parentTeamName, memberCount}]` |
@@ -127,7 +129,7 @@ All paths under `/api`; every request except `GET /api/system` carries `X-Acting
 | `GET /forecast-runs/{id}/narratives/{lang}` | `canView` on the run's team | | `NarrativeResult` with `narrative`, `verification` and `usage` as JSON objects; 404 `NARRATIVE_NOT_FOUND` |
 | `GET /me/copilot` | any acting user | | `CopilotStatus` (opens a Copilot session: the settings page's call, not a pre-check) |
 | `GET /me/github-token` | any acting user | | `{hasToken}` |
-| `PUT /me/github-token` | any acting user | `{token}` | 204; 409 `TOKEN_KEY_MISSING`, `TOKEN_REJECTED` |
+| `PUT /me/github-token` | any acting user | `{token}` | 204; 400 `INVALID_REQUEST` for a classic `ghp_` token or an empty one, 409 `TOKEN_KEY_MISSING` |
 | `DELETE /me/github-token` | any acting user | | 204 |
 
 A run not in the registry is 404 `RUN_NOT_FOUND` ("not started by this host"), as the sample facade does.
@@ -144,7 +146,7 @@ or `NARRATION_FAILED`) and reads the stored narrative. `GET /forecast-runs/{id}`
 | `forecast-web.seed.weeks` | `52` | Weeks of history |
 | `forecast-web.seed.seed` | `7` | The generator's seed |
 | `forecast-web.seed.end` | `2026-09-06` | The history's last day |
-| `forecast-web.clock.today` | `2026-09-06` | The demo clock's date; blank means the system clock and no demo clock bean |
+| `forecast-web.clock.today` | `2026-06-28` | The demo clock's date; blank means the system date (the demo clock bean stays, unpinned) |
 | `forecast-web.clock.adjustable` | `true` | Whether `POST /api/system/clock` is accepted |
 | `forecast-web.token-key-file` | `${user.home}/.workloadhub-forecast/forecast-web/token.key` | Where a generated key lives when `WHF_TOKEN_KEY` is blank |
 | `forecast-web.ui-dir` | `ui/dist` | The built front end, served when present |

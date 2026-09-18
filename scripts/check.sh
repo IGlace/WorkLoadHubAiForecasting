@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# The gate, the same step as scripts/check.ps1 and .github/workflows/ci.yml (which has no remote to fire
-# on): the Java module's `mvn verify`. Running this by hand is the only gate there is. A step whose tool
-# is missing is skipped with a message.
+# The gate, the same steps as scripts/check.ps1 and .github/workflows/ci.yml (which has no remote to fire
+# on): the Java modules' `mvn verify` (forecast-core and forecast-web), then the showcase front end's
+# `npm run check` (type check, unit tests, build) in server/forecast-web/ui. Running this by hand is the
+# only gate there is. A step whose tool is missing is skipped with a message.
 # Unlike check.ps1, which stops at the first failing step, this script runs every step and reports each
 # failure; both exit non-zero on any failure.
 #
@@ -32,8 +33,15 @@ else
     echo "SKIP server (mvn verify): mvn not found on PATH"
 fi
 
+if command -v npm >/dev/null 2>&1; then
+    ran=$((ran + 1))
+    run_step "ui (npm ci && npm run check)" bash -c "cd '$root/server/forecast-web/ui' && npm ci --no-audit --no-fund --silent && npm run check --silent"
+else
+    echo "SKIP ui (npm run check): npm not found on PATH"
+fi
+
 if [ "$ran" -eq 0 ]; then
-    echo "gate ran nothing: install mvn"
+    echo "gate ran nothing: install mvn and npm"
     exit 1
 fi
 

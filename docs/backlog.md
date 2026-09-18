@@ -307,6 +307,17 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **The synthetic seed's work supply tapers over the last eight weeks of its history (2026-09-18).** Found
+  while building the showcase host on the default demo population (120 users, 52 weeks, seed 7, ending
+  2026-09-06): the population logs about 3,000 h a week from March to June (some 30 h per logging member,
+  as the README expects), then 2,300 h in mid-July and 500 to 1,300 h through August, and the tasks created
+  per month fall from 1,171 in June to 291 in August and 84 in September. A run on the seed's last day
+  therefore forecasts near zero for every member, which is arithmetically right and useless to look at.
+  `forecast-web` pins its demo clock to 2026-06-28 for that reason. Whether the taper is intended (projects
+  winding down toward the as-of date) or the planner running out of horizon deserves a look in
+  `ProjectPlanner` and `WorkQueue`; the population property in `WorkFamilyPropertyTest` measures the mean
+  over all weeks, so it does not see it.
+
 - **`CapacityRule` builds its own calendar for the leave index while its callers pass one (2026-09-17).**
   `CapacityRule.indexFor` expands the approved leaves with `WorkingCalendar.fromHolidays(data.holidays())`,
   but every public method also takes a `WorkingCalendar` from its caller. The two agree today, because every
