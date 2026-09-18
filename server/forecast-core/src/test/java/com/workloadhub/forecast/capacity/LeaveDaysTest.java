@@ -68,6 +68,16 @@ class LeaveDaysTest {
     }
 
     @Test
+    void anExactNumberOfFullDaysFillsItsDaysAndDropsTheRest() {
+        // Three full days of hours over a four-working-day period: no partial day exists, and the day left
+        // with nothing is not an absent day. Pinned on 2026-09-18 after LeaveDaysPropertyTest flagged this
+        // case on its own arithmetic (26.4 / 8.8 is 2.9999999999999996 in binary), not on the dealing.
+        assertEquals(Map.of(MON, 8.8, TUE, 8.8, WED, 8.8), days(leave(MON, THU, 26.4, null, null), PLAIN));
+        assertEquals(Map.of(TUE, 8.8, WED, 8.8, THU, 8.8), days(leave(MON, THU, 26.4, LocalTime.of(13, 0), null), PLAIN),
+                "dealt backward with begin_time only: the day left with nothing is the first");
+    }
+
+    @Test
     void aHalfDayOnOneDateAndAOneDayLeaveOverTwoDates() {
         assertEquals(Map.of(THU, 4.0), days(leave(THU, THU, 4.0, null, null), PLAIN));
         assertEquals(Map.of(THU, 8.8), days(leave(THU, FRI, 8.8, null, null), PLAIN), "the second day receives zero and is not an absent day");

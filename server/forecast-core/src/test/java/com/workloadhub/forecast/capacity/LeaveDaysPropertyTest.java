@@ -49,9 +49,14 @@ class LeaveDaysPropertyTest {
         }
         double expected = (!hoursKnown || total <= 0) ? n * FULL : Math.min(total, n * FULL);
         assertEquals(expected, days.values().stream().mapToDouble(Double::doubleValue).sum(), 0.02, "total dealt");
-        double remainder = hoursKnown && total > 0 && total < n * FULL - 1e-9 ? total - Math.floor(total / FULL) * FULL : 0.0;
+        // A total that is an exact number of full days has no partial day at all (the days it does not fill
+        // get zero and are dropped), so the full-day count is floored with a tolerance: 26.4 / 8.8 is
+        // 2.9999999999999996 in binary, and a bare floor reads an exact three-day total as two full days plus
+        // an 8.8-hour "remainder", then demands that a full day be partial. Found by this property on
+        // 2026-09-18 (26.4 hours over four working days); the dealing itself was right.
+        double fullDays = Math.floor(total / FULL + 1e-9);
+        double remainder = hoursKnown && total > 0 && total < n * FULL - 1e-9 ? total - fullDays * FULL : 0.0;
         if (remainder > 1e-6 && n > 1) {
-            // a total that is an exact number of full days has no partial day at all (the last day gets zero and is dropped)
             LocalDate partial = times == 1 ? days.firstKey() : days.lastKey();
             assertTrue(days.get(partial) < FULL, "the partial day is the first with begin_time only, else the last");
         }
