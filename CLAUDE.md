@@ -159,7 +159,7 @@ WorkloadHub schema script, the experiment driver and the sample host — moved t
 `forecast-tools`, which is never shipped, so the library jar fell from 438,713 B over 243 entries to
 317,615 B over 196, none of them seed, schema or SQLite. Core's tests read their seeded rows from two
 committed files under `forecast-core/src/test/resources/fixtures/` (`workloadhub-schema.sql`, 34,564 B, and
-`seeded-rows.sql`, 2,831,643 B), written by `bash server/tools/experiment.sh fixture` and held fresh by
+`seeded-rows.sql`, 3,431,937 B), written by `bash server/tools/experiment.sh fixture` and held fresh by
 `FixtureFreshnessTest`; `scripts/postgres.sh` runs the local PostgreSQL 18 that the driver and the sample
 host connect to, and `--db FILE` is gone from both; the gate now needs a container engine, failing without
 Docker or podman where it used to skip. Two tasks were added during execution (2b and 2c) because

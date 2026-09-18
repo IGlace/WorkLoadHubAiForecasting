@@ -22,7 +22,7 @@ export interface Endpoint {
 export const ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/api/system', group: 'System', who: 'anyone, no acting user', production: false,
     purpose: 'The day the host runs on and the module\'s settings (windows, weekly hours, run threads).',
-    response: '{today, clockPinned, clockAdjustable, windows, defaultWeeklyHours, runThreads, actingUserHeader}', errors: [] },
+    response: '{today, clockPinned, clockAdjustable, windows, defaultWeeklyHours, runThreads, actingUserHeader, bootstrapUserId}', errors: [] },
   { method: 'POST', path: '/api/system/clock', group: 'System', who: 'ADMIN, while forecast-web.clock.adjustable is true', production: false,
     purpose: 'Demo only: moves the day a run starts from. Run at an earlier date, move forward, run again, and the accuracy page has weekdays that were forecast before they arrived.',
     body: '{today: "YYYY-MM-DD" | null}   (null releases the pin to the system date)', response: 'the same body as GET /api/system', errors: ['403 FORBIDDEN'] },
@@ -40,7 +40,7 @@ export const ENDPOINTS: Endpoint[] = [
     purpose: 'What any user may do on any team, with the reasons: the role rules of design 2026-09-11, section 3.2.',
     body: 'query: userId, teamId', response: '{userId, role, teamId, canRun, canView, runReason, viewReason}', errors: ['400 INVALID_REQUEST', '404 USER_NOT_FOUND', '404 TEAM_NOT_FOUND'] },
   { method: 'POST', path: '/api/teams/{teamId}/forecast-runs', group: 'Runs', who: 'canRun on the team', production: true,
-    purpose: 'Starts a forecast run for the team and returns at once; the run day is the host\'s today. The host records (runId, teamId, requestedBy) in its own table. A skill team leader gets one run at a time.',
+    purpose: 'Starts a forecast run for the team and returns at once; the run day is the host\'s today. The host authorizes a later poll with ForecastService.findRun(runId), which answers for a run whatever its status, so it needs no table of its own. A skill team leader gets one run at a time.',
     response: '202 {id}', errors: ['403 FORBIDDEN (role, or one at a time)', '404 TEAM_NOT_FOUND'], moduleCall: 'ForecastService.startRun(new RunRequest(teamId, userId))' },
   { method: 'GET', path: '/api/forecast-runs/{id}/progress', group: 'Runs', who: 'canView on the run\'s team', production: true,
     purpose: 'Where the run stands: phase, percent, a technical message, and a label in both languages for people. Poll it once a second until DONE or FAILED; a narration continues it with NARRATING, then NARRATED or NARRATION_FAILED.',

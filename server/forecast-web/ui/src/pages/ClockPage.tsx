@@ -42,7 +42,7 @@ export function ClockPage() {
         <h2 style={{ marginTop: 0 }}>Filling the accuracy page</h2>
         <ol>
           <li>Open a <Link to="/teams">team</Link> and start a forecast on today's date: it predicts the two windows after that day.</li>
-          <li>Acting as the admin, move today forward four weeks (2026-07-26).</li>
+          <li>Acting as the admin, move today forward four weeks.</li>
           <li>Open the team's accuracy page: every weekday between the run day and the new today was forecast before it arrived, and is now scored against the hours actually logged on it. Start another run to cover the days after the new today.</li>
           <li>The seed's history ends on the day it was generated, with no taper toward the end, so moving today forward by a few weeks opens up days for the accuracy page to score no matter where the seed started.</li>
         </ol>

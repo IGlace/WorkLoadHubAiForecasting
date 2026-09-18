@@ -355,12 +355,33 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   strings a page can show. Until 2026-09-18 they also differed by a `Dialect` parameter; with one engine
   that difference is gone and keeping both is now a choice rather than an accident.
 
-- **`forecast-core/pom.xml` declares `org.postgresql:postgresql` twice, pre-existing (2026-09-18).** Line 28
-  (`runtime`, optional) and line 35 (`test`); Maven's uniqueness key is `groupId:artifactId:type:classifier`
-  and does not include scope, so the two collide and every build prints a malformed-model warning that
-  future Maven versions may refuse such projects. One declaration silently wins, so the driver's effective
-  scope is ambiguous. Present already at `cd9a4d4`, the commit before the `forecast-web` port began; not
-  caused by it.
+- **`forecast-core/pom.xml` declared `org.postgresql:postgresql` twice, pre-existing, fixed (2026-09-18).**
+  Line 28 (`runtime`, optional) and line 35 (`test`); Maven's uniqueness key is `groupId:artifactId:type:classifier`
+  and does not include scope, so the two collided and every build printed a malformed-model warning that
+  future Maven versions may refuse such projects. Present already at `cd9a4d4`, the commit before the
+  `forecast-web` port began; not caused by it. Fixed in the whole-branch review's fix wave by dropping the
+  redundant `test`-scope line: Maven's test classpath already includes `runtime`-scope dependencies (`optional`
+  only stops a declaration from propagating to a *consumer's* dependency tree, not from being available to
+  the declaring module's own compile, runtime and test classpaths), so the single `runtime`, `optional`
+  declaration alone still supplies the driver to this module's own PostgreSQL-backed tests, while leaving the
+  host free to supply its own driver at runtime, which is what `optional` is there for.
+
+- **`SeedTailPropertyTest` is a JUnit test in jqwik clothing, and weaker than the spec asked for (2026-09-18).**
+  `@Property(tries = 1)` with no `@ForAll` parameter runs the generator exactly once, deterministically, the
+  way a plain `@Test` would; jqwik brings nothing here but the annotation. It also asserts "no week with zero
+  hours population-wide" and "the last eight weeks average at least 60% of the middle weeks' mean", which is
+  weaker than the spec's own invariant — that every counted member has an ACTIVE candidate project in every
+  week. Found in the whole-branch review of the `forecast-web` port; left as a design question (what the
+  property should actually range over, and how to state the per-member invariant as a property) rather than
+  patched under the fix wave's time budget.
+
+- **`forecast-web`'s `META-INF/spring.factories` uses the deprecated `EnvironmentPostProcessor` registration
+  key (2026-09-18).** `TokenKeyFile` and `WebSurfaceGuard` are registered under
+  `org.springframework.boot.env.EnvironmentPostProcessor=`, the classic `spring.factories` mechanism.
+  Verified to still load correctly on Boot 4.1 (`server/forecast-web/src/main/resources/META-INF/spring.factories`),
+  but it is a deprecated path Spring Boot's newer `AotFactories`/`spring/org.springframework.boot.env.EnvironmentPostProcessor.imports`
+  layout replaces. Found in the whole-branch review of the `forecast-web` port; left alone since it works and
+  migrating it is unrelated to what that port was for.
 
 - **`forecast-core`'s test-jar carries the committed fixture and the sample host (2026-09-18).**
   `forecast-web`'s own tests reuse `SeededData`, `DatabaseTestSupport` and `FakeGateway` from `forecast-core`'s

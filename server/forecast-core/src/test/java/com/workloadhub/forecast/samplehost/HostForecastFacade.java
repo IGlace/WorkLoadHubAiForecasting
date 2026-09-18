@@ -8,11 +8,11 @@ import com.workloadhub.forecast.api.NarrativeRequest;
 import com.workloadhub.forecast.api.NarrativeResult;
 import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
+import com.workloadhub.forecast.api.RunSummary;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -37,9 +37,6 @@ public final class HostForecastFacade implements AutoCloseable {
         t.setDaemon(true);
         return t;
     });
-    /** A test convenience: a real host persists (runId, teamId, requestedBy) in its own table, so a restart can still authorize a poll. */
-    private final Map<UUID, UUID> teamOfRun = new ConcurrentHashMap<>();
-    private final Map<UUID, UUID> latestRunOfUser = new ConcurrentHashMap<>();
     private final Set<String> narrationsInFlight = ConcurrentHashMap.newKeySet();
 
     public HostForecastFacade(ForecastService service, ForecastAccess access, GitHubTokenStore tokens) {
@@ -63,23 +60,18 @@ public final class HostForecastFacade implements AutoCloseable {
             throw new HostForbidden("user " + userId + " may not run a forecast for team " + teamId);
         }
         if (access.roleOf(userId).equals("SKILL_TEAM_LEADER")) {
-            UUID latest = latestRunOfUser.get(userId);
-            if (latest != null && runInProgress(service.progress(latest).phase())) {
-                throw new HostForbidden("one team at a time: run " + latest + " is still in progress");
+            Optional<RunSummary> latest = service.latestRunOf(userId);
+            if (latest.isPresent() && runInProgress(service.progress(latest.get().id()).phase())) {
+                throw new HostForbidden("one team at a time: run " + latest.get().id() + " is still in progress");
             }
         }
-        UUID id = service.startRun(new RunRequest(teamId, userId));
-        teamOfRun.put(id, teamId);
-        latestRunOfUser.put(userId, id);
-        return id;
+        return service.startRun(new RunRequest(teamId, userId));
     }
 
+    /** {@code findRun} answers for a run whatever its status, unlike {@code getRun}, which refuses anything but DONE. */
     private UUID teamOf(UUID runId) {
-        UUID team = teamOfRun.get(runId);
-        if (team == null) {
-            throw ForecastException.of("RUN_NOT_FOUND", "run " + runId + " was not started by this host");
-        }
-        return team;
+        return service.findRun(runId).map(RunSummary::teamId)
+                .orElseThrow(() -> ForecastException.of("RUN_NOT_FOUND", "run " + runId + " not found"));
     }
 
     public RunProgress progress(UUID userId, UUID runId) {

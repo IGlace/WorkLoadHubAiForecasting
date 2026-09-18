@@ -1,5 +1,6 @@
-# The same gate as scripts/check.ps1 and scripts/check.sh: the Java module's `mvn verify`. Keep the
-# three in step when any of them changes.
+# The same gate as scripts/check.ps1 and scripts/check.sh: the Java module's `mvn verify`, then the
+# showcase front end's `npm run check` in server/forecast-web/ui. Keep the three in step when any of them
+# changes.
 #
 # Paused on 2026-09-14 at the owner's request: the weekly hours forecast design is about to rewrite
 # `model/`, `planned/` and `backtest/`, so a run per push would only report a gate the work has not
@@ -30,3 +31,11 @@ jobs:
       - name: Verify
         run: mvn -B verify
         working-directory: server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/forecast-web/ui/package-lock.json
+      - name: UI check
+        run: npm ci --no-audit --no-fund && npm run check
+        working-directory: server/forecast-web/ui

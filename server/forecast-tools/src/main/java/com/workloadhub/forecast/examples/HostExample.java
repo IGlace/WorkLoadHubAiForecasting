@@ -207,8 +207,10 @@ public class HostExample {
     }
 
     /**
-     * The nine methods of {@link ForecastService}, in the order a host uses them. Each one is what a single
-     * endpoint would do: no other class of this module is on the host's import list.
+     * Nine of {@link ForecastService}'s eleven methods, in the order a host uses them. Each one is what a single
+     * endpoint would do: no other class of this module is on the host's import list. {@code findRun} and
+     * {@code latestRunOf} are not called here: they exist to authorize a poll after a restart, which this
+     * synchronous, one-run-at-a-time example never needs.
      */
     record Calls(ForecastService service, GitHubTokenStore tokens, LocalDate asOf, UUID user, Map<UUID, String> names) {
 
@@ -232,8 +234,9 @@ public class HostExample {
         /**
          * POST /teams/{id}/forecast-runs. {@code startRun} returns at once with the run's id and computes on the
          * module's own executor; the browser then polls {@code progress} — a run is a minute or two of work.
-         * {@code requestedBy} is the authenticated user, and may be null; the host records (runId, teamId,
-         * requestedBy) in its own table, so a restart can still authorize a poll.
+         * {@code requestedBy} is the authenticated user, and may be null; the host needs no table of its own
+         * to authorize a later poll after a restart, since {@code findRun(runId)} answers for a run whatever
+         * its status.
          */
         private UUID startAndWait(UUID team) throws InterruptedException {
             UUID runId;

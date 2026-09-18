@@ -44,7 +44,7 @@ import tools.jackson.databind.JsonNode;
  * because the runs are expensive and later tests read them.
  */
 @SpringBootTest(classes = {ForecastWebApplication.class, TestBeans.class}, properties = {
-        "forecast-web.database=", "forecast-web.token-key-file=", "forecast-web.ui-dir=target/no-ui",
+        "forecast-web.token-key-file=", "forecast-web.ui-dir=target/no-ui",
         "forecast-web.clock.today=2026-09-06", "whf.run-threads=1", "whf.token-key=" + TestBeans.KEY, "logging.level.root=WARN"})
 // forecast-web.clock.today above is pinned to SeededData.asOf() (2026-09-06), the fixture's last day: the
 // property must be a compile-time constant for the annotation, so the literal is asserted against the fixture
@@ -101,7 +101,7 @@ class ForecastWebIntegrationTest {
         mvc.perform(get("/api/system")).andExpect(status().isOk()).andExpect(jsonPath("$.today").value("2026-09-06"))
                 .andExpect(jsonPath("$.windows").value(2)).andExpect(jsonPath("$.defaultWeeklyHours").value(44.0))
                 .andExpect(jsonPath("$.actingUserHeader").value("X-Acting-User"))
-                .andExpect(jsonPath("$.bootstrapUserId").isEmpty());
+                .andExpect(jsonPath("$.bootstrapUserId").value(admin.id().toString()));
         mvc.perform(get("/api/me")).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("ACTING_USER_MISSING"));
         mvc.perform(get("/api/me").header(ActingUserException.HEADER, "not-a-uuid")).andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("ACTING_USER_MISSING"));

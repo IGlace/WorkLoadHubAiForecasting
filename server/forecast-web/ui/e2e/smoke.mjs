@@ -18,6 +18,10 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 page.on('console', (m) => { if (m.type() === 'error' && !/status of (400|404)/.test(m.text())) errors.push('console: ' + m.text()) })
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true })
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
+const addDays = (iso, days) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+}
 
 await page.goto(BASE + '/teams')
 await page.waitForSelector('text=Acting as nobody yet')
@@ -94,8 +98,12 @@ const adminValue = await page.$eval('select[aria-label="acting user"] optgroup[l
 await page.selectOption('select[aria-label="acting user"]', adminValue)
 await page.waitForSelector('span.badge.accent:has-text("ADMIN")')
 await page.waitForSelector('button:has-text("forward 4 weeks"):not([disabled])')
+// The clock follows the system date now (no pinned default), so assert the move itself -- today plus 28 days --
+// rather than a fixed date computed from the old pin.
+const todayBeforeMove = await page.$eval('.stat .value', (el) => el.textContent)
+const expectedAfterMove = addDays(todayBeforeMove, 28)
 await page.click('button:has-text("forward 4 weeks")')
-await page.waitForSelector('.stat .value:has-text("2026-07-26")')
+await page.waitForSelector(`.stat .value:has-text("${expectedAfterMove}")`)
 await shot('13-clock-moved')
 await page.goto(BASE + '/teams')
 await page.waitForSelector('span.badge.accent')

@@ -271,10 +271,12 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
 
 - **A run**: check the role, `startRun(new RunRequest(teamId, userId))`, let the page poll
   `progress(runId)` and show `label` in the user's language until `DONE` or `FAILED`, then read `getRun(runId)`
-  and `currentForecast(teamId, from, to)` (per member and day, over the rolling horizon). Persist
-  `(runId, teamId, requestedBy)` in your own table when you start a run: `getRun` answers only for `DONE` runs
-  and `listRuns` needs the team, so after a restart that row is what lets you authorize a poll of the
-  interrupted run (the sample facade's in-memory map is a test convenience).
+  and `currentForecast(teamId, from, to)` (per member and day, over the rolling horizon). You need no table of
+  your own to authorize a later poll: `getRun` answers only for `DONE` runs and `listRuns` needs the team, but
+  `findRun(runId)` answers for a run whatever its status (empty when there is none), so after a restart it is
+  what tells you the run's team; `latestRunOf(userId)` similarly answers the most recent run a user requested,
+  across every team and whatever its status, for enforcing one run at a time for a skill team leader (the
+  sample facade uses both instead of keeping its own maps).
 - **A narration**: check the role, `GitHubTokenStore.has(userId)` (one query) and that the run is `DONE`, then
   submit `narrate(new NarrativeRequest(runId, userId, language, null))` to your own bounded executor and
   return; the page polls `progress(runId)` (`NARRATING` with a label that rotates through "collecting data",
