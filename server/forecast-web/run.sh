@@ -5,6 +5,7 @@
 #   bash server/forecast-web/run.sh                         # http://localhost:8080, against the local PostgreSQL
 #   bash server/forecast-web/run.sh --server.port=9090      # any Spring Boot property after the script name
 #   FORECAST_WEB_DB_URL=jdbc:postgresql://host/db bash server/forecast-web/run.sh   # a database elsewhere
+#   FORECAST_WEB_DB_SCHEMA=my_schema,public bash server/forecast-web/run.sh         # tables in another schema
 #   WHF_TOKEN_KEY=... bash server/forecast-web/run.sh       # your own token key instead of the generated key file
 #
 # Run it inside the development container (`bash scripts/devbox.sh shell`), where Java, Maven, Node and

@@ -101,6 +101,14 @@ supplies one. The demo wiring, from `ForecastWebProperties`:
 default, the same local PostgreSQL `server/tools/experiment.sh` writes to. There is no database-file property
 and no built-in seeding: fill the database first, as "Setup" above describes.
 
+The connection also carries the schema, `spring.datasource.hikari.data-source-properties.currentSchema`
+(`FORECAST_WEB_DB_SCHEMA`, default `task_service,public`): the WorkloadHub tables and the module's own are
+in `task_service`, and PostgreSQL resolves an unqualified name against the search path, which for the
+`workloadhub` role is `"$user", public`. A database whose tables are in a schema of its own needs this set
+with the URL; leave it alone for any database the driver built. Flyway does not depend on it — the module
+names its schema itself — so a wrong schema starts and migrates cleanly and then fails the first request
+with `relation "users" does not exist`.
+
 ## Checks
 
 - The gate (`bash scripts/check.sh`) runs the module's tests with `mvn verify` (the role rules with their
