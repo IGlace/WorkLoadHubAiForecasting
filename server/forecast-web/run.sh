@@ -28,8 +28,30 @@ jar="$here/target/workloadhub-forecast-web-0.1.0-SNAPSHOT.jar"
 
 # Skip the check when the caller pointed at a database of their own: whether the local container is up is
 # then the wrong question.
+#
+# Ask the database, not the engine. This script's header says to run it inside the development container,
+# and that image mounts the engine's *socket* but installs no podman or docker command, so
+# `postgres.sh status` there exited at "no container engine on PATH" and this reported a perfectly healthy
+# database as down -- the check could not pass in the only place the script tells you to run it. pg_isready
+# comes from postgresql-client, which the box does install, and it asks the same question the application
+# will. A host with an engine but no psql still gets the old check. When neither can answer, start anyway:
+# Spring Boot naming the real connection failure beats this script guessing at one.
 if [ -z "${FORECAST_WEB_DB_URL:-}" ]; then
-    if ! bash "$server/../scripts/postgres.sh" status >/dev/null 2>&1; then
+    database=unknown
+    if command -v pg_isready >/dev/null 2>&1; then
+        if pg_isready -h localhost -p "${WHF_PG_PORT:-5432}" -U workloadhub -d workloadhub >/dev/null 2>&1; then
+            database=up
+        else
+            database=down
+        fi
+    elif command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+        if bash "$server/../scripts/postgres.sh" status >/dev/null 2>&1; then
+            database=up
+        else
+            database=down
+        fi
+    fi
+    if [ "$database" = down ]; then
         cat >&2 <<'EOT'
 The local PostgreSQL is not running, and this application does not create or seed a database.
 
