@@ -256,7 +256,11 @@ output. It is a parameter only so the tests can vary it.
 `Directory.deptCode` and `Directory.uniqueName` rather than restating them; `uniqueName` is package-private today
 and moves to public alongside `deptCode`.
 
-The class stays under about 250 lines. If it grows past that, the team derivation splits out.
+The class came out at 316 lines rather than the 250 this section first set as the point where the team
+derivation splits out. Left as one class deliberately: `prepare`, `members`, `deriveTeams`, `referencedTeams`
+and `teamRow` are one responsibility read top to bottom, a split would put `deriveTeams`' three private
+helpers behind a second package-private surface for no reader's benefit, and the whole class is transitional
+(section 2). Revisit only if something else is added to it.
 
 ## 10. Encoding
 

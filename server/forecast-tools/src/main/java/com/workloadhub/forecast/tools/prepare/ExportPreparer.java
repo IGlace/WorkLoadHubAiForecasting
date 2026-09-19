@@ -33,8 +33,8 @@ import java.util.UUID;
 public final class ExportPreparer {
 
     /**
-     * The {@code SeedRandom} seed the driver always passes, so two runs over one export are byte-identical.
-     * It is a parameter of {@link #prepare} only so the tests can vary it.
+     * The {@code SeedRandom} seed the driver always passes, so one export and one {@code joined} date give
+     * byte-identical output twice over. It is a parameter of {@link #prepare} only so the tests can vary it.
      */
     public static final long SEED = 20260919L;
 

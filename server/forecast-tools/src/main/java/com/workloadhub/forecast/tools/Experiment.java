@@ -217,7 +217,8 @@ public final class Experiment {
 
     /**
      * Rewrites a real export so its people can be counted. Transitional: see {@link ExportPreparer}. The seed
-     * is a constant rather than an option, so two runs over one export give byte-identical output.
+     * is a constant rather than an option, so one export and one {@code --joined} give byte-identical output;
+     * the default {@code --joined} is five years before today, which of course moves with the day.
      */
     private static int prepare(Args args) throws Exception {
         Path in = args.onlyFile("the export to prepare");
