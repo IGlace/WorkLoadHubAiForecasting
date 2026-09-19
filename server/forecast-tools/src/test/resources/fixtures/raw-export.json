@@ -1,0 +1,303 @@
+{
+  "database": "avl_workloadhub",
+  "schema": "task_service",
+  "exported_at": "2026-09-08T16:45:02.63994+01:00",
+  "excluded_tables": [
+    "refresh_tokens"
+  ],
+  "data": {
+    "user_roles": [
+      {
+        "id": "10000000-0000-0000-0000-000000000001",
+        "code": "MEMBER",
+        "label": "Member",
+        "active": true,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      }
+    ],
+    "job_titles": [
+      {
+        "id": "20000000-0000-0000-0000-000000000001",
+        "value": "Calibration Engineer",
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      }
+    ],
+    "users": [
+      {
+        "id": "30000000-0000-0000-0000-000000000001",
+        "role": "TEAM_LEADER",
+        "email": "lead@example.test",
+        "active": false,
+        "version": 0,
+        "password": null,
+        "username": "lead",
+        "full_name": "Lead One",
+        "job_title": "Team Leader Calibration",
+        "object_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "department": "PTE / CT2 Calibration & Testing 2",
+        "manager_id": null,
+        "updated_at": "2026-09-01T08:00:00",
+        "account_name": "lead",
+        "deactivated_at": "2026-01-01T08:00:00",
+        "manager_object_id": null
+      },
+      {
+        "id": "30000000-0000-0000-0000-000000000002",
+        "role": "MEMBER",
+        "email": "eng@example.test",
+        "active": false,
+        "version": 0,
+        "password": null,
+        "username": "vtwo",
+        "full_name": "Engineer Two",
+        "job_title": "Calibration Engineer",
+        "object_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "department": "PTE / CT2 Calibration & Testing 2",
+        "manager_id": "30000000-0000-0000-0000-000000000001",
+        "updated_at": "2026-09-01T08:00:00",
+        "account_name": "vtwo",
+        "deactivated_at": "2026-01-01T08:00:00",
+        "manager_object_id": null
+      }
+    ],
+    "teams": [],
+    "team_members": [],
+    "task_statuses": [
+      {
+        "id": "60000000-0000-0000-0000-000000000001",
+        "name": "To Do",
+        "active": true,
+        "category": "TO_DO",
+        "sort_order": 1,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000002",
+        "name": "In Progress",
+        "active": true,
+        "category": "IN_PROGRESS",
+        "sort_order": 2,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000003",
+        "name": "Open",
+        "active": true,
+        "category": "TO_DO",
+        "sort_order": 1,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000004",
+        "name": "In Review",
+        "active": true,
+        "category": "IN_PROGRESS",
+        "sort_order": 4,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000005",
+        "name": "Testing",
+        "active": true,
+        "category": "IN_PROGRESS",
+        "sort_order": 5,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000006",
+        "name": "Blocked",
+        "active": true,
+        "category": "IN_PROGRESS",
+        "sort_order": 6,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000007",
+        "name": "On Hold",
+        "active": true,
+        "category": "TO_DO",
+        "sort_order": 7,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000008",
+        "name": "Done",
+        "active": true,
+        "category": "DONE",
+        "sort_order": 8,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "60000000-0000-0000-0000-000000000009",
+        "name": "Closed",
+        "active": true,
+        "category": "DONE",
+        "sort_order": 9,
+        "description": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      }
+    ],
+    "task_types": [
+      {
+        "id": "70000000-0000-0000-0000-000000000001",
+        "name": "Task",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000002",
+        "name": "Story",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000003",
+        "name": "Bug",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000004",
+        "name": "Epic",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000005",
+        "name": "Improvement",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000006",
+        "name": "New Feature",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000007",
+        "name": "Change Request",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000008",
+        "name": "Incident",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000009",
+        "name": "Risk",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000010",
+        "name": "Spike",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000011",
+        "name": "Test",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      },
+      {
+        "id": "70000000-0000-0000-0000-000000000012",
+        "name": "Sub-task",
+        "active": true,
+        "icon": null,
+        "description": null,
+        "subtask_type_id": null,
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      }
+    ],
+    "projects": [],
+    "tasks": [],
+    "task_history": [],
+    "time_logs": [],
+    "holidays": [
+      {
+        "id": "c0000000-0000-0000-0000-000000000001",
+        "title": "New Year’s Day",
+        "type": "NATIONAL",
+        "status": "CONFIRMED",
+        "active": true,
+        "start_date": "2026-01-01",
+        "end_date": "2026-01-01",
+        "country_code": "MA",
+        "created_at": "2026-09-01T08:00:00",
+        "updated_at": "2026-09-01T08:00:00"
+      }
+    ],
+    "user_capacity": []
+  }
+}

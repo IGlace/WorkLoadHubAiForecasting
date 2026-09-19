@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Runs the experiment driver, which builds an experiment database on PostgreSQL.
 #
-#   bash server/tools/experiment.sh --help                                   # the five commands
+#   bash server/tools/experiment.sh --help                                   # the six commands
 #   bash server/tools/experiment.sh init-db
 #   bash server/tools/experiment.sh seed --synthetic --users 40 --out /tmp/seed.json
 #   bash server/tools/experiment.sh import /tmp/seed.json
+#   bash server/tools/experiment.sh prepare ~/export.json --out ~/prepared.json   # transitional; see server/README.md
 #   bash server/tools/experiment.sh fixture                                  # regenerate the committed test fixture
 #
 # Run it inside the development container (`bash scripts/devbox.sh shell`): that is where Java, Maven and

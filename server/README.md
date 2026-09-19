@@ -122,6 +122,8 @@ $X init-db                                    # --force drops and recreates the 
 
 # 2. a year of history for the real directory: the seed writes projects, tasks, task_history, time_logs and personal_leaves; the application's own tables are read from the export and left alone (the export holds personal data: keep it and the output outside git)
 # only the local database is ever seeded; nothing of this ships to the WorkloadHub developer
+# an export straight out of a WorkloadHub still in testing forecasts nobody: run `prepare` over it first,
+# and seed from the prepared file ("Running the forecast over a real export" below)
 $X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
 
 # 3. load it
@@ -151,11 +153,12 @@ $X fixture
 | `import` | `<file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
 | `export` | `<file>` | Writes the database's WorkloadHub tables as a JSON export. |
 | `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. Real mode writes five tables; synthetic mode writes them all. |
+| `prepare` | `<file> --out <file> [--joined ISO_DATE] [--force]` | Rewrites a real export so the forecast can count its people: every user active, `deactivated_at` cleared, and `teams` / `team_members` derived from `department` and `manager_id`. Transitional — see "Running the forecast over a real export" below. Its output refuses to land inside a git repository without `--force`. `--joined` stamps `team_members.joined_at` and defaults to five years before the day it runs. |
 | `fixture` | `[--out <dir>]` | Regenerates `forecast-core`'s committed test fixture, `workloadhub-schema.sql` and `seeded-rows.sql`. Commit both. |
-| any of them | `[--url] [--user] [--password]` | Where to connect: the options, else `WHF_DB_URL`, `WHF_DB_USER`, `WHF_DB_PASSWORD`, else the local database of `scripts/postgres.sh` (`jdbc:postgresql://localhost:5432/workloadhub`, user and password `workloadhub`). |
+| any but `prepare` | `[--url] [--user] [--password]` | Where to connect: the options, else `WHF_DB_URL`, `WHF_DB_USER`, `WHF_DB_PASSWORD`, else the local database of `scripts/postgres.sh` (`jdbc:postgresql://localhost:5432/workloadhub`, user and password `workloadhub`). `prepare` reads a file and writes a file, so it refuses these three as unknown options. |
 
-Those five are the whole of it: they build and move an experiment database, and freeze the seeded test
-fixture. Everything a
+Those six are the whole of it: they build and move an experiment database, prepare a real export for it,
+and freeze the seeded test fixture. Everything a
 *host* does — starting a run and polling its progress, reading the run, the current forecast, the run list,
 accuracy, `copilotStatus` and a narration — is in `HostExample`, a class of `forecast-tools`, run through
 `server/examples/run-host-example.sh` ("Integrating from the server's own code" below).
@@ -188,6 +191,47 @@ half day, sick days, and for one member in ten a pending request after the as-of
 are written, the module computes capacity itself. Loading it clears the application's own project
 history, comments and attachments of the rows it replaces (see above). The invariants the tests hold
 are listed in the design, section 4.8.
+
+## Running the forecast over a real export
+
+**Transitional.** WorkloadHub is still in its testing phase: almost no user is `active`, and its teams screen
+has not been used, so a real export carries a handful of stub teams instead of the company's structure. Two of
+the three conditions the module counts a member by therefore fail — `ForecastRepository` counts a user only
+when `active` is true, the role is `MEMBER` or `TEAM_LEADER`, and there is at least one `team_members` row —
+and a forecast over that export covers nobody. `prepare` corrects the export file before the seed sees it;
+delete the step once WorkloadHub populates `teams` and `team_members` itself
+(`docs/superpowers/specs/2026-09-19-real-export-preparation-design.md`).
+
+```bash
+bash scripts/postgres.sh up
+bash server/tools/experiment.sh init-db --force
+bash server/tools/experiment.sh prepare ~/whf/workloadhub_export.json --out ~/whf/prepared.json
+bash server/tools/experiment.sh import ~/whf/prepared.json
+bash server/tools/experiment.sh seed --export ~/whf/prepared.json --out ~/whf/seeded.json
+bash server/tools/experiment.sh import ~/whf/seeded.json
+```
+
+`prepare` sets every user `active` and clears `deactivated_at` — the second matters as much as the first,
+because the module reads `deactivated_at` as the member's leaving date, so a user flipped active while still
+carrying one is counted and then forecast at zero from that day. It promotes every user who has direct
+reports inside the export and is still `MEMBER` to `TEAM_LEADER`, and leaves every other role alone; nobody
+becomes `SKILL_TEAM_LEADER`, which the module does not count. It derives one parentless team per department
+code, plus an `Unassigned` one for people with no department, and one child team per user with direct
+reports. Pre-existing teams are dropped unless a `projects` or `team_capacity` row still points at one, in
+which case that team and its ancestors are kept; the command prints how many it kept and how many it dropped.
+It writes no database and reads no credentials: a file in, a file out, and the ids it mints come from a
+fixed seed, so the same export and the same `--joined` give the same bytes. Its output holds real names and
+stays outside the repository, like the seed's.
+
+`--joined` stamps `team_members.joined_at`, `created_at` and `updated_at`, and defaults to five years before
+the day the command runs. It is not filler: the module folds the earliest `joined_at` into the member's start
+date, so a stamp of today would orphan the whole seeded history behind it.
+
+A note on what it does not fix: real mode still gives about a tenth of people a late start date and a few a
+leaving date inside the window, and shapes their generated work accordingly, while leaving `users.active` and
+`deactivated_at` alone — `Directory.derive` returns on the real path before the step that would write them
+back. A handful of people will show work that begins late or stops early while the database calls them
+active. That is the seed's existing behaviour, not a fault of the prepared export.
 
 ## Running the showcase
 
@@ -359,8 +403,9 @@ credentials — by declaring one of its own; the sample host does exactly that
 ## The tools module
 
 `forecast-tools` depends on `forecast-core` and is never shipped. It holds the seed (`tools.seed`), the
-import and export of a WorkloadHub database and the schema script (`tools.export`), the driver
-(`tools.Experiment`) and the sample host (`examples.HostExample`). Its tests are the seed's, the
+import and export of a WorkloadHub database and the schema script (`tools.export`), the real-export
+preparation (`tools.prepare`), the driver (`tools.Experiment`) and the sample host
+(`examples.HostExample`). Its tests are the seed's, the
 export code's, the driver's and `FixtureFreshnessTest`, which fails the gate when
 `forecast-core/src/test/resources/fixtures/` no longer matches what the generator produces: run
 `bash server/tools/experiment.sh fixture` and commit the two files.

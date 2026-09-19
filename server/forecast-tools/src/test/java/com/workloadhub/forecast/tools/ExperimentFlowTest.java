@@ -4,17 +4,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.workloadhub.forecast.data.ForecastData;
+import com.workloadhub.forecast.data.ForecastRepository;
 import com.workloadhub.forecast.tools.testing.DatabaseTestSupport;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.Arrays;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.postgresql.ds.PGSimpleDataSource;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
  * Drives {@link Experiment}, the program the owner builds an experiment database with. It is a class of this
@@ -28,6 +32,9 @@ import org.postgresql.ds.PGSimpleDataSource;
 class ExperimentFlowTest {
 
     private static final Path FIXTURE = Path.of("src/test/resources/fixtures/mini-export.json");
+
+    /** The fixture in the shape a real export arrives in: every user inactive and deactivated, and no team at all. */
+    private static final Path RAW = Path.of("src/test/resources/fixtures/raw-export.json");
 
     /** What one run of the driver did: its exit code and everything it printed, both streams together. */
     private record Run(int exit, String output) {
@@ -140,6 +147,35 @@ class ExperimentFlowTest {
         assertTrue(json.contains("\"active\" : true") || json.contains("\"active\":true"), json);
         assertFalse(json.contains("\"deactivated_at\" : \"2026") || json.contains("\"deactivated_at\":\"2026"), json);
         assertTrue(json.contains("2021-01-04T08:00"), "joined_at is the requested date");
+    }
+
+    /**
+     * The whole chain the {@code prepare} verb exists to unblock: a real export in which nobody is active and
+     * no team exists goes in, and {@code ForecastRepository} counts members at the other end. Straight to
+     * {@code seed} it would count none — every user inactive and in no team fails two of the three conditions
+     * at {@code ForecastRepository:66} — which is the defect the design of 2026-09-19 is about.
+     */
+    @Test
+    void prepareThenSeedThenImportProducesCountableMembers(@TempDir Path dir) throws Exception {
+        DataSource ds = DatabaseTestSupport.postgres();
+        String[] db = connection(ds);
+        Path prepared = dir.resolve("prepared.json");
+        Path seeded = dir.resolve("seeded.json");
+
+        assertOk(experiment("prepare", RAW.toString(), "--out", prepared.toString(), "--joined", "2024-01-01"),
+                "department teams");
+        assertOk(experiment("seed", "--export", prepared.toString(), "--weeks", "8", "--end", "2026-09-06",
+                "--out", seeded.toString()), "real identities");
+        assertOk(experiment(concat(db, "init-db", "--force")), "Created");
+        assertOk(experiment(concat(db, "import", prepared.toString())), "Imported");
+        assertOk(experiment(concat(db, "import", seeded.toString())), "Imported");
+
+        ForecastData data = new ForecastRepository(JdbcClient.create(ds)).loadAll();
+        assertEquals(2, data.members().size(), "prepare exists so that this is not zero");
+        assertEquals(2, data.teams().size(), "the CT2 department team and Lead One's manager team");
+        assertTrue(data.members().stream().allMatch(m -> m.joined().equals(LocalDate.of(2024, 1, 1))),
+                "joined_at reaches the member's start date");
+        assertTrue(data.members().stream().allMatch(m -> m.left() == null), "deactivated_at was cleared");
     }
 
     /** The coordinates of a fresh database on the shared container, as the driver's own options. */

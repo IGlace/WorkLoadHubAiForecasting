@@ -55,7 +55,7 @@ end that calls the module the same way a real host will, against the same local 
   Copilot.
 - Documents dated before 2026-09-09 describe the archived version; each carries a note saying so.
 
-## Where the project stands (2026-09-18)
+## Where the project stands (2026-09-19)
 
 Plans 1 to 4 landed on `dev` and `main` (foundation and seed; pipeline core; run, eval and parity; Copilot
 narration), then the archival plan (`docs/superpowers/plans/2026-09-10-python-desktop-archival.md`). Then the
@@ -203,10 +203,33 @@ and this file updated, and `docs/backlog.md`'s "Java migration" section revised,
 registry-shaped items the stale branch would otherwise have reintroduced and opening the ones specific to
 this port (the host layer's duplication of `forecast-core`'s sample host, the pre-existing duplicate
 `org.postgresql:postgresql` declaration in `forecast-core/pom.xml`, the test-jar's size, and the unchecked
-Java/TypeScript boundary). Task 12 of the plan — the whole-branch review, one fix wave and the gate — is
-next.
-Next: the derived-arithmetic backlog item's own design pass, then the real export through the seed into the
-local PostgreSQL, then the server's own integration code, against the sample host.
+Java/TypeScript boundary). Task 12 of that plan — the whole-branch review, one fix wave (`5028638`) and the
+closing notes (`22b66ef`) — landed; its gate is the owner's to run, and the notes give the order to run it in.
+Then, on 2026-09-19, the real-export preparation
+(`docs/superpowers/specs/2026-09-19-real-export-preparation-design.md`,
+`docs/superpowers/plans/2026-09-19-real-export-preparation.md`): the owner's real WorkloadHub export forecasts
+**nobody**, because `ForecastRepository` counts a member only when `users.active` is true, the role is
+`MEMBER` or `TEAM_LEADER` and there is at least one `team_members` row, and an export from a WorkloadHub
+still in its testing phase fails the first and the third — 6 of 264 users active, and three test stub teams
+where the company's structure should be. A sixth driver verb, `prepare`, rewrites the export file in front of
+the seed: every user `active` with `deactivated_at` cleared (the module reads that column as the member's
+leaving date, so flipping only `active` would count a member and then forecast them at zero from that day),
+every user with direct reports inside the export whose role is still `MEMBER` promoted to `TEAM_LEADER` and
+never to `SKILL_TEAM_LEADER`, which is not counted, and `teams`/`team_members` derived from `department` and
+`manager_id` — one parentless team per department code plus an `Unassigned` one, one child team per user with
+reports, and `joined_at` from `--joined` (five years back by default), because the module folds the earliest
+`joined_at` into the member's start date and a stamp of today orphans the whole seeded history. Pre-existing
+teams are dropped unless a `projects` or `team_capacity` row still points at one, in which case that team and
+its ancestors are kept. Nothing in `forecast-core`, `SeedGenerator`, `Directory` or `ExportImporter` changed;
+only `Directory.uniqueName` became public, so the names are minted under the same UNIQUE constraint as the
+seed's. The step is transitional and deliberately sits outside the seed: the owner has confirmed WorkloadHub's
+teams will be populated for real, and derivation inside real mode would then overwrite the company's own
+structure on every run, silently. `docs/backlog.md` carries the deletion this is waiting for, and the
+late-join/early-leave behaviour real mode already had.
+Next: the whole-branch review of that plan and one fix wave, the gate by hand in the development container,
+then the real export through `prepare`, the seed and the import into the local PostgreSQL, then the
+derived-arithmetic backlog item's own design pass, then the server's own integration code, against the sample
+host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, the gate green by hand in the development container, then fast-forward `main`.
@@ -243,7 +266,7 @@ fix wave, the gate green by hand in the development container, then fast-forward
 ```text
 server/    Java 21 modules: `forecast-core`, the library the host adds and the only artifact; `forecast-tools`,
            never shipped: the seed, the import and export of a WorkloadHub database, `Experiment` (the
-           driver: init-db, import, export, seed, fixture) and `HostExample` (what a host does through
+           driver: init-db, import, export, seed, prepare, fixture) and `HostExample` (what a host does through
            `ForecastService`), run through `server/tools/experiment.sh` and `server/examples/run-host-example.sh`;
            `forecast-web`, never shipped: a showcase Spring Boot application and React front end that depends
            on `forecast-core` alone and calls it the way a real host will, run through

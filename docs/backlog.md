@@ -332,6 +332,22 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **Delete `experiment.sh prepare` and `ExportPreparer` once WorkloadHub populates `teams` and `team_members`
+  itself (2026-09-19).** The verb exists only because a WorkloadHub in its testing phase has almost no active
+  user and no real team structure, so an export straight out of it forecasts nobody
+  (`docs/superpowers/specs/2026-09-19-real-export-preparation-design.md`). Left in place it would be harmless
+  — it writes a file, not a database — but the structure it derives from `department` and `manager_id` is a
+  guess, and once the real structure exists the guess is worse than nothing. Deleting it is the whole remedy:
+  nothing downstream depends on it.
+
+- **Real mode shapes work by join and leave dates it never writes back (2026-09-19).** `Directory.derive`
+  gives ~10% of people a late join date and ~3% a leaving date inside the window (`LATE_JOIN_SHARE`,
+  `LEAVE_SHARE`) and `AbsencePlanner` and `Rhythm` shape their generated work by them, but on the real path
+  `derive` returns before the row-rewriting step that would set `users.active` and `deactivated_at` from
+  them. After a real seed a few people therefore show work that starts late or stops early while the database
+  still calls them active. Pre-dates the 2026-09-19 preparation step and is not its doing. Decide whether real
+  mode should stop doing this or should write the dates through.
+
 - **`forecast-web` narration keys clear only when the call returns (2026-09-18).** The in-flight set that
   refuses a second narration of the same run and language is cleared in the submitted task's `finally`, so a
   Copilot call that never returns would keep that run and language refused for the life of the process
