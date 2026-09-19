@@ -34,8 +34,10 @@ public final class Directory {
      * in {@code usedNames} (the export's own teams, plus every name generated so far this run), given a
      * numeric suffix (`"CT2 · Lead One 2"`) until it is unique. `teams.name` is UNIQUE, and both a real
      * export's own rows and a naming pattern this generator reuses can otherwise collide.
+     *
+     * <p>Public so {@code ExportPreparer} mints names under the same UNIQUE constraint instead of restating it.
      */
-    private static String uniqueName(String candidate, Set<String> usedNames) {
+    public static String uniqueName(String candidate, Set<String> usedNames) {
         String truncated = candidate.length() > MAX_TEAM_NAME ? candidate.substring(0, MAX_TEAM_NAME) : candidate;
         if (usedNames.add(truncated)) {
             return truncated;

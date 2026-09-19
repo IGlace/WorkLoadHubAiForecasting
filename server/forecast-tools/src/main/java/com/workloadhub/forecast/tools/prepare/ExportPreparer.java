@@ -1,12 +1,20 @@
 package com.workloadhub.forecast.tools.prepare;
 
 import com.workloadhub.forecast.tools.export.ExportEnvelope;
+import com.workloadhub.forecast.tools.seed.Directory;
+import com.workloadhub.forecast.tools.seed.SeedRandom;
+import com.workloadhub.forecast.tools.seed.Team;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.UUID;
 
 /**
  * Rewrites a real WorkloadHub export so the forecast can count its people.
@@ -81,5 +89,119 @@ public final class ExportPreparer {
         LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>(input.data());
         data.put("users", users);
         return new Result(input.withData(data), activated, promoted, 0, 0, 0, 0);
+    }
+
+    /** One user, reduced to the fields the structure is derived from. */
+    record Member(UUID id, String fullName, String jobTitle, String department, String deptCode,
+            UUID managerId, String role) {
+    }
+
+    /** The users as {@link Member}s, sorted by id string so the derivation is the same on every run. */
+    static List<Member> members(List<LinkedHashMap<String, Object>> users) {
+        List<LinkedHashMap<String, Object>> sorted = new ArrayList<>(users);
+        sorted.sort(Comparator.comparing(u -> String.valueOf(u.get("id"))));
+        List<Member> out = new ArrayList<>();
+        for (LinkedHashMap<String, Object> u : sorted) {
+            String dept = (String) u.get("department");
+            out.add(new Member(UUID.fromString((String) u.get("id")), (String) u.get("full_name"),
+                    (String) u.get("job_title"), dept, Directory.deptCode(dept),
+                    u.get("manager_id") == null ? null : UUID.fromString((String) u.get("manager_id")),
+                    String.valueOf(u.get("role"))));
+        }
+        return out;
+    }
+
+    /**
+     * The department teams (parentless, one per department code) followed by the manager teams (one per user
+     * with reports, child of that manager's department team).
+     *
+     * <p>The two levels are not cosmetic. {@code ForecastRepository} picks a member's primary team as the first
+     * of their teams that has a parent; {@code ProjectPlanner} gives projects only to parentless teams, so a flat
+     * structure produces no work at all; and {@code Rhythm} lets a manager team win over a department team.
+     * This mirrors what {@code Directory} builds on the synthetic path.
+     *
+     * <p>{@code usedNames} is mutated as names are minted, and should be seeded with the names of any
+     * pre-existing team the caller is keeping: {@code teams.name} is UNIQUE.
+     */
+    static List<Team> deriveTeams(List<Member> people, Set<String> usedNames, SeedRandom rnd) {
+        Map<UUID, Member> byId = new LinkedHashMap<>();
+        people.forEach(m -> byId.put(m.id(), m));
+
+        Map<UUID, List<UUID>> reports = new TreeMap<>();
+        Map<String, List<UUID>> byDept = new TreeMap<>();
+        Map<String, String> deptLabel = new TreeMap<>();
+        for (Member m : people) {
+            if (m.managerId() != null && byId.containsKey(m.managerId())) {
+                reports.computeIfAbsent(m.managerId(), k -> new ArrayList<>()).add(m.id());
+            }
+            String code = m.deptCode() == null ? "" : m.deptCode();
+            byDept.computeIfAbsent(code, k -> new ArrayList<>()).add(m.id());
+            // the longest department string wins, so "PTE / CT2" and "PTE / CT2 Calibration & Testing 2"
+            // share a code and the team carries the fuller label
+            if (m.department() != null && m.department().length() > deptLabel.getOrDefault(code, "").length()) {
+                deptLabel.put(code, m.department());
+            }
+        }
+
+        Map<String, UUID> heads = new TreeMap<>();
+        for (Map.Entry<String, List<UUID>> e : byDept.entrySet()) {
+            if (e.getKey().isEmpty()) {
+                continue;
+            }
+            UUID head = e.getValue().stream()
+                    .filter(id -> byId.get(id).jobTitle() != null
+                            && byId.get(id).jobTitle().toLowerCase(Locale.ROOT).contains("skill team leader"))
+                    .findFirst()
+                    .orElseGet(() -> e.getValue().stream()
+                            .filter(reports::containsKey)
+                            .max(Comparator.comparingInt(id -> reports.get(id).size()))
+                            .orElse(null));
+            if (head != null) {
+                heads.put(e.getKey(), head);
+            }
+        }
+
+        List<Team> teams = new ArrayList<>();
+        Map<String, UUID> deptTeamIds = new TreeMap<>();
+        for (Map.Entry<String, List<UUID>> e : byDept.entrySet()) {
+            String code = e.getKey();
+            UUID teamId = rnd.uuid();
+            deptTeamIds.put(code, teamId);
+            List<UUID> memberIds = new ArrayList<>();
+            for (UUID id : e.getValue()) {
+                Member m = byId.get(id);
+                boolean hasManager = m.managerId() != null && byId.containsKey(m.managerId());
+                if (!hasManager || id.equals(heads.get(code))) {
+                    memberIds.add(id);
+                }
+            }
+            String name = Directory.uniqueName(code.isEmpty() ? "Unassigned" : deptLabel.getOrDefault(code, code), usedNames);
+            // managerId may be null: a department with no head is legal, and ProjectPlanner.fallbackOwner
+            // gives its projects to the CENTER_MANAGER or the ADMIN.
+            teams.add(new Team(teamId, name, heads.get(code), null, memberIds, true, code.isEmpty() ? null : code));
+        }
+
+        for (Map.Entry<UUID, List<UUID>> e : reports.entrySet()) {
+            Member m = byId.get(e.getKey());
+            String code = m.deptCode();
+            if (code == null) {
+                // a manager with no department of their own takes the majority code of their reports
+                Map<String, Integer> votes = new TreeMap<>();
+                for (UUID r : e.getValue()) {
+                    String c = byId.get(r).deptCode();
+                    if (c != null) {
+                        votes.merge(c, 1, Integer::sum);
+                    }
+                }
+                code = votes.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("");
+            }
+            List<UUID> memberIds = new ArrayList<>();
+            memberIds.add(m.id());
+            memberIds.addAll(e.getValue());
+            String name = Directory.uniqueName((code.isEmpty() ? "Team" : code) + " · " + m.fullName(), usedNames);
+            teams.add(new Team(rnd.uuid(), name, m.id(), deptTeamIds.get(code), memberIds, false,
+                    code.isEmpty() ? null : code));
+        }
+        return teams;
     }
 }

@@ -1,14 +1,19 @@
 package com.workloadhub.forecast.tools.prepare;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.tools.export.ExportEnvelope;
+import com.workloadhub.forecast.tools.seed.SeedRandom;
+import com.workloadhub.forecast.tools.seed.Team;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -128,5 +133,68 @@ class ExportPreparerTest {
         IllegalArgumentException e = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ExportPreparer.prepare(empty, JOINED, ExportPreparer.SEED));
         assertTrue(e.getMessage().contains("users"), e.getMessage());
+    }
+
+    static List<Team> derived() {
+        return ExportPreparer.deriveTeams(ExportPreparer.members(users()), new HashSet<>(), new SeedRandom(ExportPreparer.SEED));
+    }
+
+    static Team named(List<Team> teams, String name) {
+        return teams.stream().filter(t -> t.name().equals(name)).findFirst().orElseThrow();
+    }
+
+    @Test
+    void departmentsBecomeParentlessTeamsAndManagersBecomeTheirChildren() {
+        List<Team> teams = derived();
+        // CT2 (five people, since "PTE / CT2" collapses to the same code), SIM (one), Unassigned (two)
+        List<Team> departments = teams.stream().filter(Team::department).toList();
+        assertEquals(3, departments.size(), teams.toString());
+        assertTrue(departments.stream().allMatch(t -> t.parentId() == null));
+
+        Team ct2 = named(teams, "PTE / CT2 Calibration & Testing 2");
+        assertTrue(ct2.department());
+        assertEquals(HEAD, ct2.managerId(), "the Skill Team Leader by job title heads the department");
+        assertEquals("CT2", ct2.deptCode());
+
+        List<Team> managerTeams = teams.stream().filter(t -> !t.department()).toList();
+        assertEquals(2, managerTeams.size(), "Head One and Manager Two each have reports");
+        for (Team t : managerTeams) {
+            assertEquals(ct2.id(), t.parentId(), "a manager team hangs under its department team");
+        }
+        assertNotNull(named(teams, "CT2 · Manager Two"));
+    }
+
+    @Test
+    void peopleWithNoDepartmentLandInUnassigned() {
+        Team unassigned = named(derived(), "Unassigned");
+        assertTrue(unassigned.department());
+        assertNull(unassigned.deptCode());
+        assertTrue(unassigned.memberIds().contains(LOST));
+        assertTrue(unassigned.memberIds().contains(BOSS));
+    }
+
+    @Test
+    void everyUserIsInAtLeastOneTeam() {
+        List<Team> teams = derived();
+        for (LinkedHashMap<String, Object> u : users()) {
+            UUID id = UUID.fromString((String) u.get("id"));
+            assertTrue(teams.stream().anyMatch(t -> t.memberIds().contains(id)),
+                    u.get("full_name") + " is in no team, so ForecastRepository would not count them");
+        }
+    }
+
+    @Test
+    void departmentMembersAreTheHeadAndThePeopleWithNoManager() {
+        Team ct2 = named(derived(), "PTE / CT2 Calibration & Testing 2");
+        assertEquals(List.of(HEAD), ct2.memberIds(),
+                "Manager Two and the engineers reach the department through their manager team");
+    }
+
+    @Test
+    void collidingNamesGetASuffix() {
+        Set<String> used = new HashSet<>();
+        used.add("Unassigned");
+        List<Team> teams = ExportPreparer.deriveTeams(ExportPreparer.members(users()), used, new SeedRandom(ExportPreparer.SEED));
+        assertNotNull(named(teams, "Unassigned 2"), "teams.name is UNIQUE, so a taken name gets a suffix");
     }
 }
