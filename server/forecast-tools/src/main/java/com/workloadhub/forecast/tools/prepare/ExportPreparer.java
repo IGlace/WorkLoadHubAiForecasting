@@ -86,9 +86,68 @@ public final class ExportPreparer {
             users.add(row);
         }
 
+        // Pre-existing teams: the application's teams screen has not been used, so these are test stubs and go,
+        // unless something still points at them (see referencedTeams).
+        Set<String> keep = referencedTeams(input);
+        List<LinkedHashMap<String, Object>> teamRows = new ArrayList<>();
+        Set<String> keptIds = new HashSet<>();
+        for (LinkedHashMap<String, Object> t : input.rows("teams")) {
+            if (keep.contains(String.valueOf(t.get("id")))) {
+                teamRows.add(t);
+                keptIds.add(String.valueOf(t.get("id")));
+            }
+        }
+        int kept = teamRows.size();
+        int dropped = input.rows("teams").size() - kept;
+
+        List<LinkedHashMap<String, Object>> memberRows = new ArrayList<>();
+        Set<String> pairs = new HashSet<>();
+        for (LinkedHashMap<String, Object> m : input.rows("team_members")) {
+            if (keptIds.contains(String.valueOf(m.get("team_id")))) {
+                memberRows.add(m);
+                pairs.add(m.get("team_id") + "/" + m.get("user_id"));
+            }
+        }
+
+        Set<String> usedNames = new HashSet<>();
+        for (LinkedHashMap<String, Object> t : teamRows) {
+            if (t.get("name") instanceof String s) {
+                usedNames.add(s);
+            }
+        }
+        SeedRandom rnd = new SeedRandom(seed);
+        List<Team> derived = deriveTeams(members(users), usedNames, rnd);
+
+        String stamp = joined.atTime(8, 0).toString();
+        int departments = 0;
+        for (Team team : derived) {
+            if (team.department()) {
+                departments++;
+            }
+            teamRows.add(teamRow(team, stamp));
+            for (UUID member : team.memberIds()) {
+                if (!pairs.add(team.id() + "/" + member)) {
+                    continue; // (team_id, user_id) is UNIQUE
+                }
+                LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                row.put("id", rnd.uuid().toString());
+                row.put("team_id", team.id().toString());
+                row.put("user_id", member.toString());
+                // ForecastRepository folds the earliest joined_at into the member's start date, so a stamp of
+                // "now" would orphan the whole seeded history before it.
+                row.put("joined_at", stamp);
+                row.put("created_at", stamp);
+                row.put("updated_at", stamp);
+                memberRows.add(row);
+            }
+        }
+
         LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>(input.data());
         data.put("users", users);
-        return new Result(input.withData(data), activated, promoted, 0, 0, 0, 0);
+        data.put("teams", teamRows);
+        data.put("team_members", memberRows);
+        return new Result(input.withData(data), activated, promoted, departments, derived.size() - departments,
+                kept, dropped);
     }
 
     /** One user, reduced to the fields the structure is derived from. */
@@ -203,5 +262,55 @@ public final class ExportPreparer {
                     code.isEmpty() ? null : code));
         }
         return teams;
+    }
+
+    /**
+     * The ids of pre-existing teams that must survive, because something outside {@code teams} and
+     * {@code team_members} points at them: {@code projects.team_id} and {@code team_capacity.team_id}, closed
+     * under {@code teams.parent_team_id} so an ancestor is never dropped from under a kept team. Dropping a
+     * referenced team would fail its foreign key at import, and the seed carries the export's own projects
+     * forward, so the reference reaches the database.
+     */
+    static Set<String> referencedTeams(ExportEnvelope input) {
+        Set<String> keep = new HashSet<>();
+        for (LinkedHashMap<String, Object> p : input.rows("projects")) {
+            if (p.get("team_id") instanceof String s) {
+                keep.add(s);
+            }
+        }
+        for (LinkedHashMap<String, Object> c : input.rows("team_capacity")) {
+            if (c.get("team_id") instanceof String s) {
+                keep.add(s);
+            }
+        }
+        Map<String, String> parentOf = new LinkedHashMap<>();
+        for (LinkedHashMap<String, Object> t : input.rows("teams")) {
+            if (t.get("id") instanceof String id && t.get("parent_team_id") instanceof String parent) {
+                parentOf.put(id, parent);
+            }
+        }
+        for (boolean grew = true; grew;) {
+            grew = false;
+            for (String id : new ArrayList<>(keep)) {
+                String parent = parentOf.get(id);
+                if (parent != null && keep.add(parent)) {
+                    grew = true;
+                }
+            }
+        }
+        return keep;
+    }
+
+    private static LinkedHashMap<String, Object> teamRow(Team team, String stamp) {
+        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+        row.put("id", team.id().toString());
+        row.put("name", team.name());
+        row.put("active", true);
+        row.put("version", 0L);
+        row.put("manager_id", team.managerId() == null ? null : team.managerId().toString());
+        row.put("parent_team_id", team.parentId() == null ? null : team.parentId().toString());
+        row.put("created_at", stamp);
+        row.put("updated_at", stamp);
+        return row;
     }
 }

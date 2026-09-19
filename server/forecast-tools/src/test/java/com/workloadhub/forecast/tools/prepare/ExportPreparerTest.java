@@ -197,4 +197,104 @@ class ExportPreparerTest {
         List<Team> teams = ExportPreparer.deriveTeams(ExportPreparer.members(users()), used, new SeedRandom(ExportPreparer.SEED));
         assertNotNull(named(teams, "Unassigned 2"), "teams.name is UNIQUE, so a taken name gets a suffix");
     }
+
+    static LinkedHashMap<String, Object> stubTeam(UUID id, String name, UUID parent) {
+        LinkedHashMap<String, Object> t = new LinkedHashMap<>();
+        t.put("id", id.toString());
+        t.put("name", name);
+        t.put("active", true);
+        t.put("version", 0L);
+        t.put("manager_id", null);
+        t.put("parent_team_id", parent == null ? null : parent.toString());
+        t.put("created_at", "2026-09-03T13:59:58");
+        t.put("updated_at", "2026-09-03T13:59:58");
+        return t;
+    }
+
+    static final UUID STUB = UUID.fromString("40000000-0000-0000-0000-000000000001");
+    static final UUID STUB_PARENT = UUID.fromString("40000000-0000-0000-0000-000000000002");
+    static final UUID STUB_FREE = UUID.fromString("40000000-0000-0000-0000-000000000003");
+
+    @Test
+    void teamRowsCarryTheDerivedStructure() {
+        ExportPreparer.Result result = prepared();
+        List<LinkedHashMap<String, Object>> teams = result.envelope().rows("teams");
+        assertEquals(5, teams.size(), "three departments and two manager teams");
+        assertEquals(3, result.departmentTeams());
+        assertEquals(2, result.managerTeams());
+        for (LinkedHashMap<String, Object> t : teams) {
+            assertEquals(Boolean.TRUE, t.get("active"));
+            assertEquals(0L, t.get("version"));
+            assertEquals("2021-01-04T08:00", t.get("created_at"));
+        }
+        Set<Object> ids = new HashSet<>();
+        teams.forEach(t -> ids.add(t.get("id")));
+        for (LinkedHashMap<String, Object> t : teams) {
+            if (t.get("parent_team_id") != null) {
+                assertTrue(ids.contains(t.get("parent_team_id")), "a parent that is not in the export fails the key");
+            }
+        }
+    }
+
+    @Test
+    void membershipRowsUseTheRequestedJoinedDate() {
+        List<LinkedHashMap<String, Object>> rows = prepared().envelope().rows("team_members");
+        assertTrue(rows.size() >= 7, "at least one row per user: " + rows.size());
+        Set<String> pairs = new HashSet<>();
+        for (LinkedHashMap<String, Object> m : rows) {
+            assertEquals("2021-01-04T08:00", m.get("joined_at"),
+                    "ForecastRepository folds the earliest joined_at into the member's start date");
+            assertEquals("2021-01-04T08:00", m.get("created_at"));
+            assertEquals("2021-01-04T08:00", m.get("updated_at"));
+            assertTrue(pairs.add(m.get("team_id") + "/" + m.get("user_id")), "(team_id, user_id) is UNIQUE");
+        }
+    }
+
+    @Test
+    void aStubTeamNothingReferencesIsDropped() {
+        ExportEnvelope input = envelope(users(),
+                new ArrayList<>(List.of(stubTeam(STUB_FREE, "Frontend Team", null))),
+                new ArrayList<>());
+        ExportPreparer.Result result = ExportPreparer.prepare(input, JOINED, ExportPreparer.SEED);
+        assertEquals(0, result.teamsKept());
+        assertEquals(1, result.teamsDropped());
+        assertTrue(result.envelope().rows("teams").stream().noneMatch(t -> STUB_FREE.toString().equals(t.get("id"))));
+    }
+
+    @Test
+    void aStubTeamAProjectPointsAtSurvivesWithItsAncestors() {
+        LinkedHashMap<String, Object> project = new LinkedHashMap<>();
+        project.put("id", "80000000-0000-0000-0000-000000000001");
+        project.put("key", "CT2-CAL");
+        project.put("team_id", STUB.toString());
+
+        LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>();
+        data.put("users", users());
+        data.put("teams", new ArrayList<>(List.of(
+                stubTeam(STUB_PARENT, "Engineering", null),
+                stubTeam(STUB, "Backend Team", STUB_PARENT),
+                stubTeam(STUB_FREE, "Frontend Team", null))));
+        LinkedHashMap<String, Object> membership = new LinkedHashMap<>();
+        membership.put("id", "50000000-0000-0000-0000-000000000001");
+        membership.put("team_id", STUB.toString());
+        membership.put("user_id", ENG1.toString());
+        membership.put("joined_at", "2026-09-03T14:00:00");
+        membership.put("created_at", "2026-09-03T14:00:00");
+        membership.put("updated_at", "2026-09-03T14:00:00");
+        data.put("team_members", new ArrayList<>(List.of(membership)));
+        data.put("projects", new ArrayList<>(List.of(project)));
+
+        ExportPreparer.Result result = ExportPreparer.prepare(
+                new ExportEnvelope("workloadhub", "task_service", null, List.of(), data), JOINED, ExportPreparer.SEED);
+
+        assertEquals(2, result.teamsKept(), "the referenced team and its parent");
+        assertEquals(1, result.teamsDropped());
+        Set<Object> ids = new HashSet<>();
+        result.envelope().rows("teams").forEach(t -> ids.add(t.get("id")));
+        assertTrue(ids.contains(STUB.toString()), "dropping it would fail projects.team_id at import");
+        assertTrue(ids.contains(STUB_PARENT.toString()), "dropping it would fail teams.parent_team_id at import");
+        assertTrue(!ids.contains(STUB_FREE.toString()));
+        assertTrue(result.envelope().rows("team_members").stream()
+                .anyMatch(m -> STUB.toString().equals(m.get("team_id"))), "a kept team keeps its memberships");
+    }
 }
