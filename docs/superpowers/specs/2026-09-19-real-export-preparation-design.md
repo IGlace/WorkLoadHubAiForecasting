@@ -111,9 +111,13 @@ Both, not just the first. `ForecastRepository.java:73` reads `deactivated_at` in
 LocalDateTime left = rs.getObject("deactivated_at", LocalDateTime.class);
 ```
 
-A user flipped active while still carrying a `deactivated_at` timestamp is counted and then treated as having
-left partway through the history — their forecast silently goes to zero from that date. Clearing the timestamp is
-not tidiness; it is the other half of the same fix.
+A user flipped active while still carrying a `deactivated_at` timestamp is counted by `ForecastRepository` and
+then dropped by the run. `left` is read in exactly two places in `forecast-core`: `FeatureBuilder.java:68`
+(`if (m.left() != null && !w.isBefore(m.left())) break;`) stops building their feature rows at that date, so a
+past leaving date leaves them with no row at the origin and no prediction at all; and
+`ForecastRunner.java:164` filters `membersOfTeam` with `m.left() == null || m.left().isAfter(p.origin())`,
+throwing `TEAM_NOT_FOUND` when that empties the team. Clearing the timestamp is not tidiness; it is the other
+half of the same fix, and the failure it prevents is louder than a zero.
 
 All 264 are flipped rather than the 262 counted ones: the role filter still excludes the `ADMIN` and the
 `CENTER_MANAGER`, so selecting is extra logic that buys nothing.
@@ -198,15 +202,19 @@ One row per (team, member) pair, with `id` minted from the same `SeedRandom`, an
 `joined_at = created_at = updated_at = --joined` at 08:00.
 
 `joined_at` is not filler. `ForecastRepository.java:54-57` folds it into the member's joined date, earliest row
-winning:
+winning, and `forecast-core` reads that date twice: `FeatureBuilder.java:93` computes `tenure_weeks` as
+`Weeks.weeksBetween(m.joined(), w)`, and `FeatureBuilder.startIndex` (line 117) takes **the earlier of** the
+join week and the member's first assignment week as their first feature week:
 
 ```java
 joinedOfUser.merge(user, rs.getObject("joined_at", LocalDateTime.class).toLocalDate(), (a, b) -> a.isBefore(b) ? a : b);
 ```
 
-Stamped at generation time, every member looks like they arrived the day the command ran, and the entire seeded
-history before that date is orphaned. `seed` defaults to 52 weeks ending today (`Experiment.java:191-192`), so
-the default of five years back clears any plausible window; `--joined` covers the rest.
+Stamped at generation time, every member's `tenure_weeks` goes negative across the whole history, and any
+member with no assigned task in the loaded window is orphaned outright — a member who does have assignments
+keeps their history through `startIndex`'s other candidate, so the damage is to the feature, not to every row.
+`seed` defaults to 52 weeks ending today (`Experiment.java:191-192`), so the default of five years back clears
+any plausible window; `--joined` covers the rest.
 
 `(team_id, user_id)` is `UNIQUE` (`workloadhub-postgresql.sql:613`), so a member appearing in both their
 department team and their manager team gets one row in each and no duplicate within either.

@@ -337,8 +337,11 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   user and no real team structure, so an export straight out of it forecasts nobody
   (`docs/superpowers/specs/2026-09-19-real-export-preparation-design.md`). Left in place it would be harmless
   — it writes a file, not a database — but the structure it derives from `department` and `manager_id` is a
-  guess, and once the real structure exists the guess is worse than nothing. Deleting it is the whole remedy:
-  nothing downstream depends on it.
+  guess, and once the real structure exists the guess is worse than nothing. Deleting it is the whole remedy: nothing in
+  production code but the driver's own verb depends on it. `ExportPreparerTest`,
+  `ExportPreparerPropertyTest`, `ExperimentFlowTest.prepareThenSeedThenImportProducesCountableMembers` and
+  `forecast-tools/src/test/resources/fixtures/raw-export.json` go with it, and `Directory.uniqueName` can go
+  back to private.
 
 - **Real mode shapes work by join and leave dates it never writes back (2026-09-19).** `Directory.derive`
   gives ~10% of people a late join date and ~3% a leaving date inside the window (`LATE_JOIN_SHARE`,

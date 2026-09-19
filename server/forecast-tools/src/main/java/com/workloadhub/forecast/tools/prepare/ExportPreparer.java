@@ -74,7 +74,9 @@ public final class ExportPreparer {
             }
             row.put("active", true);
             // Not tidiness: ForecastRepository reads deactivated_at as the member's leaving date, so a user
-            // flipped active while still carrying one is counted and then forecast at zero from that day.
+            // flipped active while still carrying one is counted and then dropped by the run — FeatureBuilder
+            // stops their rows at that date and ForecastRunner.forTeam filters them out, raising
+            // TEAM_NOT_FOUND for a team of them.
             row.put("deactivated_at", null);
             if (managerIds.contains(row.get("id")) && "MEMBER".equals(row.get("role"))) {
                 // A team whose manager_id names a plain MEMBER is inconsistent, and Rhythm halves a
@@ -133,8 +135,9 @@ public final class ExportPreparer {
                 row.put("id", rnd.uuid().toString());
                 row.put("team_id", team.id().toString());
                 row.put("user_id", member.toString());
-                // ForecastRepository folds the earliest joined_at into the member's start date, so a stamp of
-                // "now" would orphan the whole seeded history before it.
+                // ForecastRepository folds the earliest joined_at into the member's joined date, which feeds
+                // tenure_weeks and competes with the first assignment week in FeatureBuilder.startIndex: a
+                // stamp of "now" makes every member's tenure negative across the history.
                 row.put("joined_at", stamp);
                 row.put("created_at", stamp);
                 row.put("updated_at", stamp);

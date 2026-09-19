@@ -122,9 +122,11 @@ $X init-db                                    # --force drops and recreates the 
 
 # 2. a year of history for the real directory: the seed writes projects, tasks, task_history, time_logs and personal_leaves; the application's own tables are read from the export and left alone (the export holds personal data: keep it and the output outside git)
 # only the local database is ever seeded; nothing of this ships to the WorkloadHub developer
-# an export straight out of a WorkloadHub still in testing forecasts nobody: run `prepare` over it first,
-# and seed from the prepared file ("Running the forecast over a real export" below)
-$X seed --export ~/whf/workloadhub_export.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
+# an export straight out of a WorkloadHub still in testing forecasts nobody, so prepare it first and
+# seed from the prepared file ("Running the forecast over a real export" below)
+$X prepare ~/whf/workloadhub_export.json --out ~/whf/prepared.json
+$X import ~/whf/prepared.json                 # the directory: users, teams, team_members
+$X seed --export ~/whf/prepared.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
 
 # 3. load it
 $X import ~/whf/seeded.json
@@ -212,8 +214,10 @@ bash server/tools/experiment.sh import ~/whf/seeded.json
 ```
 
 `prepare` sets every user `active` and clears `deactivated_at` — the second matters as much as the first,
-because the module reads `deactivated_at` as the member's leaving date, so a user flipped active while still
-carrying one is counted and then forecast at zero from that day. It promotes every user who has direct
+because the module reads `deactivated_at` as the member's leaving date, and a user flipped active while
+still carrying one is counted by `ForecastRepository` and then dropped by the run: `FeatureBuilder` stops
+their feature rows at that date, and `ForecastRunner.forTeam` filters out every member whose leaving date is
+not after the origin — a team of such members raises `TEAM_NOT_FOUND` outright. It promotes every user who has direct
 reports inside the export and is still `MEMBER` to `TEAM_LEADER`, and leaves every other role alone; nobody
 becomes `SKILL_TEAM_LEADER`, which the module does not count. It derives one parentless team per department
 code, plus an `Unassigned` one for people with no department, and one child team per user with direct
@@ -224,8 +228,11 @@ fixed seed, so the same export and the same `--joined` give the same bytes. Its 
 stays outside the repository, like the seed's.
 
 `--joined` stamps `team_members.joined_at`, `created_at` and `updated_at`, and defaults to five years before
-the day the command runs. It is not filler: the module folds the earliest `joined_at` into the member's start
-date, so a stamp of today would orphan the whole seeded history behind it.
+the day the command runs. It is not filler: the module folds the earliest `joined_at` into the member's joined
+date, which feeds `tenure_weeks` and is one of the two candidates for the member's first feature week
+(`FeatureBuilder.startIndex` takes the earlier of it and the first assignment week). A stamp of the
+generation day makes every member's tenure negative across the history, and orphans outright any member with
+no assigned task in the window.
 
 A note on what it does not fix: real mode still gives about a tenth of people a late start date and a few a
 leaving date inside the window, and shapes their generated work accordingly, while leaving `users.active` and
@@ -406,7 +413,7 @@ credentials — by declaring one of its own; the sample host does exactly that
 import and export of a WorkloadHub database and the schema script (`tools.export`), the real-export
 preparation (`tools.prepare`), the driver (`tools.Experiment`) and the sample host
 (`examples.HostExample`). Its tests are the seed's, the
-export code's, the driver's and `FixtureFreshnessTest`, which fails the gate when
+export code's, the preparer's, the driver's and `FixtureFreshnessTest`, which fails the gate when
 `forecast-core/src/test/resources/fixtures/` no longer matches what the generator produces: run
 `bash server/tools/experiment.sh fixture` and commit the two files.
 

@@ -213,15 +213,19 @@ Then, on 2026-09-19, the real-export preparation
 still in its testing phase fails the first and the third — 6 of 264 users active, and three test stub teams
 where the company's structure should be. A sixth driver verb, `prepare`, rewrites the export file in front of
 the seed: every user `active` with `deactivated_at` cleared (the module reads that column as the member's
-leaving date, so flipping only `active` would count a member and then forecast them at zero from that day),
+leaving date, so flipping only `active` would count a member and then drop them from the run — `FeatureBuilder`
+stops their rows at that date and `ForecastRunner.forTeam` filters them out, raising `TEAM_NOT_FOUND` for a
+team of them),
 every user with direct reports inside the export whose role is still `MEMBER` promoted to `TEAM_LEADER` and
 never to `SKILL_TEAM_LEADER`, which is not counted, and `teams`/`team_members` derived from `department` and
-`manager_id` — one parentless team per department code plus an `Unassigned` one, one child team per user with
-reports, and `joined_at` from `--joined` (five years back by default), because the module folds the earliest
-`joined_at` into the member's start date and a stamp of today orphans the whole seeded history. Pre-existing
+`manager_id` — one parentless team per department code, plus an `Unassigned` one when anyone has no
+department at all, one child team per user with reports, and `joined_at` from `--joined` (five years back by
+default), because the module folds the earliest `joined_at` into the member's joined date, which feeds
+`tenure_weeks` and competes with the first assignment week for the member's first feature week: a stamp of
+the generation day makes every tenure negative across the history. Pre-existing
 teams are dropped unless a `projects` or `team_capacity` row still points at one, in which case that team and
-its ancestors are kept. Nothing in `forecast-core`, `SeedGenerator`, `Directory` or `ExportImporter` changed;
-only `Directory.uniqueName` became public, so the names are minted under the same UNIQUE constraint as the
+its ancestors are kept. Nothing in `forecast-core`, `SeedGenerator` or `ExportImporter` changed, and
+`Directory` only in that `uniqueName` became public, so the names are minted under the same UNIQUE constraint as the
 seed's. The step is transitional and deliberately sits outside the seed: the owner has confirmed WorkloadHub's
 teams will be populated for real, and derivation inside real mode would then overwrite the company's own
 structure on every run, silently. `docs/backlog.md` carries the deletion this is waiting for, and the
