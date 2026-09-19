@@ -265,7 +265,7 @@ Details, the page inventory, the REST surface and the no-authentication warning:
 The host adds `forecast-core` as a dependency; nothing else is required of it. Spring Boot's
 auto-configuration (`ForecastAutoConfiguration`, registered through
 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`) sees the host's own
-`DataSource`, runs the module's Flyway migrations into the host's schema under its own history table
+`DataSource`, runs the module's Flyway migrations into `task_service` under its own history table
 (`forecast_schema_history`, baselined at version 0 so the WorkloadHub tables are left alone), and registers
 the run store, the token store, the narrator, the Copilot gateway and the `ForecastService` bean. Every bean
 is `@ConditionalOnMissingBean`: a host that declares its own replaces it.
@@ -309,7 +309,16 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
 
 - **Wiring**: add the dependency, keep `whf.web.enabled` false, set `whf.token-key` from your secret store,
   `whf.work-dir` to a directory the service account can write, and declare a `java.time.Clock` bean in your
-  time zone. The module's Flyway creates its tables in your schema under `forecast_schema_history`.
+  time zone.
+- **The schema**: the module's Flyway creates its tables in `task_service` under `forecast_schema_history`.
+  That name is written in `ForecastMigrations`, not read from your `DataSource`, so the module's tables
+  always land beside the WorkloadHub tables it reads. The other side of that bargain is yours: every
+  statement the module issues names its tables unqualified, so the connections it borrows must resolve
+  `task_service` on their search path. The server's own connections already do, or it could not read its own
+  tables; a connection that does not — one whose role and default search path point elsewhere — migrates
+  cleanly and then fails every query with `relation "users" does not exist`, because Flyway names its schema
+  and the queries do not. `currentSchema=task_service,public` on the JDBC connection settles it
+  (`server/forecast-web/src/main/resources/application.yml` is an example).
 - **Who may do what** (the host enforces it; the module trusts `requestedBy`):
 
   | role | may start a run for | may view |

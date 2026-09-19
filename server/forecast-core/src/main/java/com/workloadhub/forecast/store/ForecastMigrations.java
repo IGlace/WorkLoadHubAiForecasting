@@ -17,9 +17,12 @@ public final class ForecastMigrations {
                 .dataSource(dataSource)
                 .locations(LOCATION)
                 .table(HISTORY_TABLE)
-                // The module's tables land in the host's own schema, which already holds the WorkloadHub
-                // tables before this ever runs; baseline that pre-existing state at version 0 so V1 (the
-                // module's one migration) still applies on top of it.
+                // The module's tables land in task_service, which already holds the WorkloadHub tables
+                // before this ever runs; baseline that pre-existing state at version 0 so V1 (the module's
+                // one migration) still applies on top of it. The schema is named below rather than taken
+                // from the connection, so the tables always land beside the ones the module reads -- which
+                // makes the host owe the matching search path, since every statement the module issues is
+                // unqualified. A connection that resolves elsewhere migrates here and reads there.
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
                 .validateOnMigrate(true)
