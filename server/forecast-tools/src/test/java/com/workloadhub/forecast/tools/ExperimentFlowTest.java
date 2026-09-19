@@ -111,6 +111,37 @@ class ExperimentFlowTest {
         assertEquals(0, experiment("--help").exit());
     }
 
+    /**
+     * A prepared export carries the identities of real people, so it stays outside the repository, exactly as
+     * real-mode seed output does. The refusal comes before anything is written.
+     */
+    @Test
+    void prepareRefusesTheRepositoryAndNeedsAnOutput(@TempDir Path dir) throws Exception {
+        Path inRepo = Path.of("target/prepared.json");
+        assertEquals(2, experiment("prepare", FIXTURE.toString(), "--out", inRepo.toString()).exit());
+        assertFalse(Files.exists(inRepo), "the repository guard refuses before writing anything");
+
+        Path outside = dir.resolve("prepared.json");
+        assertEquals(2, experiment("prepare", FIXTURE.toString()).exit(), "--out is required");
+        assertEquals(2, experiment("prepare", "--out", outside.toString()).exit(), "the export to prepare is required");
+        assertEquals(2, experiment("prepare", FIXTURE.toString(), "--out", outside.toString(),
+                "--joined", "last-tuesday").exit(), "--joined must be an ISO date");
+        assertFalse(Files.exists(outside));
+    }
+
+    @Test
+    void prepareWritesAnExportEveryUserCanBeCountedIn(@TempDir Path dir) throws Exception {
+        Path out = dir.resolve("prepared.json");
+        assertOk(experiment("prepare", FIXTURE.toString(), "--out", out.toString(), "--joined", "2021-01-04"),
+                "department teams");
+        String json = Files.readString(out);
+        // Json.mapper() indents, and its separator spacing is the pretty printer's business rather than this
+        // test's: both spellings are accepted so the assertion is about the value, not the layout.
+        assertTrue(json.contains("\"active\" : true") || json.contains("\"active\":true"), json);
+        assertFalse(json.contains("\"deactivated_at\" : \"2026") || json.contains("\"deactivated_at\":\"2026"), json);
+        assertTrue(json.contains("2021-01-04T08:00"), "joined_at is the requested date");
+    }
+
     /** The coordinates of a fresh database on the shared container, as the driver's own options. */
     private static String[] connection(DataSource ds) {
         PGSimpleDataSource pg = (PGSimpleDataSource) ds;

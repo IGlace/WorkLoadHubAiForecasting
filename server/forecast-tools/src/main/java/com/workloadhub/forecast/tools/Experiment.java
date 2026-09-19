@@ -8,6 +8,7 @@ import com.workloadhub.forecast.tools.export.ExportFiles;
 import com.workloadhub.forecast.tools.export.ExportImporter;
 import com.workloadhub.forecast.tools.export.SqlExportWriter;
 import com.workloadhub.forecast.tools.export.WorkloadHubSchema;
+import com.workloadhub.forecast.tools.prepare.ExportPreparer;
 import com.workloadhub.forecast.tools.seed.SeedConfig;
 import com.workloadhub.forecast.tools.seed.SeedGenerator;
 import java.io.Writer;
@@ -29,7 +30,7 @@ import javax.sql.DataSource;
 import org.postgresql.ds.PGSimpleDataSource;
 
 /**
- * Builds an experiment database on PostgreSQL: the five things the owner does from a terminal that the
+ * Builds an experiment database on PostgreSQL: the six things the owner does from a terminal that the
  * WorkloadHub server never does.
  *
  * <p>Until 2026-09-17 this was a single-file program under {@code server/tools}, compiled by the launcher against
@@ -64,6 +65,13 @@ public final class Experiment {
                        Generate an export with weeks of realistic history, from a real export or a
                        synthetic directory. Real mode (no --synthetic) needs --export and refuses to
                        write inside a git repository without --force: its output holds personal data.
+
+              prepare  <export.json> --out FILE [--joined ISO_DATE] [--force]
+                       Rewrite a real export so the forecast can count its people: every user active,
+                       and teams and memberships derived from department and manager_id. Transitional —
+                       delete it once WorkloadHub populates teams itself. Refuses to write inside a git
+                       repository without --force: its output holds personal data. --joined stamps
+                       team_members.joined_at and defaults to five years ago.
 
               fixture  [--out DIR]
                        Regenerate forecast-core's seeded test fixture: workloadhub-schema.sql and seeded-rows.sql in DIR.
@@ -102,6 +110,7 @@ public final class Experiment {
                 case "export" -> export(Args.parse(rest, Set.of("url", "user", "password"), Set.of()));
                 case "seed" -> seed(Args.parse(rest, Set.of("url", "user", "password", "out", "export", "users", "weeks", "end", "seed"),
                         Set.of("synthetic", "force")));
+                case "prepare" -> prepare(Args.parse(rest, Set.of("out", "joined"), Set.of("force")));
                 case "fixture" -> fixture(Args.parse(rest, Set.of("out", "url", "user", "password"), Set.of()));
                 default -> {
                     System.err.println("error: unknown command '" + command + "'\n");
@@ -122,7 +131,7 @@ public final class Experiment {
         }
     }
 
-    // ---- the five commands ------------------------------------------------------------------------------------
+    // ---- the six commands ------------------------------------------------------------------------------------
 
     private static int initDb(Args args) throws Exception {
         args.noFiles();
@@ -203,6 +212,27 @@ public final class Experiment {
                 System.out.printf("  %-18s %8d%n", table, rows);
             }
         }
+        return 0;
+    }
+
+    /**
+     * Rewrites a real export so its people can be counted. Transitional: see {@link ExportPreparer}. The seed
+     * is a constant rather than an option, so two runs over one export give byte-identical output.
+     */
+    private static int prepare(Args args) throws Exception {
+        Path in = args.onlyFile("the export to prepare");
+        Path out = Path.of(args.require("out"));
+        if (!args.flag("force") && insideGitRepository(out)) {
+            System.err.println("A prepared export holds personal data; write it outside the repository or pass --force");
+            return 2;
+        }
+        LocalDate joined = args.date("joined") == null ? LocalDate.now().minusYears(5) : args.date("joined");
+        ExportPreparer.Result result = ExportPreparer.prepare(ExportFiles.read(in), joined, ExportPreparer.SEED);
+        ExportFiles.write(out, result.envelope());
+        System.out.printf("Wrote %s: %d users activated, %d promoted to TEAM_LEADER, %d department teams, "
+                + "%d manager teams, %d existing teams kept, %d dropped, joined %s%n",
+                out, result.usersActivated(), result.managersPromoted(), result.departmentTeams(),
+                result.managerTeams(), result.teamsKept(), result.teamsDropped(), joined);
         return 0;
     }
 
