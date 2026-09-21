@@ -48,7 +48,7 @@ public final class Truncation {
                     status, t.priority(), t.estimate(), remaining, t.createdDate(), started, finished, t.dueDate(), t.plannedWeek(),
                     t.reopened(), t.archived()));
         }
-        return new ForecastData(data.members(), data.teams(), data.projects(), tasks, keptTransitions, keptLogs, data.leaves(),
+        return new ForecastData(data.members(), data.projects(), tasks, keptTransitions, keptLogs, data.leaves(),
                 data.pendingLeaves(), data.holidays(), data.users(), data.statusCategoryByName());
     }
 

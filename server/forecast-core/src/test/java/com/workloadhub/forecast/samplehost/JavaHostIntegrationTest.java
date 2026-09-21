@@ -52,13 +52,13 @@ class JavaHostIntegrationTest {
     ForecastAccess access;
     JdbcClient jdbc;
     UUID team;          // a team with members whose parent team has a manager
-    UUID leader;        // teams.manager_id of team
-    UUID head;          // the parent team's manager: a SKILL_TEAM_LEADER
+    UUID leader;        // the team's leader, which is the team id itself
+    UUID head;          // the leader's own manager: a SKILL_TEAM_LEADER
     UUID member;        // a MEMBER of team
     UUID viewer;        // a user who may read every team and run none: a VIEWER, or the CENTER_MANAGER when the seed has no VIEWER
     Optional<UUID> admin;       // any ADMIN, when the seed has one
-    UUID teamUnderSameHead;     // another team with members under head's department, or team when the seed has only one
-    Optional<UUID> otherTeam;   // a team with members under a different parent, when the seed has one
+    UUID teamUnderSameHead;     // another leader reporting to head, or team when the seed has only one
+    Optional<UUID> otherTeam;   // a team under a different head, when the seed has one
     Optional<UUID> outsider;    // a MEMBER of otherTeam
 
     @BeforeAll
@@ -66,25 +66,27 @@ class JavaHostIntegrationTest {
         jdbc = JdbcClient.create(dataSource);
         access = new ForecastAccess(jdbc);
         host = new HostForecastFacade(service, access, tokens);
-        List<Map<String, Object>> teams = jdbc.sql("SELECT t.id AS id, t.manager_id AS leader, t.parent_team_id AS parent, p.manager_id AS head"
-                + " FROM teams t JOIN teams p ON p.id = t.parent_team_id"
-                + " JOIN users lu ON lu.id = t.manager_id JOIN users hu ON hu.id = p.manager_id"
-                + " WHERE lu.role = 'TEAM_LEADER' AND hu.role = 'SKILL_TEAM_LEADER'"
-                + " AND EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id) ORDER BY t.id").query().listOfRows();
-        assertFalse(teams.isEmpty(), "the seed has teams under a department with a head");
+        // A team is a leader and their direct reports, keyed by the leader (design 2026-09-21): pick a
+        // TEAM_LEADER who leads somebody and reports to a SKILL_TEAM_LEADER, so both role rules have a subject.
+        String leadsSomebody = " AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = lu.id AND r.active"
+                + " AND r.role IN ('MEMBER', 'TEAM_LEADER'))";
+        List<Map<String, Object>> teams = jdbc.sql("SELECT lu.id AS id, lu.manager_id AS head FROM users lu"
+                + " JOIN users hu ON hu.id = lu.manager_id"
+                + " WHERE lu.role = 'TEAM_LEADER' AND hu.role = 'SKILL_TEAM_LEADER'" + leadsSomebody
+                + " ORDER BY lu.id").query().listOfRows();
+        assertFalse(teams.isEmpty(), "the seed has a team leader under a skill team leader");
         Map<String, Object> first = teams.get(0);
         team = UUID.fromString(first.get("id").toString());
-        leader = UUID.fromString(first.get("leader").toString());
+        leader = team;                                  // a team is its leader
         head = UUID.fromString(first.get("head").toString());
         assertEquals("TEAM_LEADER", role(leader));
         assertEquals("SKILL_TEAM_LEADER", role(head));
         member = SeededData.data().membersOfTeam(team).stream().map(m -> m.id()).filter(id -> role(id).equals("MEMBER")).findFirst().orElseThrow();
         viewer = userWithRole("VIEWER").or(() -> userWithRole("CENTER_MANAGER")).orElseThrow();
         admin = userWithRole("ADMIN");
-        teamUnderSameHead = jdbc.sql("SELECT t.id AS id FROM teams t JOIN teams p ON p.id = t.parent_team_id WHERE p.manager_id = ?"
-                + " AND t.id <> ?"
-                + " AND EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id) ORDER BY t.id").param(head).param(team)
-                .query().listOfRows().stream().findFirst().map(r -> UUID.fromString(r.get("id").toString())).orElse(team);
+        teamUnderSameHead = teams.stream()
+                .filter(t -> t.get("head").toString().equals(head.toString()) && !t.get("id").toString().equals(team.toString()))
+                .findFirst().map(t -> UUID.fromString(t.get("id").toString())).orElse(team);
         otherTeam = teams.stream().filter(t -> !t.get("head").toString().equals(head.toString())).findFirst().map(t -> UUID.fromString(t.get("id").toString()));
         outsider = otherTeam.flatMap(t -> SeededData.data().membersOfTeam(t).stream().map(m -> m.id()).filter(id -> role(id).equals("MEMBER")).findFirst());
     }

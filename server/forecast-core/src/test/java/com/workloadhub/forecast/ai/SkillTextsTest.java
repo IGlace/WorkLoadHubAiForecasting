@@ -41,6 +41,9 @@ class SkillTextsTest {
         assertTrue(all.contains("assigned to them and not finished"), "open, defined for the leader (design 2026-09-17, section 8)");
         assertTrue(!all.contains("team_capacity") && !all.contains("share_manual") && !all.contains("share_project"), "removed facts");
         assertTrue(all.contains("approved leave"), "capacity is the calendar and the approved leaves");
+        assertTrue(all.contains("report to them directly"), "a team is a leader and their direct reports (design 2026-09-21)");
+        assertTrue(all.contains("team.parent_team_id"), "the skill team leader a team risk escalates to");
+        assertTrue(!all.contains("a team without a manager"), "the old parentless-team definition of a department is gone");
     }
 
     @Test

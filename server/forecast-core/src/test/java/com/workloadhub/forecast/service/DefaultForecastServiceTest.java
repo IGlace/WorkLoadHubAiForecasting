@@ -27,7 +27,6 @@ import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.eval.Truth;
 import com.workloadhub.forecast.features.MemberDay;
 import com.workloadhub.forecast.run.ForecastRunner;
@@ -78,7 +77,7 @@ class DefaultForecastServiceTest {
         tokens = new JdbcGitHubTokenStore(JdbcClient.create(ds), AesGcmCipher.fromBase64Key(KEY));
         service = build(ds, gateway, new RunProgressTracker(), new JdbcRunStore(ds));
         ForecastData data = SeededData.data();
-        team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+        team = SeededData.anyTeam(data);
         member = data.membersOfTeam(team).get(0).id();
     }
 
@@ -317,14 +316,45 @@ class DefaultForecastServiceTest {
     }
 
     @Test
-    void aFailedRunIsRecordedNotSwallowed() {
-        UUID emptyTeam = SeededData.data().teams().stream().filter(t -> SeededData.data().membersOfTeam(t.id()).isEmpty()).map(TeamRow::id)
-                .findFirst().orElseGet(DefaultForecastServiceTest::insertEmptyTeam);
+    void aTeamThatDoesNotExistIsRejectedBeforeAnyRunIsRecorded() {
+        // A team is keyed by its leader, so a user nobody reports to is a team that does not exist.
+        UUID noSuchTeam = UUID.randomUUID();
         ForecastException ex = assertThrows(ForecastException.class,
-                () -> service.runNow(new RunRequest(emptyTeam, null)));
+                () -> service.runNow(new RunRequest(noSuchTeam, null)));
         assertEquals("TEAM_NOT_FOUND", ex.code());
-        assertEquals(RunStatus.FAILED, service.listRuns(emptyTeam, 1).get(0).status());
-        assertEquals("RUN_NOT_DONE", assertThrows(ForecastException.class, () -> service.getRun(service.listRuns(emptyTeam, 1).get(0).id())).code());
+        assertTrue(service.listRuns(noSuchTeam, 1).isEmpty(), "nothing started, so nothing is recorded");
+    }
+
+    @Test
+    void aFailedRunIsRecordedNotSwallowed() {
+        // A leader whose only counted report has already left: the team exists as far as `enqueue` can tell,
+        // so the run is created, and then fails inside the runner once the leaving date is applied. That
+        // active-with-a-leaving-date pair is the hazard the 2026-09-19 design named, here as the failure path.
+        UUID lead = UUID.randomUUID();
+        UUID gone = UUID.randomUUID();
+        insertUser(lead, "SKILL_TEAM_LEADER", null, null);
+        insertUser(gone, "MEMBER", lead, "2020-01-06T09:00:00");
+        try {
+            ForecastException ex = assertThrows(ForecastException.class,
+                    () -> service.runNow(new RunRequest(lead, null)));
+            assertEquals("TEAM_NOT_FOUND", ex.code());
+            assertEquals(RunStatus.FAILED, service.listRuns(lead, 1).get(0).status());
+            assertEquals("RUN_NOT_DONE",
+                    assertThrows(ForecastException.class, () -> service.getRun(service.listRuns(lead, 1).get(0).id())).code());
+        } finally {
+            JdbcClient.create(SeededData.dataSource()).sql("DELETE FROM users WHERE id IN (?, ?)").param(gone).param(lead).update();
+        }
+    }
+
+    /** An active user, optionally reporting to {@code manager} and optionally already deactivated. */
+    private static void insertUser(UUID id, String role, UUID manager, String deactivatedAt) {
+        String now = LocalDateTime.now().withNano(0).toString();
+        JdbcClient.create(SeededData.dataSource())
+                .sql("INSERT INTO users (id, role, email, active, username, full_name, created_at, updated_at, manager_id, deactivated_at)"
+                        + " VALUES (?, ?, ?, TRUE, ?, 'Test User', ?::timestamp, ?::timestamp, ?, ?::timestamp)")
+                .param(id).param(role).param(id + "@example.test").param("u-" + id)
+                .param(now).param(now).param(manager).param(deactivatedAt)
+                .update();
     }
 
     @Test
@@ -341,30 +371,19 @@ class DefaultForecastServiceTest {
     }
 
     /** The seed is expected to carry a member-less "Unassigned" team; this is the fallback if it ever doesn't. */
-    private static UUID insertEmptyTeam() {
-        UUID id = UUID.randomUUID();
-        DataSource ds = SeededData.dataSource();
-        String now = LocalDateTime.now().withNano(0).toString();
-        JdbcClient.create(ds)
-                .sql("INSERT INTO teams (active, created_at, updated_at, version, id, manager_id, parent_team_id, name)"
-                        + " VALUES (1, ?, ?, 1, ?, NULL, NULL, ?)")
-                .param(now).param(now).param(id.toString()).param("Empty Team " + id)
-                .update();
-        return id;
-    }
 
-    /** The first team (in {@code data.teams()} order) with a member who logged hours on a weekday in the range: not necessarily the shared
+    /** The first team (in leader-id order) with a member who logged hours on a weekday in the range: not necessarily the shared
      * {@code team}, whose members happen to have stopped logging before the range; every other test in the class runs the shared {@code team}
      * on different days, so any team works here without colliding with them. */
     private static UUID teamWithLoggedHoursBetween(LocalDate from, LocalDate to) {
         ForecastData data = SeededData.data();
         SortedMap<MemberDay, Double> logged = Truth.realisedHoursByDay(data);
-        for (TeamRow t : data.teams()) {
-            for (MemberRow m : data.membersOfTeam(t.id())) {
+        for (UUID t : SeededData.teams(data)) {
+            for (MemberRow m : data.membersOfTeam(t)) {
                 for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
                     if (d.getDayOfWeek() != DayOfWeek.SATURDAY && d.getDayOfWeek() != DayOfWeek.SUNDAY
                             && logged.getOrDefault(new MemberDay(m.id(), d), 0.0) > 0) {
-                        return t.id();
+                        return t;
                     }
                 }
             }

@@ -20,7 +20,10 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Builds the feature matrix of spec section 6 for a set of members up to an origin week. */
 public final class FeatureBuilder {
@@ -74,7 +77,7 @@ public final class FeatureBuilder {
                 weeksSinceLastArrival(r, col, fresh, start, i);
                 windowStats(r, col, mc, w);
                 throughput(r, col, mc, w, fresh, start, i);              // Task 6
-                teams.fill(r, col, m.primaryTeamId(), w);                // Task 6
+                teams.fill(r, col, teamOf(m), w);                        // Task 6
                 for (int h : Features.horizons(windows)) {
                     LocalDate target = w.plusWeeks(h);
                     double[] avail = availability.computeIfAbsent(new MemberWeek(m.id(), target), k -> new double[] {
@@ -87,16 +90,26 @@ public final class FeatureBuilder {
                     r[col.get(Features.target(h))] = i + h <= originIndex ? logged[i + h] : Double.NaN;
                 }
                 r[col.get("member_id")] = books.get("member_id").indexOf(m.id().toString());
-                r[col.get("team_id")] = books.get("team_id").indexOf(m.primaryTeamId().toString());
+                r[col.get("team_id")] = books.get("team_id").indexOf(teamOf(m).toString());
                 r[col.get("role")] = books.get("role").indexOf(m.role());
                 r[col.get("job_title")] = books.get("job_title").indexOf(title(m));
-                r[col.get("tenure_weeks")] = Weeks.weeksBetween(m.joined(), w);
+                if (m.joined() != null) {
+                    r[col.get("tenure_weeks")] = Weeks.weeksBetween(m.joined(), w);
+                }
                 r[col.get("week_of_year")] = Weeks.isoWeek(w);
                 keys.add(new MemberWeek(m.id(), w));
                 rows.add(r);
             }
         }
         return FeatureMatrix.of(columns, keys, rows.toArray(double[][]::new), books);
+    }
+
+    /**
+     * The team a member's features describe: the one they work in, which is their manager's. A member with no
+     * manager keys their own, so the value is never absent and the categorical never needs a blank.
+     */
+    static UUID teamOf(MemberRow m) {
+        return m.managerId() != null ? m.managerId() : m.id();
     }
 
     private static String title(MemberRow m) {
@@ -106,17 +119,24 @@ public final class FeatureBuilder {
     private static Map<String, List<String>> codebooks(List<MemberRow> members) {
         Map<String, List<String>> books = new LinkedHashMap<>();
         books.put("member_id", members.stream().map(m -> m.id().toString()).sorted().toList());
-        books.put("team_id", members.stream().map(m -> m.primaryTeamId().toString()).distinct().sorted().toList());
+        books.put("team_id", members.stream().map(m -> teamOf(m).toString()).distinct().sorted().toList());
         books.put("role", members.stream().map(MemberRow::role).distinct().sorted().toList());
         books.put("job_title", members.stream().map(FeatureBuilder::title).distinct().sorted().toList());
         return books;
     }
 
-    /** The earlier of the join week and the first assignment week, never before the first loaded week. */
+    /**
+     * The earlier of the join week and the first assignment week, never before the first loaded week. A member
+     * with no activity at all has no join week, so their first assignment decides, and failing that they start
+     * at the first loaded week.
+     */
     private static int startIndex(MemberRow m, List<TaskFacts> tasks, List<LocalDate> weeks) {
-        LocalDate start = Weeks.mondayOf(m.joined());
-        if (!tasks.isEmpty() && tasks.get(0).assignedWeek().isBefore(start)) {
+        LocalDate start = m.joined() == null ? null : Weeks.mondayOf(m.joined());
+        if (!tasks.isEmpty() && (start == null || tasks.get(0).assignedWeek().isBefore(start))) {
             start = tasks.get(0).assignedWeek();
+        }
+        if (start == null) {
+            return 0;
         }
         int idx = weeks.indexOf(start);
         if (idx >= 0) {
@@ -334,6 +354,7 @@ public final class FeatureBuilder {
         private final ForecastData data;
         private final Map<UUID, Map<LocalDate, double[]>> cache = new HashMap<>();
         private final Map<UUID, List<TaskFacts>> tasksByProject = new HashMap<>();
+        private final Map<UUID, Set<UUID>> memberIdsByTeam = new HashMap<>();
 
         TeamContext(ForecastData data, Lifecycle lc) {
             this.data = data;
@@ -342,6 +363,27 @@ public final class FeatureBuilder {
                     tasksByProject.computeIfAbsent(f.task().projectId(), k -> new ArrayList<>()).add(f);
                 }
             }
+        }
+
+        /**
+         * The projects the team holds by the end of {@code end}: those of the tasks assigned to one of its members
+         * on or before that day. Bounded by the week under construction, not by the whole history, because a
+         * project the team only picks up later must not reach a row built before it did.
+         */
+        private Set<UUID> projectsOf(UUID team, LocalDate end) {
+            Set<UUID> memberIds = memberIdsByTeam.computeIfAbsent(team,
+                    k -> data.membersOfTeam(k).stream().map(MemberRow::id).collect(Collectors.toSet()));
+            Set<UUID> out = new TreeSet<>(Ids.UUID_ORDER);
+            for (Map.Entry<UUID, List<TaskFacts>> e : tasksByProject.entrySet()) {
+                for (TaskFacts t : e.getValue()) {
+                    if (t.assignee() != null && memberIds.contains(t.assignee())
+                            && t.isAssigned() && !t.assignedDay().isAfter(end)) {
+                        out.add(e.getKey());
+                        break;
+                    }
+                }
+            }
+            return out;
         }
 
         void fill(double[] r, Map<String, Integer> col, UUID team, LocalDate w) {
@@ -357,7 +399,7 @@ public final class FeatureBuilder {
             int active = 0;
             int planning = 0;
             Map<UUID, ProjectRow> projects = data.projectById();
-            for (UUID pid : data.projectIdsOfTeamAndParent(team)) {
+            for (UUID pid : projectsOf(team, end)) {
                 ProjectRow p = projects.get(pid);
                 boolean hasWork = false;
                 for (TaskFacts t : tasksByProject.getOrDefault(pid, List.of())) {

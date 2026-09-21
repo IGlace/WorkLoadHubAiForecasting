@@ -166,12 +166,19 @@ where the team empties after the leaving-date filter (`ForecastRunner.java:166-1
 (`ForecastRepository.java:54-57`). It is read twice in `forecast-core`: `tenure_weeks`
 (`FeatureBuilder.java:93`) and `startIndex` (`FeatureBuilder.java:116-125`).
 
-It becomes the Monday of the member's **first activity**: the earlier of their earliest
-`time_logs.log_date` and the earliest `task_history` row that assigns a task to them. Both are
-already loaded by `loadAll`, so this costs no query — but it costs an **ordering change**. Members
-can only be finished after the logs and the transitions are read. The load order becomes: reference
-data, users into a provisional list, projects, tasks, transitions, time logs, then fold the first
-activity date into each member with the existing `MemberRow.withJoined`.
+It becomes the member's **first activity**: the earlier of their earliest `time_logs.log_date` and
+the earliest `task_history` row they are the actor of (`task_history.user_id`). Both are already
+loaded by `loadAll`, so this costs no query — but it costs an **ordering change**. Members can only
+be finished after the logs and the transitions are read. The load order becomes: reference data,
+users into a provisional list, projects, tasks, transitions, time logs, then fold the first activity
+date into each member with the existing `MemberRow.withJoined`.
+
+The second signal is "this person acted on a task", not "a task was assigned to them". That is a
+deliberate narrowing of what this design first proposed, for two reasons. Resolving who an
+`assignee` transition points at needs `Lifecycle.Resolver`, which reads names, emails and usernames
+out of `ForecastData` — the object the repository is building — so using it here would invert the
+dependency. And being assigned something is not evidence that the person had started: acting on a
+task is. `task_history.user_id` is a plain uuid and needs no resolution.
 
 Using real activity rather than a row's timestamp is the owner's choice and the better one here:
 `users.created_at` on a real export records when the row was imported, not when the person started.

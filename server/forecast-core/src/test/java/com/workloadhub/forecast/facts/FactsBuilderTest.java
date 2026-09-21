@@ -12,7 +12,6 @@ import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Truncation;
 import com.workloadhub.forecast.run.ForecastRunner;
@@ -42,7 +41,7 @@ class FactsBuilderTest {
         ForecastData data = SeededData.data();
         ForecastRunner runner = new ForecastRunner(new CapacityRule(40), 2);
         Prepared prepared = runner.prepare(data, SeededData.asOf(), ForecastRunner.ProgressListener.NONE);
-        UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+        UUID team = SeededData.anyTeam(data);
         outcome = runner.forTeam(prepared, team);
         facts = FactsBuilder.build(outcome, UUID.fromString("00000000-0000-0000-0000-000000000001"), LocalDateTime.of(2026, 9, 6, 12, 0));
         json = FactsBuilder.toJson(facts);
@@ -123,7 +122,6 @@ class FactsBuilderTest {
         LeaveRow outside = new LeaveRow(ana.id(), LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 25), null, null, 8.8, "PENDING", "PAID_LEAVE");
         LeaveRow noTotal = new LeaveRow(ana.id(), LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), null, null, null, "PENDING", "SICK_LEAVE");
         ForecastData data = new ForecastData(List.of(ana),
-                List.of(new TeamRow(TestData.PARENT_TEAM, "Dept", null, null), new TeamRow(TestData.TEAM, "Team", null, TestData.PARENT_TEAM)),
                 List.of(), List.of(open), List.of(), List.of(), List.of(),
                 List.of(endsOnFirstDay, startsOnLastDay, outside, noTotal), List.of(), List.of(TestData.user(ana)), TestData.STATUS_CATEGORIES);
         ForecastRunner runner = new ForecastRunner(new CapacityRule(44), 2);
@@ -174,7 +172,7 @@ class FactsBuilderTest {
         ForecastRunner runner = new ForecastRunner(new CapacityRule(40), 2);
         Prepared prepared = runner.prepare(young, youngAsOf, ForecastRunner.ProgressListener.NONE);
         assertTrue(prepared.backtestOrigins().isEmpty(), "under 13 weeks before every origin");
-        UUID team = young.teams().stream().filter(t -> !young.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+        UUID team = SeededData.anyTeam(young);
         TeamOutcome thin = runner.forTeam(prepared, team);
         Map<String, Object> thinFacts = FactsBuilder.build(thin, UUID.fromString("00000000-0000-0000-0000-000000000003"),
                 LocalDateTime.of(2026, 9, 6, 12, 0));
@@ -278,8 +276,8 @@ class FactsBuilderTest {
         UUID doneProjectId = TestData.id("proj-done");
         TaskRow openTask = TestData.task("open", ana.id(), asOf.minusWeeks(2).atTime(9, 0), 5.0).withProject(liveProjectId);
         TaskRow doneTask = TestData.task("done", ana.id(), asOf.minusWeeks(3).atTime(9, 0), 4.0).withProject(doneProjectId).withStatus("DONE");
-        ProjectRow liveProject = new ProjectRow(liveProjectId, "LIVE", "Live Project", "ACTIVE", TestData.TEAM);
-        ProjectRow doneProject = new ProjectRow(doneProjectId, "DONE", "Done Project", "ACTIVE", TestData.TEAM);
+        ProjectRow liveProject = new ProjectRow(liveProjectId, "LIVE", "Live Project", "ACTIVE");
+        ProjectRow doneProject = new ProjectRow(doneProjectId, "DONE", "Done Project", "ACTIVE");
         ForecastData data = TestData.data(List.of(ana), List.of(openTask, doneTask), List.of(), List.of())
                 .withProjects(List.of(liveProject, doneProject));
         ForecastRunner runner = new ForecastRunner(new CapacityRule(40), 2);

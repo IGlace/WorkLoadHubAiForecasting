@@ -11,7 +11,10 @@ import com.workloadhub.forecast.testing.SeededData;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -26,26 +29,51 @@ class ForecastRepositoryTest {
     }
 
     @Test
-    void loadsCountedMembersWithTheirTeams() {
+    void countsEveryActiveUserOfACountedRole() {
         ForecastData data = SeededData.data();
         assertFalse(data.members().isEmpty());
         for (MemberRow m : data.members()) {
             assertTrue(Set.of("MEMBER", "TEAM_LEADER").contains(m.role()), m.role());
-            assertFalse(m.teamIds().isEmpty());
-            assertTrue(m.teamIds().contains(m.primaryTeamId()));
-            assertNotNull(m.joined());
         }
+        // Team membership is no longer a condition: every such user is counted, exactly (design 2026-09-21).
         long rows = count(SeededData.dataSource(),
                 "SELECT COUNT(*) FROM users WHERE role IN ('MEMBER', 'TEAM_LEADER') AND active");
-        assertTrue(data.members().size() <= rows && data.members().size() >= rows - 5, "counted members " + data.members().size() + " of " + rows);
+        assertEquals(rows, data.members().size());
     }
 
     @Test
-    void primaryTeamPrefersTheManagerTeam() {
+    void aMemberCarriesTheirManagerAndDepartmentFromTheUsersTable() {
         ForecastData data = SeededData.data();
-        long withParent = data.members().stream()
-                .filter(m -> data.teamById().get(m.primaryTeamId()).parentId() != null).count();
-        assertTrue(withParent > data.members().size() / 2, "most members sit in a manager team");
+        assertTrue(data.members().stream().anyMatch(m -> m.managerId() != null), "the seed has a hierarchy");
+        assertTrue(data.members().stream().anyMatch(m -> m.department() != null), "and departments");
+        for (MemberRow m : data.members()) {
+            if (m.managerId() != null) {
+                assertNotNull(data.userById().get(m.managerId()), "a manager id resolves to a user");
+                assertTrue(data.membersOfTeam(m.managerId()).contains(m), "a member is in their manager's team");
+            }
+            assertTrue(data.membersOfTeam(m.id()).contains(m), "and keys a team of their own");
+        }
+    }
+
+    @Test
+    void theJoinedDateIsTheMembersFirstActivity() {
+        ForecastData data = SeededData.data();
+        Map<UUID, LocalDate> firstLog = new HashMap<>();
+        for (var l : data.timeLogs()) {
+            firstLog.merge(l.userId(), l.day(), (a, b) -> a.isBefore(b) ? a : b);
+        }
+        assertFalse(firstLog.isEmpty());
+        int checked = 0;
+        for (MemberRow m : data.members()) {
+            LocalDate log = firstLog.get(m.id());
+            if (log == null) {
+                continue;
+            }
+            assertNotNull(m.joined(), m.fullName() + " logged hours and so has a joined date");
+            assertFalse(m.joined().isAfter(log), "joined " + m.joined() + " is not after the first logged day " + log);
+            checked++;
+        }
+        assertTrue(checked > 0, "at least one member logged hours");
     }
 
     @Test
@@ -79,7 +107,7 @@ class ForecastRepositoryTest {
         assertTrue(data.leaves().stream().allMatch(l -> "APPROVED".equals(l.status()) && l.absenceHours() != null && l.absenceHours() > 0));
         assertEquals(count(SeededData.dataSource(), "SELECT COUNT(*) FROM projects WHERE archived = FALSE"), data.projects().size());
         MemberRow m = data.members().get(0);
-        assertFalse(data.projectIdsOfTeamAndParent(m.primaryTeamId()).isEmpty());
+        assertFalse(data.projectIdsOfTeam(m.managerId() == null ? m.id() : m.managerId()).isEmpty());
         assertEquals(count(SeededData.dataSource(), "SELECT COUNT(*) FROM users"), data.users().size());
         for (int i = 1; i < data.leaves().size(); i++) {
             var prev = data.leaves().get(i - 1);

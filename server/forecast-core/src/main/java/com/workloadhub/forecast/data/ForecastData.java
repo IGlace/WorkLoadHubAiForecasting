@@ -5,7 +5,6 @@ import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
 import com.workloadhub.forecast.data.rows.UserRef;
@@ -33,7 +32,6 @@ import java.util.function.Function;
 public final class ForecastData {
 
     private final List<MemberRow> members;
-    private final List<TeamRow> teams;
     private final List<ProjectRow> projects;
     private final List<TaskRow> tasks;
     private final List<TransitionRow> transitions;
@@ -46,16 +44,15 @@ public final class ForecastData {
 
     private final Map<UUID, TaskRow> taskById;
     private final Map<UUID, ProjectRow> projectById;
-    private final Map<UUID, TeamRow> teamById;
+    private final Map<UUID, UserRef> userById;
     private final Map<UUID, List<TransitionRow>> transitionsByTask;
     private final Map<UUID, List<TimeLogRow>> logsByTask;
-    private final Map<UUID, Set<UUID>> projectIdsOfTeamAndParentCache = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<UUID>> projectIdsOfTeamCache = new ConcurrentHashMap<>();
 
-    public ForecastData(List<MemberRow> members, List<TeamRow> teams, List<ProjectRow> projects, List<TaskRow> tasks,
+    public ForecastData(List<MemberRow> members, List<ProjectRow> projects, List<TaskRow> tasks,
             List<TransitionRow> transitions, List<TimeLogRow> timeLogs, List<LeaveRow> leaves, List<LeaveRow> pendingLeaves,
             List<HolidayRow> holidays, List<UserRef> users, Map<String, String> statusCategoryByName) {
         this.members = sortedBy(members, MemberRow::id);
-        this.teams = sortedBy(teams, TeamRow::id);
         this.projects = sortedBy(projects, ProjectRow::id);
         this.tasks = sortedBy(tasks, TaskRow::id);
         this.transitions = List.copyOf(transitions.stream()
@@ -76,7 +73,7 @@ public final class ForecastData {
 
         this.taskById = index(this.tasks, TaskRow::id);
         this.projectById = index(this.projects, ProjectRow::id);
-        this.teamById = index(this.teams, TeamRow::id);
+        this.userById = index(this.users, UserRef::id);
         this.transitionsByTask = groupByTask(this.transitions, TransitionRow::taskId);
         this.logsByTask = groupByTask(this.timeLogs, TimeLogRow::taskId);
     }
@@ -111,16 +108,12 @@ public final class ForecastData {
     }
 
     public ForecastData withProjects(List<ProjectRow> projects) {
-        return new ForecastData(members, teams, projects, tasks, transitions, timeLogs, leaves, pendingLeaves, holidays, users,
+        return new ForecastData(members, projects, tasks, transitions, timeLogs, leaves, pendingLeaves, holidays, users,
                 statusCategoryByName);
     }
 
     public List<MemberRow> members() {
         return members;
-    }
-
-    public List<TeamRow> teams() {
-        return teams;
     }
 
     public List<ProjectRow> projects() {
@@ -169,12 +162,18 @@ public final class ForecastData {
         return projectById;
     }
 
-    public Map<UUID, TeamRow> teamById() {
-        return teamById;
+    /** Every user by id, counted or not: a team's leader is looked up here, since they may not be counted. */
+    public Map<UUID, UserRef> userById() {
+        return userById;
     }
 
+    /**
+     * The team keyed by {@code teamId}: the leader of that id and every counted member who reports to them
+     * directly. {@code members} is already filtered to counted, active users, so an uncounted report is absent
+     * by construction and a leader who is not counted themselves keys a team they are not in.
+     */
     public List<MemberRow> membersOfTeam(UUID teamId) {
-        return members.stream().filter(m -> m.teamIds().contains(teamId)).toList();
+        return members.stream().filter(m -> m.id().equals(teamId) || teamId.equals(m.managerId())).toList();
     }
 
     public Map<UUID, List<TransitionRow>> transitionsByTask() {
@@ -185,22 +184,21 @@ public final class ForecastData {
         return logsByTask;
     }
 
-    /** Projects owned by the team or by its parent team (a department's projects feed its manager teams). */
-    public Set<UUID> projectIdsOfTeamAndParent(UUID teamId) {
-        return projectIdsOfTeamAndParentCache.computeIfAbsent(teamId, this::computeProjectIdsOfTeamAndParent);
+    /**
+     * The projects this team actually works on: the distinct projects of the tasks assigned to its members,
+     * over the whole loaded history. `projects.team_id` names a project team and is not consulted.
+     */
+    public Set<UUID> projectIdsOfTeam(UUID teamId) {
+        return projectIdsOfTeamCache.computeIfAbsent(teamId, this::computeProjectIdsOfTeam);
     }
 
-    private Set<UUID> computeProjectIdsOfTeamAndParent(UUID teamId) {
-        TeamRow team = teamById.get(teamId);
-        Set<UUID> owners = new TreeSet<>(Ids.UUID_ORDER);
-        owners.add(teamId);
-        if (team != null && team.parentId() != null) {
-            owners.add(team.parentId());
-        }
+    private Set<UUID> computeProjectIdsOfTeam(UUID teamId) {
+        Set<UUID> memberIds = new TreeSet<>(Ids.UUID_ORDER);
+        membersOfTeam(teamId).forEach(m -> memberIds.add(m.id()));
         Set<UUID> out = new TreeSet<>(Ids.UUID_ORDER);
-        for (ProjectRow p : projects) {
-            if (p.teamId() != null && owners.contains(p.teamId())) {
-                out.add(p.id());
+        for (TaskRow t : tasks) {
+            if (t.projectId() != null && t.assigneeId() != null && memberIds.contains(t.assigneeId())) {
+                out.add(t.projectId());
             }
         }
         return Set.copyOf(out);

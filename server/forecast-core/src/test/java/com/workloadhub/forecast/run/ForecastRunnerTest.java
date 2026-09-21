@@ -21,7 +21,6 @@ import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.features.MemberWeek;
 import com.workloadhub.forecast.lifecycle.Truncation;
 import com.workloadhub.forecast.testing.SeededData;
@@ -48,7 +47,7 @@ class ForecastRunnerTest {
         data = SeededData.data();
         runner = new ForecastRunner(new CapacityRule(40), 2);
         prepared = runner.prepare(data, SeededData.asOf(), ForecastRunner.ProgressListener.NONE);
-        team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+        team = SeededData.anyTeam(data);
     }
 
     @Test

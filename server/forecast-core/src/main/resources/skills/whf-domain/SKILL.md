@@ -6,7 +6,7 @@ description: Vocabulary and data dictionary of the WorkloadHub forecast facts. U
 # WorkloadHub domain
 
 ## Organisation
-- A **department** is a team without a manager; a **team** has a manager (the team leader), who also does technical work and is counted like any member.
+- A **team** is a **team leader** and the people who report to them directly. It is named by its leader: `team.name` is the leader's own name, `team.department` their department, and `team.manager_id` the leader. The leader is counted like any other member, because they do technical work too. A **skill team leader** manages team leaders rather than doing technical work, is never counted in a team, and is named by `team.parent_team_id`: they are who a team risk is escalated to. The application's own `teams` table is unrelated; it groups the people on a project, not the people who report to someone.
 - A **member** is a person counted in the workload, identified by a UUID string (`id`) and named by `name`. Weeks start on Monday; working days are Monday to Friday; public holidays are off days. A **forecast window** is five weekdays starting the first weekday after the run day (a run on a Friday or a weekend starts on Monday); a run covers between one and six contiguous windows, and `model.windows` says how many; a holiday inside a window stays inside with zero capacity and no predicted hours. Weeks remain the unit of history.
 - **Open**, said of a member's task, means assigned to them and not finished, whatever its status (To Do, In Progress, In Review). It is not the application's `Open` status, which means a task nobody is assigned to yet; those are the team's backlog. Say "assigned to them and not finished" when a leader could read it the other way.
 

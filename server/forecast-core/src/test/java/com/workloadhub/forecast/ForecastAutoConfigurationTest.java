@@ -15,7 +15,6 @@ import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.calendar.Horizon;
 import com.workloadhub.forecast.data.ForecastData;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.service.DefaultForecastService;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.JdbcRunStore;
@@ -141,7 +140,7 @@ class ForecastAutoConfigurationTest {
         // w and w + 1 boosters), so a Friday would fit 6 and this case would fail for the wrong reason.
         LocalDate asOf = LocalDate.of(2026, 9, 7);
         ForecastData data = SeededData.data();
-        UUID teamId = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+        UUID teamId = SeededData.anyTeam(data);
         RunResult r = serviceWith(6, asOf).runNow(new RunRequest(teamId, null));
         long members = r.memberWindows().stream().map(MemberWindowForecast::userId).distinct().count();
         assertEquals(6 * members, r.memberWindows().size());

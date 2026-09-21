@@ -11,7 +11,7 @@ import com.workloadhub.forecast.data.rows.HolidayRow;
 import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
-import com.workloadhub.forecast.data.rows.TeamRow;
+import com.workloadhub.forecast.data.rows.UserRef;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.features.WeeklySeries;
 import com.workloadhub.forecast.lifecycle.Lifecycle;
@@ -66,7 +66,7 @@ public final class FactsBuilder {
         Map<UUID, MemberPattern> patternById = patterns.stream().collect(Collectors.toMap(MemberPattern::memberId, x -> x));
         List<LocalDate> historyWeeks = Weeks.between(p.origin().minusWeeks(HISTORY_WEEKS - 1), p.origin());
         WeeklySeries series = WeeklySeries.build(lc, data, out.members(), historyWeeks);
-        Set<UUID> teamProjects = data.projectIdsOfTeamAndParent(out.teamId());
+        Set<UUID> teamProjects = data.projectIdsOfTeam(out.teamId());
         Set<UUID> liveProjectIds = new java.util.HashSet<>();
         for (TaskFacts f : lc.all()) {
             if (f.task().projectId() != null && !f.done()) {
@@ -127,7 +127,7 @@ public final class FactsBuilder {
     }
 
     private static Map<String, Object> team(TeamOutcome out, ForecastData data, Map<UUID, ProjectRow> projects) {
-        TeamRow team = data.teamById().get(out.teamId());
+        UserRef lead = data.userById().get(out.teamId());
         List<Object> totals = new ArrayList<>();
         for (ForecastWindow w : out.prepared().windows()) {
             double demand = 0;
@@ -140,8 +140,12 @@ public final class FactsBuilder {
             }
             totals.add(map("window", w.index(), "start", str(w.start()), "end", str(w.end()), "demand", round1(demand), "capacity", round1(capacity)));
         }
-        return map("id", str(out.teamId()), "name", team == null ? null : team.name(), "parent_team_id", team == null ? null : str(team.parentId()),
-                "manager_id", team == null ? null : str(team.managerId()), "totals", totals);
+        // A team is keyed by its leader, so `name` is the leader's own name, `manager_id` is the key itself,
+        // and `parent_team_id` is the leader's own manager: the skill team leader a risk is escalated to.
+        return map("id", str(out.teamId()), "name", lead == null ? null : lead.fullName(),
+                "department", lead == null ? null : lead.department(),
+                "parent_team_id", lead == null || lead.managerId() == null ? null : str(lead.managerId()),
+                "manager_id", str(out.teamId()), "totals", totals);
     }
 
     /** Estimated hours of the member's open tasks whose planned week overlaps the window. */

@@ -14,7 +14,6 @@ import com.workloadhub.forecast.ai.FakeGateway;
 import com.workloadhub.forecast.api.ForecastService;
 import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.testing.SeededData;
 import java.util.Base64;
 import java.util.UUID;
@@ -51,7 +50,7 @@ class SampleHostIntegrationTest {
     void theHostRunsNarratesAndReadsThroughTheRestSurface() throws Exception {
         assertEquals(Base64.getEncoder().encodeToString(new byte[32]), KEY);
         ForecastData data = SeededData.data();
-        UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+        UUID team = SeededData.anyTeam(data);
         UUID member = data.membersOfTeam(team).get(0).id();
         FakeGateway fake = (FakeGateway) gateway;
 

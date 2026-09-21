@@ -3,7 +3,6 @@ package com.workloadhub.forecast.testing;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
 import com.workloadhub.forecast.data.rows.UserRef;
@@ -17,8 +16,14 @@ import java.util.UUID;
 /** Hand-built rows with sensible defaults, for rule tests that do not need the seed. */
 public final class TestData {
 
-    public static final UUID TEAM = UUID.fromString("40000000-0000-0000-0000-000000000001");
-    public static final UUID PARENT_TEAM = UUID.fromString("40000000-0000-0000-0000-000000000000");
+    /**
+     * A team is keyed by its leader's user id (design 2026-09-21), so this is a person, not a team row.
+     * {@code member(suffix, TEAM)} makes someone who reports to that leader, which is what puts them in the team.
+     */
+    public static final UUID TEAM = id("member-lead");
+    /** The leader above {@link #TEAM}'s leader: the skill team leader a team's risks escalate to. */
+    public static final UUID PARENT_TEAM = id("member-top");
+    public static final String DEPARTMENT = "PTE / CT2 Calibration & Testing 2";
     public static final LocalDate JOINED = LocalDate.of(2026, 1, 5);
     public static final Map<String, String> STATUS_CATEGORIES = Map.of(
             "Open", "TO_DO", "To Do", "TO_DO", "On Hold", "TO_DO",
@@ -32,17 +37,30 @@ public final class TestData {
         return UUID.nameUUIDFromBytes(suffix.getBytes(StandardCharsets.UTF_8));
     }
 
-    public static MemberRow member(String suffix, UUID team) {
+    /** A counted MEMBER reporting to {@code manager}, and so forecast in {@code manager}'s team. */
+    public static MemberRow member(String suffix, UUID manager) {
         return new MemberRow(id("member-" + suffix), "Member " + suffix, suffix + "@example.test", "MEMBER", "Engineer",
-                List.of(team), team, JOINED, null);
+                DEPARTMENT, manager, JOINED, null);
+    }
+
+    /** A TEAM_LEADER, who keys their own team and is counted inside it, reporting to {@code manager}. */
+    public static MemberRow leader(String suffix, UUID manager) {
+        return new MemberRow(id("member-" + suffix), "Member " + suffix, suffix + "@example.test", "TEAM_LEADER", "Team Leader",
+                DEPARTMENT, manager, JOINED, null);
     }
 
     public static UserRef user(MemberRow m) {
-        return new UserRef(m.id(), m.fullName(), m.email(), m.email().substring(0, m.email().indexOf('@')));
+        return new UserRef(m.id(), m.fullName(), m.email(), m.email().substring(0, m.email().indexOf('@')),
+                m.department(), m.managerId());
     }
 
     public static TaskRow task(String suffix, UUID assignee, LocalDateTime created, double estimate) {
-        return new TaskRow(id("task-" + suffix), "T-" + suffix, "Task " + suffix, null, assignee, id("reporter"), null,
+        return taskIn(suffix, assignee, null, created, estimate);
+    }
+
+    /** As {@link #task}, in a named project: a team's projects are those of its members' tasks. */
+    public static TaskRow taskIn(String suffix, UUID assignee, UUID projectId, LocalDateTime created, double estimate) {
+        return new TaskRow(id("task-" + suffix), "T-" + suffix, "Task " + suffix, projectId, assignee, id("reporter"), null,
                 "Task", "TO_DO", "MEDIUM", estimate, estimate, created, null, null, null, null, false, false);
     }
 
@@ -63,8 +81,7 @@ public final class TestData {
     }
 
     public static ForecastData data(List<MemberRow> members, List<TaskRow> tasks, List<TransitionRow> transitions, List<TimeLogRow> logs) {
-        List<TeamRow> teams = List.of(new TeamRow(PARENT_TEAM, "Dept", null, null), new TeamRow(TEAM, "Team", null, PARENT_TEAM));
         List<UserRef> users = members.stream().map(TestData::user).toList();
-        return new ForecastData(members, teams, List.of(), tasks, transitions, logs, List.of(), List.of(), List.of(), users, STATUS_CATEGORIES);
+        return new ForecastData(members, List.of(), tasks, transitions, logs, List.of(), List.of(), List.of(), users, STATUS_CATEGORIES);
     }
 }

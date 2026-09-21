@@ -135,8 +135,15 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
         return id;
     }
 
+    /**
+     * A team exists when the user it is keyed by leads someone: `teams` is not consulted, because it holds
+     * project teams (design 2026-09-21, section 4). The code and the message shape are unchanged, so a host
+     * that already handles TEAM_NOT_FOUND keeps working.
+     */
     private void requireTeam(UUID teamId) {
-        boolean exists = !JdbcClient.create(dataSource).sql("SELECT id FROM teams WHERE id = ?").param(teamId).query().listOfRows().isEmpty();
+        boolean exists = !JdbcClient.create(dataSource)
+                .sql("SELECT 1 FROM users WHERE manager_id = ? AND active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')")
+                .param(teamId).query().listOfRows().isEmpty();
         if (!exists) {
             throw ForecastException.of("TEAM_NOT_FOUND", "team " + teamId + " does not exist");
         }

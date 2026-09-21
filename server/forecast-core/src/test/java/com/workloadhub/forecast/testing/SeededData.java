@@ -2,9 +2,14 @@ package com.workloadhub.forecast.testing;
 
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.ForecastRepository;
+import com.workloadhub.forecast.data.Ids;
+import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.ForecastMigrations;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -48,5 +53,23 @@ public final class SeededData {
 
     public static LocalDate asOf() {
         return AS_OF;
+    }
+
+    /**
+     * The teams of a dataset, keyed by their leader: every user who has at least one counted direct report
+     * (design 2026-09-21, section 4). Sorted, so a test that takes the first one takes the same one every run.
+     */
+    public static List<UUID> teams(ForecastData data) {
+        return data.members().stream()
+                .map(MemberRow::managerId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted(Ids.UUID_ORDER)
+                .toList();
+    }
+
+    /** The first team of a dataset that has members, which is every team by construction. */
+    public static UUID anyTeam(ForecastData data) {
+        return teams(data).stream().filter(t -> !data.membersOfTeam(t).isEmpty()).findFirst().orElseThrow();
     }
 }

@@ -51,7 +51,7 @@ class PatternsTest {
         ForecastData data = TestData.data(List.of(ANA), List.of(a, b, old, current), List.of(
                         TestData.assignedBy(a.id(), ANA.id(), ANA.fullName(), mon),
                         TestData.assignedBy(b.id(), TestData.id("lead"), ANA.fullName(), mon.plusDays(1))), List.of())
-                .withProjects(List.of(new ProjectRow(PROJECT, "PRJ", "Project", "ACTIVE", TestData.TEAM)));
+                .withProjects(List.of(new ProjectRow(PROJECT, "PRJ", "Project", "ACTIVE")));
         MemberPattern p = Patterns.of(ANA.id(), Lifecycle.derive(data), data, AS_OF);
         assertEquals(2, p.tasks13w());
         assertEquals(12.0, p.hours13w(), 1e-9);

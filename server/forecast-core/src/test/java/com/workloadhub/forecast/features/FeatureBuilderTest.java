@@ -263,22 +263,30 @@ class FeatureBuilderTest {
         UUID active = TestData.id("proj-active");
         UUID planning = TestData.id("proj-planning");
         List<ProjectRow> projects = List.of(
-                new ProjectRow(active, "ACT", "Active", "ACTIVE", TestData.TEAM),
-                new ProjectRow(planning, "PLN", "Planning", "PLANNING", TestData.PARENT_TEAM));
+                new ProjectRow(active, "ACT", "Active", "ACTIVE"),
+                new ProjectRow(planning, "PLN", "Planning", "PLANNING"));
         LocalDate w1 = ORIGIN.minusWeeks(1);
         TaskRow backlog = TestData.task("1", null, w1.atTime(9, 0), 9).withProject(active);
         TaskRow assignedLater = TestData.task("2", ANA.id(), ORIGIN.minusWeeks(3).atTime(9, 0), 5).withProject(active).withDue(ORIGIN.plusWeeks(2));
         TaskRow bens = TestData.task("3", ben.id(), w1.atTime(9, 0), 7).withProject(active).withDue(ORIGIN.plusDays(3));
-        ForecastData data = TestData.data(List.of(ANA, ben), List.of(backlog, assignedLater, bens),
+        // A team's projects are the ones its members hold tasks in (design 2026-09-21, section 6), so the
+        // PLANNING project reaches these columns through Ben's task, not through a parent team.
+        TaskRow bensPlanned = TestData.task("4", ben.id(), ORIGIN.minusWeeks(6).atTime(9, 0), 3).withProject(planning);
+        ForecastData data = TestData.data(List.of(ANA, ben), List.of(backlog, assignedLater, bens, bensPlanned),
                 List.of(TestData.assignee(assignedLater.id(), ANA.fullName(), w1.atTime(12, 0))), List.of()).withProjects(projects);
         FeatureMatrix m = matrix(data);
+        // A project becomes the team's on the day one of its members is first assigned in it, and not before:
+        // at week −3 only the PLANNING project qualifies, through Ben's task 4.
         int atW3 = row(m, ORIGIN.minusWeeks(3));
-        assertEquals(5.0, m.get(atW3, "team_backlog_unassigned_hrs"), "task 2 waited in the backlog until week −1");
-        assertEquals(1.0, m.get(atW3, "proj_active"));
-        assertEquals(1.0, m.get(atW3, "proj_planning"), "the parent team's project counts");
+        assertEquals(0.0, m.get(atW3, "proj_active"), "nobody holds a task in the ACTIVE project yet");
+        assertEquals(1.0, m.get(atW3, "proj_planning"), "a project a member holds a task in counts");
+        assertEquals(0.0, m.get(atW3, "team_backlog_unassigned_hrs"), "so its backlog is not the team's yet either");
+        // By week −1 task 2 is assigned to Ana, so the ACTIVE project and its unassigned task 1 are the team's.
         int atW1 = row(m, w1);
-        assertEquals(9.0, m.get(atW1, "team_backlog_unassigned_hrs"));
-        assertEquals(m.get(atW1, "team_backlog_unassigned_hrs"), m.get(m.keys().indexOf(new MemberWeek(ben.id(), w1)), "team_backlog_unassigned_hrs"));
+        assertEquals(1.0, m.get(atW1, "proj_active"));
+        assertEquals(9.0, m.get(atW1, "team_backlog_unassigned_hrs"), "task 1 sits there with nobody on it");
+        assertEquals(m.get(atW1, "team_backlog_unassigned_hrs"), m.get(m.keys().indexOf(new MemberWeek(ben.id(), w1)), "team_backlog_unassigned_hrs"),
+                "and every member of the team sees the same figure");
     }
 
     @Test

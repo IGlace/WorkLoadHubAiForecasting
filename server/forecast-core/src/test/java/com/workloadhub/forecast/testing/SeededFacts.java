@@ -3,7 +3,6 @@ package com.workloadhub.forecast.testing;
 import com.workloadhub.forecast.capacity.CapacityRule;
 import com.workloadhub.forecast.Json;
 import com.workloadhub.forecast.data.ForecastData;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.facts.FactsBuilder;
 import com.workloadhub.forecast.run.ForecastRunner;
 import com.workloadhub.forecast.run.Prepared;
@@ -24,7 +23,7 @@ public final class SeededFacts {
     public static synchronized String factsJson() {
         if (json == null) {
             ForecastData data = SeededData.data();
-            UUID team = data.teams().stream().filter(t -> !data.membersOfTeam(t.id()).isEmpty()).map(TeamRow::id).findFirst().orElseThrow();
+            UUID team = SeededData.anyTeam(data);
             // windows pinned to 2, the default, so these facts stay put across window-count experiments elsewhere.
             // 44 h, the seed's own week and the module's default
             ForecastRunner runner = new ForecastRunner(new CapacityRule(44.0), 2);

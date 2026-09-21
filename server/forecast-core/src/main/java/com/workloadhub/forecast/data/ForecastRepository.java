@@ -6,7 +6,6 @@ import com.workloadhub.forecast.data.rows.LeaveRow;
 import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.data.rows.ProjectRow;
 import com.workloadhub.forecast.data.rows.TaskRow;
-import com.workloadhub.forecast.data.rows.TeamRow;
 import com.workloadhub.forecast.data.rows.TimeLogRow;
 import com.workloadhub.forecast.data.rows.TransitionRow;
 import com.workloadhub.forecast.data.rows.UserRef;
@@ -22,7 +21,13 @@ import java.util.TreeMap;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/** Reads the WorkloadHub tables into typed rows. Read only. */
+/**
+ * Reads the WorkloadHub tables into typed rows. Read only.
+ *
+ * <p>`teams` and `team_members` are never read: they hold project teams, an ad-hoc group working on one
+ * project, not the company structure. The structure is `users.manager_id`, and a team is a leader and the
+ * people who report to them directly (design 2026-09-21).
+ */
 public final class ForecastRepository {
 
     private static final Set<String> COUNTED_ROLES = Set.of("MEMBER", "TEAM_LEADER");
@@ -43,41 +48,27 @@ public final class ForecastRepository {
         }).list();
         Map<UUID, String> typeNameById = new HashMap<>();
         jdbc.sql("SELECT id, name FROM task_types").query((rs, i) -> typeNameById.put(rs.getObject("id", UUID.class), rs.getString("name"))).list();
-        List<TeamRow> teams = jdbc.sql("SELECT id, name, manager_id, parent_team_id FROM teams")
-                .query((rs, i) -> new TeamRow(rs.getObject("id", UUID.class), rs.getString("name"), rs.getObject("manager_id", UUID.class),
-                        rs.getObject("parent_team_id", UUID.class)))
-                .list();
-        Map<UUID, TeamRow> teamById = new HashMap<>();
-        teams.forEach(t -> teamById.put(t.id(), t));
-        Map<UUID, List<UUID>> teamsOfUser = new HashMap<>();
-        Map<UUID, LocalDate> joinedOfUser = new HashMap<>();
-        jdbc.sql("SELECT team_id, user_id, joined_at FROM team_members").query((rs, i) -> {
-            UUID user = rs.getObject("user_id", UUID.class);
-            teamsOfUser.computeIfAbsent(user, k -> new ArrayList<>()).add(rs.getObject("team_id", UUID.class));
-            joinedOfUser.merge(user, rs.getObject("joined_at", LocalDateTime.class).toLocalDate(), (a, b) -> a.isBefore(b) ? a : b);
-            return null;
-        }).list();
         List<UserRef> users = new ArrayList<>();
-        List<MemberRow> members = new ArrayList<>();
-        jdbc.sql("SELECT id, full_name, email, username, role, job_title, active, deactivated_at FROM users").query((rs, i) -> {
-            UUID id = rs.getObject("id", UUID.class);
-            users.add(new UserRef(id, rs.getString("full_name"), rs.getString("email"), rs.getString("username")));
-            List<UUID> teamIds = teamsOfUser.getOrDefault(id, List.of());
-            if (!rs.getBoolean("active") || !COUNTED_ROLES.contains(rs.getString("role")) || teamIds.isEmpty()) {
-                return null;
-            }
-            List<UUID> sorted = teamIds.stream().sorted(Ids.UUID_ORDER).toList();
-            UUID primary = sorted.stream()
-                    .filter(t -> teamById.containsKey(t) && teamById.get(t).parentId() != null)
-                    .findFirst().orElse(sorted.get(0));
-            LocalDateTime left = rs.getObject("deactivated_at", LocalDateTime.class);
-            members.add(new MemberRow(id, rs.getString("full_name"), rs.getString("email"), rs.getString("role"), rs.getString("job_title"),
-                    sorted, primary, joinedOfUser.get(id), left == null ? null : left.toLocalDate()));
-            return null;
-        }).list();
-        List<ProjectRow> projects = jdbc.sql("SELECT id, key, name, status, team_id FROM projects WHERE archived = FALSE")
-                .query((rs, i) -> new ProjectRow(rs.getObject("id", UUID.class), rs.getString("key"), rs.getString("name"), rs.getString("status"),
-                        rs.getObject("team_id", UUID.class)))
+        // Counted members without their joined date yet: it comes from activity, which is loaded below.
+        List<MemberRow> counted = new ArrayList<>();
+        jdbc.sql("SELECT id, full_name, email, username, role, job_title, department, manager_id, active, deactivated_at FROM users")
+                .query((rs, i) -> {
+                    UUID id = rs.getObject("id", UUID.class);
+                    String department = rs.getString("department");
+                    UUID managerId = rs.getObject("manager_id", UUID.class);
+                    users.add(new UserRef(id, rs.getString("full_name"), rs.getString("email"), rs.getString("username"),
+                            department, managerId));
+                    if (!rs.getBoolean("active") || !COUNTED_ROLES.contains(rs.getString("role"))) {
+                        return null;
+                    }
+                    LocalDateTime left = rs.getObject("deactivated_at", LocalDateTime.class);
+                    counted.add(new MemberRow(id, rs.getString("full_name"), rs.getString("email"), rs.getString("role"),
+                            rs.getString("job_title"), department, managerId,
+                            null, left == null ? null : left.toLocalDate()));
+                    return null;
+                }).list();
+        List<ProjectRow> projects = jdbc.sql("SELECT id, key, name, status FROM projects WHERE archived = FALSE")
+                .query((rs, i) -> new ProjectRow(rs.getObject("id", UUID.class), rs.getString("key"), rs.getString("name"), rs.getString("status")))
                 .list();
         List<TaskRow> tasks = jdbc.sql("SELECT id, key, title, project_id, assignee_id, reporter_id, parent_task_id, task_type_id,"
                 + " task_status_id, priority, original_estimate_hrs, remaining_estimate_hrs, created_date, started_date, finished_date,"
@@ -93,14 +84,31 @@ public final class ForecastRepository {
                             pw == null ? null : Weeks.mondayOf(pw), rs.getBoolean("reopened_from_done"), false);
                 })
                 .list();
+        // The member's first activity, which is their joined date (design 2026-09-21, section 5). Both signals
+        // name the person directly, so neither needs the assignee-name resolution Lifecycle does.
+        Map<UUID, LocalDate> firstActivity = new HashMap<>();
         List<TransitionRow> transitions = jdbc.sql("SELECT task_id, user_id, field_name, old_value, new_value, changed_at FROM task_history")
-                .query((rs, i) -> new TransitionRow(rs.getObject("task_id", UUID.class), rs.getObject("user_id", UUID.class), rs.getString("field_name"),
-                        rs.getString("old_value"), rs.getString("new_value"), rs.getObject("changed_at", LocalDateTime.class)))
+                .query((rs, i) -> {
+                    TransitionRow row = new TransitionRow(rs.getObject("task_id", UUID.class), rs.getObject("user_id", UUID.class),
+                            rs.getString("field_name"), rs.getString("old_value"), rs.getString("new_value"),
+                            rs.getObject("changed_at", LocalDateTime.class));
+                    if (row.userId() != null && row.changedAt() != null) {
+                        earliest(firstActivity, row.userId(), row.changedAt().toLocalDate());
+                    }
+                    return row;
+                })
                 .list();
         List<TimeLogRow> logs = jdbc.sql("SELECT task_id, user_id, log_date, hours FROM time_logs")
-                .query((rs, i) -> new TimeLogRow(rs.getObject("task_id", UUID.class), rs.getObject("user_id", UUID.class),
-                        rs.getObject("log_date", LocalDate.class), rs.getDouble("hours")))
+                .query((rs, i) -> {
+                    TimeLogRow row = new TimeLogRow(rs.getObject("task_id", UUID.class), rs.getObject("user_id", UUID.class),
+                            rs.getObject("log_date", LocalDate.class), rs.getDouble("hours"));
+                    if (row.userId() != null && row.day() != null) {
+                        earliest(firstActivity, row.userId(), row.day());
+                    }
+                    return row;
+                })
                 .list();
+        List<MemberRow> members = counted.stream().map(m -> m.withJoined(firstActivity.get(m.id()))).toList();
         List<LeaveRow> leaves = new ArrayList<>();
         List<LeaveRow> pendingLeaves = new ArrayList<>();
         jdbc.sql("SELECT employee_id, start_date, end_date, begin_time, end_time, absence_hours, status, leave_type"
@@ -115,6 +123,10 @@ public final class ForecastRepository {
                 .query((rs, i) -> new HolidayRow(rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class),
                         "CONFIRMED".equals(rs.getString("status")), rs.getBoolean("active"), rs.getString("title")))
                 .list();
-        return new ForecastData(members, teams, projects, tasks, transitions, logs, leaves, pendingLeaves, holidays, users, categoryByName);
+        return new ForecastData(members, projects, tasks, transitions, logs, leaves, pendingLeaves, holidays, users, categoryByName);
+    }
+
+    private static void earliest(Map<UUID, LocalDate> into, UUID user, LocalDate day) {
+        into.merge(user, day, (a, b) -> a.isBefore(b) ? a : b);
     }
 }
