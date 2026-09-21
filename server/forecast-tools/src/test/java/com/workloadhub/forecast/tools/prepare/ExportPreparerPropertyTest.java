@@ -9,9 +9,9 @@ import com.workloadhub.forecast.tools.export.ExportFiles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -23,7 +23,10 @@ import net.jqwik.api.constraints.LongRange;
 /**
  * The invariants of a prepared export. Broken, each produces a failure that is silent or far from its cause: a
  * user left inactive is dropped by {@code ForecastRepository} without a word and simply never appears in a
- * forecast, and a manager left as a MEMBER leads a team nobody is allowed to run.
+ * forecast, and a leader left as a MEMBER leads a team nobody is allowed to run.
+ *
+ * <p>The assertions restate the rule rather than calling {@code EffectiveRole}, which is what {@code prepare}
+ * itself uses: an oracle built from the implementation proves only that it equals itself.
  *
  * <p>Random directories rather than one fixture, because the shapes that break these are structural — a
  * manager outside the export, a chain three deep, a cycle-free tree with several roots — and a hand-written
@@ -35,12 +38,16 @@ class ExportPreparerPropertyTest {
     private static final List<String> DEPARTMENTS =
             Arrays.asList("PTE / CT2 Calibration & Testing 2", "PTE / CT2", "PTE / SIM Simulation", "ADM / HR People", null);
 
-    private static final List<String> TITLES =
-            Arrays.asList("Skill Team Leader", "Calibration Engineer", "Simulation Engineer", null);
+    // Every shape the rule must separate: the two actor titles, two leader spellings, plain members, none.
+    private static final List<String> TITLES = Arrays.asList("Skill Team Leader", "Engineering Center Manager",
+            "Team Leader Calibration", "SW Lead Engineer", "Calibration Engineer", "Simulation Engineer", null);
 
     private static final List<String> ROLES = List.of("MEMBER", "MEMBER", "MEMBER", "TEAM_LEADER", "VIEWER", "ADMIN", "CENTER_MANAGER");
 
-    private static final Set<String> FIXED = Set.of("ADMIN", "CENTER_MANAGER");
+    /** The roles no job title implies, which the application assigns by hand and this step keeps. */
+    private static final Set<String> DECLARED_WINS = Set.of("ADMIN", "CENTER_MANAGER", "VIEWER");
+
+    private static final Set<String> COUNTED = Set.of("MEMBER", "TEAM_LEADER");
 
     /** A directory of 1 to 40 people with random departments, titles, roles and managers, from one seed. */
     private static ExportEnvelope directory(long seed) {
@@ -67,74 +74,101 @@ class ExportPreparerPropertyTest {
         return ExportPreparerTest.envelope(users, new ArrayList<>(), new ArrayList<>());
     }
 
+    /** What the title says, restated here rather than borrowed from the class under test. */
+    private static String byTitle(String declaredRole, String jobTitle) {
+        if (DECLARED_WINS.contains(declaredRole)) {
+            return declaredRole;
+        }
+        String t = jobTitle == null ? "" : jobTitle.toLowerCase(Locale.ROOT);
+        if (t.contains("skill team leader")) {
+            return "SKILL_TEAM_LEADER";
+        }
+        if (t.contains("center manager")) {
+            return "CENTER_MANAGER";
+        }
+        return t.contains("team lead") || t.contains("lead engineer") ? "TEAM_LEADER" : "MEMBER";
+    }
+
     @Property(tries = 300)
-    void everyUserIsActiveAndEveryManagerCarriesTheLeaderRoleTheirPlaceImplies(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
+    void everyUserIsActiveAndCarriesTheRoleTheirTitleGivesThem(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
         ExportEnvelope input = directory(seed);
-        List<LinkedHashMap<String, Object>> before = input.rows("users");
-        Set<Object> ids = new HashSet<>();
-        before.forEach(u -> ids.add(u.get("id")));
-        Set<Object> managers = new HashSet<>();
-        before.forEach(u -> {
-            if (u.get("manager_id") != null && ids.contains(u.get("manager_id"))) {
-                managers.add(u.get("manager_id"));
+        Map<Object, String> titled = new HashMap<>();
+        for (LinkedHashMap<String, Object> u : input.rows("users")) {
+            titled.put(u.get("id"), byTitle(String.valueOf(u.get("role")), (String) u.get("job_title")));
+        }
+        // Counted reports, of the activated directory: prepare activates everyone before it classifies.
+        Map<Object, Integer> reports = new HashMap<>();
+        for (LinkedHashMap<String, Object> u : input.rows("users")) {
+            Object manager = u.get("manager_id");
+            if (manager != null && !manager.equals(u.get("id")) && titled.containsKey(manager) && COUNTED.contains(titled.get(u.get("id")))) {
+                reports.merge(manager, 1, Integer::sum);
             }
-        });
-        Set<Object> managersOfManagers = new HashSet<>();
-        before.forEach(u -> {
-            if (u.get("manager_id") != null && managers.contains(u.get("id"))) {
-                managersOfManagers.add(u.get("manager_id"));
-            }
-        });
-        Map<Object, String> roleBefore = new HashMap<>();
-        before.forEach(u -> roleBefore.put(u.get("id"), String.valueOf(u.get("role"))));
+        }
 
         List<LinkedHashMap<String, Object>> after = ExportPreparer.prepare(input).envelope().rows("users");
 
-        assertEquals(before.size(), after.size(), "nobody is added or lost");
+        assertEquals(titled.size(), after.size(), "nobody is added or lost");
         for (LinkedHashMap<String, Object> u : after) {
             Object id = u.get("id");
             String role = String.valueOf(u.get("role"));
             assertEquals(Boolean.TRUE, u.get("active"), id + " must be active");
             assertNull(u.get("deactivated_at"), id + " must carry no leaving date");
-            if (FIXED.contains(roleBefore.get(id))) {
-                assertEquals(roleBefore.get(id), role, id + " keeps a role the project planner looks for");
-            } else if (managersOfManagers.contains(id)) {
-                assertEquals("SKILL_TEAM_LEADER", role, id + " manages a manager");
-            } else if (managers.contains(id)) {
-                assertEquals("TEAM_LEADER", role, id + " manages people and no manager");
+            String expected = titled.get(id);
+            if ("TEAM_LEADER".equals(expected) && reports.getOrDefault(id, 0) == 0) {
+                assertEquals("MEMBER", role, id + " leads nobody, so they are a member");
             } else {
-                assertEquals(roleBefore.get(id), role, id + " manages nobody, so their role is not this step's business");
+                assertEquals(expected, role, id + "'s role must be the one their title gives them");
             }
         }
     }
 
     @Property(tries = 100)
-    void everyCountedUsersManagerCanLeadATeamUnlessTheyAreAnAdminOrCentreManager(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
-        ExportEnvelope input = directory(seed);
-        Map<Object, String> roleBefore = new HashMap<>();
-        input.rows("users").forEach(u -> roleBefore.put(u.get("id"), String.valueOf(u.get("role"))));
-
-        List<LinkedHashMap<String, Object>> after = ExportPreparer.prepare(input).envelope().rows("users");
+    void everyTeamLeaderLeadsSomebodyAndNoActorIsCounted(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
+        List<LinkedHashMap<String, Object>> after = ExportPreparer.prepare(directory(seed)).envelope().rows("users");
         Map<Object, String> roles = new HashMap<>();
         after.forEach(u -> roles.put(u.get("id"), String.valueOf(u.get("role"))));
 
+        Map<Object, Integer> countedReports = new HashMap<>();
         for (LinkedHashMap<String, Object> u : after) {
             Object manager = u.get("manager_id");
-            if (manager == null || !roles.containsKey(manager) || !Set.of("MEMBER", "TEAM_LEADER").contains(String.valueOf(u.get("role")))) {
-                continue;
+            if (manager != null && !manager.equals(u.get("id")) && roles.containsKey(manager) && COUNTED.contains(roles.get(u.get("id")))) {
+                countedReports.merge(manager, 1, Integer::sum);
             }
-            // This user is counted, so somebody must be able to run the team they sit in. Only a TEAM_LEADER
-            // keys a team (design 2026-09-21, ruling 1), and prepare gives every manager that role or the
-            // skill-leader one above it — except an ADMIN or CENTER_MANAGER, whose role it must not touch
-            // because ProjectPlanner.fallbackOwner looks for exactly those two. A counted user under one of
-            // those two is therefore in no team at all: a known consequence, asserted here so it stays known.
-            if (FIXED.contains(roleBefore.get(manager))) {
-                assertEquals(roleBefore.get(manager), roles.get(manager), "a fixed role is never rewritten");
-                continue;
-            }
-            assertTrue(Set.of("TEAM_LEADER", "SKILL_TEAM_LEADER").contains(roles.get(manager)),
-                    "the manager of a counted user came out " + roles.get(manager) + ", which leads no team");
         }
+        for (LinkedHashMap<String, Object> u : after) {
+            String role = roles.get(u.get("id"));
+            if ("TEAM_LEADER".equals(role)) {
+                // Every team leader keys a team, so the count of them is the count of teams.
+                assertTrue(countedReports.getOrDefault(u.get("id"), 0) > 0,
+                        u.get("id") + " came out a team leader with nobody counted under them");
+            }
+            // An actor is never demoted into a counted role: they lead nobody the forecast can see either,
+            // but they do no technical work, so making them a member would put them in a forecast.
+            String title = (String) u.get("job_title");
+            if (title != null && title.toLowerCase(Locale.ROOT).contains("skill team leader")
+                    && !DECLARED_WINS.contains(String.valueOf(u.get("role")))) {
+                assertEquals("SKILL_TEAM_LEADER", role, u.get("id") + " is an actor and must stay one");
+            }
+        }
+    }
+
+    @Property(tries = 100)
+    void theCountersDescribeTheFileTheyCameWith(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
+        ExportPreparer.Result result = ExportPreparer.prepare(directory(seed));
+        List<LinkedHashMap<String, Object>> after = result.envelope().rows("users");
+        long counted = after.stream().filter(u -> COUNTED.contains(String.valueOf(u.get("role")))).count();
+        long leaders = after.stream().filter(u -> "TEAM_LEADER".equals(String.valueOf(u.get("role")))).count();
+        long skill = after.stream().filter(u -> "SKILL_TEAM_LEADER".equals(String.valueOf(u.get("role")))).count();
+        assertEquals(counted, result.countedMembers());
+        assertEquals(leaders, result.teamLeaders());
+        assertEquals(skill, result.skillTeamLeaders());
+    }
+
+    @Property(tries = 100)
+    void preparingAPreparedExportChangesNothing(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
+        // It writes roles back into the file it reads, so a second run over its own output must be a no-op.
+        ExportEnvelope once = ExportPreparer.prepare(directory(seed)).envelope();
+        assertEquals(ExportFiles.toJson(once), ExportFiles.toJson(ExportPreparer.prepare(once).envelope()));
     }
 
     @Property(tries = 100)

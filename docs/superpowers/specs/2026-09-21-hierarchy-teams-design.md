@@ -2,6 +2,8 @@
 
 Date: 2026-09-21
 Status: **implemented, landed on `dev` on 2026-09-21**, including the fix wave of the branch review
+and the **second revision of the same day (section 16)**, which moves the role from `users.role` to the
+job title. Read section 16 with section 2: it amends rulings 1, 2, 3 and 9, and every other ruling stands.
 
 Supersedes `2026-09-19-real-export-preparation-design.md` in part: that document's sections 5 and 6,
 the derivation of department teams and manager teams, are withdrawn. Its sections 4 and 4.1, the
@@ -65,7 +67,8 @@ sentence is in the narrator's system message on every run.
 
 Settled with the owner on 2026-09-21.
 
-1. **A team is a team leader plus their direct reports.** Not a subtree. A user whose role is
+1. **A team is a team leader plus their direct reports.** Not a subtree. A user whose *effective*
+   role (section 16) is
    `TEAM_LEADER` and who has at least one counted direct report has a team; its members are that leader and
    the users whose `manager_id` names them. A manager of any other role — a skill team leader, an admin —
    keys no team, which section 4 explains and enforces.
@@ -84,7 +87,8 @@ Settled with the owner on 2026-09-21.
    no longer read.
 9. **`prepare` keeps activating users and promoting managers and loses all team derivation.** A
    manager whose own reports include another manager becomes `SKILL_TEAM_LEADER`; every other
-   manager becomes `TEAM_LEADER`.
+   manager becomes `TEAM_LEADER`. *(Superseded by section 16: the role comes from the job title, and
+   `prepare` decides nothing of its own — it writes the module's own answer back into the file.)*
 10. **The synthetic seed still writes `teams` and `team_members`, as genuine project teams**: one
     per project, holding the people who work on it, with `projects.team_id` naming it.
 
@@ -482,3 +486,125 @@ decided then.
 - **The real export is not in this repository or this container**, per the standing hard rule. The
   figures in section 1 are the owner's measurements, not re-measured here, and the implementation is
   written against the schema and the code.
+
+## 16. Second revision: the role comes from the job title
+
+Settled with the owner on 2026-09-21, after the first revision landed, when the owner's real export was
+measured for the first time. It amends rulings 1, 2, 3 and 9. Everything else in this document stands.
+
+### 16.1 What the measurement showed
+
+The owner's directory, 264 users:
+
+| `users.role` | count |
+|---|---|
+| MEMBER | 260 |
+| TEAM_LEADER | 2 |
+| ADMIN | 1 |
+| CENTER_MANAGER | 1 |
+| SKILL_TEAM_LEADER | 0 |
+
+The two accounts marked `TEAM_LEADER` have no job title, no department, no manager and **no direct
+reports**: they are application accounts, not people in the org chart. Nobody at all carries
+`SKILL_TEAM_LEADER`. So the role column is not evidence of leadership, and a production run keyed on
+it would find no team anywhere and forecast nobody — the same failure this document was written to fix,
+one level further in.
+
+`job_title` does carry the structure, and the owner confirmed it is synchronised automatically from the
+organisation system:
+
+- 12 titles say "Team Leader", with 143 people directly beneath them;
+- 3 say "Skill Team Leader", each sitting above real team leaders (4, 3 and 2 of them);
+- 1 says "Engineering Center Manager", with 13 reports;
+- one more, "Lead Engineer DAI & AI", has 24 reports under a title that says neither.
+
+`job_title_role_mappings` exists in WorkloadHub's schema, with `job_title_id`, `role_id` and an optional
+per-user `user_id` — exactly the right table for this — and holds **0 rows**. The owner ruled it out for
+now; the patterns below are the whole rule.
+
+### 16.2 The rule
+
+`EffectiveRole` (`server/forecast-core/src/main/java/com/workloadhub/forecast/data/EffectiveRole.java`)
+is the one place that decides a role, in two stages.
+
+**Stage 1, the title.** Matching is case-insensitive over whitespace-collapsed text, and the order is
+load-bearing, because "Skill Team Leader" contains "team lead".
+
+1. `users.role` is `ADMIN`, `CENTER_MANAGER` or `VIEWER` → that role. No job title implies these, and
+   the application assigns them deliberately.
+2. the title contains `skill team leader` → `SKILL_TEAM_LEADER`
+3. the title contains `center manager` → `CENTER_MANAGER`
+4. the title contains `team lead` or `lead engineer` → `TEAM_LEADER`
+5. otherwise → `MEMBER`
+
+A `TEAM_LEADER` or `SKILL_TEAM_LEADER` **declared in the column is not believed**, for the reason in
+16.1.
+
+**Stage 2, the demotion.** A stage-1 `TEAM_LEADER` with no counted, active direct report becomes
+`MEMBER` (owner's ruling: "if a team leader or lead engineer with no direct members that he manage below
+him then he should be treated as just a member"). They are forecast as an ordinary member of their own
+manager's team and run nothing.
+
+An **actor is never demoted**. A `SKILL_TEAM_LEADER` or `CENTER_MANAGER` with no reports has nothing to
+act on, but making them a member would make them a forecast subject, and ruling 2 says neither does
+technical work.
+
+**Why the two stages cannot contradict each other.** Demotion only ever turns `TEAM_LEADER` into
+`MEMBER`, and both are counted. So whether a user is counted is fixed by their title alone, never by
+anyone else's demotion, the rule terminates in one pass, and the answer does not depend on the order of
+the input. `EffectiveRoleTest` holds all three.
+
+### 16.3 Consequences for ruling 1
+
+Every effective `TEAM_LEADER` keys exactly one team, because a leader nobody reports to is no longer a
+leader. The "and has at least one counted direct report" half of ruling 1 is therefore carried by the
+role itself, and `FeatureBuilder.teamKeys`, `DefaultForecastService.requireTeam` and
+`forecast-web`'s `Directory.teams()` each test the role alone.
+
+### 16.4 Who may run
+
+Amending ruling 3 and `2026-09-11-host-integration-design.md` section 3.2:
+
+| effective role | runs | views |
+|---|---|---|
+| `ADMIN` | any team | any team |
+| `CENTER_MANAGER` | **any team** (was: none) | any team |
+| `SKILL_TEAM_LEADER` | the team of a leader who reports to them, one at a time | those, and their own |
+| `TEAM_LEADER` | their own team | their own, and the one they belong to |
+| `MEMBER` | none | the team they belong to |
+| `VIEWER` | none | any team |
+
+The owner's words: a skill team leader, an admin and a centre manager "are unique positions that can run
+forecast on behalf of teams that belong to the hierarchy under them; they don't have their own direct
+teams to forecast". A centre manager sits above the whole organisation, so "beneath them" is every team;
+a skill team leader's reach stays what ruling 3 already said — the leaders who report to them directly —
+which in the owner's directory is the same set either way.
+
+### 16.5 What this costs
+
+**Who is left out.** The owner ruled that people who belong to no team stay out rather than being
+gathered under an actor. In the real directory that is 85 of 264: 43 with no `manager_id` at all, 31
+plain members reporting straight to a Skill Team Leader or the Engineering Center Manager, 8 lead
+engineers with no reports (7 of whom report to a Skill Team Leader), and the 3 skill team leaders and
+1 centre manager, who are correctly never counted. **12 teams, 179 people forecastable.**
+
+**The rename risk.** A job title edited to something the patterns do not match silently removes a team.
+The owner accepts it: the titles are written by the organisation system, not by hand. `prepare` prints
+what it classified, so a real export can be checked before it is seeded. `job_title_role_mappings` is
+the permanent fix if it is ever populated.
+
+### 16.6 What changed in the code
+
+- **new** `forecast-core` `data/EffectiveRole.java`, and `MemberRow.withRole`.
+- `ForecastRepository` reads every user, classifies once, then keeps the counted ones: who counts
+  depends on the whole directory, so nobody can be judged row by row any more.
+- `FeatureBuilder.teamKeys` tests the role alone (16.3).
+- `DefaultForecastService.requireTeam` reads the key and their direct reports instead of asking SQL
+  about `users.role`.
+- `ExportPreparer` fell to activation plus writing the effective role back; its `Result` gained
+  `countedMembers`, which is the number the owner checks, and `teamLeaders` is now also the team count.
+- The seed's `Directory` step 3 calls `EffectiveRole` instead of its own manager-of-managers rule, so
+  the seeded `users.role` says what the module will derive from the same rows. The synthetic directory
+  also gained one `VIEWER`, so all six roles have a subject.
+- `forecast-web`'s `Directory` and `ForecastAccess`, and the sample host's `ForecastAccess`, classify in
+  Java rather than testing the role in SQL; `permissions.ts` carries the new matrix.

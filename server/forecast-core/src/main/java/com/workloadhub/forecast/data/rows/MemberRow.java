@@ -4,7 +4,8 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * A counted user: role MEMBER or TEAM_LEADER, active. {@code managerId} is the company structure
+ * A counted user: effective role MEMBER or TEAM_LEADER, active. {@code role} is the effective role of
+ * {@link com.workloadhub.forecast.data.EffectiveRole} — what the job title says, not what `users.role` holds. {@code managerId} is the company structure
  * (`users.manager_id`) and so names the team this member is forecast in; a member who leads a team is keyed by
  * their own id as well (design 2026-09-21, section 4).
  *
@@ -17,6 +18,10 @@ public record MemberRow(UUID id, String fullName, String email, String role, Str
         UUID managerId, LocalDate joined, LocalDate left) {
 
     public MemberRow withFullName(String fullName) {
+        return new MemberRow(id, fullName, email, role, jobTitle, managerId, joined, left);
+    }
+
+    public MemberRow withRole(String role) {
         return new MemberRow(id, fullName, email, role, jobTitle, managerId, joined, left);
     }
 

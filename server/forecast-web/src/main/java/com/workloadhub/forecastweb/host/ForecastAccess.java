@@ -1,5 +1,7 @@
 package com.workloadhub.forecastweb.host;
 
+import com.workloadhub.forecast.data.EffectiveRole;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -7,11 +9,13 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * The v1 role rules (design 2026-09-11, section 3.2), read from `users` alone: what the real host enforces
  * before calling the module. ADMIN runs and views any team; a SKILL_TEAM_LEADER runs and views the team of a
  * leader who reports to them, one at a time; a TEAM_LEADER runs and views their own team; members view the team
- * they belong to; VIEWER and CENTER_MANAGER view any team and run none. Every answer carries its reason, so a
- * page can say why a button is disabled.
+ * they belong to; a VIEWER views any team and runs none. A CENTER_MANAGER runs and views any team: the owner
+ * ruled on 2026-09-21 that they, like an ADMIN, act for the whole organisation and lead no team of their own.
+ * Every answer carries its reason, so a page can say why a button is disabled.
  *
  * <p>A team is a leader and their direct reports, keyed by the leader's user id (design 2026-09-21), so `teams`
- * and `team_members` are not consulted: they hold project teams, which grant nobody anything.
+ * and `team_members` are not consulted: they hold project teams, which grant nobody anything. The role is the
+ * effective one — what the job title says, not what `users.role` holds (see {@link EffectiveRole}).
  */
 public final class ForecastAccess {
 
@@ -25,9 +29,29 @@ public final class ForecastAccess {
         this.jdbc = jdbc;
     }
 
+    /**
+     * The user's effective role. Their own row is not enough, because a leader nobody counted reports to is a
+     * member, so their direct reports are read with them; nothing further out can change the answer, because
+     * whether a report is counted depends on their own job title alone.
+     */
     public String roleOf(UUID userId) {
-        return jdbc.sql("SELECT role FROM users WHERE id = ?").param(userId).query().listOfRows().stream()
-                .findFirst().map(r -> String.valueOf(r.get("role"))).orElseThrow(() -> new HostForbidden("unknown user " + userId));
+        String role = effectiveRole(userId);
+        if (role == null) {
+            throw new HostForbidden("unknown user " + userId);
+        }
+        return role;
+    }
+
+    /** The same answer, or null for a user who is not in the directory. */
+    private String effectiveRole(UUID userId) {
+        List<EffectiveRole.Candidate> rows = jdbc
+                .sql("SELECT id, manager_id, role, job_title, active FROM users WHERE id = ? OR manager_id = ?")
+                .param(userId).param(userId)
+                .query((rs, i) -> new EffectiveRole.Candidate(rs.getObject("id", UUID.class),
+                        rs.getObject("manager_id", UUID.class), rs.getString("role"), rs.getString("job_title"),
+                        rs.getBoolean("active")))
+                .list();
+        return EffectiveRole.resolve(rows).get(userId);
     }
 
     public boolean canRun(UUID userId, UUID teamId) {
@@ -41,7 +65,7 @@ public final class ForecastAccess {
     public Decision run(UUID userId, UUID teamId) {
         String role = roleOf(userId);
         return switch (role) {
-            case "ADMIN" -> new Decision(true, "ADMIN may run a forecast for any team");
+            case "ADMIN", "CENTER_MANAGER" -> new Decision(true, role + " may run a forecast for any team");
             case "TEAM_LEADER" -> manages(userId, teamId)
                     ? new Decision(true, "TEAM_LEADER manages this team")
                     : new Decision(false, "TEAM_LEADER may only run their own team");
@@ -89,14 +113,13 @@ public final class ForecastAccess {
     }
 
     /**
-     * Whether a team exists at all: this user is a TEAM_LEADER and somebody counted reports to them. The role
+     * Whether a team exists at all. An effective TEAM_LEADER is exactly that: their job title says they lead
+     * and somebody counted reports to them, since a leader nobody reports to is demoted to a member. The role
      * matters — a SKILL_TEAM_LEADER has reports too, and their "team" would be the leaders beneath them,
      * which nobody may run (design 2026-09-21, rulings 1 and 3).
      */
     private boolean leadsSomeone(UUID teamId) {
-        return !jdbc.sql("SELECT 1 FROM users lead JOIN users r ON r.manager_id = lead.id"
-                        + " WHERE lead.id = ? AND lead.role = 'TEAM_LEADER'"
-                        + " AND r.active = TRUE AND r.role IN ('MEMBER', 'TEAM_LEADER')")
-                .param(teamId).query().listOfRows().isEmpty();
+        // Not roleOf: a team id naming nobody is simply not a team, which is an answer, not a refusal.
+        return "TEAM_LEADER".equals(effectiveRole(teamId));
     }
 }

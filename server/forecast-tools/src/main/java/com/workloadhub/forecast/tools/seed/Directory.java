@@ -1,10 +1,10 @@
 package com.workloadhub.forecast.tools.seed;
 
+import com.workloadhub.forecast.data.EffectiveRole;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -111,24 +111,24 @@ public final class Directory {
             }
         }
 
-        // 3. roles, in the two tiers the hierarchy has: a manager of managers is a skill team leader and does
-        // no technical work; every other manager is a team leader and is counted like any member. ADMIN and
-        // CENTER_MANAGER are left alone, because ProjectPlanner.fallbackOwner looks for exactly those two.
-        Set<UUID> managersOfManagers = new HashSet<>();
-        for (UUID managerId : reports.keySet()) {
-            Person m = people.get(managerId);
-            if (m.managerId() != null && people.containsKey(m.managerId())) {
-                managersOfManagers.add(m.managerId());
-            }
+        // 3. roles: the job title says who leads, and a leader nobody counted reports to is a member. This
+        // is the module's own rule (EffectiveRole), applied here so the seeded users.role says what the
+        // forecast will derive from the same rows rather than something else. ADMIN and CENTER_MANAGER are
+        // left alone by the rule itself, which ProjectPlanner.fallbackOwner depends on.
+        //
+        // The activity flag is this directory's own leaving date, the one step 1 invented and step 5 writes
+        // back as `active`, so the seeded column and the role the module derives from the seeded rows are the
+        // same answer. In real mode nothing is written, and a leader whose invented departures empty their
+        // team is shaped as a member for the rest of the seed — a simulation detail, since the real rows the
+        // module reads are untouched.
+        List<EffectiveRole.Candidate> candidates = new ArrayList<>();
+        for (Person p : people.values()) {
+            UUID manager = people.containsKey(p.managerId()) ? p.managerId() : null;
+            candidates.add(new EffectiveRole.Candidate(p.id(), manager, p.role(), p.jobTitle(), p.left() == null));
         }
-        for (UUID managerId : reports.keySet()) {
-            Person m = people.get(managerId);
-            if (m.role().equals("ADMIN") || m.role().equals("CENTER_MANAGER")) {
-                continue;
-            }
-            boolean skill = managersOfManagers.contains(managerId)
-                    || (m.jobTitle() != null && m.jobTitle().toLowerCase(Locale.ROOT).contains("skill team leader"));
-            people.put(managerId, m.withRole(skill ? "SKILL_TEAM_LEADER" : "TEAM_LEADER"));
+        Map<UUID, String> roles = EffectiveRole.resolve(candidates);
+        for (Person p : List.copyOf(people.values())) {
+            people.put(p.id(), p.withRole(roles.get(p.id())));
         }
 
         // 4. departments: one per code, headed by the senior-most person in it. The head owns its projects.

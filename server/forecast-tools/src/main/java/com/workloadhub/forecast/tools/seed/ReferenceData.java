@@ -4,8 +4,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
 
@@ -188,6 +190,23 @@ public final class ReferenceData {
         }
         if (out.size() > 1) {
             out.get(1).put("role", "ADMIN");
+        }
+        // One VIEWER, so the seeded directory carries all six roles and the hosts' "reads every team, runs
+        // none" rule has a subject. A plain member, and only one whose leader keeps another report: a leader
+        // nobody counted reports to is no longer a leader, and their team would vanish from the seed.
+        Map<Object, Integer> plainReports = new HashMap<>();
+        for (LinkedHashMap<String, Object> u : out) {
+            if (!String.valueOf(u.get("job_title")).contains("Team Leader") && u.get("manager_id") != null) {
+                plainReports.merge(u.get("manager_id"), 1, Integer::sum);
+            }
+        }
+        for (int i = out.size() - 1; i > 1; i--) {
+            LinkedHashMap<String, Object> u = out.get(i);
+            if (!String.valueOf(u.get("job_title")).contains("Team Leader") && "MEMBER".equals(u.get("role"))
+                    && plainReports.getOrDefault(u.get("manager_id"), 0) > 1) {
+                u.put("role", "VIEWER");
+                break;
+            }
         }
         return out;
     }

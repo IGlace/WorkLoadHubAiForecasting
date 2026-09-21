@@ -1,10 +1,14 @@
 package com.workloadhub.forecastweb.host;
 
+import com.workloadhub.forecast.data.EffectiveRole;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -16,10 +20,16 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * <p>A team is a leader and the people who report to them directly, keyed by the leader's own user id (design
  * 2026-09-21). The application's `teams` table is not read: it holds project teams, an ad-hoc group around one
  * project, which say nothing about who manages whom.
+ *
+ * <p>Neither is `users.role` trusted. Who leads comes from the job title, through the module's own
+ * {@link EffectiveRole}, so this host and the module always agree on who is a leader and who is counted. That
+ * rule needs the whole directory at once — a leader nobody reports to is a member — so the queries that used
+ * to test the role in SQL are one read and a classification in Java.
  */
 public final class Directory {
 
-    public record User(UUID id, String fullName, String role, String jobTitle, String department, boolean active) {
+    public record User(UUID id, String fullName, String role, String jobTitle, String department, boolean active,
+            UUID managerId) {
     }
 
     /** {@code id} is the leader's user id; {@code parentTeamId} is the team of the leader's own manager. */
@@ -35,19 +45,28 @@ public final class Directory {
         this.jdbc = jdbc;
     }
 
-    public Optional<ActingUser> user(UUID id) {
-        return jdbc.sql("SELECT id, full_name, role, job_title FROM users WHERE id = ?").param(id)
-                .query().listOfRows().stream().findFirst()
-                .map(r -> new ActingUser(uuid(r.get("id")), str(r.get("full_name")), str(r.get("role")), str(r.get("job_title"))));
-    }
-
+    /** Every user with their effective role, by name. The one read every other method here is built on. */
     public List<User> users() {
-        List<User> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql("SELECT id, full_name, role, job_title, department, active FROM users ORDER BY full_name").query().listOfRows()) {
-            out.add(new User(uuid(r.get("id")), str(r.get("full_name")), str(r.get("role")), str(r.get("job_title")), str(r.get("department")),
-                    bool(r.get("active"))));
+        List<User> raw = new ArrayList<>();
+        List<EffectiveRole.Candidate> candidates = new ArrayList<>();
+        for (Map<String, Object> r : jdbc.sql("SELECT id, full_name, role, job_title, department, active, manager_id"
+                + " FROM users ORDER BY full_name").query().listOfRows()) {
+            User u = new User(uuid(r.get("id")), str(r.get("full_name")), str(r.get("role")), str(r.get("job_title")),
+                    str(r.get("department")), bool(r.get("active")), uuid(r.get("manager_id")));
+            raw.add(u);
+            candidates.add(new EffectiveRole.Candidate(u.id(), u.managerId(), u.role(), u.jobTitle(), u.active()));
+        }
+        Map<UUID, String> roles = EffectiveRole.resolve(candidates);
+        List<User> out = new ArrayList<>(raw.size());
+        for (User u : raw) {
+            out.add(new User(u.id(), u.fullName(), roles.get(u.id()), u.jobTitle(), u.department(), u.active(), u.managerId()));
         }
         return out;
+    }
+
+    public Optional<ActingUser> user(UUID id) {
+        return users().stream().filter(u -> u.id().equals(id)).findFirst()
+                .map(u -> new ActingUser(u.id(), u.fullName(), u.role(), u.jobTitle()));
     }
 
     public Map<UUID, User> usersById() {
@@ -59,25 +78,32 @@ public final class Directory {
     }
 
     /** Counted, as {@code ForecastRepository} counts, so the host's member lists agree with the module's. */
-    private static String counted(String alias) {
-        String q = alias.isEmpty() ? "" : alias + ".";
-        return " " + q + "active = TRUE AND " + q + "role IN ('MEMBER', 'TEAM_LEADER')";
+    private static boolean counted(User u) {
+        return EffectiveRole.counted(u.role(), u.active());
+    }
+
+    /** Whether this user reports to somebody other than themselves, and so is somebody else's team member. */
+    private static boolean reportsToAnother(User u) {
+        return u.managerId() != null && !u.managerId().equals(u.id());
     }
 
     public List<Team> teams() {
-        String sql = "SELECT m.id, m.full_name, m.manager_id,"
-                + " (SELECT COUNT(*) FROM users r WHERE r.manager_id = m.id AND" + counted("r") + ") AS reports,"
-                + " CASE WHEN" + counted("m") + " THEN 1 ELSE 0 END AS counts_itself"
-                + " FROM users m"
-                // Only a TEAM_LEADER keys a team: a skill team leader has reports too, and their "team"
-                // would be the leaders beneath them, which ruling 3 says nobody runs.
-                + " WHERE m.role = 'TEAM_LEADER'"
-                + " AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND" + counted("r") + ")"
-                + " ORDER BY m.full_name";
+        List<User> all = users();
+        Map<UUID, Integer> reports = new HashMap<>();
+        for (User u : all) {
+            if (counted(u) && reportsToAnother(u)) {
+                reports.merge(u.managerId(), 1, Integer::sum);
+            }
+        }
         List<Team> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql(sql).query().listOfRows()) {
-            int members = ((Number) r.get("reports")).intValue() + ((Number) r.get("counts_itself")).intValue();
-            out.add(new Team(uuid(r.get("id")), str(r.get("full_name")), uuid(r.get("id")), uuid(r.get("manager_id")), members));
+        for (User u : all) {
+            // Only an effective TEAM_LEADER keys a team, and every one of them does: a leader nobody counted
+            // reports to is already a member, and a skill team leader's "team" would be the leaders beneath
+            // them, which ruling 3 says nobody runs.
+            if ("TEAM_LEADER".equals(u.role())) {
+                out.add(new Team(u.id(), u.fullName(), u.id(), u.managerId(),
+                        reports.getOrDefault(u.id(), 0) + (counted(u) ? 1 : 0)));
+            }
         }
         return out;
     }
@@ -87,28 +113,39 @@ public final class Directory {
     }
 
     /**
-     * Every counted user's place: their manager's team, and their own when they lead one. One query, not one
-     * per team: a counted user belongs to their manager's team when that manager leads one, and to their own
-     * when they lead one themselves.
+     * Every counted user's place: their manager's team, and their own when they lead one. One read, not one
+     * per team.
      */
     public List<Membership> memberships() {
-        String sql = "SELECT u.id AS user_id, t.id AS team_id"
-                + " FROM users u JOIN users t ON t.id = u.manager_id OR t.id = u.id"
-                + " WHERE" + counted("u")
-                + " AND t.role = 'TEAM_LEADER'"
-                + " AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = t.id AND" + counted("r") + ")"
-                + " ORDER BY u.full_name";
+        List<User> all = users();
+        Set<UUID> teams = new HashSet<>();
+        for (User u : all) {
+            if ("TEAM_LEADER".equals(u.role())) {
+                teams.add(u.id());
+            }
+        }
         List<Membership> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql(sql).query().listOfRows()) {
-            out.add(new Membership(uuid(r.get("team_id")), uuid(r.get("user_id"))));
+        for (User u : all) {
+            if (!counted(u)) {
+                continue;
+            }
+            if (teams.contains(u.id())) {
+                out.add(new Membership(u.id(), u.id()));
+            }
+            if (reportsToAnother(u) && teams.contains(u.managerId())) {
+                out.add(new Membership(u.managerId(), u.id()));
+            }
         }
         return out;
     }
 
     /** The leader, when they are counted themselves, and everyone who reports to them directly. */
     public List<UUID> membersOf(UUID teamId) {
-        return jdbc.sql("SELECT id FROM users WHERE (id = ? OR manager_id = ?) AND" + counted("") + " ORDER BY full_name")
-                .param(teamId).param(teamId).query().listOfRows().stream().map(r -> uuid(r.get("id"))).toList();
+        return users().stream()
+                .filter(Directory::counted)
+                .filter(u -> u.id().equals(teamId) || teamId.equals(u.managerId()))
+                .map(User::id)
+                .toList();
     }
 
     static UUID uuid(Object o) {

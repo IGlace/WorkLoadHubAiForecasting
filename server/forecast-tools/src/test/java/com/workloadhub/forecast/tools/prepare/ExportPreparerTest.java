@@ -15,8 +15,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * What {@code prepare} does to a real export, now that the forecast reads the hierarchy directly: it makes
- * every user active and gives every manager the leader role their place in {@code users.manager_id} implies.
- * It derives no teams — that was the 2026-09-19 design, withdrawn on 2026-09-21 — so `teams` and
+ * every user active and writes each one's effective role — the one their job title gives them, which is the
+ * role the module derives for itself — back into {@code users.role}. It decides nothing of its own. It
+ * derives no teams either — that was the 2026-09-19 design, withdrawn on 2026-09-21 — so `teams` and
  * `team_members` must come through untouched.
  */
 class ExportPreparerTest {
@@ -94,31 +95,51 @@ class ExportPreparerTest {
     }
 
     @Test
-    void aManagerOfManagersBecomesASkillTeamLeaderAndEveryOtherManagerATeamLeader() {
+    void theTitleDecidesTheRoleAndALeaderWithReportsKeepsIt() {
         ExportPreparer.Result result = prepared();
         List<LinkedHashMap<String, Object>> out = result.envelope().rows("users");
-        assertEquals("SKILL_TEAM_LEADER", row(out, HEAD).get("role"), "Head One manages Manager Two, who manages people");
-        assertEquals("TEAM_LEADER", row(out, MGR).get("role"), "Manager Two manages two engineers and nobody else's people");
+        assertEquals("SKILL_TEAM_LEADER", row(out, HEAD).get("role"), "Head One's title says skill team leader");
+        assertEquals("TEAM_LEADER", row(out, MGR).get("role"), "Manager Two leads, and two engineers report to them");
         assertEquals("MEMBER", row(out, ENG1).get("role"), "an engineer manages nobody");
         assertEquals("MEMBER", row(out, ORPHAN).get("role"));
         assertEquals("MEMBER", row(out, LOST).get("role"));
         assertEquals("CENTER_MANAGER", row(out, BOSS).get("role"), "the centre manager keeps their role");
         assertEquals(1, result.teamLeaders(), "Manager Two, and nobody else leads a team");
         assertEquals(1, result.skillTeamLeaders(), "Head One");
+        assertEquals(5, result.countedMembers(), "everyone but Head One and Boss Seven");
     }
 
     @Test
-    void theCountersAreTotalsInTheOutputRatherThanPromotions() {
-        // The owner reads the skill-team-leader total to see how many people stop being forecast as
-        // individuals; somebody the export already labelled one is dropped too, and must be counted.
+    void aLeaderNobodyReportsToComesOutAMember() {
+        // The owner's ruling of 2026-09-21: a team leader or lead engineer with nobody under them does the
+        // work of a member and is forecast as one.
         List<LinkedHashMap<String, Object>> users = users();
-        users.set(1, user(MGR, "Manager Two", "Team Leader Calibration", "PTE / CT2 Calibration & Testing 2", HEAD, "TEAM_LEADER", true));
+        users.set(2, user(ENG1, "Eng Three", "SW Lead Engineer", "PTE / CT2", MGR, "MEMBER", false));
+        users.set(4, user(ORPHAN, "Orphan Five", "Lead Engineer Battery", "PTE / SIM Simulation", null, "MEMBER", true));
+        ExportPreparer.Result result = ExportPreparer.prepare(envelope(users, new ArrayList<>(), new ArrayList<>()));
+        List<LinkedHashMap<String, Object>> out = result.envelope().rows("users");
+        assertEquals("MEMBER", row(out, ENG1).get("role"), "a lead engineer with no reports leads nothing");
+        assertEquals("MEMBER", row(out, ORPHAN).get("role"), "and so does one with no manager either");
+        assertEquals(1, result.teamLeaders(), "still only Manager Two");
+    }
+
+    @Test
+    void aLeaderRoleInTheColumnIsNotBelieved() {
+        // WorkloadHub's own role column says MEMBER for 260 of the owner's 264 people and TEAM_LEADER for two
+        // accounts that lead nobody, so only the title is evidence. ADMIN and CENTER_MANAGER are different:
+        // no title implies them, and ProjectPlanner.fallbackOwner looks for exactly those two.
+        List<LinkedHashMap<String, Object>> users = users();
         users.set(4, user(ORPHAN, "Orphan Five", "Simulation Engineer", "PTE / SIM Simulation", null, "SKILL_TEAM_LEADER", true));
         ExportPreparer.Result result = ExportPreparer.prepare(envelope(users, new ArrayList<>(), new ArrayList<>()));
-        assertEquals("TEAM_LEADER", row(result.envelope().rows("users"), MGR).get("role"), "already right, left alone");
-        assertEquals("SKILL_TEAM_LEADER", row(result.envelope().rows("users"), ORPHAN).get("role"), "manages nobody, left alone");
-        assertEquals(1, result.teamLeaders(), "Manager Two");
-        assertEquals(2, result.skillTeamLeaders(), "Head One, promoted, and Orphan Five, who already was one");
+        assertEquals("MEMBER", row(result.envelope().rows("users"), ORPHAN).get("role"), "a simulation engineer, whatever the column says");
+        assertEquals("CENTER_MANAGER", row(result.envelope().rows("users"), BOSS).get("role"), "but this one is kept");
+        assertEquals(1, result.skillTeamLeaders(), "Head One, whose title says so");
+    }
+
+    @Test
+    void preparingATwicePreparedExportChangesNothing() {
+        ExportEnvelope once = prepared().envelope();
+        assertEquals(once.rows("users"), ExportPreparer.prepare(once).envelope().rows("users"));
     }
 
     @Test

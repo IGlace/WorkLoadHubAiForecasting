@@ -327,14 +327,15 @@ class DefaultForecastServiceTest {
 
     @Test
     void aFailedRunIsRecordedNotSwallowed() {
-        // A TEAM_LEADER who has themselves left, whose only counted report has left too: the team exists as
-        // far as `enqueue` can tell — the key carries the right role and somebody counted still reports to it
+        // A team leader who has themselves left, whose only counted report has left too: the team exists as
+        // far as `enqueue` can tell — the key's job title says leader and somebody counted still reports to it
         // — so the run is created, and then fails inside the runner once the leaving dates are applied. That
         // active-with-a-leaving-date pair is the hazard the 2026-09-19 design named, here as the failure path.
         UUID lead = UUID.randomUUID();
         UUID gone = UUID.randomUUID();
-        insertUser(lead, "TEAM_LEADER", null, "2020-01-06T09:00:00", false);
-        insertUser(gone, "MEMBER", lead, "2020-01-06T09:00:00", true);
+        // The job title, not the role column, is what makes a leader (design 2026-09-21, section 16).
+        insertUser(lead, "MEMBER", "Team Leader Test", null, "2020-01-06T09:00:00", false);
+        insertUser(gone, "MEMBER", "Calibration Engineer", lead, "2020-01-06T09:00:00", true);
         try {
             ForecastException ex = assertThrows(ForecastException.class,
                     () -> service.runNow(new RunRequest(lead, null)));
@@ -347,13 +348,17 @@ class DefaultForecastServiceTest {
         }
     }
 
-    /** A user, optionally reporting to {@code manager}, optionally still flagged active, optionally left. */
-    private static void insertUser(UUID id, String role, UUID manager, String deactivatedAt, boolean active) {
+    /**
+     * A user with a job title, optionally reporting to {@code manager}, optionally still flagged active,
+     * optionally left. The title matters: it is what decides the effective role.
+     */
+    private static void insertUser(UUID id, String role, String jobTitle, UUID manager, String deactivatedAt, boolean active) {
         String now = LocalDateTime.now().withNano(0).toString();
         JdbcClient.create(SeededData.dataSource())
-                .sql("INSERT INTO users (id, role, email, active, username, full_name, created_at, updated_at, manager_id, deactivated_at)"
-                        + " VALUES (?, ?, ?, ?, ?, 'Test User', ?::timestamp, ?::timestamp, ?, ?::timestamp)")
-                .param(id).param(role).param(id + "@example.test").param(active).param("u-" + id)
+                .sql("INSERT INTO users (id, role, job_title, email, active, username, full_name, created_at, updated_at,"
+                        + " manager_id, deactivated_at)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, 'Test User', ?::timestamp, ?::timestamp, ?, ?::timestamp)")
+                .param(id).param(role).param(jobTitle).param(id + "@example.test").param(active).param("u-" + id)
                 .param(now).param(now).param(manager).param(deactivatedAt)
                 .update();
     }

@@ -25,6 +25,7 @@ import com.workloadhub.forecast.api.RunStatus;
 import com.workloadhub.forecast.api.RunSummary;
 import com.workloadhub.forecast.backtest.Backtest;
 import com.workloadhub.forecast.Json;
+import com.workloadhub.forecast.data.EffectiveRole;
 import com.workloadhub.forecast.data.ForecastData;
 import com.workloadhub.forecast.data.ForecastRepository;
 import com.workloadhub.forecast.eval.Accuracy;
@@ -136,19 +137,27 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     }
 
     /**
-     * A team exists when the user it is keyed by is a TEAM_LEADER and somebody counted reports to them
-     * (design 2026-09-21, rulings 1 and 3). `teams` is not consulted, because it holds project teams. The
-     * role of the key is part of the test, not decoration: a SKILL_TEAM_LEADER also has reports, and a run
-     * keyed by them would forecast the leaders beneath them all at once, which ruling 3 forbids. The code and
-     * the message shape are unchanged, so a host that already handles TEAM_NOT_FOUND keeps working.
+     * A team exists when the user it is keyed by is an effective TEAM_LEADER: their job title says they lead
+     * and somebody counted and active reports to them (design 2026-09-21, rulings 1 and 3, second revision).
+     * `teams` is not consulted, because it holds project teams, and `users.role` is not trusted, because
+     * WorkloadHub leaves it at MEMBER. The role of the key is part of the test, not decoration: a
+     * SKILL_TEAM_LEADER also has reports, and a run keyed by them would forecast the leaders beneath them all
+     * at once, which ruling 3 forbids. The code and the message shape are unchanged, so a host that already
+     * handles TEAM_NOT_FOUND keeps working.
+     *
+     * <p>The key and their direct reports are enough to decide it: whether a report is counted depends on
+     * their own job title alone, never on who reports to them, so the rest of the directory cannot change
+     * the answer.
      */
     private void requireTeam(UUID teamId) {
-        boolean exists = !JdbcClient.create(dataSource)
-                .sql("SELECT 1 FROM users lead JOIN users r ON r.manager_id = lead.id"
-                        + " WHERE lead.id = ? AND lead.role = 'TEAM_LEADER'"
-                        + " AND r.active = TRUE AND r.role IN ('MEMBER', 'TEAM_LEADER')")
-                .param(teamId).query().listOfRows().isEmpty();
-        if (!exists) {
+        List<EffectiveRole.Candidate> rows = JdbcClient.create(dataSource)
+                .sql("SELECT id, manager_id, role, job_title, active FROM users WHERE id = ? OR manager_id = ?")
+                .param(teamId).param(teamId)
+                .query((rs, i) -> new EffectiveRole.Candidate(rs.getObject("id", UUID.class),
+                        rs.getObject("manager_id", UUID.class), rs.getString("role"), rs.getString("job_title"),
+                        rs.getBoolean("active")))
+                .list();
+        if (!"TEAM_LEADER".equals(EffectiveRole.resolve(rows).get(teamId))) {
             throw ForecastException.of("TEAM_NOT_FOUND", "team " + teamId + " does not exist");
         }
     }

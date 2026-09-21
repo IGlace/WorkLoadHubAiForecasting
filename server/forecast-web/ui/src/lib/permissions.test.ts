@@ -21,6 +21,10 @@ describe('permissions', () => {
     expect(row('TEAM_LEADER').run).toBe('their own team')
     expect(row('SKILL_TEAM_LEADER').run).toBe('the team of a leader who reports to them, one at a time')
     expect(row('MEMBER').run).toBe('none')
+    // An admin and a centre manager lead no team of their own and act for the whole organisation.
+    expect(row('ADMIN').run).toBe('any team')
+    expect(row('CENTER_MANAGER').run).toBe('any team')
+    expect(row('VIEWER').run).toBe('none')
     // A leader runs one team, so no row may promise "the teams they manage" any more.
     expect(ROLE_MATRIX.some((r) => r.run.includes('teams they manage'))).toBe(false)
     expect(ROLE_MATRIX.some((r) => r.run.includes('parent team'))).toBe(false)

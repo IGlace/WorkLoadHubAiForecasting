@@ -38,11 +38,14 @@ end that calls the module the same way a real host will, against the same local 
   `accuracy(teamId, from, to)` as the module's only evaluation surface. The per-run backtest inside
   `ForecastRunner.prepare` stayed: it still produces every run's prediction intervals and `mae`.
 - `docs/superpowers/specs/2026-09-21-hierarchy-teams-design.md`: **implemented, landed on `dev` on
-  2026-09-21.** Read it before touching anything that says "team". WorkloadHub's `teams` and `team_members`
-  are project teams and are never read; a team is a team leader and their direct reports, keyed by the
-  leader's own user id, from `users.manager_id`. Its section 2 holds the ten rulings and is the first thing to
-  read; section 3 explains why `team_id` keeps its name and why there is no migration. It withdraws sections 5
-  and 6 of `2026-09-19-real-export-preparation-design.md`, which are history.
+  2026-09-21.** Read it before touching anything that says "team" or "role". WorkloadHub's `teams` and
+  `team_members` are project teams and are never read; a team is a team leader and their direct reports, keyed
+  by the leader's own user id, from `users.manager_id`. Its section 2 holds the ten rulings and is the first
+  thing to read; section 3 explains why `team_id` keeps its name and why there is no migration. **Read section
+  16 with section 2**: the second revision of the same day, which took the role out of `users.role` — the
+  owner's directory leaves it at MEMBER for 260 of 264 people — and put it in `users.job_title`, through
+  `EffectiveRole`. It amends rulings 1, 2, 3 and 9. The document withdraws sections 5 and 6 of
+  `2026-09-19-real-export-preparation-design.md`, which are history.
 - `docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md`: **implemented,
   landing on dev on 2026-09-17.** `personal_leaves` replaces `absences`, capacity is the calendar and the
   approved leaves over the 44 h default, `user_capacity` and `team_capacity` are not read, the seed writes
@@ -243,7 +246,24 @@ the rows it stamped. `forecast-web` reads `users` alone for its teams and its th
 One pre-existing defect surfaced on the way: `ExportPreparerPropertyTest` could never run, because its
 `DEPARTMENTS` list holds a null and `List.of` rejects nulls, so the class failed in its static initialiser
 every time.
-Next: the whole-branch review and one fix wave, the gate by hand in the development container, then the real
+Then, later the same day, the **second revision** of that design (its section 16), after the owner's real
+export was measured for the first time: `users.role` reads MEMBER for 260 of its 264 people, the only two
+accounts marked `TEAM_LEADER` have no title, no department and no reports, and nobody at all carries
+`SKILL_TEAM_LEADER` — so keying teams on that column would have forecast nobody in production, the same
+failure one level in. `users.job_title`, which the owner's organisation system writes automatically, does
+carry the structure, so `EffectiveRole` derives the role from it in two stages: the title classifies (`skill
+team leader` and `center manager` make actors, `team lead` or `lead engineer` a leader, anything else a
+member; `ADMIN`, `CENTER_MANAGER` and `VIEWER` are still read from the column, because no title implies
+them), and then a leader with no counted, active direct report is demoted to a member — the owner's ruling,
+so a lead engineer who leads nobody is forecast as one. Actors are never demoted, because that would make
+them forecast subjects. The two stages cannot contradict each other: demotion turns `TEAM_LEADER` into
+`MEMBER` and both are counted, so who is counted is fixed by the title alone. A `CENTER_MANAGER` now runs any
+team, like an `ADMIN`; a skill team leader still runs one leader beneath them at a time. `ExportPreparer`
+decides nothing any more — it activates and writes the module's own answer back — the seed's `Directory`
+calls the same rule instead of its own, and the synthetic directory gained one `VIEWER` so all six roles have
+a subject. On the owner's real export this gives **12 teams and 179 of 264 people forecastable**; the 85
+left out are recorded in section 16.5 at the owner's ruling that people in no team stay out.
+Next: the real
 export through `prepare`, the seed and the import into the local PostgreSQL, then the derived-arithmetic
 backlog item's own design pass, then the server's own integration code, against the sample host.
 The standing workflow for a plan:
@@ -366,7 +386,9 @@ technical-writer. Index in `.claude/agents/README.md`.
   Java module has since deleted.
 - Commit messages: imperative subject, short body explaining why.
 - Domain vocabulary: team (a team leader and the people who report to them directly, keyed by the leader's
-  own user id), skill team leader (the manager of a team leader; not counted, runs one leader's team at a
+  own user id), effective role (the role the forecast acts on: the job title decides, and a leader nobody
+  counted reports to is a member — `EffectiveRole`, never `users.role` except for ADMIN, CENTER_MANAGER and
+  VIEWER), skill team leader (the manager of a team leader; not counted, runs one leader's team at a
   time), department (`users.department`, where work comes from), member; demand, capacity,
   overload; the model and its target (logged hours per member-week), backtest; narrative, facts, contract,
   verification; window (five weekdays; a run covers one to six, two by default, starting the first weekday

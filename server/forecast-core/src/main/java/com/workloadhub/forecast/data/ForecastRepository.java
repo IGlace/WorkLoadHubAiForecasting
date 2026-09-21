@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -26,11 +25,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  *
  * <p>`teams` and `team_members` are never read: they hold project teams, an ad-hoc group working on one
  * project, not the company structure. The structure is `users.manager_id`, and a team is a leader and the
- * people who report to them directly (design 2026-09-21).
+ * people who report to them directly (design 2026-09-21). The role is not trusted from `users.role` either:
+ * it is derived from the job title by {@link EffectiveRole}.
  */
 public final class ForecastRepository {
-
-    private static final Set<String> COUNTED_ROLES = Set.of("MEMBER", "TEAM_LEADER");
 
     private final JdbcClient jdbc;
 
@@ -49,21 +47,30 @@ public final class ForecastRepository {
         Map<UUID, String> typeNameById = new HashMap<>();
         jdbc.sql("SELECT id, name FROM task_types").query((rs, i) -> typeNameById.put(rs.getObject("id", UUID.class), rs.getString("name"))).list();
         List<UserRef> users = new ArrayList<>();
-        // Counted members without their joined date yet: it comes from activity, which is loaded below.
-        List<MemberRow> counted = new ArrayList<>();
+        // Every user, with the role column left null: who counts depends on the whole directory, because a
+        // team leader nobody reports to is a member (EffectiveRole), so nobody can be judged row by row.
+        List<MemberRow> everyone = new ArrayList<>();
+        List<EffectiveRole.Candidate> candidates = new ArrayList<>();
+        Map<UUID, Boolean> activeById = new HashMap<>();
         jdbc.sql("SELECT id, full_name, email, username, role, job_title, manager_id, active, deactivated_at FROM users")
                 .query((rs, i) -> {
                     UUID id = rs.getObject("id", UUID.class);
                     UUID managerId = rs.getObject("manager_id", UUID.class);
                     users.add(new UserRef(id, rs.getString("full_name"), rs.getString("email"), rs.getString("username"), managerId));
-                    if (!rs.getBoolean("active") || !COUNTED_ROLES.contains(rs.getString("role"))) {
-                        return null;
-                    }
+                    boolean active = rs.getBoolean("active");
+                    activeById.put(id, active);
+                    candidates.add(new EffectiveRole.Candidate(id, managerId, rs.getString("role"), rs.getString("job_title"), active));
                     LocalDateTime left = rs.getObject("deactivated_at", LocalDateTime.class);
-                    counted.add(new MemberRow(id, rs.getString("full_name"), rs.getString("email"), rs.getString("role"),
+                    everyone.add(new MemberRow(id, rs.getString("full_name"), rs.getString("email"), null,
                             rs.getString("job_title"), managerId, null, left == null ? null : left.toLocalDate()));
                     return null;
                 }).list();
+        Map<UUID, String> roles = EffectiveRole.resolve(candidates);
+        // Counted members without their joined date yet: it comes from activity, which is loaded below.
+        List<MemberRow> counted = everyone.stream()
+                .filter(m -> EffectiveRole.counted(roles.get(m.id()), activeById.get(m.id())))
+                .map(m -> m.withRole(roles.get(m.id())))
+                .toList();
         List<ProjectRow> projects = jdbc.sql("SELECT id, key, name, status FROM projects WHERE archived = FALSE")
                 .query((rs, i) -> new ProjectRow(rs.getObject("id", UUID.class), rs.getString("key"), rs.getString("name"), rs.getString("status")))
                 .list();

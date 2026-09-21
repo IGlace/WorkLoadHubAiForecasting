@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.workloadhub.forecast.testing.SeededData;
 import com.workloadhub.forecastweb.SeededUsers;
 import com.workloadhub.forecastweb.SeededUsers.Team;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeAll;
@@ -72,11 +74,27 @@ class ForecastAccessTest {
     }
 
     @Test
-    void centerManagerViewsEverythingAndRunsNothing() {
+    void centerManagerRunsAndViewsEveryTeam() {
+        // The owner's ruling of 2026-09-21: a centre manager leads no team of their own and acts for the
+        // whole organisation, so they run on behalf of any team leader in it, exactly as an ADMIN does.
         ActingUser cm = SeededUsers.withRole("CENTER_MANAGER");
         Team any = SeededUsers.notInvolving(cm.id());
-        assertEquals(new ForecastAccess.Decision(false, "CENTER_MANAGER may not run a forecast"), access.run(cm.id(), any.id()));
+        assertEquals(new ForecastAccess.Decision(true, "CENTER_MANAGER may run a forecast for any team"), access.run(cm.id(), any.id()));
         assertEquals(new ForecastAccess.Decision(true, "CENTER_MANAGER may view any team"), access.view(cm.id(), any.id()));
+    }
+
+    @Test
+    void aLeaderNobodyReportsToIsJustAMember() {
+        // The owner's ruling of 2026-09-21: a title saying "lead engineer" is not a team on its own. The
+        // seeded directory gives that title to ordinary engineers, so there is somebody to ask about.
+        List<Map<String, Object>> lonely = JdbcClient.create(SeededData.dataSource())
+                .sql("SELECT id FROM users u WHERE lower(u.job_title) LIKE '%lead engineer%'"
+                        + " AND NOT EXISTS (SELECT 1 FROM users r WHERE r.manager_id = u.id) ORDER BY id")
+                .query().listOfRows();
+        assertFalse(lonely.isEmpty(), "the seed gives some engineers a lead-engineer title");
+        UUID id = UUID.fromString(lonely.get(0).get("id").toString());
+        assertEquals("MEMBER", access.roleOf(id), "a lead engineer with no reports is a member");
+        assertFalse(access.canRun(id, id), "and keys no team of their own");
     }
 
     @Test

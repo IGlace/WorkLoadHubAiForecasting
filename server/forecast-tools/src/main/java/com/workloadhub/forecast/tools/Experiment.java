@@ -68,7 +68,8 @@ public final class Experiment {
 
               prepare  <export.json> --out FILE [--force]
                        Rewrite a real export so the forecast can count its people: every user active,
-                       and each manager given the leader role their place in users.manager_id implies.
+                       and each user's role set to the one their job title gives them, which is the role
+                       the forecast itself derives. Prints what the file then holds.
                        Transitional — delete it once WorkloadHub's own active flag means what it says.
                        Refuses to write inside a git repository without --force: its output holds
                        personal data.
@@ -228,9 +229,9 @@ public final class Experiment {
         }
         ExportPreparer.Result result = ExportPreparer.prepare(ExportFiles.read(in));
         ExportFiles.write(out, result.envelope());
-        System.out.printf("Wrote %s: %d users activated, %d TEAM_LEADER, %d SKILL_TEAM_LEADER "
-                + "(the second are no longer forecast as individuals)%n",
-                out, result.usersActivated(), result.teamLeaders(), result.skillTeamLeaders());
+        System.out.printf("Wrote %s: %d users activated, %d forecastable members in %d teams, "
+                + "%d SKILL_TEAM_LEADER (who run a team beneath them and are never forecast themselves)%n",
+                out, result.usersActivated(), result.countedMembers(), result.teamLeaders(), result.skillTeamLeaders());
         return 0;
     }
 

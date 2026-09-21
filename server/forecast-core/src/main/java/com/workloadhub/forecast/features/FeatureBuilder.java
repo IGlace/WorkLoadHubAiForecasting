@@ -125,20 +125,16 @@ public final class FeatureBuilder {
     }
 
     /**
-     * The members who key a team: a TEAM_LEADER somebody counted reports to (design 2026-09-21, ruling 1).
-     * Read from every counted member, not from the subset being built, so one member's features never depend
-     * on who else was asked for.
+     * The members who key a team: the effective TEAM_LEADERs (design 2026-09-21, ruling 1). The effective
+     * role already carries the "somebody reports to them" half of the rule, because a leader nobody counted
+     * reports to is demoted to MEMBER by {@link com.workloadhub.forecast.data.EffectiveRole}. Read from every
+     * counted member, not from the subset being built, so one member's features never depend on who else was
+     * asked for.
      */
     private Set<UUID> teamKeys() {
-        Set<UUID> managed = new HashSet<>();
-        for (MemberRow m : data.members()) {
-            if (m.managerId() != null) {
-                managed.add(m.managerId());
-            }
-        }
         Set<UUID> out = new HashSet<>();
         for (MemberRow m : data.members()) {
-            if ("TEAM_LEADER".equals(m.role()) && managed.contains(m.id())) {
+            if ("TEAM_LEADER".equals(m.role())) {
                 out.add(m.id());
             }
         }
