@@ -107,6 +107,8 @@ class ExportPreparerTest {
         assertEquals(1, result.teamLeaders(), "Manager Two, and nobody else leads a team");
         assertEquals(1, result.skillTeamLeaders(), "Head One");
         assertEquals(5, result.countedMembers(), "everyone but Head One and Boss Seven");
+        assertEquals(3, result.teamMembers(), "Manager Two and their two engineers; a team is all a run reaches");
+        assertEquals(2, result.inNoTeam(), "Orphan Five and Lost Six report to nobody, so no run covers them");
     }
 
     @Test

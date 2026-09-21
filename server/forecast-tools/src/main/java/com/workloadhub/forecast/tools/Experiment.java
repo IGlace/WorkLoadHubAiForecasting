@@ -229,9 +229,14 @@ public final class Experiment {
         }
         ExportPreparer.Result result = ExportPreparer.prepare(ExportFiles.read(in));
         ExportFiles.write(out, result.envelope());
-        System.out.printf("Wrote %s: %d users activated, %d forecastable members in %d teams, "
-                + "%d SKILL_TEAM_LEADER (who run a team beneath them and are never forecast themselves)%n",
-                out, result.usersActivated(), result.countedMembers(), result.teamLeaders(), result.skillTeamLeaders());
+        System.out.printf("Wrote %s: %d users activated, %d members in %d teams, %d SKILL_TEAM_LEADER "
+                + "(who run a team beneath them and are never forecast themselves)%n",
+                out, result.usersActivated(), result.teamMembers(), result.teamLeaders(), result.skillTeamLeaders());
+        if (result.inNoTeam() > 0) {
+            System.out.printf("  %d more carry a counted role but are in no team, so no run reaches them:"
+                    + " they report to a skill team leader, a centre manager or an admin, or to nobody at all%n",
+                    result.inNoTeam());
+        }
         return 0;
     }
 

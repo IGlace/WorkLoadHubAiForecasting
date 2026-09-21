@@ -583,10 +583,16 @@ which in the owner's directory is the same set either way.
 ### 16.5 What this costs
 
 **Who is left out.** The owner ruled that people who belong to no team stay out rather than being
-gathered under an actor. In the real directory that is 85 of 264: 43 with no `manager_id` at all, 31
-plain members reporting straight to a Skill Team Leader or the Engineering Center Manager, 8 lead
-engineers with no reports (7 of whom report to a Skill Team Leader), and the 3 skill team leaders and
-1 centre manager, who are correctly never counted. **12 teams, 179 people forecastable.**
+gathered under an actor. Running `prepare` over the owner's own (anonymised) export confirms the shipped
+code agrees: **258 users activated, 179 members in 12 teams, 3 skill team leaders**, with **79 counted but
+in no team** — 41 who report to nobody at all and 38 whose manager is a skill team leader, the centre
+manager or the admin. Add the 3 skill team leaders, the 2 centre managers and the 1 admin, who are
+correctly never counted, and the 264 are accounted for.
+
+A note on the two figures, because the difference is easy to report wrongly: a counted role is permission
+to be forecast, not a guarantee of it. A run is per team, so somebody counted whose manager is an actor is
+never reached. Reporting 258 as "forecastable" would have claimed the forecast covers everyone when it
+covers 179.
 
 **The rename risk.** A job title edited to something the patterns do not match silently removes a team.
 The owner accepts it: the titles are written by the organisation system, not by hand. `prepare` prints
@@ -601,8 +607,11 @@ the permanent fix if it is ever populated.
 - `FeatureBuilder.teamKeys` tests the role alone (16.3).
 - `DefaultForecastService.requireTeam` reads the key and their direct reports instead of asking SQL
   about `users.role`.
-- `ExportPreparer` fell to activation plus writing the effective role back; its `Result` gained
-  `countedMembers`, which is the number the owner checks, and `teamLeaders` is now also the team count.
+- `ExportPreparer` fell to activation plus writing the effective role back; `teamLeaders` is now also the
+  team count. Its `Result` gained **two** member figures, because the first draft of this change reported
+  only one and said the wrong thing: `countedMembers` is everybody the role rule allows (258 on the owner's
+  directory) while `teamMembers` is everybody actually inside a team (179), and a run is per team, so only
+  the second is ever forecast. `prepare` prints the second and names the gap.
 - The seed's `Directory` step 3 calls `EffectiveRole` instead of its own manager-of-managers rule, so
   the seeded `users.role` says what the module will derive from the same rows. The synthetic directory
   also gained one `VIEWER`, so all six roles have a subject.

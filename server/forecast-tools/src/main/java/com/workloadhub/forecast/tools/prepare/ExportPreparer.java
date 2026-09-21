@@ -33,11 +33,22 @@ public final class ExportPreparer {
     /**
      * The prepared export and what it holds afterwards, so the owner can see at a glance whether the file is
      * worth seeding. {@code teamLeaders} is also the number of teams: a leader nobody reports to is demoted
-     * to a member, so every effective TEAM_LEADER keys exactly one team. {@code countedMembers} is how many
-     * people a run can forecast at all — the number that used to come out near zero.
+     * to a member, so every effective TEAM_LEADER keys exactly one team.
+     *
+     * <p>{@code countedMembers} and {@code teamMembers} are not the same number, and the difference is the
+     * point. A run is per team, so only somebody inside a team is ever forecast: {@code teamMembers} counts
+     * the leaders and the people who report to them, while {@code countedMembers} counts everybody the role
+     * rule would allow — including those whose manager is an actor, or who have no manager at all. On the
+     * owner's directory that gap is 79 people of 258, and reporting only the larger figure would say the
+     * forecast covers everyone when it covers 179.
      */
-    public record Result(ExportEnvelope envelope, int usersActivated, int countedMembers, int teamLeaders,
-            int skillTeamLeaders) {
+    public record Result(ExportEnvelope envelope, int usersActivated, int countedMembers, int teamMembers,
+            int teamLeaders, int skillTeamLeaders) {
+
+        /** Counted by the role rule but inside no team, so never forecast. */
+        public int inNoTeam() {
+            return countedMembers - teamMembers;
+        }
     }
 
     private ExportPreparer() {
@@ -72,13 +83,21 @@ public final class ExportPreparer {
 
         Map<UUID, String> roles = EffectiveRole.resolve(candidates);
         int counted = 0;
+        int inTeam = 0;
         int teamLeaders = 0;
         int skillTeamLeaders = 0;
         for (LinkedHashMap<String, Object> row : users) {
-            String role = roles.get(id(row.get("id")));
+            UUID id = id(row.get("id"));
+            String role = roles.get(id);
             row.put("role", role);
             if (EffectiveRole.counted(role, true)) {
                 counted++;
+                // Inside a team: they lead one, or they report to somebody who does.
+                UUID manager = id(row.get("manager_id"));
+                if ("TEAM_LEADER".equals(role)
+                        || (manager != null && !manager.equals(id) && "TEAM_LEADER".equals(roles.get(manager)))) {
+                    inTeam++;
+                }
             }
             if ("SKILL_TEAM_LEADER".equals(role)) {
                 skillTeamLeaders++;
@@ -89,7 +108,7 @@ public final class ExportPreparer {
 
         LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>(input.data());
         data.put("users", users);
-        return new Result(input.withData(data), activated, counted, teamLeaders, skillTeamLeaders);
+        return new Result(input.withData(data), activated, counted, inTeam, teamLeaders, skillTeamLeaders);
     }
 
     /** A user id straight out of the export's JSON. A manager outside the export is simply absent. */

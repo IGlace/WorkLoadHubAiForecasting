@@ -156,12 +156,25 @@ class ExportPreparerPropertyTest {
     void theCountersDescribeTheFileTheyCameWith(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
         ExportPreparer.Result result = ExportPreparer.prepare(directory(seed));
         List<LinkedHashMap<String, Object>> after = result.envelope().rows("users");
-        long counted = after.stream().filter(u -> COUNTED.contains(String.valueOf(u.get("role")))).count();
-        long leaders = after.stream().filter(u -> "TEAM_LEADER".equals(String.valueOf(u.get("role")))).count();
-        long skill = after.stream().filter(u -> "SKILL_TEAM_LEADER".equals(String.valueOf(u.get("role")))).count();
+        Map<Object, String> roles = new HashMap<>();
+        after.forEach(u -> roles.put(u.get("id"), String.valueOf(u.get("role"))));
+        long counted = after.stream().filter(u -> COUNTED.contains(roles.get(u.get("id")))).count();
+        long leaders = after.stream().filter(u -> "TEAM_LEADER".equals(roles.get(u.get("id")))).count();
+        long skill = after.stream().filter(u -> "SKILL_TEAM_LEADER".equals(roles.get(u.get("id")))).count();
+        // Inside a team: they lead one, or they report to somebody who does. Never more than the counted.
+        long inTeam = after.stream().filter(u -> COUNTED.contains(roles.get(u.get("id"))))
+                .filter(u -> "TEAM_LEADER".equals(roles.get(u.get("id")))
+                        || (u.get("manager_id") != null && !u.get("manager_id").equals(u.get("id"))
+                                && "TEAM_LEADER".equals(roles.get(u.get("manager_id")))))
+                .count();
         assertEquals(counted, result.countedMembers());
+        assertEquals(inTeam, result.teamMembers());
         assertEquals(leaders, result.teamLeaders());
         assertEquals(skill, result.skillTeamLeaders());
+        assertTrue(result.teamMembers() <= result.countedMembers(), "a team member is always a counted member");
+        assertEquals(result.countedMembers() - result.teamMembers(), result.inNoTeam());
+        // Every team has its leader in it, so the two counts rise and fall together.
+        assertTrue(result.teamLeaders() == 0 || result.teamMembers() >= result.teamLeaders());
     }
 
     @Property(tries = 100)

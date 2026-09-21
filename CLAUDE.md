@@ -261,8 +261,11 @@ them forecast subjects. The two stages cannot contradict each other: demotion tu
 team, like an `ADMIN`; a skill team leader still runs one leader beneath them at a time. `ExportPreparer`
 decides nothing any more — it activates and writes the module's own answer back — the seed's `Directory`
 calls the same rule instead of its own, and the synthetic directory gained one `VIEWER` so all six roles have
-a subject. On the owner's real export this gives **12 teams and 179 of 264 people forecastable**; the 85
-left out are recorded in section 16.5 at the owner's ruling that people in no team stay out.
+a subject. Running `prepare` over the owner's own export confirms it end to end: 258 users activated, **179 members in
+12 teams**, 3 skill team leaders, and 79 people who carry a counted role but sit in no team, so no run
+reaches them — 41 reporting to nobody, 38 to an actor. That gap is the owner's ruling that people in no team
+stay out, and section 16.5 records it. `prepare` prints both figures: a counted role is permission to be
+forecast, not a guarantee, since a run is per team.
 Next: the real
 export through `prepare`, the seed and the import into the local PostgreSQL, then the derived-arithmetic
 backlog item's own design pass, then the server's own integration code, against the sample host.
