@@ -7,9 +7,14 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/** Users, teams and memberships read straight from the seeded tables: the core's loaded data holds the counted members only. */
+/**
+ * Users and the teams the company structure makes of them, read straight from the seeded `users` table: the
+ * core's loaded data holds the counted members only. A team is a leader and their direct reports, keyed by
+ * the leader (design 2026-09-21), so `teams` and `team_members` are never read here either.
+ */
 public final class SeededUsers {
 
+    /** {@code id} and {@code managerId} are both the leader; {@code parentId} is the leader's own manager. */
     public record Team(UUID id, String name, UUID managerId, UUID parentId) {
     }
 
@@ -29,45 +34,58 @@ public final class SeededUsers {
         return users().stream().filter(u -> u.role().equals(role)).findFirst().orElseThrow(() -> new AssertionError("no " + role + " in the seed"));
     }
 
+    /** Counted, as {@code ForecastRepository} counts: the host's lists must agree with the module's. */
+    private static final String COUNTED = " active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')";
+
+    /** Every team of the seed: one per user somebody counted reports to, keyed by that leader. */
     public static List<Team> teams() {
-        return jdbc().sql("SELECT id, name, manager_id, parent_team_id FROM teams ORDER BY name").query().listOfRows().stream()
-                .map(r -> new Team(UUID.fromString(str(r, "id")), str(r, "name"), uuid(r, "manager_id"), uuid(r, "parent_team_id"))).toList();
+        String sql = "SELECT m.id, m.full_name, m.manager_id FROM users m"
+                + " WHERE EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND" + COUNTED + ")"
+                + " ORDER BY m.full_name";
+        return jdbc().sql(sql).query().listOfRows().stream()
+                .map(r -> new Team(UUID.fromString(str(r, "id")), str(r, "full_name"),
+                        UUID.fromString(str(r, "id")), uuid(r, "manager_id")))
+                .toList();
     }
 
+    /** The team this user leads, which is keyed by their own id. */
     public static Team managedBy(UUID userId) {
-        return teams().stream().filter(t -> userId.equals(t.managerId())).findFirst().orElseThrow(() -> new AssertionError(userId + " manages no team"));
+        return teams().stream().filter(t -> userId.equals(t.id())).findFirst()
+                .orElseThrow(() -> new AssertionError(userId + " leads no team"));
     }
 
-    /** The department team a skill team leader heads: managed by them, no parent, with child teams under it. */
+    /** The team of a leader who leads other leaders: the one a skill team leader stands above. */
     public static Team departmentOf(UUID userId) {
-        return teams().stream().filter(t -> userId.equals(t.managerId()) && t.parentId() == null && !childrenOf(t.id()).isEmpty()).findFirst()
-                .orElseThrow(() -> new AssertionError(userId + " heads no department team with children"));
+        return teams().stream().filter(t -> userId.equals(t.id()) && !childrenOf(t.id()).isEmpty()).findFirst()
+                .orElseThrow(() -> new AssertionError(userId + " leads nobody who leads a team"));
     }
 
     public static boolean headsADepartment(UUID userId) {
-        return teams().stream().anyMatch(t -> userId.equals(t.managerId()) && t.parentId() == null && !childrenOf(t.id()).isEmpty());
+        return !childrenOf(userId).isEmpty();
     }
 
+    /** The teams whose leader reports to this one: what a skill team leader may run, one at a time. */
     public static List<Team> childrenOf(UUID teamId) {
         return teams().stream().filter(t -> teamId.equals(t.parentId())).toList();
     }
 
+    /** The leader, when counted themselves, and everyone who reports to them directly. */
     public static List<UUID> membersOf(UUID teamId) {
-        return jdbc().sql("SELECT user_id FROM team_members WHERE team_id = ?").param(teamId).query().listOfRows().stream()
-                .map(r -> UUID.fromString(str(r, "user_id"))).toList();
+        return jdbc().sql("SELECT id FROM users WHERE (id = ? OR manager_id = ?) AND" + COUNTED + " ORDER BY full_name")
+                .param(teamId).param(teamId).query().listOfRows().stream()
+                .map(r -> UUID.fromString(str(r, "id"))).toList();
     }
 
+    /** The teams this user belongs to: their manager's, and their own when they lead one. */
     public static List<UUID> teamsOf(UUID userId) {
-        return jdbc().sql("SELECT team_id FROM team_members WHERE user_id = ?").param(userId).query().listOfRows().stream()
-                .map(r -> UUID.fromString(str(r, "team_id"))).toList();
+        return teams().stream().filter(t -> membersOf(t.id()).contains(userId)).map(Team::id).toList();
     }
 
-    /** A team the user neither manages, belongs to, nor manages the parent of. */
+    /** A team the user neither leads, belongs to, nor stands above. */
     public static Team notInvolving(UUID userId) {
         List<UUID> mine = teamsOf(userId);
-        List<Team> all = teams();
-        return all.stream().filter(t -> !userId.equals(t.managerId()) && !mine.contains(t.id()))
-                .filter(t -> t.parentId() == null || all.stream().filter(p -> p.id().equals(t.parentId())).noneMatch(p -> userId.equals(p.managerId())))
+        return teams().stream()
+                .filter(t -> !userId.equals(t.id()) && !mine.contains(t.id()) && !userId.equals(t.parentId()))
                 .findFirst().orElseThrow();
     }
 

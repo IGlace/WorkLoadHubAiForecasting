@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /** The weekly target hours of each member and the arrivals that realise it (design section 4.4). */
@@ -22,10 +23,10 @@ public final class Rhythm {
     private final SeedRandom rnd;
     private final Map<UUID, Double> baseFactor = new HashMap<>();
     private final Map<UUID, List<LocalDate>> eventWeeks = new HashMap<>();
-    private final Map<UUID, Team> teamOf = new HashMap<>();
+    private final Map<UUID, UUID> teamOf = new HashMap<>();
 
     public Rhythm(SeedConfig cfg, SeedCalendar cal, Map<UUID, Person> people, Map<UUID, AbsencePlanner.Plan> plans,
-            List<Team> teams, SeedRandom rnd) {
+            SeedRandom rnd) {
         this.cfg = cfg;
         this.cal = cal;
         this.plans = plans;
@@ -37,24 +38,25 @@ public final class Rhythm {
         }
         List<LocalDate> mondays = cfg.mondays();
         int events = Math.max(1, Math.round(3f * cfg.weeks() / 52f));
-        for (Team t : teams) {
+        // A team is a manager and their direct reports (design 2026-09-21), so a person belongs to exactly
+        // one and needs no tie-break. Event weeks are dealt per team, in id order, so one seed gives one result.
+        for (UUID id : ids) {
+            teamOf.put(id, Directory.teamKey(people.get(id), people));
+        }
+        List<UUID> teamKeys = new ArrayList<>(new TreeSet<>(teamOf.values()));
+        for (UUID key : teamKeys) {
             List<LocalDate> weeks = new ArrayList<>();
             for (int e = 0; e < events; e++) {
                 LocalDate start = mondays.get(rnd.between(0, mondays.size() - 1));
                 weeks.add(start);
                 weeks.add(start.plusWeeks(1));
             }
-            eventWeeks.put(t.id(), weeks);
-            for (UUID member : t.memberIds()) {
-                // a manager team wins over a department team for people in both
-                if (!teamOf.containsKey(member) || teamOf.get(member).department()) {
-                    teamOf.put(member, t);
-                }
-            }
+            eventWeeks.put(key, weeks);
         }
     }
 
-    public Team teamOf(Person p) {
+    /** The team the person is forecast in: their manager's, or their own when they have no manager. */
+    public UUID teamOf(Person p) {
         return teamOf.get(p.id());
     }
 
@@ -102,8 +104,8 @@ public final class Rhythm {
     }
 
     public double target(Person p, LocalDate monday) {
-        Team t = teamOf(p);
-        return base(p) * season(monday, cal) * ramp(p, monday) * (t == null ? 1.0 : event(t.id(), monday))
+        UUID t = teamOf(p);
+        return base(p) * season(monday, cal) * ramp(p, monday) * (t == null ? 1.0 : event(t, monday))
                 * availability(p, monday);
     }
 

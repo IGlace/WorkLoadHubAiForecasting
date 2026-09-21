@@ -35,29 +35,29 @@ class ForecastAccessTest {
     }
 
     @Test
-    void teamLeaderRunsTheTeamsTheyManageOnly() {
+    void teamLeaderRunsTheirOwnTeamOnly() {
         ActingUser leader = SeededUsers.withRole("TEAM_LEADER");
         Team own = SeededUsers.managedBy(leader.id());
         Team other = SeededUsers.notInvolving(leader.id());
         assertEquals(new ForecastAccess.Decision(true, "TEAM_LEADER manages this team"), access.run(leader.id(), own.id()));
         assertTrue(access.canView(leader.id(), own.id()));
-        assertEquals(new ForecastAccess.Decision(false, "TEAM_LEADER may only run the teams they manage"), access.run(leader.id(), other.id()));
-        assertEquals(new ForecastAccess.Decision(false, "TEAM_LEADER may only view the teams they manage or belong to"), access.view(leader.id(), other.id()));
+        assertEquals(new ForecastAccess.Decision(false, "TEAM_LEADER may only run their own team"), access.run(leader.id(), other.id()));
+        assertEquals(new ForecastAccess.Decision(false, "TEAM_LEADER may only view their own team or the one they belong to"), access.view(leader.id(), other.id()));
     }
 
     @Test
-    void skillTeamLeaderRunsTheTeamsUnderTheirOwn() {
+    void skillTeamLeaderRunsTheTeamOfALeaderWhoReportsToThem() {
         ActingUser head = SeededUsers.users().stream().filter(u -> u.role().equals("SKILL_TEAM_LEADER") && SeededUsers.headsADepartment(u.id()))
                 .findFirst().orElseThrow(() -> new AssertionError("a SKILL_TEAM_LEADER whose department team has a child"));
         Team department = SeededUsers.departmentOf(head.id());
         Team child = SeededUsers.childrenOf(department.id()).get(0);
-        assertEquals(new ForecastAccess.Decision(true, "SKILL_TEAM_LEADER manages this team's parent team"), access.run(head.id(), child.id()));
+        assertEquals(new ForecastAccess.Decision(true, "SKILL_TEAM_LEADER manages this team's leader"), access.run(head.id(), child.id()));
         assertTrue(access.canView(head.id(), child.id()));
         // The department team itself is managed, not under a team they manage: viewed as a member, never run.
         assertFalse(access.canRun(head.id(), department.id()));
-        assertEquals("SKILL_TEAM_LEADER may only run the teams under the team they manage", access.run(head.id(), department.id()).reason());
+        assertEquals("SKILL_TEAM_LEADER may only run the team of a leader who reports to them", access.run(head.id(), department.id()).reason());
         Team other = SeededUsers.notInvolving(head.id());
-        assertEquals("SKILL_TEAM_LEADER may only view the teams under the team they manage, or their own", access.view(head.id(), other.id()).reason());
+        assertEquals("SKILL_TEAM_LEADER may only view the team of a leader who reports to them, or their own", access.view(head.id(), other.id()).reason());
     }
 
     @Test

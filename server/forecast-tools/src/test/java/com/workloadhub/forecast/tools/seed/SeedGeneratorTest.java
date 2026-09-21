@@ -418,9 +418,12 @@ class SeedGeneratorTest {
         }
     }
 
-    /** Real mode writes no teams, so every project it plans must belong to a team the export already has. */
+    /**
+     * Real mode writes no `teams` rows, so every project it plans must belong to a team the export already
+     * has, or to none at all. A team id minted here would be a dangling foreign key at import.
+     */
     @Test
-    void realModeProjectsBelongToTheExportsOwnTeams() throws Exception {
+    void realModeProjectsBelongToTheExportsOwnTeamsOrToNone() throws Exception {
         ExportEnvelope input = ExportFiles.read(java.nio.file.Path.of("src/test/resources/fixtures/mini-export.json"));
         ExportEnvelope env = SeedGenerator.generate(input, new SeedConfig(8, LocalDate.of(2026, 9, 6), 3, false, 0));
         Set<String> teams = ids(input, "teams");

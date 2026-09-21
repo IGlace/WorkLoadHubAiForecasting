@@ -26,7 +26,7 @@ class WorkQueueTest {
 
     static final SeedConfig CFG = new SeedConfig(16, LocalDate.of(2026, 9, 6), 1, false, 0);
 
-    record World(List<Person> people, Map<UUID, AbsencePlanner.Plan> plans, List<Team> teams, List<Project> projects,
+    record World(List<Person> people, Map<UUID, AbsencePlanner.Plan> plans, List<Department> departments, List<Project> projects,
             Rhythm rhythm, Reference ref, SeedCalendar cal) {
     }
 
@@ -46,12 +46,11 @@ class WorkQueueTest {
             byId.put(p.id(), p);
             plans.put(p.id(), AbsencePlanner.plan(p, cal, CFG, rnd));
         }
-        Team dept = new Team(UUID.fromString("40000000-0000-0000-0000-000000000001"), "PTE / CT2", lead, null, List.of(lead), true, "CT2");
-        Team team = new Team(UUID.fromString("40000000-0000-0000-0000-000000000002"), "CT2 · Lead One", lead, dept.id(), List.of(lead, e1, e2), false, "CT2");
-        List<Team> teams = List.of(dept, team);
-        List<Project> projects = ProjectPlanner.plan(teams, byId, List.of(), CFG, rnd);
-        Rhythm rhythm = new Rhythm(CFG, cal, byId, plans, teams, rnd);
-        return new World(people, plans, teams, projects, rhythm, reference(), cal);
+        Department dept = new Department("CT2", "PTE / CT2", lead, List.of(lead, e1, e2));
+        List<Department> departments = List.of(dept);
+        List<Project> projects = ProjectPlanner.plan(departments, byId, List.of(), CFG, rnd);
+        Rhythm rhythm = new Rhythm(CFG, cal, byId, plans, rnd);
+        return new World(people, plans, departments, projects, rhythm, reference(), cal);
     }
 
     static Reference reference() {
@@ -68,7 +67,7 @@ class WorkQueueTest {
 
     static WorkQueue.Result run(long seed, WorkQueue.Rates rates) {
         World w = world(seed);
-        return WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.teams(), w.projects(), w.rhythm(), w.ref(), rates, new SeedRandom(seed + 1));
+        return WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.projects(), w.rhythm(), w.ref(), rates, new SeedRandom(seed + 1));
     }
 
     static LocalDateTime ts(Object v) {
@@ -78,7 +77,7 @@ class WorkQueueTest {
     @Property(tries = 15)
     boolean lifecycleInvariantsHold(@ForAll @LongRange(min = 1, max = 5000) long seed) {
         World w = world(seed);
-        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.teams(), w.projects(), w.rhythm(), w.ref(), WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
+        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.projects(), w.rhythm(), w.ref(), WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
         Map<UUID, Person> byId = new HashMap<>();
         w.people().forEach(p -> byId.put(p.id(), p));
         Map<String, List<LinkedHashMap<String, Object>>> logsByTask = new HashMap<>();
@@ -163,11 +162,11 @@ class WorkQueueTest {
     }
 
     @Test
-    void membersOfAnExportTeamAlsoSeeThatTeamsProjects() {
-        // e1 belongs to both the ordinary manager team (via Rhythm.teamOf, its "primary" team) and an
-        // export-style team (no department, no parent) that owns one project of its own; before the fix
-        // planArrivals only ever considered the primary team's candidates, so e1's export-owned project
-        // never received anything but its epics.
+    void anExportsOwnProjectIsPickedUpAlthoughItBelongsToNoDepartmentOfOurs() {
+        // A project a real export carried has no department code of ours when its owner is outside the
+        // directory, so it is open to everybody rather than to nobody. Before that rule it reached only the
+        // members of its own team row, and once team rows stopped being the structure it would have reached
+        // no one, leaving it with nothing but its epics.
         long seed = 21;
         SeedRandom rnd = new SeedRandom(seed);
         SeedCalendar cal = AbsencePlannerTest.cal();
@@ -182,23 +181,21 @@ class WorkQueueTest {
             byId.put(p.id(), p);
             plans.put(p.id(), AbsencePlanner.plan(p, cal, CFG, rnd));
         }
-        Team dept = new Team(UUID.fromString("40000000-0000-0000-0000-000000000001"), "PTE / CT2", lead, null, List.of(lead), true, "CT2");
-        Team team = new Team(UUID.fromString("40000000-0000-0000-0000-000000000002"), "CT2 · Lead One", lead, dept.id(), List.of(lead, e1), false, "CT2");
-        Team exportTeam = new Team(UUID.fromString("40000000-0000-0000-0000-000000000003"), "Legacy Squad", null, null, List.of(e1), false, null);
-        List<Team> teams = List.of(dept, team, exportTeam);
+        Department dept = new Department("CT2", "PTE / CT2", lead, List.of(lead, e1));
         UUID exportProjectId = UUID.fromString("80000000-0000-0000-0000-000000000099");
-        Project exportProject = new Project(exportProjectId, "LEG", "Legacy platform", exportTeam.id(), lead, "ACTIVE",
+        Project exportProject = new Project(exportProjectId, "LEG", "Legacy platform",
+                UUID.fromString("40000000-0000-0000-0000-000000000003"), lead, "ACTIVE", null,
                 CFG.firstMonday(), CFG.lastDay().plusWeeks(1));
         List<Project> projects = new ArrayList<>();
         projects.add(exportProject);
-        projects.addAll(ProjectPlanner.plan(teams, byId, List.of(), CFG, rnd));
-        Rhythm rhythm = new Rhythm(CFG, cal, byId, plans, teams, rnd);
-        WorkQueue.Result r = WorkQueue.run(CFG, cal, people, plans, teams, projects, rhythm, reference(),
+        projects.addAll(ProjectPlanner.plan(List.of(dept), byId, List.of(), CFG, rnd));
+        Rhythm rhythm = new Rhythm(CFG, cal, byId, plans, rnd);
+        WorkQueue.Result r = WorkQueue.run(CFG, cal, people, plans, projects, rhythm, reference(),
                 WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
         UUID epicType = reference().typeIds().get("Epic");
         boolean landed = r.taskRows().stream().anyMatch(t -> exportProjectId.toString().equals(t.get("project_id"))
                 && !epicType.toString().equals(t.get("task_type_id")));
-        assertTrue(landed, "at least one non-epic task of the export team's member lands in its own project");
+        assertTrue(landed, "at least one non-epic task lands in the export's own project");
     }
 
     @Test
@@ -296,7 +293,7 @@ class WorkQueueTest {
     void defaultRatesCoverSubTasksAndDataIntegrity() {
         long seed = 7;
         World w = world(seed);
-        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.teams(), w.projects(), w.rhythm(), w.ref(),
+        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.projects(), w.rhythm(), w.ref(),
                 WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
         Map<UUID, Person> byId = new HashMap<>();
         w.people().forEach(p -> byId.put(p.id(), p));
@@ -436,7 +433,7 @@ class WorkQueueTest {
         // tiny 3-person world, not evidence the discipline mechanism broke. Seed 1 shows the effect.
         long seed = 1;
         World w = world(seed);
-        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.teams(), w.projects(), w.rhythm(), w.ref(),
+        WorkQueue.Result r = WorkQueue.run(CFG, w.cal(), w.people(), w.plans(), w.projects(), w.rhythm(), w.ref(),
                 WorkQueue.Rates.DEFAULT, new SeedRandom(seed + 1));
         Map<UUID, Double> loggedByMember = new HashMap<>();
         Map<UUID, Integer> rowsByMember = new HashMap<>();

@@ -1,7 +1,6 @@
 package com.workloadhub.forecast.tools.seed;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -14,11 +13,16 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
-/** Turns the directory columns of users (manager, department, job title) into teams, roles and memberships. */
+/**
+ * Turns the directory columns of users (manager, department, job title) into departments and roles.
+ *
+ * <p>It writes no `teams` or `team_members` rows. It used to synthesise both, on the belief that they were
+ * the company structure; they are project teams, and the structure is `users.manager_id` (design
+ * 2026-09-21). {@link ProjectPlanner} writes the project teams instead, from the work it plans.
+ */
 public final class Directory {
 
-    public record Result(List<Person> people, List<Team> teams, List<LinkedHashMap<String, Object>> userRows,
-            List<LinkedHashMap<String, Object>> teamRows, List<LinkedHashMap<String, Object>> teamMemberRows) {
+    public record Result(List<Person> people, List<Department> departments, List<LinkedHashMap<String, Object>> userRows) {
     }
 
     private static final double LEAVE_SHARE = 0.03;
@@ -35,9 +39,8 @@ public final class Directory {
      * numeric suffix (`"CT2 · Lead One 2"`) until it is unique. `teams.name` is UNIQUE, and both a real
      * export's own rows and a naming pattern this generator reuses can otherwise collide.
      *
-     * <p>Public so {@code ExportPreparer} mints names under the same UNIQUE constraint instead of restating it.
      */
-    public static String uniqueName(String candidate, Set<String> usedNames) {
+    static String uniqueName(String candidate, Set<String> usedNames) {
         String truncated = candidate.length() > MAX_TEAM_NAME ? candidate.substring(0, MAX_TEAM_NAME) : candidate;
         if (usedNames.add(truncated)) {
             return truncated;
@@ -64,8 +67,7 @@ public final class Directory {
         return first.isEmpty() ? null : first.toUpperCase(Locale.ROOT);
     }
 
-    public static Result derive(List<LinkedHashMap<String, Object>> userRows, List<LinkedHashMap<String, Object>> teamRows,
-            List<LinkedHashMap<String, Object>> memberRows, SeedConfig cfg, SeedRandom rnd) {
+    public static Result derive(List<LinkedHashMap<String, Object>> userRows, SeedConfig cfg, SeedRandom rnd) {
         List<LinkedHashMap<String, Object>> sortedUsers = new ArrayList<>(userRows);
         sortedUsers.sort(Comparator.comparing(u -> String.valueOf(u.get("id"))));
 
@@ -109,90 +111,49 @@ public final class Directory {
             }
         }
 
-        // 3. roles: managers lead, department heads are skill team leaders, admins and the center manager stay
+        // 3. roles, in the two tiers the hierarchy has: a manager of managers is a skill team leader and does
+        // no technical work; every other manager is a team leader and is counted like any member. ADMIN and
+        // CENTER_MANAGER are left alone, because ProjectPlanner.fallbackOwner looks for exactly those two.
+        Set<UUID> managersOfManagers = new HashSet<>();
         for (UUID managerId : reports.keySet()) {
             Person m = people.get(managerId);
-            if (m.role().equals("MEMBER") || m.role().equals("TEAM_LEADER") || m.role().equals("VIEWER")) {
-                people.put(managerId, m.withRole("TEAM_LEADER"));
+            if (m.managerId() != null && people.containsKey(m.managerId())) {
+                managersOfManagers.add(m.managerId());
             }
         }
-        Map<String, UUID> heads = new TreeMap<>();
-        for (Map.Entry<String, List<UUID>> e : byDept.entrySet()) {
-            if (e.getKey().isEmpty()) {
+        for (UUID managerId : reports.keySet()) {
+            Person m = people.get(managerId);
+            if (m.role().equals("ADMIN") || m.role().equals("CENTER_MANAGER")) {
                 continue;
             }
+            boolean skill = managersOfManagers.contains(managerId)
+                    || (m.jobTitle() != null && m.jobTitle().toLowerCase(Locale.ROOT).contains("skill team leader"));
+            people.put(managerId, m.withRole(skill ? "SKILL_TEAM_LEADER" : "TEAM_LEADER"));
+        }
+
+        // 4. departments: one per code, headed by the senior-most person in it. The head owns its projects.
+        List<Department> departments = new ArrayList<>();
+        for (Map.Entry<String, List<UUID>> e : byDept.entrySet()) {
+            String code = e.getKey();
             UUID head = e.getValue().stream()
-                    .filter(id -> people.get(id).jobTitle() != null
-                            && people.get(id).jobTitle().toLowerCase(Locale.ROOT).contains("skill team leader"))
+                    .filter(id -> people.get(id).role().equals("SKILL_TEAM_LEADER"))
                     .findFirst()
                     .orElseGet(() -> e.getValue().stream()
                             .filter(reports::containsKey)
                             .max(Comparator.comparingInt(id -> reports.get(id).size()))
                             .orElse(null));
-            if (head != null) {
-                heads.put(e.getKey(), head);
-                Person h = people.get(head);
-                if (!h.role().equals("ADMIN") && !h.role().equals("CENTER_MANAGER")) {
-                    people.put(head, h.withRole("SKILL_TEAM_LEADER"));
-                }
-            }
+            String label = code.isEmpty() ? "Unassigned" : deptLabel.getOrDefault(code, code);
+            departments.add(new Department(code, label, head, List.copyOf(e.getValue())));
         }
 
-        // Real mode: the application's own teams are the structure, and the seed writes none (design
-        // 2026-09-17, section 7.1), so nothing may be invented here. A team without a parent is a department
-        // team and receives the projects; a team with one is a member team of that department.
+        // Real mode leaves the application's own users alone: it writes the five work tables and nothing else
+        // (design 2026-09-17, section 7.1). The structure above is still derived, because the work is shaped by
+        // it; only the rows are left untouched.
         if (!cfg.synthetic()) {
-            return new Result(new ArrayList<>(people.values()), applicationTeams(teamRows, memberRows, people), userRows, teamRows, memberRows);
+            return new Result(new ArrayList<>(people.values()), departments, userRows);
         }
 
-        // 4. department teams (one per code, plus "Unassigned" for people with neither manager nor department)
-        List<Team> teams = new ArrayList<>();
-        Map<String, UUID> deptTeamIds = new TreeMap<>();
-        // seeded from the export's own team names so a generated name never collides with one of theirs
-        // (teams.name is UNIQUE); every name this loop and the next one mint is added as it is chosen.
-        Set<String> usedNames = new HashSet<>();
-        for (LinkedHashMap<String, Object> t : teamRows) {
-            if (t.get("name") instanceof String s) {
-                usedNames.add(s);
-            }
-        }
-        for (String code : byDept.keySet()) {
-            UUID teamId = rnd.uuid();
-            deptTeamIds.put(code, teamId);
-            List<UUID> members = new ArrayList<>();
-            for (UUID id : byDept.get(code)) {
-                Person p = people.get(id);
-                boolean hasManager = p.managerId() != null && people.containsKey(p.managerId());
-                if (!hasManager || id.equals(heads.get(code))) {
-                    members.add(id);
-                }
-            }
-            String name = uniqueName(code.isEmpty() ? "Unassigned" : deptLabel.getOrDefault(code, code), usedNames);
-            teams.add(new Team(teamId, name, heads.get(code), null, members, true, code.isEmpty() ? null : code));
-        }
-
-        // 5. manager teams
-        for (Map.Entry<UUID, List<UUID>> e : reports.entrySet()) {
-            Person m = people.get(e.getKey());
-            String code = m.deptCode();
-            if (code == null) {
-                Map<String, Integer> votes = new TreeMap<>();
-                for (UUID r : e.getValue()) {
-                    String c = people.get(r).deptCode();
-                    if (c != null) {
-                        votes.merge(c, 1, Integer::sum);
-                    }
-                }
-                code = votes.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("");
-            }
-            List<UUID> members = new ArrayList<>();
-            members.add(m.id());
-            members.addAll(e.getValue());
-            String name = uniqueName((code.isEmpty() ? "Team" : code) + " · " + m.fullName(), usedNames);
-            teams.add(new Team(rnd.uuid(), name, m.id(), deptTeamIds.get(code), members, false, code.isEmpty() ? null : code));
-        }
-
-        // 6. rows: users updated, existing teams and memberships kept, new ones appended
+        // 5. rows: the synthetic directory's own users, with the roles and dates this derivation gave them
         List<LinkedHashMap<String, Object>> newUserRows = new ArrayList<>();
         for (LinkedHashMap<String, Object> u : sortedUsers) {
             Person p = people.get(UUID.fromString((String) u.get("id")));
@@ -202,81 +163,15 @@ public final class Directory {
             row.put("deactivated_at", p.left() == null ? null : p.left().atTime(18, 0).toString());
             newUserRows.add(row);
         }
-        List<LinkedHashMap<String, Object>> newTeamRows = new ArrayList<>(teamRows);
-        List<LinkedHashMap<String, Object>> newMemberRows = new ArrayList<>(memberRows);
-        String now = first.atTime(8, 0).toString();
-        for (Team t : teams) {
-            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-            row.put("id", t.id().toString());
-            row.put("name", t.name());
-            row.put("active", true);
-            row.put("version", 0L);
-            row.put("manager_id", t.managerId() == null ? null : t.managerId().toString());
-            row.put("parent_team_id", t.parentId() == null ? null : t.parentId().toString());
-            row.put("created_at", now);
-            row.put("updated_at", now);
-            newTeamRows.add(row);
-            for (UUID member : t.memberIds()) {
-                LocalDateTime joined = people.get(member).joined().atTime(8, 0);
-                LinkedHashMap<String, Object> m = new LinkedHashMap<>();
-                m.put("id", rnd.uuid().toString());
-                m.put("team_id", t.id().toString());
-                m.put("user_id", member.toString());
-                m.put("joined_at", joined.toString());
-                m.put("created_at", joined.toString());
-                m.put("updated_at", joined.toString());
-                newMemberRows.add(m);
-            }
-        }
-        for (Team existing : existingTeams(teamRows, memberRows)) {
-            teams.add(existing);
-        }
-        return new Result(new ArrayList<>(people.values()), teams, newUserRows, newTeamRows, newMemberRows);
+        return new Result(new ArrayList<>(people.values()), departments, newUserRows);
     }
 
-    /** The export's teams as the generator's Team values: department when parentless, deptCode from the members' majority. */
-    static List<Team> applicationTeams(List<LinkedHashMap<String, Object>> teamRows, List<LinkedHashMap<String, Object>> memberRows,
-            Map<UUID, Person> people) {
-        List<Team> out = new ArrayList<>();
-        for (LinkedHashMap<String, Object> t : teamRows) {
-            UUID id = UUID.fromString((String) t.get("id"));
-            List<UUID> members = new ArrayList<>();
-            Map<String, Integer> codes = new TreeMap<>();
-            for (LinkedHashMap<String, Object> m : memberRows) {
-                if (!id.toString().equals(m.get("team_id"))) {
-                    continue;
-                }
-                UUID member = UUID.fromString((String) m.get("user_id"));
-                members.add(member);
-                Person p = people.get(member);
-                if (p != null && p.deptCode() != null) {
-                    codes.merge(p.deptCode(), 1, Integer::sum);
-                }
-            }
-            String code = codes.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
-            UUID parent = t.get("parent_team_id") == null ? null : UUID.fromString((String) t.get("parent_team_id"));
-            out.add(new Team(id, (String) t.get("name"), t.get("manager_id") == null ? null : UUID.fromString((String) t.get("manager_id")),
-                    parent, members, parent == null, code));
-        }
-        return out;
-    }
-
-    /** The export's own teams, as Team values, so the generator can give them tasks too. */
-    static List<Team> existingTeams(List<LinkedHashMap<String, Object>> teamRows, List<LinkedHashMap<String, Object>> memberRows) {
-        List<Team> out = new ArrayList<>();
-        for (LinkedHashMap<String, Object> t : teamRows) {
-            UUID id = UUID.fromString((String) t.get("id"));
-            List<UUID> members = new ArrayList<>();
-            for (LinkedHashMap<String, Object> m : memberRows) {
-                if (id.toString().equals(m.get("team_id"))) {
-                    members.add(UUID.fromString((String) m.get("user_id")));
-                }
-            }
-            out.add(new Team(id, (String) t.get("name"),
-                    t.get("manager_id") == null ? null : UUID.fromString((String) t.get("manager_id")),
-                    t.get("parent_team_id") == null ? null : UUID.fromString((String) t.get("parent_team_id")),
-                    members, false, null));
-        }
-        return out;
+    /**
+     * The team a person is forecast in: their manager's, or their own when they have no manager inside the
+     * directory. The same rule as {@code FeatureBuilder.teamOf}, so the seed and the module agree on who
+     * belongs with whom.
+     */
+    public static UUID teamKey(Person p, Map<UUID, Person> people) {
+        return p.managerId() != null && people.containsKey(p.managerId()) ? p.managerId() : p.id();
     }
 }

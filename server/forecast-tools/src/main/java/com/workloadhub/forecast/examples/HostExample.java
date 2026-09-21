@@ -148,34 +148,39 @@ public class HostExample {
     }
 
     /**
-     * Example only: a server knows its team ids from its own pages, and its session's user. Prints the teams
-     * when --team is absent, each with whether it has a {@code TEAM_LEADER} — see {@link #leaderOf}, which has
-     * nobody to act as without one. The seed leaves plenty of teams without: a department team's head is a
-     * {@code SKILL_TEAM_LEADER}, and a manager who is also an {@code ADMIN} keeps that role.
+     * Example only: a server knows its team ids from its own pages, and its session's user. A team is a leader
+     * and the people who report to them directly, keyed by the leader's own user id (design 2026-09-21), so
+     * this lists the users somebody reports to. The ones whose own role is not {@code TEAM_LEADER} are shown
+     * too, because a skill team leader leads team leaders and the example has nobody to act as there.
      */
     private static UUID pickTeam(JdbcClient jdbc, String requested) {
         if (requested != null) {
             return UUID.fromString(requested);
         }
-        System.out.printf("%-38s %-14s %s%n", "team id", "leader", "name");
+        System.out.printf("%-38s %-14s %-24s %s%n", "team id (its leader)", "role", "leader", "members");
         for (Map<String, Object> row : jdbc.sql("""
-                SELECT t.id, t.name, (SELECT COUNT(*) FROM team_members tm JOIN users u ON u.id = tm.user_id
-                                      WHERE tm.team_id = t.id AND u.role = 'TEAM_LEADER') AS leaders
-                FROM teams t ORDER BY t.name""").query().listOfRows()) {
-            boolean hasLeader = ((Number) row.get("leaders")).intValue() > 0;
-            System.out.printf("%-38s %-14s %s%n", row.get("id"), hasLeader ? "TEAM_LEADER" : "-", row.get("name"));
+                SELECT m.id, m.full_name, m.role,
+                       (SELECT COUNT(*) FROM users r WHERE r.manager_id = m.id AND r.active
+                        AND r.role IN ('MEMBER', 'TEAM_LEADER')) AS members
+                FROM users m
+                WHERE EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND r.active
+                              AND r.role IN ('MEMBER', 'TEAM_LEADER'))
+                ORDER BY m.full_name""").query().listOfRows()) {
+            System.out.printf("%-38s %-14s %-24s %s%n", row.get("id"), row.get("role"), row.get("full_name"), row.get("members"));
         }
-        System.out.println("\npass one of the teams marked TEAM_LEADER as --team <uuid>: the example acts as that user,"
-                + "\nand the ones marked - have nobody it could act as");
+        System.out.println("\npass one of the teams marked TEAM_LEADER as --team <uuid>: the example acts as that leader,"
+                + "\nand a SKILL_TEAM_LEADER leads team leaders rather than a team of its own");
         return null;
     }
 
     /**
      * Example only: the leader stands in for the authenticated user, because a token can only be stored for a
-     * user who exists. A server passes the session's own user id and has already checked the role.
+     * user who exists. A team is keyed by its leader, so the leader is the team id itself — checked here only
+     * to be sure they carry the role the run rules ask for. A server passes the session's own user id and has
+     * already checked the role.
      */
     private static UUID leaderOf(JdbcClient jdbc, UUID team) {
-        return jdbc.sql("SELECT u.id FROM users u JOIN team_members tm ON tm.user_id = u.id WHERE tm.team_id = ? AND u.role = 'TEAM_LEADER'")
+        return jdbc.sql("SELECT id FROM users WHERE id = ? AND role = 'TEAM_LEADER'")
                 .param(team).query(String.class).optional().map(UUID::fromString).orElse(null);
     }
 

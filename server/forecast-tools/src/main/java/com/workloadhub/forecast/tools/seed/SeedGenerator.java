@@ -5,6 +5,7 @@ import com.workloadhub.forecast.tools.export.WorkloadHubSchema;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -212,7 +213,7 @@ public final class SeedGenerator {
         }
 
         // 2. structure
-        Directory.Result dir = Directory.derive(users, teams, members, cfg, rnd);
+        Directory.Result dir = Directory.derive(users, cfg, rnd);
         Map<UUID, Person> people = new HashMap<>();
         for (Person p : dir.people()) {
             people.put(p.id(), p);
@@ -233,11 +234,29 @@ public final class SeedGenerator {
         }
 
         // 4. projects, rhythm, work
-        List<Project> projects = ProjectPlanner.plan(dir.teams(), people, projectRows, cfg, rnd);
-        Rhythm rhythm = new Rhythm(cfg, cal, people, plans, dir.teams(), rnd);
+        List<Project> projects = ProjectPlanner.plan(dir.departments(), people, projectRows, cfg, rnd);
+        Rhythm rhythm = new Rhythm(cfg, cal, people, plans, rnd);
         Reference ref = Reference.from(statuses, types);
-        WorkQueue.Result work = WorkQueue.run(cfg, cal, dir.people(), plans, dir.teams(), projects, rhythm, ref,
+        WorkQueue.Result work = WorkQueue.run(cfg, cal, dir.people(), plans, projects, rhythm, ref,
                 WorkQueue.Rates.DEFAULT, rnd);
+
+        // 4b. the project teams: one per project this generator invented, holding whoever took its work. The
+        // application's `teams` table means exactly that, so it is derived from the work rather than declared
+        // in front of it (design 2026-09-21, ruling 10). A project an export carried keeps its own team.
+        Set<String> carriedOver = new HashSet<>();
+        projectRows.forEach(r -> carriedOver.add(String.valueOf(r.get("id"))));
+        List<Project> minted = projects.stream().filter(pr -> !carriedOver.contains(pr.id().toString())).toList();
+        Set<String> usedTeamNames = new HashSet<>();
+        teams.forEach(t -> {
+            if (t.get("name") instanceof String n) {
+                usedTeamNames.add(n);
+            }
+        });
+        ProjectPlanner.ProjectTeams projectTeams = ProjectPlanner.projectTeams(minted, work.taskRows(), usedTeamNames, cfg, rnd);
+        List<LinkedHashMap<String, Object>> outTeams = new ArrayList<>(teams);
+        outTeams.addAll(projectTeams.teamRows());
+        List<LinkedHashMap<String, Object>> outMembers = new ArrayList<>(members);
+        outMembers.addAll(projectTeams.memberRows());
 
         // 5. project rows with the next task number
         Map<String, LinkedHashMap<String, Object>> existingById = new HashMap<>();
@@ -262,8 +281,8 @@ public final class SeedGenerator {
             data.put("user_roles", roles);
             data.put("job_titles", jobTitles);
             data.put("users", dir.userRows());
-            data.put("teams", dir.teamRows());
-            data.put("team_members", dir.teamMemberRows());
+            data.put("teams", outTeams);
+            data.put("team_members", outMembers);
             data.put("task_statuses", statuses);
             data.put("task_types", types);
             data.put("holidays", cal.holidayRows());

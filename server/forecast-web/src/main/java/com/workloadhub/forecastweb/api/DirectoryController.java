@@ -18,7 +18,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The directory the front end picks users and teams from. Production has its own pages for this; the module never reads names. */
+/**
+ * The directory the front end picks users and teams from. Production has its own pages for this; the module
+ * never reads names. A team is a leader and their direct reports, keyed by the leader (design 2026-09-21).
+ */
 @RestController
 @RequestMapping("/api/directory")
 public class DirectoryController {
@@ -36,12 +39,10 @@ public class DirectoryController {
         teams.forEach(t -> teamById.put(t.id(), t));
         Map<UUID, List<TeamRelation>> relations = new LinkedHashMap<>();
         for (Directory.Team t : teams) {
-            if (t.managerId() != null) {
-                relations.computeIfAbsent(t.managerId(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "manages"));
-            }
-            Directory.Team parent = t.parentTeamId() == null ? null : teamById.get(t.parentTeamId());
-            if (parent != null && parent.managerId() != null) {
-                relations.computeIfAbsent(parent.managerId(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "manages-parent"));
+            // The leader manages their own team; the leader above them may act for it, one team at a time.
+            relations.computeIfAbsent(t.id(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "manages"));
+            if (t.parentTeamId() != null) {
+                relations.computeIfAbsent(t.parentTeamId(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "manages-parent"));
             }
         }
         for (Directory.Membership m : directory.memberships()) {
@@ -50,6 +51,7 @@ public class DirectoryController {
                 relations.computeIfAbsent(m.userId(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "member"));
             }
         }
+        relations.values().forEach(list -> list.sort(java.util.Comparator.comparing(TeamRelation::name).thenComparing(TeamRelation::relation)));
         List<UserView> out = new ArrayList<>();
         for (Directory.User u : directory.users()) {
             out.add(new UserView(u.id(), u.fullName(), u.role(), u.jobTitle(), u.department(), u.active(), relations.getOrDefault(u.id(), List.of())));

@@ -66,12 +66,12 @@ public final class Experiment {
                        synthetic directory. Real mode (no --synthetic) needs --export and refuses to
                        write inside a git repository without --force: its output holds personal data.
 
-              prepare  <export.json> --out FILE [--joined ISO_DATE] [--force]
+              prepare  <export.json> --out FILE [--force]
                        Rewrite a real export so the forecast can count its people: every user active,
-                       and teams and memberships derived from department and manager_id. Transitional —
-                       delete it once WorkloadHub populates teams itself. Refuses to write inside a git
-                       repository without --force: its output holds personal data. --joined stamps
-                       team_members.joined_at and defaults to five years ago.
+                       and each manager given the leader role their place in users.manager_id implies.
+                       Transitional — delete it once WorkloadHub's own active flag means what it says.
+                       Refuses to write inside a git repository without --force: its output holds
+                       personal data.
 
               fixture  [--out DIR]
                        Regenerate forecast-core's seeded test fixture: workloadhub-schema.sql and seeded-rows.sql in DIR.
@@ -110,7 +110,7 @@ public final class Experiment {
                 case "export" -> export(Args.parse(rest, Set.of("url", "user", "password"), Set.of()));
                 case "seed" -> seed(Args.parse(rest, Set.of("url", "user", "password", "out", "export", "users", "weeks", "end", "seed"),
                         Set.of("synthetic", "force")));
-                case "prepare" -> prepare(Args.parse(rest, Set.of("out", "joined"), Set.of("force")));
+                case "prepare" -> prepare(Args.parse(rest, Set.of("out"), Set.of("force")));
                 case "fixture" -> fixture(Args.parse(rest, Set.of("out", "url", "user", "password"), Set.of()));
                 default -> {
                     System.err.println("error: unknown command '" + command + "'\n");
@@ -216,9 +216,8 @@ public final class Experiment {
     }
 
     /**
-     * Rewrites a real export so its people can be counted. Transitional: see {@link ExportPreparer}. The seed
-     * is a constant rather than an option, so one export and one {@code --joined} give byte-identical output;
-     * the default {@code --joined} is five years before today, which of course moves with the day.
+     * Rewrites a real export so its people can be counted. Transitional: see {@link ExportPreparer}. Pure in,
+     * pure out and nothing random, so one export always gives byte-identical output.
      */
     private static int prepare(Args args) throws Exception {
         Path in = args.onlyFile("the export to prepare");
@@ -227,13 +226,10 @@ public final class Experiment {
             System.err.println("A prepared export holds personal data; write it outside the repository or pass --force");
             return 2;
         }
-        LocalDate joined = args.date("joined") == null ? LocalDate.now().minusYears(5) : args.date("joined");
-        ExportPreparer.Result result = ExportPreparer.prepare(ExportFiles.read(in), joined, ExportPreparer.SEED);
+        ExportPreparer.Result result = ExportPreparer.prepare(ExportFiles.read(in));
         ExportFiles.write(out, result.envelope());
-        System.out.printf("Wrote %s: %d users activated, %d promoted to TEAM_LEADER, %d department teams, "
-                + "%d manager teams, %d existing teams kept, %d dropped, joined %s%n",
-                out, result.usersActivated(), result.managersPromoted(), result.departmentTeams(),
-                result.managerTeams(), result.teamsKept(), result.teamsDropped(), joined);
+        System.out.printf("Wrote %s: %d users activated, %d promoted to TEAM_LEADER, %d to SKILL_TEAM_LEADER%n",
+                out, result.usersActivated(), result.teamLeaders(), result.skillTeamLeaders());
         return 0;
     }
 

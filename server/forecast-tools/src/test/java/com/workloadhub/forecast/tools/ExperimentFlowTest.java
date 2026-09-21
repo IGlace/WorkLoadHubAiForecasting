@@ -12,8 +12,10 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import com.workloadhub.forecast.data.rows.MemberRow;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -132,28 +134,29 @@ class ExperimentFlowTest {
         assertEquals(2, experiment("prepare", FIXTURE.toString()).exit(), "--out is required");
         assertEquals(2, experiment("prepare", "--out", outside.toString()).exit(), "the export to prepare is required");
         assertEquals(2, experiment("prepare", FIXTURE.toString(), "--out", outside.toString(),
-                "--joined", "last-tuesday").exit(), "--joined must be an ISO date");
+                "--joined", "2021-01-04").exit(), "--joined is gone with the team derivation it stamped");
         assertFalse(Files.exists(outside));
     }
 
     @Test
     void prepareWritesAnExportEveryUserCanBeCountedIn(@TempDir Path dir) throws Exception {
         Path out = dir.resolve("prepared.json");
-        assertOk(experiment("prepare", FIXTURE.toString(), "--out", out.toString(), "--joined", "2021-01-04"),
-                "department teams");
+        assertOk(experiment("prepare", FIXTURE.toString(), "--out", out.toString()), "users activated");
         String json = Files.readString(out);
         // Json.mapper() indents, and its separator spacing is the pretty printer's business rather than this
         // test's: both spellings are accepted so the assertion is about the value, not the layout.
         assertTrue(json.contains("\"active\" : true") || json.contains("\"active\":true"), json);
         assertFalse(json.contains("\"deactivated_at\" : \"2026") || json.contains("\"deactivated_at\":\"2026"), json);
-        assertTrue(json.contains("2021-01-04T08:00"), "joined_at is the requested date");
+        // teams and team_members are this step's business no longer, so they come through exactly as they went in.
+        assertTrue(json.contains("\"teams\""), json);
+        assertTrue(json.contains("TEAM_LEADER"), "a manager carries the leader role their place implies");
     }
 
     /**
-     * The whole chain the {@code prepare} verb exists to unblock: a real export in which nobody is active and
-     * no team exists goes in, and {@code ForecastRepository} counts members at the other end. Straight to
-     * {@code seed} it would count none — every user inactive and in no team fails two of the three conditions
-     * at {@code ForecastRepository:66} — which is the defect the design of 2026-09-19 is about.
+     * The whole chain the {@code prepare} verb exists to unblock: a real export in which nobody is active
+     * goes in, and {@code ForecastRepository} counts members at the other end. Straight to {@code seed} it
+     * would count none, because every user is inactive. Its `teams` table stays empty throughout, which is
+     * the point of the 2026-09-21 change: the hierarchy in `users.manager_id` is enough.
      */
     @Test
     void prepareThenSeedThenImportProducesCountableMembers(@TempDir Path dir) throws Exception {
@@ -162,8 +165,7 @@ class ExperimentFlowTest {
         Path prepared = dir.resolve("prepared.json");
         Path seeded = dir.resolve("seeded.json");
 
-        assertOk(experiment("prepare", RAW.toString(), "--out", prepared.toString(), "--joined", "2024-01-01"),
-                "department teams");
+        assertOk(experiment("prepare", RAW.toString(), "--out", prepared.toString()), "users activated");
         assertOk(experiment("seed", "--export", prepared.toString(), "--weeks", "8", "--end", "2026-09-06",
                 "--out", seeded.toString()), "real identities");
         assertOk(experiment(concat(db, "init-db", "--force")), "Created");
@@ -172,9 +174,10 @@ class ExperimentFlowTest {
 
         ForecastData data = new ForecastRepository(JdbcClient.create(ds)).loadAll();
         assertEquals(2, data.members().size(), "prepare exists so that this is not zero");
-        assertEquals(2, data.teams().size(), "the CT2 department team and Lead One's manager team");
-        assertTrue(data.members().stream().allMatch(m -> m.joined().equals(LocalDate.of(2024, 1, 1))),
-                "joined_at reaches the member's start date");
+        // The whole point of the 2026-09-21 change: the raw export's teams table is empty and nobody cares.
+        assertTrue(data.members().stream().anyMatch(m -> m.managerId() != null), "the hierarchy came through");
+        UUID team = data.members().stream().map(MemberRow::managerId).filter(java.util.Objects::nonNull).findFirst().orElseThrow();
+        assertTrue(!data.membersOfTeam(team).isEmpty(), "and it makes a team the forecast can run");
         assertTrue(data.members().stream().allMatch(m -> m.left() == null), "deactivated_at was cleared");
     }
 

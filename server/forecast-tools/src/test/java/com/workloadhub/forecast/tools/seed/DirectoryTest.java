@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -68,57 +69,61 @@ class DirectoryTest {
     }
 
     @Test
-    void derivesManagerTeamsDepartmentsAndRoles() {
-        Directory.Result r = Directory.derive(users(), List.of(), List.of(), cfg(), new SeedRandom(1));
-        // manager teams for MGR and for HEAD (whose report is MGR), the CT2 department team, the "Unassigned" department team
-        assertEquals(4, r.teams().size());
-        Team mgrTeam = r.teams().stream().filter(t -> MGR.equals(t.managerId()) && !t.department()).findFirst().orElseThrow();
-        assertTrue(mgrTeam.memberIds().containsAll(List.of(MGR, ENG1, ENG2)), "leader counted with reports");
-        Team dept = r.teams().stream().filter(t -> t.department() && "CT2".equals(t.deptCode())).findFirst().orElseThrow();
-        assertEquals(dept.id(), mgrTeam.parentId());
-        assertEquals(HEAD, dept.managerId());
-        assertTrue(dept.memberIds().contains(ORPHAN), "user without manager joins the department team");
-        Team unassigned = r.teams().stream().filter(t -> t.department() && t.deptCode() == null).findFirst().orElseThrow();
+    void derivesDepartmentsAndTheTwoLeaderRoles() {
+        Directory.Result r = Directory.derive(users(), cfg(), new SeedRandom(1));
+        // The CT2 department, and the "" one for the person with no department at all.
+        assertEquals(2, r.departments().size());
+        Department ct2 = r.departments().stream().filter(d -> "CT2".equals(d.code())).findFirst().orElseThrow();
+        assertEquals(HEAD, ct2.headId(), "the head is the skill team leader of the department");
+        assertTrue(ct2.memberIds().containsAll(List.of(HEAD, MGR, ENG1, ENG2, ORPHAN)));
+        Department unassigned = r.departments().stream().filter(d -> d.code().isEmpty()).findFirst().orElseThrow();
+        assertEquals("Unassigned", unassigned.label());
         assertTrue(unassigned.memberIds().contains(LOST));
+
+        // Head One manages Manager Two, who manages people, so Head One does no technical work and is not counted.
         assertEquals("SKILL_TEAM_LEADER", role(r, HEAD));
         assertEquals("TEAM_LEADER", role(r, MGR));
         assertEquals("MEMBER", role(r, ENG1));
-        assertEquals("CT2 · Manager Two", mgrTeam.name());
+        assertEquals("MEMBER", role(r, ORPHAN), "managing nobody is not a role change");
     }
 
     @Test
-    void activatesEveryoneAndKeepsExistingTeams() {
-        LinkedHashMap<String, Object> existingTeam = new LinkedHashMap<>();
-        existingTeam.put("id", "40000000-0000-0000-0000-000000000001");
-        existingTeam.put("name", "Backend Team");
-        existingTeam.put("active", true);
-        existingTeam.put("version", 0L);
-        existingTeam.put("manager_id", MGR.toString());
-        existingTeam.put("parent_team_id", null);
-        existingTeam.put("created_at", "2026-09-03T13:59:58");
-        existingTeam.put("updated_at", "2026-09-03T13:59:58");
-        LinkedHashMap<String, Object> existingMember = new LinkedHashMap<>();
-        existingMember.put("id", "50000000-0000-0000-0000-000000000001");
-        existingMember.put("team_id", "40000000-0000-0000-0000-000000000001");
-        existingMember.put("user_id", ENG1.toString());
-        existingMember.put("joined_at", "2026-09-03T13:59:58");
-        existingMember.put("created_at", "2026-09-03T13:59:58");
-        existingMember.put("updated_at", "2026-09-03T13:59:58");
-        Directory.Result r = Directory.derive(users(), List.of(existingTeam), List.of(existingMember), cfg(), new SeedRandom(1));
-        assertEquals(5, r.teams().size());
-        assertTrue(r.teamRows().stream().anyMatch(t -> "Backend Team".equals(t.get("name"))));
+    void aTeamIsAManagerAndTheirDirectReports() {
+        Directory.Result r = Directory.derive(users(), cfg(), new SeedRandom(1));
+        Map<UUID, Person> people = new java.util.HashMap<>();
+        r.people().forEach(p -> people.put(p.id(), p));
+        assertEquals(MGR, Directory.teamKey(people.get(ENG1), people), "an engineer is forecast in their manager's team");
+        assertEquals(MGR, Directory.teamKey(people.get(ENG2), people));
+        assertEquals(HEAD, Directory.teamKey(people.get(MGR), people), "a leader is also a member of their own manager's team");
+        assertEquals(ORPHAN, Directory.teamKey(people.get(ORPHAN), people), "nobody above them, so they key their own");
+    }
+
+    @Test
+    void writesNoTeamRowsAtAll() {
+        // teams and team_members hold project teams; ProjectPlanner writes those, from the work it plans.
+        Directory.Result r = Directory.derive(users(), cfg(), new SeedRandom(1));
+        assertEquals(3, Directory.Result.class.getRecordComponents().length,
+                "people, departments and userRows: no team rows on this result");
         long active = r.userRows().stream().filter(u -> Boolean.TRUE.equals(u.get("active"))).count();
         assertTrue(active >= 5, "3% leave at most; got " + active);
         assertTrue(r.people().stream().allMatch(p -> !p.joined().isAfter(cfg().lastDay())));
-        assertTrue(r.teamMemberRows().stream().allMatch(m -> m.get("joined_at") != null));
+    }
+
+    @Test
+    void realModeLeavesTheUserRowsAlone() {
+        SeedConfig real = new SeedConfig(20, LocalDate.of(2026, 9, 6), 42L, false, 0);
+        Directory.Result r = Directory.derive(users(), real, new SeedRandom(1));
+        assertEquals(users(), r.userRows(), "real mode writes the five work tables and nothing else");
+        assertTrue(r.departments().size() >= 1, "the structure is still derived; the work is shaped by it");
+        assertEquals("SKILL_TEAM_LEADER", role(r, HEAD), "and the roles it implies are still known");
     }
 
     @Test
     void isDeterministic() {
-        Directory.Result a = Directory.derive(users(), List.of(), List.of(), cfg(), new SeedRandom(7));
-        Directory.Result b = Directory.derive(users(), List.of(), List.of(), cfg(), new SeedRandom(7));
-        assertEquals(a.teamRows(), b.teamRows());
-        assertEquals(a.teamMemberRows(), b.teamMemberRows());
+        Directory.Result a = Directory.derive(users(), cfg(), new SeedRandom(7));
+        Directory.Result b = Directory.derive(users(), cfg(), new SeedRandom(7));
+        assertEquals(a.userRows(), b.userRows());
+        assertEquals(a.departments(), b.departments());
     }
 
     static String role(Directory.Result r, UUID id) {

@@ -16,4 +16,13 @@ describe('permissions', () => {
   it('lists the six roles of the design once each', () => {
     expect(ROLE_MATRIX.map((r) => r.role)).toEqual(['ADMIN', 'SKILL_TEAM_LEADER', 'TEAM_LEADER', 'MEMBER', 'VIEWER', 'CENTER_MANAGER'])
   })
+  it('describes a team as a leader and their direct reports, not a row of the teams table', () => {
+    const row = (role: string) => ROLE_MATRIX.find((r) => r.role === role)!
+    expect(row('TEAM_LEADER').run).toBe('their own team')
+    expect(row('SKILL_TEAM_LEADER').run).toBe('the team of a leader who reports to them, one at a time')
+    expect(row('MEMBER').run).toBe('none')
+    // A leader runs one team, so no row may promise "the teams they manage" any more.
+    expect(ROLE_MATRIX.some((r) => r.run.includes('teams they manage'))).toBe(false)
+    expect(ROLE_MATRIX.some((r) => r.run.includes('parent team'))).toBe(false)
+  })
 })

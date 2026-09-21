@@ -1,11 +1,14 @@
 import type { Role, TeamPermission } from '../types'
 
-/** The role matrix of design 2026-09-11, section 3.2, as the permissions page prints it. */
+/**
+ * The role matrix of design 2026-09-11, section 3.2, as the permissions page prints it, rebound to the
+ * hierarchy: a team is a team leader and the people who report to them directly (design 2026-09-21).
+ */
 export const ROLE_MATRIX: { role: Role; run: string; view: string }[] = [
   { role: 'ADMIN', run: 'any team', view: 'any team' },
-  { role: 'SKILL_TEAM_LEADER', run: 'a team whose parent team they manage, one at a time', view: 'those teams and their own memberships' },
-  { role: 'TEAM_LEADER', run: 'the teams they manage', view: 'those teams and their own memberships' },
-  { role: 'MEMBER', run: 'none', view: 'the teams they belong to' },
+  { role: 'SKILL_TEAM_LEADER', run: 'the team of a leader who reports to them, one at a time', view: 'those teams and their own' },
+  { role: 'TEAM_LEADER', run: 'their own team', view: 'their own team and the one they belong to' },
+  { role: 'MEMBER', run: 'none', view: 'the team they belong to' },
   { role: 'VIEWER', run: 'none', view: 'any team' },
   { role: 'CENTER_MANAGER', run: 'none', view: 'any team' },
 ]

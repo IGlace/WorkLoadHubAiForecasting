@@ -9,9 +9,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 
-/** Two to four projects per department, named for the department's kind of work, plus the export's own projects. */
+/**
+ * Two to four projects per department, named for the department's kind of work, plus the export's own
+ * projects. Each project also gets its own **project team**: the group who work on it, which is what the
+ * application's `teams` table means (design 2026-09-21, ruling 10). The team's membership is only known once
+ * the work is generated, so {@link #teamRows} and {@link #memberRows} are called afterwards.
+ */
 public final class ProjectPlanner {
 
     private record Template(String suffix, String name) {
@@ -41,19 +48,13 @@ public final class ProjectPlanner {
     private ProjectPlanner() {
     }
 
-    /** The dominant family of a team's members (department teams: everyone in that department code). */
-    static WorkFamily dominantFamily(Team team, List<Team> teams, Map<UUID, Person> people) {
+    /** The dominant family of a department's people. */
+    static WorkFamily dominantFamily(Department department, Map<UUID, Person> people) {
         Map<WorkFamily, Integer> votes = new EnumMap<>(WorkFamily.class);
-        for (Team t : teams) {
-            boolean inDept = t.id().equals(team.id()) || (team.department() && team.id().equals(t.parentId()));
-            if (!inDept) {
-                continue;
-            }
-            for (UUID id : t.memberIds()) {
-                Person p = people.get(id);
-                if (p != null && !p.family().isUnknown()) {
-                    votes.merge(p.family(), 1, Integer::sum);
-                }
+        for (UUID id : department.memberIds()) {
+            Person p = people.get(id);
+            if (p != null && !p.family().isUnknown()) {
+                votes.merge(p.family(), 1, Integer::sum);
             }
         }
         return votes.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(WorkFamily.SYSTEMS);
@@ -76,15 +77,19 @@ public final class ProjectPlanner {
                 .orElse(null);
     }
 
-    public static List<Project> plan(List<Team> teams, Map<UUID, Person> people,
+    public static List<Project> plan(List<Department> departments, Map<UUID, Person> people,
             List<LinkedHashMap<String, Object>> existingProjectRows, SeedConfig cfg, SeedRandom rnd) {
         List<Project> out = new ArrayList<>();
         UUID fallbackOwner = fallbackOwner(people);
         for (LinkedHashMap<String, Object> row : existingProjectRows) {
             UUID teamId = row.get("team_id") == null ? null : UUID.fromString((String) row.get("team_id"));
             UUID ownerId = row.get("owner_id") == null ? null : UUID.fromString((String) row.get("owner_id"));
+            // An export's own project keeps its own team. Its department is its owner's, so the people who
+            // already work under that owner are the ones who pick it up; with no owner in the directory it has
+            // none, and is open to everybody.
+            Person owner = ownerId == null ? null : people.get(ownerId);
             out.add(new Project(UUID.fromString((String) row.get("id")), (String) row.get("key"), (String) row.get("name"),
-                    teamId, ownerId, String.valueOf(row.get("status")),
+                    teamId, ownerId, String.valueOf(row.get("status")), owner == null ? null : owner.deptCode(),
                     cfg.firstMonday(), cfg.lastDay().plusWeeks(1)));
         }
         List<LocalDate> mondays = cfg.mondays();
@@ -96,12 +101,9 @@ public final class ProjectPlanner {
                 used.add(s);
             }
         }
-        for (Team team : teams) {
-            if (!team.department()) {
-                continue;
-            }
-            String code = team.deptCode() == null ? "GEN" : team.deptCode();
-            WorkFamily family = dominantFamily(team, teams, people);
+        for (Department department : departments) {
+            String code = department.code() == null || department.code().isEmpty() ? "GEN" : department.code();
+            WorkFamily family = dominantFamily(department, people);
             List<Template> templates = TEMPLATES.get(family);
             int count = rnd.between(2, 4);
 
@@ -182,24 +184,87 @@ public final class ProjectPlanner {
                     }
                     status = "ACTIVE";
                 }
-                UUID owner = team.managerId() != null ? team.managerId() : fallbackOwner;
-                out.add(new Project(rnd.uuid(), key, String.format(t.name(), code, n), team.id(), owner,
-                        status, start, end));
+                UUID owner = department.headId() != null ? department.headId() : fallbackOwner;
+                // Real mode writes only the five work tables, so it writes no team row either: a project team
+                // id minted here would be a dangling foreign key at import. `projects.team_id` is nullable,
+                // and a null says honestly that this generator does not know who the project team is.
+                UUID projectTeam = cfg.synthetic() ? rnd.uuid() : null;
+                out.add(new Project(rnd.uuid(), key, String.format(t.name(), code, n), projectTeam, owner,
+                        status, department.code(), start, end));
             }
         }
         return out;
     }
 
-    /** The projects a team's members work on. */
-    public static List<Project> projectsFor(Team team, List<Team> teams, List<Project> projects) {
-        UUID deptId = team.department() ? team.id() : team.parentId();
+    /**
+     * The projects a person can pick up: their department's, plus any project with no department of ours — a
+     * real export's own, whose owner is outside the directory.
+     */
+    public static List<Project> projectsFor(Person p, List<Project> projects) {
         List<Project> out = new ArrayList<>();
-        for (Project p : projects) {
-            if (p.teamId() != null && (p.teamId().equals(deptId) || p.teamId().equals(team.id()))) {
-                out.add(p);
+        for (Project pr : projects) {
+            if (pr.deptCode() == null || pr.deptCode().equals(p.deptCode())) {
+                out.add(pr);
             }
         }
         return out;
+    }
+
+    /** The `teams` and `team_members` rows of the project teams, which the two lists must stay in step. */
+    public record ProjectTeams(List<LinkedHashMap<String, Object>> teamRows, List<LinkedHashMap<String, Object>> memberRows) {
+    }
+
+    /**
+     * One project team per project the seed invented: the people who were actually given its tasks. This is
+     * what the application's `teams` table holds — a group formed around a project — so it is derived from the
+     * generated work rather than declared in front of it, and it is written only for projects this generator
+     * created. A project an export already carried keeps whatever team that export gave it.
+     *
+     * @param taskRows the generated tasks, read for `project_id` and `assignee_id`
+     * @param usedNames the team names already taken, since `teams.name` is UNIQUE
+     */
+    public static ProjectTeams projectTeams(List<Project> minted, List<LinkedHashMap<String, Object>> taskRows,
+            Set<String> usedNames, SeedConfig cfg, SeedRandom rnd) {
+        Map<UUID, Set<UUID>> workersByProject = new TreeMap<>();
+        for (LinkedHashMap<String, Object> t : taskRows) {
+            Object project = t.get("project_id");
+            Object assignee = t.get("assignee_id");
+            if (project != null && assignee != null) {
+                workersByProject.computeIfAbsent(UUID.fromString(String.valueOf(project)), k -> new TreeSet<>())
+                        .add(UUID.fromString(String.valueOf(assignee)));
+            }
+        }
+        List<LinkedHashMap<String, Object>> teamRows = new ArrayList<>();
+        List<LinkedHashMap<String, Object>> memberRows = new ArrayList<>();
+        for (Project p : minted) {
+            if (p.teamId() == null) {
+                // Real mode: no team was minted for it, so there are no rows to write (see plan).
+                continue;
+            }
+            String stamp = p.windowStart().atTime(8, 0).toString();
+            LinkedHashMap<String, Object> team = new LinkedHashMap<>();
+            team.put("id", p.teamId().toString());
+            team.put("name", Directory.uniqueName(p.name(), usedNames));
+            team.put("active", true);
+            team.put("version", 0L);
+            team.put("manager_id", p.ownerId() == null ? null : p.ownerId().toString());
+            // A project team is flat: it is a group around a project, not a place in the company structure.
+            team.put("parent_team_id", null);
+            team.put("created_at", stamp);
+            team.put("updated_at", stamp);
+            teamRows.add(team);
+            for (UUID worker : workersByProject.getOrDefault(p.id(), Set.of())) {
+                LinkedHashMap<String, Object> m = new LinkedHashMap<>();
+                m.put("id", rnd.uuid().toString());
+                m.put("team_id", p.teamId().toString());
+                m.put("user_id", worker.toString());
+                m.put("joined_at", stamp);
+                m.put("created_at", stamp);
+                m.put("updated_at", stamp);
+                memberRows.add(m);
+            }
+        }
+        return new ProjectTeams(teamRows, memberRows);
     }
 
     public static LinkedHashMap<String, Object> row(Project p, LinkedHashMap<String, Object> existingRow, long nextTaskNumber, SeedConfig cfg) {

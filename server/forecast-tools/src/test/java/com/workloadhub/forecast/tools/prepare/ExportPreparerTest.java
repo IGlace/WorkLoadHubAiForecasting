@@ -1,22 +1,24 @@
 package com.workloadhub.forecast.tools.prepare;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.workloadhub.forecast.tools.export.ExportEnvelope;
-import com.workloadhub.forecast.tools.seed.SeedRandom;
-import com.workloadhub.forecast.tools.seed.Team;
-import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
+/**
+ * What {@code prepare} does to a real export, now that the forecast reads the hierarchy directly: it makes
+ * every user active and gives every manager the leader role their place in {@code users.manager_id} implies.
+ * It derives no teams — that was the 2026-09-19 design, withdrawn on 2026-09-21 — so `teams` and
+ * `team_members` must come through untouched.
+ */
 class ExportPreparerTest {
 
     static final UUID HEAD = UUID.fromString("30000000-0000-0000-0000-000000000001");
@@ -26,8 +28,6 @@ class ExportPreparerTest {
     static final UUID ORPHAN = UUID.fromString("30000000-0000-0000-0000-000000000005");
     static final UUID LOST = UUID.fromString("30000000-0000-0000-0000-000000000006");
     static final UUID BOSS = UUID.fromString("30000000-0000-0000-0000-000000000007");
-
-    static final LocalDate JOINED = LocalDate.of(2021, 1, 4);
 
     static LinkedHashMap<String, Object> user(UUID id, String name, String title, String dept, UUID manager,
             String role, boolean active) {
@@ -52,7 +52,7 @@ class ExportPreparerTest {
         return u;
     }
 
-    /** Six people in two departments, one of them with no department at all, plus a centre manager. */
+    /** Seven people: a head over a manager over two engineers, plus two loose people and a centre manager. */
     static List<LinkedHashMap<String, Object>> users() {
         return new ArrayList<>(List.of(
                 user(HEAD, "Head One", "Skill Team Leader", "PTE / CT2 Calibration & Testing 2", null, "MEMBER", false),
@@ -74,7 +74,7 @@ class ExportPreparerTest {
     }
 
     static ExportPreparer.Result prepared() {
-        return ExportPreparer.prepare(envelope(users(), new ArrayList<>(), new ArrayList<>()), JOINED, ExportPreparer.SEED);
+        return ExportPreparer.prepare(envelope(users(), new ArrayList<>(), new ArrayList<>()));
     }
 
     static LinkedHashMap<String, Object> row(List<LinkedHashMap<String, Object>> rows, UUID id) {
@@ -94,207 +94,81 @@ class ExportPreparerTest {
     }
 
     @Test
-    void managersBecomeTeamLeadersAndNobodyBecomesASkillTeamLeader() {
+    void aManagerOfManagersBecomesASkillTeamLeaderAndEveryOtherManagerATeamLeader() {
         ExportPreparer.Result result = prepared();
         List<LinkedHashMap<String, Object>> out = result.envelope().rows("users");
-        assertEquals("TEAM_LEADER", row(out, HEAD).get("role"), "Head One manages Manager Two");
-        assertEquals("TEAM_LEADER", row(out, MGR).get("role"), "Manager Two manages two engineers");
+        assertEquals("SKILL_TEAM_LEADER", row(out, HEAD).get("role"), "Head One manages Manager Two, who manages people");
+        assertEquals("TEAM_LEADER", row(out, MGR).get("role"), "Manager Two manages two engineers and nobody else's people");
         assertEquals("MEMBER", row(out, ENG1).get("role"), "an engineer manages nobody");
         assertEquals("MEMBER", row(out, ORPHAN).get("role"));
+        assertEquals("MEMBER", row(out, LOST).get("role"));
         assertEquals("CENTER_MANAGER", row(out, BOSS).get("role"), "the centre manager keeps their role");
-        assertEquals(2, result.managersPromoted());
-        assertTrue(out.stream().noneMatch(u -> "SKILL_TEAM_LEADER".equals(u.get("role"))),
-                "SKILL_TEAM_LEADER is not counted by ForecastRepository; the forecast would lose these people");
+        assertEquals(1, result.teamLeaders());
+        assertEquals(1, result.skillTeamLeaders());
     }
 
     @Test
-    void everyOtherTableIsCopiedThroughUnchanged() {
-        LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>();
-        data.put("users", users());
-        LinkedHashMap<String, Object> holiday = new LinkedHashMap<>();
-        holiday.put("id", "90000000-0000-0000-0000-000000000001");
-        holiday.put("date", "2026-01-01");
-        holiday.put("active", true);
-        data.put("holidays", new ArrayList<>(List.of(holiday)));
-        ExportEnvelope input = new ExportEnvelope("workloadhub", "task_service", "2026-09-19T10:00:00", List.of("notifications"), data);
+    void aRoleThatIsAlreadyRightIsNotCountedAsAPromotion() {
+        List<LinkedHashMap<String, Object>> users = users();
+        users.set(1, user(MGR, "Manager Two", "Team Leader Calibration", "PTE / CT2 Calibration & Testing 2", HEAD, "TEAM_LEADER", true));
+        ExportPreparer.Result result = ExportPreparer.prepare(envelope(users, new ArrayList<>(), new ArrayList<>()));
+        assertEquals("TEAM_LEADER", row(result.envelope().rows("users"), MGR).get("role"));
+        assertEquals(0, result.teamLeaders(), "Manager Two was already a team leader");
+        assertEquals(1, result.skillTeamLeaders(), "Head One still moves");
+    }
 
-        ExportEnvelope out = ExportPreparer.prepare(input, JOINED, ExportPreparer.SEED).envelope();
+    @Test
+    void aManagerWhoIsNotInTheExportGrantsNobodyAnything() {
+        UUID absent = UUID.fromString("90000000-0000-0000-0000-000000000001");
+        List<LinkedHashMap<String, Object>> users = new ArrayList<>(List.of(
+                user(ENG1, "Eng Three", "Calibration Engineer", "PTE / CT2", absent, "MEMBER", false)));
+        ExportPreparer.Result result = ExportPreparer.prepare(envelope(users, new ArrayList<>(), new ArrayList<>()));
+        assertEquals("MEMBER", row(result.envelope().rows("users"), ENG1).get("role"));
+        assertEquals(0, result.teamLeaders());
+        assertEquals(0, result.skillTeamLeaders());
+    }
 
-        assertEquals(List.of(holiday), out.rows("holidays"));
+    @Test
+    void teamsAndTeamMembersAreCopiedThroughUntouched() {
+        LinkedHashMap<String, Object> team = new LinkedHashMap<>();
+        team.put("id", UUID.fromString("40000000-0000-0000-0000-000000000001").toString());
+        team.put("name", "Backend Team");
+        team.put("manager_id", MGR.toString());
+        team.put("parent_team_id", null);
+        LinkedHashMap<String, Object> membership = new LinkedHashMap<>();
+        membership.put("id", UUID.fromString("50000000-0000-0000-0000-000000000001").toString());
+        membership.put("team_id", team.get("id"));
+        membership.put("user_id", ENG1.toString());
+        List<LinkedHashMap<String, Object>> teams = new ArrayList<>(List.of(team));
+        List<LinkedHashMap<String, Object>> members = new ArrayList<>(List.of(membership));
+
+        ExportPreparer.Result result = ExportPreparer.prepare(envelope(users(), teams, members));
+
+        // Project teams are the application's own and none of this step's business (design 2026-09-21).
+        assertSame(teams, result.envelope().rows("teams"));
+        assertSame(members, result.envelope().rows("team_members"));
+        assertEquals(List.of(team), result.envelope().rows("teams"));
+        assertEquals(List.of(membership), result.envelope().rows("team_members"));
+    }
+
+    @Test
+    void theEnvelopeMetadataSurvives() {
+        ExportEnvelope out = prepared().envelope();
         assertEquals("workloadhub", out.database());
         assertEquals("task_service", out.schema());
         assertEquals("2026-09-19T10:00:00", out.exportedAt());
-        assertEquals(List.of("notifications"), out.excludedTables());
+        assertTrue(out.excludedTables().isEmpty());
     }
 
     @Test
     void anExportWithNoUsersIsRefused() {
-        ExportEnvelope empty = new ExportEnvelope("workloadhub", "task_service", null, List.of(), new LinkedHashMap<>());
-        IllegalArgumentException e = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> ExportPreparer.prepare(empty, JOINED, ExportPreparer.SEED));
-        assertTrue(e.getMessage().contains("users"), e.getMessage());
-    }
-
-    static List<Team> derived() {
-        return ExportPreparer.deriveTeams(ExportPreparer.members(users()), new HashSet<>(), new SeedRandom(ExportPreparer.SEED));
-    }
-
-    static Team named(List<Team> teams, String name) {
-        return teams.stream().filter(t -> t.name().equals(name)).findFirst().orElseThrow();
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> ExportPreparer.prepare(envelope(new ArrayList<>(), new ArrayList<>(), new ArrayList<>())));
+        assertTrue(e.getMessage().contains("no users"));
     }
 
     @Test
-    void departmentsBecomeParentlessTeamsAndManagersBecomeTheirChildren() {
-        List<Team> teams = derived();
-        // CT2 (five people, since "PTE / CT2" collapses to the same code), SIM (one), Unassigned (two)
-        List<Team> departments = teams.stream().filter(Team::department).toList();
-        assertEquals(3, departments.size(), teams.toString());
-        assertTrue(departments.stream().allMatch(t -> t.parentId() == null));
-
-        Team ct2 = named(teams, "PTE / CT2 Calibration & Testing 2");
-        assertTrue(ct2.department());
-        assertEquals(HEAD, ct2.managerId(), "the Skill Team Leader by job title heads the department");
-        assertEquals("CT2", ct2.deptCode());
-
-        List<Team> managerTeams = teams.stream().filter(t -> !t.department()).toList();
-        assertEquals(2, managerTeams.size(), "Head One and Manager Two each have reports");
-        for (Team t : managerTeams) {
-            assertEquals(ct2.id(), t.parentId(), "a manager team hangs under its department team");
-        }
-        assertNotNull(named(teams, "CT2 · Manager Two"));
-    }
-
-    @Test
-    void peopleWithNoDepartmentLandInUnassigned() {
-        Team unassigned = named(derived(), "Unassigned");
-        assertTrue(unassigned.department());
-        assertNull(unassigned.deptCode());
-        assertTrue(unassigned.memberIds().contains(LOST));
-        assertTrue(unassigned.memberIds().contains(BOSS));
-    }
-
-    @Test
-    void everyUserIsInAtLeastOneTeam() {
-        List<Team> teams = derived();
-        for (LinkedHashMap<String, Object> u : users()) {
-            UUID id = UUID.fromString((String) u.get("id"));
-            assertTrue(teams.stream().anyMatch(t -> t.memberIds().contains(id)),
-                    u.get("full_name") + " is in no team, so ForecastRepository would not count them");
-        }
-    }
-
-    @Test
-    void departmentMembersAreTheHeadAndThePeopleWithNoManager() {
-        Team ct2 = named(derived(), "PTE / CT2 Calibration & Testing 2");
-        assertEquals(List.of(HEAD), ct2.memberIds(),
-                "Manager Two and the engineers reach the department through their manager team");
-    }
-
-    @Test
-    void collidingNamesGetASuffix() {
-        Set<String> used = new HashSet<>();
-        used.add("Unassigned");
-        List<Team> teams = ExportPreparer.deriveTeams(ExportPreparer.members(users()), used, new SeedRandom(ExportPreparer.SEED));
-        assertNotNull(named(teams, "Unassigned 2"), "teams.name is UNIQUE, so a taken name gets a suffix");
-    }
-
-    static LinkedHashMap<String, Object> stubTeam(UUID id, String name, UUID parent) {
-        LinkedHashMap<String, Object> t = new LinkedHashMap<>();
-        t.put("id", id.toString());
-        t.put("name", name);
-        t.put("active", true);
-        t.put("version", 0L);
-        t.put("manager_id", null);
-        t.put("parent_team_id", parent == null ? null : parent.toString());
-        t.put("created_at", "2026-09-03T13:59:58");
-        t.put("updated_at", "2026-09-03T13:59:58");
-        return t;
-    }
-
-    static final UUID STUB = UUID.fromString("40000000-0000-0000-0000-000000000001");
-    static final UUID STUB_PARENT = UUID.fromString("40000000-0000-0000-0000-000000000002");
-    static final UUID STUB_FREE = UUID.fromString("40000000-0000-0000-0000-000000000003");
-
-    @Test
-    void teamRowsCarryTheDerivedStructure() {
-        ExportPreparer.Result result = prepared();
-        List<LinkedHashMap<String, Object>> teams = result.envelope().rows("teams");
-        assertEquals(5, teams.size(), "three departments and two manager teams");
-        assertEquals(3, result.departmentTeams());
-        assertEquals(2, result.managerTeams());
-        for (LinkedHashMap<String, Object> t : teams) {
-            assertEquals(Boolean.TRUE, t.get("active"));
-            assertEquals(0L, t.get("version"));
-            assertEquals("2021-01-04T08:00", t.get("created_at"));
-        }
-        Set<Object> ids = new HashSet<>();
-        teams.forEach(t -> ids.add(t.get("id")));
-        for (LinkedHashMap<String, Object> t : teams) {
-            if (t.get("parent_team_id") != null) {
-                assertTrue(ids.contains(t.get("parent_team_id")), "a parent that is not in the export fails the key");
-            }
-        }
-    }
-
-    @Test
-    void membershipRowsUseTheRequestedJoinedDate() {
-        List<LinkedHashMap<String, Object>> rows = prepared().envelope().rows("team_members");
-        assertTrue(rows.size() >= 7, "at least one row per user: " + rows.size());
-        Set<String> pairs = new HashSet<>();
-        for (LinkedHashMap<String, Object> m : rows) {
-            assertEquals("2021-01-04T08:00", m.get("joined_at"),
-                    "ForecastRepository folds the earliest joined_at into the member's start date");
-            assertEquals("2021-01-04T08:00", m.get("created_at"));
-            assertEquals("2021-01-04T08:00", m.get("updated_at"));
-            assertTrue(pairs.add(m.get("team_id") + "/" + m.get("user_id")), "(team_id, user_id) is UNIQUE");
-        }
-    }
-
-    @Test
-    void aStubTeamNothingReferencesIsDropped() {
-        ExportEnvelope input = envelope(users(),
-                new ArrayList<>(List.of(stubTeam(STUB_FREE, "Frontend Team", null))),
-                new ArrayList<>());
-        ExportPreparer.Result result = ExportPreparer.prepare(input, JOINED, ExportPreparer.SEED);
-        assertEquals(0, result.teamsKept());
-        assertEquals(1, result.teamsDropped());
-        assertTrue(result.envelope().rows("teams").stream().noneMatch(t -> STUB_FREE.toString().equals(t.get("id"))));
-    }
-
-    @Test
-    void aStubTeamAProjectPointsAtSurvivesWithItsAncestors() {
-        LinkedHashMap<String, Object> project = new LinkedHashMap<>();
-        project.put("id", "80000000-0000-0000-0000-000000000001");
-        project.put("key", "CT2-CAL");
-        project.put("team_id", STUB.toString());
-
-        LinkedHashMap<String, List<LinkedHashMap<String, Object>>> data = new LinkedHashMap<>();
-        data.put("users", users());
-        data.put("teams", new ArrayList<>(List.of(
-                stubTeam(STUB_PARENT, "Engineering", null),
-                stubTeam(STUB, "Backend Team", STUB_PARENT),
-                stubTeam(STUB_FREE, "Frontend Team", null))));
-        LinkedHashMap<String, Object> membership = new LinkedHashMap<>();
-        membership.put("id", "50000000-0000-0000-0000-000000000001");
-        membership.put("team_id", STUB.toString());
-        membership.put("user_id", ENG1.toString());
-        membership.put("joined_at", "2026-09-03T14:00:00");
-        membership.put("created_at", "2026-09-03T14:00:00");
-        membership.put("updated_at", "2026-09-03T14:00:00");
-        data.put("team_members", new ArrayList<>(List.of(membership)));
-        data.put("projects", new ArrayList<>(List.of(project)));
-
-        ExportPreparer.Result result = ExportPreparer.prepare(
-                new ExportEnvelope("workloadhub", "task_service", null, List.of(), data), JOINED, ExportPreparer.SEED);
-
-        assertEquals(2, result.teamsKept(), "the referenced team and its parent");
-        assertEquals(1, result.teamsDropped());
-        Set<Object> ids = new HashSet<>();
-        result.envelope().rows("teams").forEach(t -> ids.add(t.get("id")));
-        assertTrue(ids.contains(STUB.toString()), "dropping it would fail projects.team_id at import");
-        assertTrue(ids.contains(STUB_PARENT.toString()), "dropping it would fail teams.parent_team_id at import");
-        assertTrue(!ids.contains(STUB_FREE.toString()));
-        assertTrue(result.envelope().rows("team_members").stream()
-                .anyMatch(m -> STUB.toString().equals(m.get("team_id"))), "a kept team keeps its memberships");
+    void twoRunsOverOneExportAgree() {
+        assertEquals(prepared().envelope().rows("users"), prepared().envelope().rows("users"));
     }
 }

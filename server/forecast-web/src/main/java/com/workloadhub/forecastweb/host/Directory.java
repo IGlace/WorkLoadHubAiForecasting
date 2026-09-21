@@ -9,14 +9,20 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * The WorkloadHub directory as this host reads it: users, teams and memberships. The production server has its
- * own services for these tables; the module itself only ever answers in ids, so a host joins the names.
+ * The WorkloadHub directory as this host reads it: users, and the teams the company structure makes of them.
+ * The production server has its own services for these; the module itself only ever answers in ids, so a host
+ * joins the names.
+ *
+ * <p>A team is a leader and the people who report to them directly, keyed by the leader's own user id (design
+ * 2026-09-21). The application's `teams` table is not read: it holds project teams, an ad-hoc group around one
+ * project, which say nothing about who manages whom.
  */
 public final class Directory {
 
     public record User(UUID id, String fullName, String role, String jobTitle, String department, boolean active) {
     }
 
+    /** {@code id} is the leader's user id; {@code parentTeamId} is the team of the leader's own manager. */
     public record Team(UUID id, String name, UUID managerId, UUID parentTeamId, int memberCount) {
     }
 
@@ -52,14 +58,20 @@ public final class Directory {
         return out;
     }
 
+    /** Counted: what {@code ForecastRepository} counts, so the host's member lists agree with the module's. */
+    private static final String COUNTED = " active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')";
+
     public List<Team> teams() {
+        String sql = "SELECT m.id, m.full_name, m.manager_id,"
+                + " (SELECT COUNT(*) FROM users r WHERE r.manager_id = m.id AND" + COUNTED + ") AS reports,"
+                + " CASE WHEN m." + COUNTED + " THEN 1 ELSE 0 END AS counts_itself"
+                + " FROM users m"
+                + " WHERE EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND" + COUNTED + ")"
+                + " ORDER BY m.full_name";
         List<Team> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql("""
-                SELECT t.id, t.name, t.manager_id, t.parent_team_id,
-                       (SELECT COUNT(*) FROM team_members tm WHERE tm.team_id = t.id) AS members
-                FROM teams t ORDER BY t.name""").query().listOfRows()) {
-            out.add(new Team(uuid(r.get("id")), str(r.get("name")), uuid(r.get("manager_id")), uuid(r.get("parent_team_id")),
-                    ((Number) r.get("members")).intValue()));
+        for (Map<String, Object> r : jdbc.sql(sql).query().listOfRows()) {
+            int members = ((Number) r.get("reports")).intValue() + ((Number) r.get("counts_itself")).intValue();
+            out.add(new Team(uuid(r.get("id")), str(r.get("full_name")), uuid(r.get("id")), uuid(r.get("manager_id")), members));
         }
         return out;
     }
@@ -68,17 +80,21 @@ public final class Directory {
         return teams().stream().filter(t -> t.id().equals(id)).findFirst();
     }
 
+    /** Every counted user's place: their manager's team, and their own when they lead one. */
     public List<Membership> memberships() {
         List<Membership> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.sql("SELECT team_id, user_id FROM team_members").query().listOfRows()) {
-            out.add(new Membership(uuid(r.get("team_id")), uuid(r.get("user_id"))));
+        for (Team t : teams()) {
+            for (UUID member : membersOf(t.id())) {
+                out.add(new Membership(t.id(), member));
+            }
         }
         return out;
     }
 
+    /** The leader, when they are counted themselves, and everyone who reports to them directly. */
     public List<UUID> membersOf(UUID teamId) {
-        return jdbc.sql("SELECT tm.user_id FROM team_members tm JOIN users u ON u.id = tm.user_id WHERE tm.team_id = ?"
-                + " ORDER BY u.full_name").param(teamId).query().listOfRows().stream().map(r -> uuid(r.get("user_id"))).toList();
+        return jdbc.sql("SELECT id FROM users WHERE (id = ? OR manager_id = ?) AND" + COUNTED + " ORDER BY full_name")
+                .param(teamId).param(teamId).query().listOfRows().stream().map(r -> uuid(r.get("id"))).toList();
     }
 
     static UUID uuid(Object o) {

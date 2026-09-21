@@ -20,8 +20,8 @@ class RhythmTest {
         people.put(p.id(), p);
         Map<UUID, AbsencePlanner.Plan> plans = new HashMap<>();
         plans.put(p.id(), AbsencePlanner.plan(p, cal, CFG, new SeedRandom(seed)));
-        Team team = new Team(UUID.randomUUID(), "CT2 · X", p.id(), null, List.of(p.id()), false, "CT2");
-        return new Rhythm(CFG, cal, people, plans, List.of(team), new SeedRandom(seed));
+        // One person with no manager keys their own team (Directory.teamKey).
+        return new Rhythm(CFG, cal, people, plans, new SeedRandom(seed));
     }
 
     @Test
@@ -39,7 +39,7 @@ class RhythmTest {
         Rhythm r = rhythm(eng, 9);
         LocalDate week = LocalDate.of(2026, 3, 16);
         double t = r.target(eng, week);
-        double expected = r.base(eng) * Rhythm.season(week, AbsencePlannerTest.cal()) * r.ramp(eng, week) * r.event(r.teamOf(eng).id(), week) * r.availability(eng, week);
+        double expected = r.base(eng) * Rhythm.season(week, AbsencePlannerTest.cal()) * r.ramp(eng, week) * r.event(r.teamOf(eng), week) * r.availability(eng, week);
         assertEquals(expected, t, 1e-9);
         assertTrue(r.base(eng) >= 42 * 0.5 && r.base(eng) <= 42 * 1.3);
         Person lead = eng.withRole("TEAM_LEADER");

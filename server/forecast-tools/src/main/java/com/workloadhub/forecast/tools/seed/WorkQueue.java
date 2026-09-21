@@ -91,15 +91,13 @@ public final class WorkQueue {
      * (exported) hours apart from the worked hours discipline actually scales, without conflating that gap
      * with the separate estimate/actual ratio. */
     private final Map<UUID, Double> workedHours = new TreeMap<>();
-    private final List<Team> teams;
     private final List<Project> projects;
 
     private WorkQueue(SeedConfig cfg, SeedCalendar cal, List<Person> personList, Map<UUID, AbsencePlanner.Plan> plans,
-            List<Team> teams, List<Project> projects, Rhythm rhythm, Reference ref, Rates rates, SeedRandom rnd) {
+            List<Project> projects, Rhythm rhythm, Reference ref, Rates rates, SeedRandom rnd) {
         this.cfg = cfg;
         this.cal = cal;
         this.plans = plans;
-        this.teams = teams;
         this.projects = projects;
         this.rhythm = rhythm;
         this.ref = ref;
@@ -114,12 +112,13 @@ public final class WorkQueue {
     }
 
     public static Result run(SeedConfig cfg, SeedCalendar cal, List<Person> people, Map<UUID, AbsencePlanner.Plan> plans,
-            List<Team> teams, List<Project> projects, Rhythm rhythm, Reference ref, Rates rates, SeedRandom rnd) {
-        WorkQueue q = new WorkQueue(cfg, cal, people, plans, teams, projects, rhythm, ref, rates, rnd);
+            List<Project> projects, Rhythm rhythm, Reference ref, Rates rates, SeedRandom rnd) {
+        WorkQueue q = new WorkQueue(cfg, cal, people, plans, projects, rhythm, ref, rates, rnd);
         q.createEpics();
         List<Person> counted = new ArrayList<>(people);
-        // a counted person in no team gets no work: the module does not count such a user either
-        counted.removeIf(p -> !p.counted() || rhythm.teamOf(p) == null);
+        // Every counted person gets work, including one who reports to nobody: the module counts them too now
+        // that a team membership is no longer a condition (design 2026-09-21, section 4).
+        counted.removeIf(p -> !p.counted());
         counted.sort(Comparator.comparing(p -> p.id().toString()));
         for (Person p : counted) {
             q.simulate(p);
@@ -161,20 +160,13 @@ public final class WorkQueue {
     }
 
     /**
-     * The projects a member can pick up: the union, without duplicates and in a fixed order (by project
-     * key), of every team the member belongs to (a person can be on both a department team and a manager
-     * team, and an export's own team as well) rather than only their {@link Rhythm#teamOf} primary team,
-     * so members of an export's own team also see that team's own projects and not only its epics.
+     * The projects a member can pick up, in a fixed order (by project key): their department's, plus any a
+     * real export carried whose owner is outside the directory.
      */
     private List<Project> candidatesFor(Person p) {
         Map<String, Project> byKey = new TreeMap<>();
-        for (Team t : teams) {
-            if (!t.memberIds().contains(p.id())) {
-                continue;
-            }
-            for (Project pr : ProjectPlanner.projectsFor(t, teams, projects)) {
-                byKey.put(pr.key(), pr);
-            }
+        for (Project pr : ProjectPlanner.projectsFor(p, projects)) {
+            byKey.put(pr.key(), pr);
         }
         return new ArrayList<>(byKey.values());
     }
@@ -236,12 +228,9 @@ public final class WorkQueue {
     }
 
     private void simulate(Person p) {
-        Team team = rhythm.teamOf(p);
-        if (team == null) {
-            return;
-        }
-        UUID leader = team.managerId() != null && people.containsKey(team.managerId()) && !team.managerId().equals(p.id())
-                ? team.managerId() : p.id();
+        // Who hands this person work: their own manager, or themselves when they lead the team.
+        UUID team = rhythm.teamOf(p);
+        UUID leader = team != null && !team.equals(p.id()) && people.containsKey(team) ? team : p.id();
         AbsencePlanner.Plan plan = plans.get(p.id());
         List<Arrival> arrivals = planArrivals(p);
         // the member's estimation bias: lognormal(1.0, 0.25), clamped so one member's draw at the
