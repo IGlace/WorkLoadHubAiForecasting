@@ -144,7 +144,7 @@ public final class FactsBuilder {
         // and `parent_team_id` is the leader's own manager: the skill team leader a risk is escalated to.
         return map("id", str(out.teamId()), "name", lead == null ? null : lead.fullName(),
                 "parent_team_id", lead == null || lead.managerId() == null ? null : str(lead.managerId()),
-                "manager_id", str(out.teamId()), "totals", totals);
+                "manager_id", lead == null ? null : str(out.teamId()), "totals", totals);
     }
 
     /** Estimated hours of the member's open tasks whose planned week overlaps the window. */

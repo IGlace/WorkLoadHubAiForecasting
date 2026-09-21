@@ -64,9 +64,15 @@ public final class ForecastAccess {
                 .param(userId).param(teamId).query().listOfRows().isEmpty();
     }
 
-    /** Whether a team exists at all: somebody counted reports to this user. */
+    /**
+     * Whether a team exists at all: this user is a TEAM_LEADER and somebody counted reports to them. The role
+     * matters — a SKILL_TEAM_LEADER has reports too, and their "team" would be the leaders beneath them,
+     * which nobody may run (design 2026-09-21, rulings 1 and 3).
+     */
     private boolean leadsSomeone(UUID teamId) {
-        return !jdbc.sql("SELECT 1 FROM users WHERE manager_id = ? AND active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')")
+        return !jdbc.sql("SELECT 1 FROM users lead JOIN users r ON r.manager_id = lead.id"
+                        + " WHERE lead.id = ? AND lead.role = 'TEAM_LEADER'"
+                        + " AND r.active = TRUE AND r.role IN ('MEMBER', 'TEAM_LEADER')")
                 .param(teamId).query().listOfRows().isEmpty();
     }
 }

@@ -7,7 +7,9 @@ import com.workloadhub.forecast.data.rows.MemberRow;
 import com.workloadhub.forecast.store.DatabaseTestSupport;
 import com.workloadhub.forecast.store.ForecastMigrations;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -56,14 +58,19 @@ public final class SeededData {
     }
 
     /**
-     * The teams of a dataset, keyed by their leader: every user who has at least one counted direct report
-     * (design 2026-09-21, section 4). Sorted, so a test that takes the first one takes the same one every run.
+     * The teams of a dataset, keyed by their leader: every TEAM_LEADER who has at least one counted direct
+     * report (design 2026-09-21, rulings 1 and 3). The role of the key is part of the test — a
+     * SKILL_TEAM_LEADER has reports too, and their "team" is the leaders beneath them, which nobody runs.
+     * Sorted, so a test that takes the first one takes the same one every run.
      */
     public static List<UUID> teams(ForecastData data) {
+        Map<UUID, MemberRow> byId = new HashMap<>();
+        data.members().forEach(m -> byId.put(m.id(), m));
         return data.members().stream()
                 .map(MemberRow::managerId)
                 .filter(Objects::nonNull)
                 .distinct()
+                .filter(id -> byId.get(id) != null && "TEAM_LEADER".equals(byId.get(id).role()))
                 .sorted(Ids.UUID_ORDER)
                 .toList();
     }

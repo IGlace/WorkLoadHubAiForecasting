@@ -184,7 +184,7 @@ class WorkQueueTest {
         Department dept = new Department("CT2", "PTE / CT2", lead, List.of(lead, e1));
         UUID exportProjectId = UUID.fromString("80000000-0000-0000-0000-000000000099");
         Project exportProject = new Project(exportProjectId, "LEG", "Legacy platform",
-                UUID.fromString("40000000-0000-0000-0000-000000000003"), lead, "ACTIVE", null,
+                UUID.fromString("40000000-0000-0000-0000-000000000003"), lead, "ACTIVE", null, true,
                 CFG.firstMonday(), CFG.lastDay().plusWeeks(1));
         List<Project> projects = new ArrayList<>();
         projects.add(exportProject);

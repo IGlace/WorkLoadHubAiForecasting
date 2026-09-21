@@ -99,23 +99,26 @@ class DirectoryTest {
     }
 
     @Test
-    void writesNoTeamRowsAtAll() {
-        // teams and team_members hold project teams; ProjectPlanner writes those, from the work it plans.
+    void syntheticModeWritesTheDerivedRolesIntoTheUserRows() {
         Directory.Result r = Directory.derive(users(), cfg(), new SeedRandom(1));
-        assertEquals(3, Directory.Result.class.getRecordComponents().length,
-                "people, departments and userRows: no team rows on this result");
+        assertEquals("SKILL_TEAM_LEADER", r.userRows().stream()
+                .filter(u -> HEAD.toString().equals(u.get("id"))).findFirst().orElseThrow().get("role"));
         long active = r.userRows().stream().filter(u -> Boolean.TRUE.equals(u.get("active"))).count();
         assertTrue(active >= 5, "3% leave at most; got " + active);
         assertTrue(r.people().stream().allMatch(p -> !p.joined().isAfter(cfg().lastDay())));
     }
 
     @Test
-    void realModeLeavesTheUserRowsAlone() {
+    void realModeDerivesTheStructureButLeavesTheUserRowsAlone() {
         SeedConfig real = new SeedConfig(20, LocalDate.of(2026, 9, 6), 42L, false, 0);
         Directory.Result r = Directory.derive(users(), real, new SeedRandom(1));
-        assertEquals(users(), r.userRows(), "real mode writes the five work tables and nothing else");
-        assertTrue(r.departments().size() >= 1, "the structure is still derived; the work is shaped by it");
-        assertEquals("SKILL_TEAM_LEADER", role(r, HEAD), "and the roles it implies are still known");
+        // The discriminating pair: the derivation knows Head One is a skill team leader, and the row does not
+        // say so, because real mode writes the five work tables and nothing else.
+        assertEquals("SKILL_TEAM_LEADER", role(r, HEAD), "the structure is derived; the work is shaped by it");
+        assertEquals("MEMBER", r.userRows().stream()
+                .filter(u -> HEAD.toString().equals(u.get("id"))).findFirst().orElseThrow().get("role"),
+                "but the export's own row is untouched");
+        assertTrue(r.departments().size() >= 1);
     }
 
     @Test

@@ -1,7 +1,7 @@
 # Teams come from the hierarchy, not the `teams` table
 
 Date: 2026-09-21
-Status: design, not yet implemented
+Status: **implemented, landed on `dev` on 2026-09-21**, including the fix wave of the branch review
 
 Supersedes `2026-09-19-real-export-preparation-design.md` in part: that document's sections 5 and 6,
 the derivation of department teams and manager teams, are withdrawn. Its sections 4 and 4.1, the
@@ -65,9 +65,10 @@ sentence is in the narrator's system message on every run.
 
 Settled with the owner on 2026-09-21.
 
-1. **A team is a manager plus their direct reports.** Not a subtree. A user whose role is
-   `TEAM_LEADER` and who has at least one direct report has a team; its members are that leader
-   and the users whose `manager_id` names them.
+1. **A team is a team leader plus their direct reports.** Not a subtree. A user whose role is
+   `TEAM_LEADER` and who has at least one counted direct report has a team; its members are that leader and
+   the users whose `manager_id` names them. A manager of any other role — a skill team leader, an admin —
+   keys no team, which section 4 explains and enforces.
 2. **The leader is counted**, because team leaders do technical work and log hours. **A skill team
    leader is not counted**, because they do not.
 3. **A skill team leader is the manager of a team leader.** To run a forecast they choose one team
@@ -110,22 +111,24 @@ keys them separately, which is correct — the two runs are two different questi
 ## 4. What the module reads
 
 `ForecastRepository.loadAll` loses both team queries
-(`ForecastRepository.java:46-59`) and gains two columns on the users query
-(`ForecastRepository.java:62`):
+and gains `manager_id` on the users query:
 
 ```java
-jdbc.sql("SELECT id, full_name, email, username, role, job_title, department, manager_id, active, deactivated_at FROM users")
+jdbc.sql("SELECT id, full_name, email, username, role, job_title, manager_id, active, deactivated_at FROM users")
 ```
 
 The counted-member test becomes `active` and a counted role. The primary-team selection goes.
 
 `MemberRow` (`server/forecast-core/src/main/java/com/workloadhub/forecast/data/rows/MemberRow.java`)
-drops `teamIds` and `primaryTeamId` and gains `managerId` and `department`:
+drops `teamIds` and `primaryTeamId` and gains `managerId`:
 
 ```java
 public record MemberRow(UUID id, String fullName, String email, String role, String jobTitle,
-        String department, UUID managerId, LocalDate joined, LocalDate left)
+        UUID managerId, LocalDate joined, LocalDate left)
 ```
+
+`department` was carried here at first and is not: nothing in the module reads it, and the one place that
+would have (the `team` fact's name) does not either — see section 8.
 
 `MemberRow.employedOn` goes with them. It is dead code: the only `employedOn` anyone calls is the
 seed's own `Person.employedOn`.
@@ -148,13 +151,25 @@ public List<MemberRow> membersOfTeam(UUID teamId) {
 by construction and needs no second test. A leader whose own role is not counted is absent from
 their own team's member list while still being its key, which is exactly ruling 2.
 
-`DefaultForecastService.requireTeam` (`DefaultForecastService.java:138-143`) stops asking
-`SELECT id FROM teams WHERE id = ?` and asks instead whether that user exists and has at least one
-counted, active direct report:
+`DefaultForecastService.requireTeam` stops asking `SELECT id FROM teams WHERE id = ?` and asks instead
+whether that user is a `TEAM_LEADER` with at least one counted, active direct report:
 
 ```sql
-SELECT 1 FROM users WHERE manager_id = ? AND active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')
+SELECT 1 FROM users lead JOIN users r ON r.manager_id = lead.id
+WHERE lead.id = ? AND lead.role = 'TEAM_LEADER'
+  AND r.active = TRUE AND r.role IN ('MEMBER', 'TEAM_LEADER')
 ```
+
+**The role of the key is part of the test, not decoration.** A `SKILL_TEAM_LEADER` has direct reports too,
+and a run keyed by one would forecast every leader beneath them at once, which ruling 3 forbids; on the seed
+fixture 9 of 17 users with counted reports are a skill team leader or an admin. Without the role clause that
+run is reachable — an `ADMIN` short-circuits the host's own check, and a host that forgets to check at all
+falls back on this one. Every list of teams applies the same clause: `Directory.teams()` in the showcase, the
+two `ForecastAccess.leadsSomeone`, `HostExample`, and the test helpers.
+
+One consequence to accept: a counted user whose manager is an `ADMIN` or a `CENTER_MANAGER` is in no team and
+appears in no run, because `prepare` must leave those two roles alone. It is asserted in
+`ExportPreparerPropertyTest` so that it stays a known shape rather than a surprise.
 
 The code `TEAM_NOT_FOUND` and the shape of its message stay, so hosts and the showcase keep the
 error they already handle. `ForecastRunner.forTeam` keeps its own `TEAM_NOT_FOUND` for the case
@@ -213,12 +228,18 @@ projects, created by the week's end, neither assigned nor finished.
 
 ## 7. Features
 
-`Features.CATEGORICAL` (`features/Features.java:63`) keeps all four columns, `team_id` among them.
-Its source moves from `m.primaryTeamId()` to `m.managerId()`
-(`FeatureBuilder.java:90`), and the codebook at `FeatureBuilder.java:109` follows.
+`Features.CATEGORICAL` keeps all four columns, `team_id` among them. Its source becomes
+`FeatureBuilder.teamOf`: **the team the member does their work in** — the one they lead if they lead one,
+otherwise their manager's.
 
-A member with no manager has no `team_id` value. Per the 2026-09-16 ruling it is left blank rather
-than given a sentinel, exactly as the other blank-able columns are.
+That distinction is not pedantry. A run's members are a leader and their reports, and the leader is in two
+teams. Keying their row on `managerId` like everyone else would give the leader team columns describing the
+*group of leaders above them* — a different and much larger `team_backlog_unassigned_hrs`, `proj_active` and
+`proj_planning` than every other row of the same run carries, for no reason a model can learn.
+
+A member who neither leads a team nor reports to anyone has no `team_id`. Per the 2026-09-16 ruling it is
+left blank rather than given a sentinel, exactly as the other blank-able columns are; such a member is in no
+team and appears in no run.
 
 The column is still worth having. It was always a proxy for "who this person works alongside", and
 under the hierarchy it is a truer one: the manager id groups the people who actually share a
@@ -234,7 +255,7 @@ The `team` node (`facts/FactsBuilder.java:129-145`) is built from the leader ins
 | field | now |
 |---|---|
 | `id` | the leader's user id, unchanged in type and position |
-| `name` | the leader's full name, prefixed by their department code where they have one |
+| `name` | the leader's full name |
 | `manager_id` | the leader's user id |
 | `parent_team_id` | the leader's own `manager_id` |
 | `totals` | unchanged |
@@ -338,9 +359,17 @@ department, keeps the tables honest without inventing a second hierarchy.
 project's work, so it takes the leader team. The team rows written at `SeedGenerator.java:265-266`
 come from `ProjectPlanner` rather than `Directory`.
 
-**Real mode is unchanged in what it writes**: `REAL_MODE_TABLES` (`SeedGenerator.java:22`), the five
-work tables. It invents no projects, so it mints no project teams, so `teams` and `team_members` in
-a real database stay exactly as WorkloadHub left them.
+**Real mode is unchanged in what it writes**: `REAL_MODE_TABLES` (`SeedGenerator.java:22`), the five work
+tables. It does invent department projects, as it always did, but mints **no project team** for them —
+`projects.team_id` is nullable, and a team id minted there would be a dangling foreign key at import, since
+no `teams` row is written. `teams` and `team_members` in a real database stay exactly as WorkloadHub left
+them.
+
+A project's `deptCode` is normalised so that a blank and a null are one thing. `Directory.deptCode` answers
+null for a blank department while a `Department`'s own code spells the same thing as `""`; compared raw,
+`"".equals(null)` is false and every person with no department at all matches no project, so they get no
+task, no log and no history. A project that belongs to no department of ours — one a real export carried
+whose owner is outside the directory — says so with `openToAll` instead of with a null code.
 
 `HostExample` (`examples/HostExample.java:160-183`) stops querying `teams` and `team_members` and
 lists teams as the users who have counted direct reports, with the leader themselves as the

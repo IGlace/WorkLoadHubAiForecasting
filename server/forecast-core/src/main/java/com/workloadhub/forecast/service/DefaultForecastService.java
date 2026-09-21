@@ -136,13 +136,17 @@ public final class DefaultForecastService implements ForecastService, AutoClosea
     }
 
     /**
-     * A team exists when the user it is keyed by leads someone: `teams` is not consulted, because it holds
-     * project teams (design 2026-09-21, section 4). The code and the message shape are unchanged, so a host
-     * that already handles TEAM_NOT_FOUND keeps working.
+     * A team exists when the user it is keyed by is a TEAM_LEADER and somebody counted reports to them
+     * (design 2026-09-21, rulings 1 and 3). `teams` is not consulted, because it holds project teams. The
+     * role of the key is part of the test, not decoration: a SKILL_TEAM_LEADER also has reports, and a run
+     * keyed by them would forecast the leaders beneath them all at once, which ruling 3 forbids. The code and
+     * the message shape are unchanged, so a host that already handles TEAM_NOT_FOUND keeps working.
      */
     private void requireTeam(UUID teamId) {
         boolean exists = !JdbcClient.create(dataSource)
-                .sql("SELECT 1 FROM users WHERE manager_id = ? AND active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')")
+                .sql("SELECT 1 FROM users lead JOIN users r ON r.manager_id = lead.id"
+                        + " WHERE lead.id = ? AND lead.role = 'TEAM_LEADER'"
+                        + " AND r.active = TRUE AND r.role IN ('MEMBER', 'TEAM_LEADER')")
                 .param(teamId).query().listOfRows().isEmpty();
         if (!exists) {
             throw ForecastException.of("TEAM_NOT_FOUND", "team " + teamId + " does not exist");

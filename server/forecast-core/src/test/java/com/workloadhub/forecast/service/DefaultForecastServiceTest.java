@@ -327,13 +327,14 @@ class DefaultForecastServiceTest {
 
     @Test
     void aFailedRunIsRecordedNotSwallowed() {
-        // A leader whose only counted report has already left: the team exists as far as `enqueue` can tell,
-        // so the run is created, and then fails inside the runner once the leaving date is applied. That
+        // A TEAM_LEADER who has themselves left, whose only counted report has left too: the team exists as
+        // far as `enqueue` can tell — the key carries the right role and somebody counted still reports to it
+        // — so the run is created, and then fails inside the runner once the leaving dates are applied. That
         // active-with-a-leaving-date pair is the hazard the 2026-09-19 design named, here as the failure path.
         UUID lead = UUID.randomUUID();
         UUID gone = UUID.randomUUID();
-        insertUser(lead, "SKILL_TEAM_LEADER", null, null);
-        insertUser(gone, "MEMBER", lead, "2020-01-06T09:00:00");
+        insertUser(lead, "TEAM_LEADER", null, "2020-01-06T09:00:00", false);
+        insertUser(gone, "MEMBER", lead, "2020-01-06T09:00:00", true);
         try {
             ForecastException ex = assertThrows(ForecastException.class,
                     () -> service.runNow(new RunRequest(lead, null)));
@@ -346,13 +347,13 @@ class DefaultForecastServiceTest {
         }
     }
 
-    /** An active user, optionally reporting to {@code manager} and optionally already deactivated. */
-    private static void insertUser(UUID id, String role, UUID manager, String deactivatedAt) {
+    /** A user, optionally reporting to {@code manager}, optionally still flagged active, optionally left. */
+    private static void insertUser(UUID id, String role, UUID manager, String deactivatedAt, boolean active) {
         String now = LocalDateTime.now().withNano(0).toString();
         JdbcClient.create(SeededData.dataSource())
                 .sql("INSERT INTO users (id, role, email, active, username, full_name, created_at, updated_at, manager_id, deactivated_at)"
-                        + " VALUES (?, ?, ?, TRUE, ?, 'Test User', ?::timestamp, ?::timestamp, ?, ?::timestamp)")
-                .param(id).param(role).param(id + "@example.test").param("u-" + id)
+                        + " VALUES (?, ?, ?, ?, ?, 'Test User', ?::timestamp, ?::timestamp, ?, ?::timestamp)")
+                .param(id).param(role).param(id + "@example.test").param(active).param("u-" + id)
                 .param(now).param(now).param(manager).param(deactivatedAt)
                 .update();
     }
@@ -370,7 +371,6 @@ class DefaultForecastServiceTest {
         assertEquals("forecast failed", service.progress(left).label().en());
     }
 
-    /** The seed is expected to carry a member-less "Unassigned" team; this is the fallback if it ever doesn't. */
 
     /** The first team (in leader-id order) with a member who logged hours on a weekday in the range: not necessarily the shared
      * {@code team}, whose members happen to have stopped logging before the range; every other test in the class runs the shared {@code team}

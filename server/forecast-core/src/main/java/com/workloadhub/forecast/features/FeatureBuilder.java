@@ -17,13 +17,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /** Builds the feature matrix of spec section 6 for a set of members up to an origin week. */
 public final class FeatureBuilder {
@@ -49,7 +50,8 @@ public final class FeatureBuilder {
         LocalDate firstWeek = origin.minusWeeks(Features.HISTORY_WEEKS - 1);
         List<LocalDate> weeks = Weeks.between(firstWeek, origin);
         WeeklySeries series = WeeklySeries.build(lc, data, members, weeks);
-        Map<String, List<String>> books = codebooks(members);
+        Set<UUID> leaders = teamKeys();
+        Map<String, List<String>> books = codebooks(members, leaders);
         List<String> columns = Features.allColumns(windows);
         Map<String, Integer> col = new HashMap<>();
         for (int i = 0; i < columns.size(); i++) {
@@ -77,7 +79,10 @@ public final class FeatureBuilder {
                 weeksSinceLastArrival(r, col, fresh, start, i);
                 windowStats(r, col, mc, w);
                 throughput(r, col, mc, w, fresh, start, i);              // Task 6
-                teams.fill(r, col, teamOf(m), w);                        // Task 6
+                UUID team = teamOf(m, leaders);                          // Task 6
+                if (team != null) {
+                    teams.fill(r, col, team, w);
+                }
                 for (int h : Features.horizons(windows)) {
                     LocalDate target = w.plusWeeks(h);
                     double[] avail = availability.computeIfAbsent(new MemberWeek(m.id(), target), k -> new double[] {
@@ -90,7 +95,9 @@ public final class FeatureBuilder {
                     r[col.get(Features.target(h))] = i + h <= originIndex ? logged[i + h] : Double.NaN;
                 }
                 r[col.get("member_id")] = books.get("member_id").indexOf(m.id().toString());
-                r[col.get("team_id")] = books.get("team_id").indexOf(teamOf(m).toString());
+                if (team != null) {
+                    r[col.get("team_id")] = books.get("team_id").indexOf(team.toString());
+                }
                 r[col.get("role")] = books.get("role").indexOf(m.role());
                 r[col.get("job_title")] = books.get("job_title").indexOf(title(m));
                 if (m.joined() != null) {
@@ -105,30 +112,57 @@ public final class FeatureBuilder {
     }
 
     /**
-     * The team a member's features describe: the one they work in, which is their manager's. A member with no
-     * manager keys their own, so the value is never absent and the categorical never needs a blank.
+     * The team a member's features describe: <b>the one they do their work in</b>. For a leader that is the
+     * team they lead, not their own manager's — otherwise a leader's team columns would describe the group of
+     * leaders above them, a different and much larger quantity than every other row of the same run carries.
+     * For everyone else it is their manager's team.
+     *
+     * <p>Null when a member neither leads a team nor reports to anyone. Per the owner's 2026-09-16 ruling
+     * that is left blank, not given a sentinel; such a member is in no team and appears in no run.
      */
-    static UUID teamOf(MemberRow m) {
-        return m.managerId() != null ? m.managerId() : m.id();
+    static UUID teamOf(MemberRow m, Set<UUID> leaders) {
+        return leaders.contains(m.id()) ? m.id() : m.managerId();
+    }
+
+    /**
+     * The members who key a team: a TEAM_LEADER somebody counted reports to (design 2026-09-21, ruling 1).
+     * Read from every counted member, not from the subset being built, so one member's features never depend
+     * on who else was asked for.
+     */
+    private Set<UUID> teamKeys() {
+        Set<UUID> managed = new HashSet<>();
+        for (MemberRow m : data.members()) {
+            if (m.managerId() != null) {
+                managed.add(m.managerId());
+            }
+        }
+        Set<UUID> out = new HashSet<>();
+        for (MemberRow m : data.members()) {
+            if ("TEAM_LEADER".equals(m.role()) && managed.contains(m.id())) {
+                out.add(m.id());
+            }
+        }
+        return out;
     }
 
     private static String title(MemberRow m) {
         return m.jobTitle() == null || m.jobTitle().isBlank() ? NO_TITLE : m.jobTitle();
     }
 
-    private static Map<String, List<String>> codebooks(List<MemberRow> members) {
+    private static Map<String, List<String>> codebooks(List<MemberRow> members, Set<UUID> leaders) {
         Map<String, List<String>> books = new LinkedHashMap<>();
         books.put("member_id", members.stream().map(m -> m.id().toString()).sorted().toList());
-        books.put("team_id", members.stream().map(m -> teamOf(m).toString()).distinct().sorted().toList());
+        books.put("team_id", members.stream().map(m -> teamOf(m, leaders)).filter(Objects::nonNull)
+                .map(UUID::toString).distinct().sorted().toList());
         books.put("role", members.stream().map(MemberRow::role).distinct().sorted().toList());
         books.put("job_title", members.stream().map(FeatureBuilder::title).distinct().sorted().toList());
         return books;
     }
 
     /**
-     * The earlier of the join week and the first assignment week, never before the first loaded week. A member
-     * with no activity at all has no join week, so their first assignment decides, and failing that they start
-     * at the first loaded week.
+     * The earlier of the first-activity week and the first assignment week, never before the first loaded
+     * week. A member with no activity at all has no first-activity week, so their first assignment decides,
+     * and failing that they start at the first loaded week.
      */
     private static int startIndex(MemberRow m, List<TaskFacts> tasks, List<LocalDate> weeks) {
         LocalDate start = m.joined() == null ? null : Weeks.mondayOf(m.joined());
@@ -354,7 +388,7 @@ public final class FeatureBuilder {
         private final ForecastData data;
         private final Map<UUID, Map<LocalDate, double[]>> cache = new HashMap<>();
         private final Map<UUID, List<TaskFacts>> tasksByProject = new HashMap<>();
-        private final Map<UUID, Set<UUID>> memberIdsByTeam = new HashMap<>();
+        private final Map<UUID, Map<UUID, LocalDate>> heldFromByTeam = new HashMap<>();
 
         TeamContext(ForecastData data, Lifecycle lc) {
             this.data = data;
@@ -366,23 +400,38 @@ public final class FeatureBuilder {
         }
 
         /**
-         * The projects the team holds by the end of {@code end}: those of the tasks assigned to one of its members
-         * on or before that day. Bounded by the week under construction, not by the whole history, because a
-         * project the team only picks up later must not reach a row built before it did.
+         * When each project became the team's: the earliest day one of its members was assigned a task in it.
+         * Computed once per team — walking every task once per (team, week) instead costs a full scan of the
+         * task table for every week of the history, which a real export cannot afford.
          */
-        private Set<UUID> projectsOf(UUID team, LocalDate end) {
-            Set<UUID> memberIds = memberIdsByTeam.computeIfAbsent(team,
-                    k -> data.membersOfTeam(k).stream().map(MemberRow::id).collect(Collectors.toSet()));
-            Set<UUID> out = new TreeSet<>(Ids.UUID_ORDER);
-            for (Map.Entry<UUID, List<TaskFacts>> e : tasksByProject.entrySet()) {
-                for (TaskFacts t : e.getValue()) {
-                    if (t.assignee() != null && memberIds.contains(t.assignee())
-                            && t.isAssigned() && !t.assignedDay().isAfter(end)) {
-                        out.add(e.getKey());
-                        break;
+        private Map<UUID, LocalDate> heldFrom(UUID team) {
+            return heldFromByTeam.computeIfAbsent(team, k -> {
+                Set<UUID> memberIds = new HashSet<>();
+                data.membersOfTeam(k).forEach(m -> memberIds.add(m.id()));
+                Map<UUID, LocalDate> out = new HashMap<>();
+                for (Map.Entry<UUID, List<TaskFacts>> e : tasksByProject.entrySet()) {
+                    for (TaskFacts t : e.getValue()) {
+                        if (t.assignee() != null && memberIds.contains(t.assignee()) && t.isAssigned()) {
+                            out.merge(e.getKey(), t.assignedDay(), (a, b) -> a.isBefore(b) ? a : b);
+                        }
                     }
                 }
-            }
+                return out;
+            });
+        }
+
+        /**
+         * The projects the team holds by the end of {@code end}: those one of its members had been assigned a
+         * task in on or before that day. Bounded by the week under construction, not by the whole history,
+         * because a project the team only picks up later must not reach a row built before it did.
+         */
+        private Set<UUID> projectsOf(UUID team, LocalDate end) {
+            Set<UUID> out = new TreeSet<>(Ids.UUID_ORDER);
+            heldFrom(team).forEach((project, since) -> {
+                if (!since.isAfter(end)) {
+                    out.add(project);
+                }
+            });
             return out;
         }
 

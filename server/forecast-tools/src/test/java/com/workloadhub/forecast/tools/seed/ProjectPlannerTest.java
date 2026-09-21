@@ -93,6 +93,39 @@ class ProjectPlannerTest {
     }
 
     @Test
+    void peopleWithNoDepartmentGetTheProjectsOfTheDepartmentNobodyNamed() {
+        // Directory.deptCode answers null for a blank department while Department.code() spells the same
+        // thing as "". Compared raw, "".equals(null) is false, and these people would match no project at
+        // all: no candidate, so no task, no log and no history. Invisible on the seed fixture, where every
+        // synthetic user has a department; routine on a real export, where many have none.
+        UUID member = UUID.randomUUID();
+        Department unnamed = new Department("", "Unassigned", null, List.of(member));
+        Person p = new Person(member, "Nobody", "Generalist", null, null, null, "MEMBER",
+                WorkFamily.SUPPORT, CFG.firstMonday(), null);
+        List<Project> projects = ProjectPlanner.plan(List.of(unnamed), Map.of(member, p), List.of(), CFG, new SeedRandom(5));
+        assertTrue(!projects.isEmpty(), "the department nobody named still gets projects");
+        for (Project pr : projects) {
+            assertNull(pr.deptCode(), "a blank code is stored as null, the same thing the person carries");
+            assertTrue(!pr.openToAll(), "it belongs to a department of ours, so it is not open to everybody");
+        }
+        assertEquals(projects, ProjectPlanner.projectsFor(p, projects), "and its own people can pick them up");
+    }
+
+    @Test
+    void aDepartmentsProjectsAreNotOfferedToAnotherDepartment() {
+        UUID ours = UUID.randomUUID();
+        UUID theirs = UUID.randomUUID();
+        Department ct2 = new Department("CT2", "PTE / CT2", ours, List.of(ours));
+        Person outsider = new Person(theirs, "Outsider", "Simulation Engineer", "PTE / SIM", "SIM", null, "MEMBER",
+                WorkFamily.DESIGN, CFG.firstMonday(), null);
+        List<Project> projects = ProjectPlanner.plan(List.of(ct2),
+                Map.of(ours, person(ours, "Head", "Skill Team Leader", "SKILL_TEAM_LEADER", WorkFamily.COORDINATION, null)),
+                List.of(), CFG, new SeedRandom(5));
+        assertTrue(!projects.isEmpty());
+        assertTrue(ProjectPlanner.projectsFor(outsider, projects).isEmpty(), "SIM does not work on CT2's projects");
+    }
+
+    @Test
     void realModeMintsNoProjectTeamBecauseItWritesNoTeamRows() {
         UUID head = UUID.randomUUID();
         List<UUID> engineers = List.of(UUID.randomUUID());

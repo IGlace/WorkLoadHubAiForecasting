@@ -109,18 +109,31 @@ class ExportPreparerPropertyTest {
     }
 
     @Property(tries = 100)
-    void everyCountedUsersManagerLeadsATeamThatCanBeRun(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
-        List<LinkedHashMap<String, Object>> after = ExportPreparer.prepare(directory(seed)).envelope().rows("users");
+    void everyCountedUsersManagerCanLeadATeamUnlessTheyAreAnAdminOrCentreManager(@ForAll @LongRange(min = 0, max = 100_000) long seed) {
+        ExportEnvelope input = directory(seed);
+        Map<Object, String> roleBefore = new HashMap<>();
+        input.rows("users").forEach(u -> roleBefore.put(u.get("id"), String.valueOf(u.get("role"))));
+
+        List<LinkedHashMap<String, Object>> after = ExportPreparer.prepare(input).envelope().rows("users");
         Map<Object, String> roles = new HashMap<>();
         after.forEach(u -> roles.put(u.get("id"), String.valueOf(u.get("role"))));
+
         for (LinkedHashMap<String, Object> u : after) {
             Object manager = u.get("manager_id");
             if (manager == null || !roles.containsKey(manager) || !Set.of("MEMBER", "TEAM_LEADER").contains(String.valueOf(u.get("role")))) {
                 continue;
             }
-            // This user is counted, so their manager keys a team. Whoever runs it is a leader or fixed role.
-            assertTrue(Set.of("TEAM_LEADER", "SKILL_TEAM_LEADER", "ADMIN", "CENTER_MANAGER").contains(roles.get(manager)),
-                    "the manager of a counted user is " + roles.get(manager) + ", which can lead no team");
+            // This user is counted, so somebody must be able to run the team they sit in. Only a TEAM_LEADER
+            // keys a team (design 2026-09-21, ruling 1), and prepare gives every manager that role or the
+            // skill-leader one above it — except an ADMIN or CENTER_MANAGER, whose role it must not touch
+            // because ProjectPlanner.fallbackOwner looks for exactly those two. A counted user under one of
+            // those two is therefore in no team at all: a known consequence, asserted here so it stays known.
+            if (FIXED.contains(roleBefore.get(manager))) {
+                assertEquals(roleBefore.get(manager), roles.get(manager), "a fixed role is never rewritten");
+                continue;
+            }
+            assertTrue(Set.of("TEAM_LEADER", "SKILL_TEAM_LEADER").contains(roles.get(manager)),
+                    "the manager of a counted user came out " + roles.get(manager) + ", which leads no team");
         }
     }
 

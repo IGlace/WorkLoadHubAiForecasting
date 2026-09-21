@@ -51,20 +51,17 @@ public final class ForecastRepository {
         List<UserRef> users = new ArrayList<>();
         // Counted members without their joined date yet: it comes from activity, which is loaded below.
         List<MemberRow> counted = new ArrayList<>();
-        jdbc.sql("SELECT id, full_name, email, username, role, job_title, department, manager_id, active, deactivated_at FROM users")
+        jdbc.sql("SELECT id, full_name, email, username, role, job_title, manager_id, active, deactivated_at FROM users")
                 .query((rs, i) -> {
                     UUID id = rs.getObject("id", UUID.class);
-                    String department = rs.getString("department");
                     UUID managerId = rs.getObject("manager_id", UUID.class);
-                    users.add(new UserRef(id, rs.getString("full_name"), rs.getString("email"), rs.getString("username"),
-                            department, managerId));
+                    users.add(new UserRef(id, rs.getString("full_name"), rs.getString("email"), rs.getString("username"), managerId));
                     if (!rs.getBoolean("active") || !COUNTED_ROLES.contains(rs.getString("role"))) {
                         return null;
                     }
                     LocalDateTime left = rs.getObject("deactivated_at", LocalDateTime.class);
                     counted.add(new MemberRow(id, rs.getString("full_name"), rs.getString("email"), rs.getString("role"),
-                            rs.getString("job_title"), department, managerId,
-                            null, left == null ? null : left.toLocalDate()));
+                            rs.getString("job_title"), managerId, null, left == null ? null : left.toLocalDate()));
                     return null;
                 }).list();
         List<ProjectRow> projects = jdbc.sql("SELECT id, key, name, status FROM projects WHERE archived = FALSE")

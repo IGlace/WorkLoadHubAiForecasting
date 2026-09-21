@@ -116,10 +116,10 @@ class HostForecastFacadeTest {
         StubService service = new StubService();
         HostForecastFacade facade = new HostForecastFacade(service, new ForecastAccess(jdbc), new NoTokens(), Clock.systemUTC());
 
-        ActingUser acting = SeededUsers.users().stream().filter(u -> u.role().equals("SKILL_TEAM_LEADER") && SeededUsers.headsADepartment(u.id()))
+        ActingUser acting = SeededUsers.users().stream().filter(u -> u.role().equals("SKILL_TEAM_LEADER") && SeededUsers.leadsLeaders(u.id()))
                 .findFirst().orElseThrow();
-        Team department = SeededUsers.departmentOf(acting.id());
-        List<Team> children = SeededUsers.childrenOf(department.id());
+        // A skill team leader keys no team of their own; the teams they may run are the ones beneath them.
+        List<Team> children = SeededUsers.childrenOf(acting.id());
 
         UUID first = facade.startRun(acting, children.get(0).id());
         HostForbidden refused = assertThrows(HostForbidden.class, () -> facade.startRun(acting, children.get(children.size() > 1 ? 1 : 0).id()));

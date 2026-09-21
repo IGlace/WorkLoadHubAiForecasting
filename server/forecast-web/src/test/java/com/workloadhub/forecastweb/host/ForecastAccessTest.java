@@ -47,15 +47,16 @@ class ForecastAccessTest {
 
     @Test
     void skillTeamLeaderRunsTheTeamOfALeaderWhoReportsToThem() {
-        ActingUser head = SeededUsers.users().stream().filter(u -> u.role().equals("SKILL_TEAM_LEADER") && SeededUsers.headsADepartment(u.id()))
-                .findFirst().orElseThrow(() -> new AssertionError("a SKILL_TEAM_LEADER whose department team has a child"));
-        Team department = SeededUsers.departmentOf(head.id());
-        Team child = SeededUsers.childrenOf(department.id()).get(0);
+        ActingUser head = SeededUsers.users().stream().filter(u -> u.role().equals("SKILL_TEAM_LEADER") && SeededUsers.leadsLeaders(u.id()))
+                .findFirst().orElseThrow(() -> new AssertionError("a SKILL_TEAM_LEADER with a team leader under them"));
+        // A skill team leader keys no team of their own; the teams they may run are the ones beneath them.
+        Team child = SeededUsers.childrenOf(head.id()).get(0);
         assertEquals(new ForecastAccess.Decision(true, "SKILL_TEAM_LEADER manages this team's leader"), access.run(head.id(), child.id()));
         assertTrue(access.canView(head.id(), child.id()));
-        // The department team itself is managed, not under a team they manage: viewed as a member, never run.
-        assertFalse(access.canRun(head.id(), department.id()));
-        assertEquals("SKILL_TEAM_LEADER may only run the team of a leader who reports to them", access.run(head.id(), department.id()).reason());
+        // Their own id keys nothing: a skill team leader leads team leaders, and that is not a team anyone runs.
+        assertFalse(access.canRun(head.id(), head.id()));
+        assertEquals("SKILL_TEAM_LEADER may only run the team of a leader who reports to them", access.run(head.id(), head.id()).reason());
+        assertFalse(access.canView(head.id(), head.id()), "and it is not a team they can view either");
         Team other = SeededUsers.notInvolving(head.id());
         assertEquals("SKILL_TEAM_LEADER may only view the team of a leader who reports to them, or their own", access.view(head.id(), other.id()).reason());
     }

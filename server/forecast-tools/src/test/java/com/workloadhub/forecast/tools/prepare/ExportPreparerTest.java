@@ -103,18 +103,22 @@ class ExportPreparerTest {
         assertEquals("MEMBER", row(out, ORPHAN).get("role"));
         assertEquals("MEMBER", row(out, LOST).get("role"));
         assertEquals("CENTER_MANAGER", row(out, BOSS).get("role"), "the centre manager keeps their role");
-        assertEquals(1, result.teamLeaders());
-        assertEquals(1, result.skillTeamLeaders());
+        assertEquals(1, result.teamLeaders(), "Manager Two, and nobody else leads a team");
+        assertEquals(1, result.skillTeamLeaders(), "Head One");
     }
 
     @Test
-    void aRoleThatIsAlreadyRightIsNotCountedAsAPromotion() {
+    void theCountersAreTotalsInTheOutputRatherThanPromotions() {
+        // The owner reads the skill-team-leader total to see how many people stop being forecast as
+        // individuals; somebody the export already labelled one is dropped too, and must be counted.
         List<LinkedHashMap<String, Object>> users = users();
         users.set(1, user(MGR, "Manager Two", "Team Leader Calibration", "PTE / CT2 Calibration & Testing 2", HEAD, "TEAM_LEADER", true));
+        users.set(4, user(ORPHAN, "Orphan Five", "Simulation Engineer", "PTE / SIM Simulation", null, "SKILL_TEAM_LEADER", true));
         ExportPreparer.Result result = ExportPreparer.prepare(envelope(users, new ArrayList<>(), new ArrayList<>()));
-        assertEquals("TEAM_LEADER", row(result.envelope().rows("users"), MGR).get("role"));
-        assertEquals(0, result.teamLeaders(), "Manager Two was already a team leader");
-        assertEquals(1, result.skillTeamLeaders(), "Head One still moves");
+        assertEquals("TEAM_LEADER", row(result.envelope().rows("users"), MGR).get("role"), "already right, left alone");
+        assertEquals("SKILL_TEAM_LEADER", row(result.envelope().rows("users"), ORPHAN).get("role"), "manages nobody, left alone");
+        assertEquals(1, result.teamLeaders(), "Manager Two");
+        assertEquals(2, result.skillTeamLeaders(), "Head One, promoted, and Orphan Five, who already was one");
     }
 
     @Test

@@ -30,10 +30,10 @@ class CapacityRuleTest {
     static final LocalDate MON = LocalDate.of(2026, 4, 27);   // the week of Labour Day (Friday 1 May): four working days
 
     static ForecastData data(List<LeaveRow> leaves) {
-        MemberRow m = new MemberRow(M, "Eng Two", "e@example.test", "MEMBER", "Calibration Engineer", "PTE / CT2", T, LocalDate.of(2026, 1, 5), null);
+        MemberRow m = new MemberRow(M, "Eng Two", "e@example.test", "MEMBER", "Calibration Engineer", T, LocalDate.of(2026, 1, 5), null);
         return new ForecastData(List.of(m), List.of(), List.of(), List.of(), List.of(),
                 leaves, List.of(), List.of(new HolidayRow(LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 1), true, true, "Labour Day")),
-                List.of(new UserRef(M, "Eng Two", "e@example.test", "eng", "PTE / CT2", T)), Map.of());
+                List.of(new UserRef(M, "Eng Two", "e@example.test", "eng", T)), Map.of());
     }
 
     static LeaveRow leave(LocalDate start, LocalDate end, Double hours, LocalTime begin, LocalTime finish) {
@@ -100,10 +100,10 @@ class CapacityRuleTest {
 
     @Test
     void aPendingLeaveDoesNotReduceCapacity() {
-        MemberRow m = new MemberRow(M, "Eng Two", "e@example.test", "MEMBER", "Calibration Engineer", "PTE / CT2", T, LocalDate.of(2026, 1, 5), null);
+        MemberRow m = new MemberRow(M, "Eng Two", "e@example.test", "MEMBER", "Calibration Engineer", T, LocalDate.of(2026, 1, 5), null);
         LeaveRow pending = new LeaveRow(M, LocalDate.of(2026, 3, 16), LocalDate.of(2026, 3, 20), null, null, 44.0, "PENDING", "PAID_LEAVE");
         ForecastData d = new ForecastData(List.of(m), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(pending), List.of(), List.of(new UserRef(M, "Eng Two", "e@example.test", "eng", "PTE / CT2", T)), Map.of());
+                List.of(), List.of(pending), List.of(), List.of(new UserRef(M, "Eng Two", "e@example.test", "eng", T)), Map.of());
         WorkingCalendar cal = WorkingCalendar.fromHolidays(d.holidays());
         assertEquals(44.0, new CapacityRule(44.0).capacity(m, LocalDate.of(2026, 3, 16), d, cal), 1e-9);
         assertEquals(1, d.pendingLeaves().size());

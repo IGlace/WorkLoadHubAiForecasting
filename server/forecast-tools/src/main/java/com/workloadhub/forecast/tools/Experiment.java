@@ -228,7 +228,8 @@ public final class Experiment {
         }
         ExportPreparer.Result result = ExportPreparer.prepare(ExportFiles.read(in));
         ExportFiles.write(out, result.envelope());
-        System.out.printf("Wrote %s: %d users activated, %d promoted to TEAM_LEADER, %d to SKILL_TEAM_LEADER%n",
+        System.out.printf("Wrote %s: %d users activated, %d TEAM_LEADER, %d SKILL_TEAM_LEADER "
+                + "(the second are no longer forecast as individuals)%n",
                 out, result.usersActivated(), result.teamLeaders(), result.skillTeamLeaders());
         return 0;
     }

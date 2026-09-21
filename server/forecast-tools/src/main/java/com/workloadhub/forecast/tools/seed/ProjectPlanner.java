@@ -88,9 +88,11 @@ public final class ProjectPlanner {
             // already work under that owner are the ones who pick it up; with no owner in the directory it has
             // none, and is open to everybody.
             Person owner = ownerId == null ? null : people.get(ownerId);
+            // With its owner inside the directory the project belongs to that owner's department; with the
+            // owner outside it belongs to no department of ours, and is open to everybody rather than nobody.
             out.add(new Project(UUID.fromString((String) row.get("id")), (String) row.get("key"), (String) row.get("name"),
                     teamId, ownerId, String.valueOf(row.get("status")), owner == null ? null : owner.deptCode(),
-                    cfg.firstMonday(), cfg.lastDay().plusWeeks(1)));
+                    owner == null, cfg.firstMonday(), cfg.lastDay().plusWeeks(1)));
         }
         List<LocalDate> mondays = cfg.mondays();
         // global, not per department: projects.key is UNIQUE across the whole export, and the export's
@@ -190,20 +192,21 @@ public final class ProjectPlanner {
                 // and a null says honestly that this generator does not know who the project team is.
                 UUID projectTeam = cfg.synthetic() ? rnd.uuid() : null;
                 out.add(new Project(rnd.uuid(), key, String.format(t.name(), code, n), projectTeam, owner,
-                        status, department.code(), start, end));
+                        status, department.code(), false, start, end));
             }
         }
         return out;
     }
 
     /**
-     * The projects a person can pick up: their department's, plus any project with no department of ours — a
-     * real export's own, whose owner is outside the directory.
+     * The projects a person can pick up: their own department's, plus any a real export carried whose owner is
+     * outside the directory and which therefore belongs to no department of ours. A person with no department
+     * is in the department nobody named, and gets its projects like anyone else.
      */
     public static List<Project> projectsFor(Person p, List<Project> projects) {
         List<Project> out = new ArrayList<>();
         for (Project pr : projects) {
-            if (pr.deptCode() == null || pr.deptCode().equals(p.deptCode())) {
+            if (pr.openToAll() || pr.belongsTo(p.deptCode())) {
                 out.add(pr);
             }
         }

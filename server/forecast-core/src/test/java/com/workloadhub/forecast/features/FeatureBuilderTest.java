@@ -290,6 +290,36 @@ class FeatureBuilderTest {
     }
 
     @Test
+    void aLeaderSeesTheirOwnTeamsBacklog_notTheirManagersTeams() {
+        // The leader of a run is in two teams: the one they lead and their own manager's. Their team columns
+        // must describe the one they work in, or every row of a run would carry the same figure except the
+        // leader's, which would silently be a different and much larger quantity.
+        MemberRow head = new MemberRow(TestData.PARENT_TEAM, "Head", "head@example.test", "SKILL_TEAM_LEADER",
+                "Skill Team Leader", null, TestData.JOINED, null);
+        MemberRow lead = new MemberRow(TestData.TEAM, "Lead", "lead@example.test", "TEAM_LEADER",
+                "Team Leader", TestData.PARENT_TEAM, TestData.JOINED, null);
+        MemberRow report = TestData.member("report", TestData.TEAM).withJoined(ORIGIN.minusWeeks(6));
+        UUID ours = TestData.id("proj-ours");
+        LocalDate w = ORIGIN.minusWeeks(4);
+
+        // one assigned task each, so the project is the team's, and one unassigned task sitting in it
+        TaskRow leads = TestData.taskIn("L", lead.id(), ours, ORIGIN.minusWeeks(6).atTime(9, 0), 3);
+        TaskRow reports = TestData.taskIn("R", report.id(), ours, ORIGIN.minusWeeks(6).atTime(9, 0), 3);
+        TaskRow waiting = TestData.taskIn("W", null, ours, ORIGIN.minusWeeks(6).atTime(9, 0), 11);
+        ForecastData data = TestData.data(List.of(head, lead, report), List.of(leads, reports, waiting), List.of(), List.of())
+                .withProjects(List.of(new ProjectRow(ours, "OURS", "Ours", "ACTIVE")));
+        FeatureMatrix m = matrix(data);
+
+        double leadBacklog = m.get(m.keys().indexOf(new MemberWeek(lead.id(), w)), "team_backlog_unassigned_hrs");
+        double reportBacklog = m.get(m.keys().indexOf(new MemberWeek(report.id(), w)), "team_backlog_unassigned_hrs");
+        assertEquals(11.0, reportBacklog, "the unassigned task sits in the team's project");
+        assertEquals(reportBacklog, leadBacklog, "and the leader sees the same team as the people they lead");
+        assertEquals(m.decode("team_id", m.get(m.keys().indexOf(new MemberWeek(lead.id(), w)), "team_id")),
+                m.decode("team_id", m.get(m.keys().indexOf(new MemberWeek(report.id(), w)), "team_id")),
+                "they are one team, so one category");
+    }
+
+    @Test
     void plannedHoursAreTheOpenTasksEstimatesPlannedForTheTargetWeek() {
         // planned is assigned week −1 and targets week +1: at the origin (h1 target = +1w) it is the only
         // open task whose plan matches, so planned_hrs_h1 = 12.0, its own estimate.

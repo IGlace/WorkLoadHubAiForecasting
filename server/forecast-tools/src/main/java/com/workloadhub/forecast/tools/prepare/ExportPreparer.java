@@ -29,7 +29,12 @@ public final class ExportPreparer {
     /** Roles this step never rewrites: {@code ProjectPlanner.fallbackOwner} looks for exactly these two. */
     private static final Set<String> FIXED_ROLES = Set.of("ADMIN", "CENTER_MANAGER");
 
-    /** The prepared export and what the run did, for the driver to print. */
+    /**
+     * The prepared export and what it holds afterwards. {@code teamLeaders} and {@code skillTeamLeaders} are
+     * <b>totals in the output</b>, not promotions: the owner reads the second off the summary to see how many
+     * people stop being forecast as individuals, and someone the export already labelled a skill team leader
+     * counts there too.
+     */
     public record Result(ExportEnvelope envelope, int usersActivated, int teamLeaders, int skillTeamLeaders) {
     }
 
@@ -80,15 +85,13 @@ public final class ExportPreparer {
             row.put("deactivated_at", null);
             String role = String.valueOf(row.get("role"));
             if (managers.contains(row.get("id")) && !FIXED_ROLES.contains(role)) {
-                String wanted = managersOfManagers.contains(row.get("id")) ? "SKILL_TEAM_LEADER" : "TEAM_LEADER";
-                if (!wanted.equals(role)) {
-                    row.put("role", wanted);
-                    if ("SKILL_TEAM_LEADER".equals(wanted)) {
-                        skillTeamLeaders++;
-                    } else {
-                        teamLeaders++;
-                    }
-                }
+                role = managersOfManagers.contains(row.get("id")) ? "SKILL_TEAM_LEADER" : "TEAM_LEADER";
+                row.put("role", role);
+            }
+            if ("SKILL_TEAM_LEADER".equals(role)) {
+                skillTeamLeaders++;
+            } else if ("TEAM_LEADER".equals(role)) {
+                teamLeaders++;
             }
             users.add(row);
         }

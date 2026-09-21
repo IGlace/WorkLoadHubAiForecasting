@@ -37,10 +37,11 @@ public final class SeededUsers {
     /** Counted, as {@code ForecastRepository} counts: the host's lists must agree with the module's. */
     private static final String COUNTED = " active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')";
 
-    /** Every team of the seed: one per user somebody counted reports to, keyed by that leader. */
+    /** Every team of the seed: one per TEAM_LEADER somebody counted reports to, keyed by that leader. */
     public static List<Team> teams() {
         String sql = "SELECT m.id, m.full_name, m.manager_id FROM users m"
-                + " WHERE EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND" + COUNTED + ")"
+                + " WHERE m.role = 'TEAM_LEADER'"
+                + " AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND" + COUNTED + ")"
                 + " ORDER BY m.full_name";
         return jdbc().sql(sql).query().listOfRows().stream()
                 .map(r -> new Team(UUID.fromString(str(r, "id")), str(r, "full_name"),
@@ -54,13 +55,9 @@ public final class SeededUsers {
                 .orElseThrow(() -> new AssertionError(userId + " leads no team"));
     }
 
-    /** The team of a leader who leads other leaders: the one a skill team leader stands above. */
-    public static Team departmentOf(UUID userId) {
-        return teams().stream().filter(t -> userId.equals(t.id()) && !childrenOf(t.id()).isEmpty()).findFirst()
-                .orElseThrow(() -> new AssertionError(userId + " leads nobody who leads a team"));
-    }
 
-    public static boolean headsADepartment(UUID userId) {
+    /** Whether any team's leader reports to this user: a skill team leader stands above at least one team. */
+    public static boolean leadsLeaders(UUID userId) {
         return !childrenOf(userId).isEmpty();
     }
 

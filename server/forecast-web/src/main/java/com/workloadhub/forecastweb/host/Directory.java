@@ -58,15 +58,21 @@ public final class Directory {
         return out;
     }
 
-    /** Counted: what {@code ForecastRepository} counts, so the host's member lists agree with the module's. */
-    private static final String COUNTED = " active = TRUE AND role IN ('MEMBER', 'TEAM_LEADER')";
+    /** Counted, as {@code ForecastRepository} counts, so the host's member lists agree with the module's. */
+    private static String counted(String alias) {
+        String q = alias.isEmpty() ? "" : alias + ".";
+        return " " + q + "active = TRUE AND " + q + "role IN ('MEMBER', 'TEAM_LEADER')";
+    }
 
     public List<Team> teams() {
         String sql = "SELECT m.id, m.full_name, m.manager_id,"
-                + " (SELECT COUNT(*) FROM users r WHERE r.manager_id = m.id AND" + COUNTED + ") AS reports,"
-                + " CASE WHEN m." + COUNTED + " THEN 1 ELSE 0 END AS counts_itself"
+                + " (SELECT COUNT(*) FROM users r WHERE r.manager_id = m.id AND" + counted("r") + ") AS reports,"
+                + " CASE WHEN" + counted("m") + " THEN 1 ELSE 0 END AS counts_itself"
                 + " FROM users m"
-                + " WHERE EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND" + COUNTED + ")"
+                // Only a TEAM_LEADER keys a team: a skill team leader has reports too, and their "team"
+                // would be the leaders beneath them, which ruling 3 says nobody runs.
+                + " WHERE m.role = 'TEAM_LEADER'"
+                + " AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND" + counted("r") + ")"
                 + " ORDER BY m.full_name";
         List<Team> out = new ArrayList<>();
         for (Map<String, Object> r : jdbc.sql(sql).query().listOfRows()) {
@@ -80,20 +86,28 @@ public final class Directory {
         return teams().stream().filter(t -> t.id().equals(id)).findFirst();
     }
 
-    /** Every counted user's place: their manager's team, and their own when they lead one. */
+    /**
+     * Every counted user's place: their manager's team, and their own when they lead one. One query, not one
+     * per team: a counted user belongs to their manager's team when that manager leads one, and to their own
+     * when they lead one themselves.
+     */
     public List<Membership> memberships() {
+        String sql = "SELECT u.id AS user_id, t.id AS team_id"
+                + " FROM users u JOIN users t ON t.id = u.manager_id OR t.id = u.id"
+                + " WHERE" + counted("u")
+                + " AND t.role = 'TEAM_LEADER'"
+                + " AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = t.id AND" + counted("r") + ")"
+                + " ORDER BY u.full_name";
         List<Membership> out = new ArrayList<>();
-        for (Team t : teams()) {
-            for (UUID member : membersOf(t.id())) {
-                out.add(new Membership(t.id(), member));
-            }
+        for (Map<String, Object> r : jdbc.sql(sql).query().listOfRows()) {
+            out.add(new Membership(uuid(r.get("team_id")), uuid(r.get("user_id"))));
         }
         return out;
     }
 
     /** The leader, when they are counted themselves, and everyone who reports to them directly. */
     public List<UUID> membersOf(UUID teamId) {
-        return jdbc.sql("SELECT id FROM users WHERE (id = ? OR manager_id = ?) AND" + COUNTED + " ORDER BY full_name")
+        return jdbc.sql("SELECT id FROM users WHERE (id = ? OR manager_id = ?) AND" + counted("") + " ORDER BY full_name")
                 .param(teamId).param(teamId).query().listOfRows().stream().map(r -> uuid(r.get("id"))).toList();
     }
 

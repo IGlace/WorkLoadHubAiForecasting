@@ -42,10 +42,9 @@ class ForecastRepositoryTest {
     }
 
     @Test
-    void aMemberCarriesTheirManagerAndDepartmentFromTheUsersTable() {
+    void aMemberCarriesTheirManagerFromTheUsersTable() {
         ForecastData data = SeededData.data();
         assertTrue(data.members().stream().anyMatch(m -> m.managerId() != null), "the seed has a hierarchy");
-        assertTrue(data.members().stream().anyMatch(m -> m.department() != null), "and departments");
         for (MemberRow m : data.members()) {
             if (m.managerId() != null) {
                 assertNotNull(data.userById().get(m.managerId()), "a manager id resolves to a user");
@@ -58,22 +57,26 @@ class ForecastRepositoryTest {
     @Test
     void theJoinedDateIsTheMembersFirstActivity() {
         ForecastData data = SeededData.data();
-        Map<UUID, LocalDate> firstLog = new HashMap<>();
+        // The two signals, independently: the earliest logged day, and the earliest history row the user is
+        // the actor of. joined must be exactly the earlier of them, not merely no later than one.
+        Map<UUID, LocalDate> earliest = new HashMap<>();
         for (var l : data.timeLogs()) {
-            firstLog.merge(l.userId(), l.day(), (a, b) -> a.isBefore(b) ? a : b);
+            earliest.merge(l.userId(), l.day(), (a, b) -> a.isBefore(b) ? a : b);
         }
-        assertFalse(firstLog.isEmpty());
+        for (var t : data.transitions()) {
+            if (t.userId() != null) {
+                earliest.merge(t.userId(), t.changedAt().toLocalDate(), (a, b) -> a.isBefore(b) ? a : b);
+            }
+        }
+        assertFalse(earliest.isEmpty());
         int checked = 0;
         for (MemberRow m : data.members()) {
-            LocalDate log = firstLog.get(m.id());
-            if (log == null) {
-                continue;
+            assertEquals(earliest.get(m.id()), m.joined(), m.fullName() + "'s joined date is their first activity");
+            if (m.joined() != null) {
+                checked++;
             }
-            assertNotNull(m.joined(), m.fullName() + " logged hours and so has a joined date");
-            assertFalse(m.joined().isAfter(log), "joined " + m.joined() + " is not after the first logged day " + log);
-            checked++;
         }
-        assertTrue(checked > 0, "at least one member logged hours");
+        assertTrue(checked > 0, "at least one member was active");
     }
 
     @Test

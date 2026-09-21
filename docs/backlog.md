@@ -343,6 +343,15 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
   `forecast-tools/src/test/resources/fixtures/raw-export.json` go with it. `Directory.uniqueName` is already
   back to package-private; `ProjectPlanner` uses it for the project team names.
 
+- **A counted user whose manager is an ADMIN or a CENTER_MANAGER is in no team (2026-09-21).** Only a
+  `TEAM_LEADER` keys a team (design 2026-09-21, ruling 1), and `prepare` must not rewrite those two roles
+  because `ProjectPlanner.fallbackOwner` looks for exactly them. Anyone reporting directly to one is therefore
+  forecast by nobody: they are counted as a member, but no run covers them. On the seed fixture that is one
+  admin with two reports. `ExportPreparerPropertyTest.everyCountedUsersManagerCanLeadATeamUnlessTheyAreAnAdminOrCentreManager`
+  asserts the shape so it stays known. Decide, once the real export has been through `prepare`, whether the
+  right answer is to promote such a manager anyway, to give `fallbackOwner` another way to find an owner, or
+  to leave those people out on purpose.
+
 - **The forecast has never been measured against a real export (2026-09-21).** `tenure_weeks` changed meaning
   with the hierarchy work, from "in a team since" to "active since", and the real export has no accuracy
   baseline to compare either reading against. Nothing regressed, because nothing was ever measured; this is a

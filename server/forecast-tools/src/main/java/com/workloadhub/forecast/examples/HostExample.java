@@ -148,28 +148,28 @@ public class HostExample {
     }
 
     /**
-     * Example only: a server knows its team ids from its own pages, and its session's user. A team is a leader
-     * and the people who report to them directly, keyed by the leader's own user id (design 2026-09-21), so
-     * this lists the users somebody reports to. The ones whose own role is not {@code TEAM_LEADER} are shown
-     * too, because a skill team leader leads team leaders and the example has nobody to act as there.
+     * Example only: a server knows its team ids from its own pages, and its session's user. A team is a
+     * TEAM_LEADER and the people who report to them directly, keyed by that leader's own user id (design
+     * 2026-09-21), so this lists exactly those leaders. A skill team leader keys nothing: they lead team
+     * leaders and run one of their teams, never a team of their own.
      */
     private static UUID pickTeam(JdbcClient jdbc, String requested) {
         if (requested != null) {
             return UUID.fromString(requested);
         }
-        System.out.printf("%-38s %-14s %-24s %s%n", "team id (its leader)", "role", "leader", "members");
+        System.out.printf("%-38s %-24s %s%n", "team id (its leader)", "leader", "members");
         for (Map<String, Object> row : jdbc.sql("""
-                SELECT m.id, m.full_name, m.role,
+                SELECT m.id, m.full_name,
                        (SELECT COUNT(*) FROM users r WHERE r.manager_id = m.id AND r.active
                         AND r.role IN ('MEMBER', 'TEAM_LEADER')) AS members
                 FROM users m
-                WHERE EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND r.active
+                WHERE m.role = 'TEAM_LEADER'
+                  AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND r.active
                               AND r.role IN ('MEMBER', 'TEAM_LEADER'))
                 ORDER BY m.full_name""").query().listOfRows()) {
-            System.out.printf("%-38s %-14s %-24s %s%n", row.get("id"), row.get("role"), row.get("full_name"), row.get("members"));
+            System.out.printf("%-38s %-24s %s%n", row.get("id"), row.get("full_name"), row.get("members"));
         }
-        System.out.println("\npass one of the teams marked TEAM_LEADER as --team <uuid>: the example acts as that leader,"
-                + "\nand a SKILL_TEAM_LEADER leads team leaders rather than a team of its own");
+        System.out.println("\npass one of them as --team <uuid>: the example acts as that team's leader");
         return null;
     }
 

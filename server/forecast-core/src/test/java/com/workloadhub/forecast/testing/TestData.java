@@ -23,7 +23,6 @@ public final class TestData {
     public static final UUID TEAM = id("member-lead");
     /** The leader above {@link #TEAM}'s leader: the skill team leader a team's risks escalate to. */
     public static final UUID PARENT_TEAM = id("member-top");
-    public static final String DEPARTMENT = "PTE / CT2 Calibration & Testing 2";
     public static final LocalDate JOINED = LocalDate.of(2026, 1, 5);
     public static final Map<String, String> STATUS_CATEGORIES = Map.of(
             "Open", "TO_DO", "To Do", "TO_DO", "On Hold", "TO_DO",
@@ -40,18 +39,17 @@ public final class TestData {
     /** A counted MEMBER reporting to {@code manager}, and so forecast in {@code manager}'s team. */
     public static MemberRow member(String suffix, UUID manager) {
         return new MemberRow(id("member-" + suffix), "Member " + suffix, suffix + "@example.test", "MEMBER", "Engineer",
-                DEPARTMENT, manager, JOINED, null);
+                manager, JOINED, null);
     }
 
     /** A TEAM_LEADER, who keys their own team and is counted inside it, reporting to {@code manager}. */
     public static MemberRow leader(String suffix, UUID manager) {
         return new MemberRow(id("member-" + suffix), "Member " + suffix, suffix + "@example.test", "TEAM_LEADER", "Team Leader",
-                DEPARTMENT, manager, JOINED, null);
+                manager, JOINED, null);
     }
 
     public static UserRef user(MemberRow m) {
-        return new UserRef(m.id(), m.fullName(), m.email(), m.email().substring(0, m.email().indexOf('@')),
-                m.department(), m.managerId());
+        return new UserRef(m.id(), m.fullName(), m.email(), m.email().substring(0, m.email().indexOf('@')), m.managerId());
     }
 
     public static TaskRow task(String suffix, UUID assignee, LocalDateTime created, double estimate) {
