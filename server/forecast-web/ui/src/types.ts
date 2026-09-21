@@ -69,7 +69,7 @@ export interface FactsWindow { index: number; start: string; end: string; workin
 export interface PressedMember { member_id: string; name: string; overload_hours?: number; spare_hours?: number; backlog_excess_hrs?: number; due_excess_hrs?: number }
 export interface Facts {
   run: { id: string; as_of: string; windows: FactsWindow[]; generated_at: string; origin: string; horizons: number[] }
-  team: { id: string; name: string | null; department?: string | null; totals: { window: number; start: string; end: string; demand: number; capacity: number }[] }
+  team: { id: string; name: string | null; totals: { window: number; start: string; end: string; demand: number; capacity: number }[] }
   members: unknown[]
   projects: unknown[]
   model: { name: string; target: string; mae: number | null; mean_actual_hours: number | null; confidence: string; backtest_origins: string[]; horizons: number[]; windows: number; limitations?: string | string[] }

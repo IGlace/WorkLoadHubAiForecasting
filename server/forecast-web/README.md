@@ -69,6 +69,11 @@ outside `com.workloadhub.forecast`, so component scanning never picks that contr
 
 ## The pages
 
+A **team**, on every page below, is a team leader and the people who report to them directly, and its
+`teamId` is that leader's own user id. The structure comes from `users.manager_id`; WorkloadHub's own
+`teams` table groups people around a project and is not read by the module or by this host
+(`docs/superpowers/specs/2026-09-21-hierarchy-teams-design.md`).
+
 | page | what it shows | routes |
 |---|---|---|
 | Acting as (top bar) | pick any user; the role badge; whether a token is stored | `GET /api/directory/users`, `GET /api/me` |

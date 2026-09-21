@@ -37,6 +37,12 @@ end that calls the module the same way a real host will, against the same local 
   `Report` and the driver's `eval` command — once the features were settled and the model locked, leaving
   `accuracy(teamId, from, to)` as the module's only evaluation surface. The per-run backtest inside
   `ForecastRunner.prepare` stayed: it still produces every run's prediction intervals and `mae`.
+- `docs/superpowers/specs/2026-09-21-hierarchy-teams-design.md`: **implemented, landed on `dev` on
+  2026-09-21.** Read it before touching anything that says "team". WorkloadHub's `teams` and `team_members`
+  are project teams and are never read; a team is a team leader and their direct reports, keyed by the
+  leader's own user id, from `users.manager_id`. Its section 2 holds the ten rulings and is the first thing to
+  read; section 3 explains why `team_id` keeps its name and why there is no migration. It withdraws sections 5
+  and 6 of `2026-09-19-real-export-preparation-design.md`, which are history.
 - `docs/superpowers/specs/2026-09-17-personal-leaves-capacity-and-seed-scope-design.md`: **implemented,
   landing on dev on 2026-09-17.** `personal_leaves` replaces `absences`, capacity is the calendar and the
   approved leaves over the 44 h default, `user_capacity` and `team_capacity` are not read, the seed writes
@@ -207,33 +213,39 @@ Java/TypeScript boundary). Task 12 of that plan — the whole-branch review, one
 closing notes (`22b66ef`) — landed; its gate is the owner's to run, and the notes give the order to run it in.
 Then, on 2026-09-19, the real-export preparation
 (`docs/superpowers/specs/2026-09-19-real-export-preparation-design.md`,
-`docs/superpowers/plans/2026-09-19-real-export-preparation.md`): the owner's real WorkloadHub export forecasts
-**nobody**, because `ForecastRepository` counts a member only when `users.active` is true, the role is
-`MEMBER` or `TEAM_LEADER` and there is at least one `team_members` row, and an export from a WorkloadHub
-still in its testing phase fails the first and the third — 6 of 264 users active, and three test stub teams
-where the company's structure should be. A sixth driver verb, `prepare`, rewrites the export file in front of
-the seed: every user `active` with `deactivated_at` cleared (the module reads that column as the member's
-leaving date, so flipping only `active` would count a member and then drop them from the run — `FeatureBuilder`
-stops their rows at that date and `ForecastRunner.forTeam` filters them out, raising `TEAM_NOT_FOUND` for a
-team of them),
-every user with direct reports inside the export whose role is still `MEMBER` promoted to `TEAM_LEADER` and
-never to `SKILL_TEAM_LEADER`, which is not counted, and `teams`/`team_members` derived from `department` and
-`manager_id` — one parentless team per department code, plus an `Unassigned` one when anyone has no
-department at all, one child team per user with reports, and `joined_at` from `--joined` (five years back by
-default), because the module folds the earliest `joined_at` into the member's joined date, which feeds
-`tenure_weeks` and competes with the first assignment week for the member's first feature week: a stamp of
-the generation day makes every tenure negative across the history. Pre-existing
-teams are dropped unless a `projects` or `team_capacity` row still points at one, in which case that team and
-its ancestors are kept. Nothing in `forecast-core`, `SeedGenerator` or `ExportImporter` changed, and
-`Directory` only in that `uniqueName` became public, so the names are minted under the same UNIQUE constraint as the
-seed's. The step is transitional and deliberately sits outside the seed: the owner has confirmed WorkloadHub's
-teams will be populated for real, and derivation inside real mode would then overwrite the company's own
-structure on every run, silently. `docs/backlog.md` carries the deletion this is waiting for, and the
-late-join/early-leave behaviour real mode already had.
-Next: the whole-branch review of that plan and one fix wave, the gate by hand in the development container,
-then the real export through `prepare`, the seed and the import into the local PostgreSQL, then the
-derived-arithmetic backlog item's own design pass, then the server's own integration code, against the sample
-host.
+`docs/superpowers/plans/2026-09-19-real-export-preparation.md`), a sixth driver verb, `prepare`, that rewrites
+a real export in front of the seed so its people can be counted. **Its sections 5 and 6 were withdrawn two
+days later**; what survives is described below.
+Then, on 2026-09-21, **teams come from the hierarchy, not the `teams` table**
+(`docs/superpowers/specs/2026-09-21-hierarchy-teams-design.md`): the owner corrected a misreading the whole
+forecast had been built on. `teams` and `team_members` hold **project teams** — an ad-hoc group working on
+one project — and say nothing about who reports to whom. The company structure is `users.manager_id`, and a
+**team is a team leader and the people who report to them directly**, keyed by the leader's own user id. The
+leader is counted like any member, because they do technical work; a **skill team leader** manages team
+leaders, does none, is never counted, and runs a forecast only by choosing one leader beneath them, which
+they do rarely and to stand in for an absent leader. The name `team_id` is kept everywhere — API parameters,
+REST paths, `forecast_runs.team_id`, `forecast_current_days.team_id`, the facts — so **no migration**: only
+what the uuid points at changed. `ForecastRepository` stops reading both tables and drops the
+"must be in a team" condition, so every active user of a counted role is forecastable, where the owner's real
+export previously produced a forecast over nobody. `TeamRow` is gone, `ProjectRow` lost `team_id`, `UserRef`
+gained `department` and `manager_id`. The joined date came from `team_members.joined_at`, which is no longer
+read, and becomes the member's **first activity** — their earliest logged hour or the earliest `task_history`
+row they are the actor of — with a blank tenure rather than an invented date for a member who has none. A
+team's projects become the projects of its members' tasks, bounded in the feature path by the week being
+built, because a project the team only picks up later must not reach a row built before it did
+(`FeatureLeakageTest` caught exactly that). The seed's `Team` record split: a `Department` is where work comes
+from, and a team is a manager's id (`Directory.teamKey`, the same rule as `FeatureBuilder.teamOf`);
+`ProjectPlanner` now mints the `teams` rows, one per project, from the people who actually took its work,
+which is what the application means by them, and mints none in real mode, where a team id would be a dangling
+foreign key. `ExportPreparer` fell from 319 lines to 100: it keeps the activation and gives each manager the
+leader role their place implies, a manager of managers becoming `SKILL_TEAM_LEADER`, and `--joined` went with
+the rows it stamped. `forecast-web` reads `users` alone for its teams and its three permission predicates.
+One pre-existing defect surfaced on the way: `ExportPreparerPropertyTest` could never run, because its
+`DEPARTMENTS` list holds a null and `List.of` rejects nulls, so the class failed in its static initialiser
+every time.
+Next: the whole-branch review and one fix wave, the gate by hand in the development container, then the real
+export through `prepare`, the seed and the import into the local PostgreSQL, then the derived-arithmetic
+backlog item's own design pass, then the server's own integration code, against the sample host.
 The standing workflow for a plan:
 `brainstorming`, `writing-plans`, subagent-driven execution with a review per task, a whole-branch review, one
 fix wave, the gate green by hand in the development container, then fast-forward `main`.
@@ -353,7 +365,9 @@ technical-writer. Index in `.claude/agents/README.md`.
   two share no ancestor and must never be merged into each other — a merge would resurrect every file the
   Java module has since deleted.
 - Commit messages: imperative subject, short body explaining why.
-- Domain vocabulary: department (a team without a manager), team (team leader), member; demand, capacity,
+- Domain vocabulary: team (a team leader and the people who report to them directly, keyed by the leader's
+  own user id), skill team leader (the manager of a team leader; not counted, runs one leader's team at a
+  time), department (`users.department`, where work comes from), member; demand, capacity,
   overload; the model and its target (logged hours per member-week), backtest; narrative, facts, contract,
   verification; window (five weekdays; a run covers one to six, two by default, starting the first weekday
   after the run day), current forecast (the latest run's value per member and day).

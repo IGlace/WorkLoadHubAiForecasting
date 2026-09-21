@@ -125,7 +125,7 @@ $X init-db                                    # --force drops and recreates the 
 # an export straight out of a WorkloadHub still in testing forecasts nobody, so prepare it first and
 # seed from the prepared file ("Running the forecast over a real export" below)
 $X prepare ~/whf/workloadhub_export.json --out ~/whf/prepared.json
-$X import ~/whf/prepared.json                 # the directory: users, teams, team_members
+$X import ~/whf/prepared.json                 # the directory: users, and the hierarchy in manager_id
 $X seed --export ~/whf/prepared.json --weeks 52 --end 2026-09-06 --seed 42 --out ~/whf/seeded.json
 
 # 3. load it
@@ -155,7 +155,7 @@ $X fixture
 | `import` | `<file>` | Loads a WorkloadHub JSON export (real or seeded) into the database, replacing existing rows. |
 | `export` | `<file>` | Writes the database's WorkloadHub tables as a JSON export. |
 | `seed` | `--out <file> [--export f] [--synthetic] [--users n] [--weeks 52] [--end] [--seed 42] [--force]` | Generates an export with weeks of realistic history, from a real export (`--export`) or a synthetic directory (`--synthetic`). Real-mode output refuses to land inside a git repository without `--force`. Real mode writes five tables; synthetic mode writes them all. |
-| `prepare` | `<file> --out <file> [--joined ISO_DATE] [--force]` | Rewrites a real export so the forecast can count its people: every user active, `deactivated_at` cleared, and `teams` / `team_members` derived from `department` and `manager_id`. Transitional — see "Running the forecast over a real export" below. Its output refuses to land inside a git repository without `--force`. `--joined` stamps `team_members.joined_at` and defaults to five years before the day it runs. |
+| `prepare` | `<file> --out <file> [--force]` | Rewrites a real export so the forecast can count its people: every user active, `deactivated_at` cleared, and each manager given the leader role their place in `users.manager_id` implies. Transitional — see "Running the forecast over a real export" below. Its output refuses to land inside a git repository without `--force`. |
 | `fixture` | `[--out <dir>]` | Regenerates `forecast-core`'s committed test fixture, `workloadhub-schema.sql` and `seeded-rows.sql`. Commit both. |
 | any but `prepare` | `[--url] [--user] [--password]` | Where to connect: the options, else `WHF_DB_URL`, `WHF_DB_USER`, `WHF_DB_PASSWORD`, else the local database of `scripts/postgres.sh` (`jdbc:postgresql://localhost:5432/workloadhub`, user and password `workloadhub`). `prepare` reads a file and writes a file, so it refuses these three as unknown options. |
 
@@ -196,13 +196,15 @@ are listed in the design, section 4.8.
 
 ## Running the forecast over a real export
 
-**Transitional.** WorkloadHub is still in its testing phase: almost no user is `active`, and its teams screen
-has not been used, so a real export carries a handful of stub teams instead of the company's structure. Two of
-the three conditions the module counts a member by therefore fail — `ForecastRepository` counts a user only
-when `active` is true, the role is `MEMBER` or `TEAM_LEADER`, and there is at least one `team_members` row —
-and a forecast over that export covers nobody. `prepare` corrects the export file before the seed sees it;
-delete the step once WorkloadHub populates `teams` and `team_members` itself
-(`docs/superpowers/specs/2026-09-19-real-export-preparation-design.md`).
+**Transitional.** WorkloadHub is still in its testing phase, and almost no user is `active` there — a flag
+that carries no meaning during testing (owner, 2026-09-19). `ForecastRepository` counts a user only when
+`active` is true and the role is `MEMBER` or `TEAM_LEADER`, so a forecast over a raw export covers almost
+nobody. `prepare` corrects the export file before the seed sees it; delete the step once WorkloadHub's own
+`active` means what it says (`docs/superpowers/specs/2026-09-21-hierarchy-teams-design.md`, section 9).
+
+It does **not** touch `teams` or `team_members`. It used to derive both, because a team membership was once a
+third condition of being counted; the forecast reads the hierarchy in `users.manager_id` directly now, so
+that derivation is gone and those tables come through byte for byte.
 
 ```bash
 bash scripts/postgres.sh up
@@ -217,28 +219,23 @@ bash server/tools/experiment.sh import ~/whf/seeded.json
 because the module reads `deactivated_at` as the member's leaving date, and a user flipped active while
 still carrying one is counted by `ForecastRepository` and then dropped by the run: `FeatureBuilder` stops
 their feature rows at that date, and `ForecastRunner.forTeam` filters out every member whose leaving date is
-not after the origin — a team of such members raises `TEAM_NOT_FOUND` outright. It promotes every user who has direct
-reports inside the export and is still `MEMBER` to `TEAM_LEADER`, and leaves every other role alone; nobody
-becomes `SKILL_TEAM_LEADER`, which the module does not count. It derives one parentless team per department
-code, plus an `Unassigned` one for people with no department, and one child team per user with direct
-reports. Pre-existing teams are dropped unless a `projects` or `team_capacity` row still points at one, in
-which case that team and its ancestors are kept; the command prints how many it kept and how many it dropped.
-It writes no database and reads no credentials: a file in, a file out, and the ids it mints come from a
-fixed seed, so the same export and the same `--joined` give the same bytes. Its output holds real names and
-stays outside the repository, like the seed's.
+not after the origin — a team of such members raises `TEAM_NOT_FOUND` outright.
 
-`--joined` stamps `team_members.joined_at`, `created_at` and `updated_at`, and defaults to five years before
-the day the command runs. It is not filler: the module folds the earliest `joined_at` into the member's joined
-date, which feeds `tenure_weeks` and is one of the two candidates for the member's first feature week
-(`FeatureBuilder.startIndex` takes the earlier of it and the first assignment week). A stamp of the
-generation day makes every member's tenure negative across the history, and orphans outright any member with
-no assigned task in the window.
+It then gives every manager inside the export the role their place implies: a manager whose own reports
+include another manager becomes `SKILL_TEAM_LEADER`, and every other manager becomes `TEAM_LEADER`. `ADMIN`
+and `CENTER_MANAGER` keep their roles, because `ProjectPlanner.fallbackOwner` looks for exactly those two,
+and a user who manages nobody is left alone. The promotion has a consequence worth reading off the command's
+own summary before the first real run: a skill team leader does no technical work, so `SKILL_TEAM_LEADER` is
+not a counted role and those people stop being forecast as individuals. They remain the people who may run
+the teams beneath them.
+
+It writes no database and reads no credentials: a file in, a file out, nothing random, so one export always
+gives the same bytes. Its output holds real names and stays outside the repository, like the seed's.
 
 A note on what it does not fix: real mode still gives about a tenth of people a late start date and a few a
 leaving date inside the window, and shapes their generated work accordingly, while leaving `users.active` and
-`deactivated_at` alone — `Directory.derive` returns on the real path before the step that would write them
-back. A handful of people will show work that begins late or stops early while the database calls them
-active. That is the seed's existing behaviour, not a fault of the prepared export.
+`deactivated_at` alone. A handful of people will show work that begins late or stops early while the database
+calls them active. That is the seed's existing behaviour, not a fault of the prepared export.
 
 ## Running the showcase
 
@@ -324,9 +321,9 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
   | role | may start a run for | may view |
   |---|---|---|
   | `ADMIN` | any team | any team |
-  | `SKILL_TEAM_LEADER` | a team whose parent team they manage, one at a time | those teams and their own memberships |
-  | `TEAM_LEADER` | the teams they manage | those teams and their own memberships |
-  | `MEMBER` | none | the teams they belong to |
+  | `SKILL_TEAM_LEADER` | the team of a leader who reports to them, one at a time | those teams and their own |
+  | `TEAM_LEADER` | their own team | their own team and the one they belong to |
+  | `MEMBER` | none | the team they belong to |
   | `VIEWER`, `CENTER_MANAGER` | none | any team |
 
 - **A run**: check the role, `startRun(new RunRequest(teamId, userId))`, let the page poll
@@ -357,7 +354,7 @@ sample host in the tests (`forecast-core/src/test/java/com/workloadhub/forecast/
   repository, inside the development container) runs `HostExample`, a standalone Spring Boot
   application on the local PostgreSQL that makes every one of those calls and prints what comes back — a run
   with its progress labels, the windows and the overload, the current forecast, the run list, accuracy and
-  `copilotStatus`. Without `--team` it lists the teams, marking which of them have a `TEAM_LEADER`: the example
+  `copilotStatus`. Without `--team` it lists the teams, each named by its leader and marked with that leader's role: the example
   acts as that user, and refuses a team that has none, since it has no session to take a user from. With
   `--narrate` it also calls the model, which is the live Copilot check ("Narrating with Copilot" below). It is
   a class of `forecast-tools`, so the gate compiles it; its `DataSource` is the one Spring Boot builds from

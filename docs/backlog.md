@@ -332,16 +332,21 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
-- **Delete `experiment.sh prepare` and `ExportPreparer` once WorkloadHub populates `teams` and `team_members`
-  itself (2026-09-19).** The verb exists only because a WorkloadHub in its testing phase has almost no active
-  user and no real team structure, so an export straight out of it forecasts nobody
-  (`docs/superpowers/specs/2026-09-19-real-export-preparation-design.md`). Left in place it would be harmless
-  — it writes a file, not a database — but the structure it derives from `department` and `manager_id` is a
-  guess, and once the real structure exists the guess is worse than nothing. Deleting it is the whole remedy: nothing in
-  production code but the driver's own verb depends on it. `ExportPreparerTest`,
-  `ExportPreparerPropertyTest`, `ExperimentFlowTest.prepareThenSeedThenImportProducesCountableMembers` and
-  `forecast-tools/src/test/resources/fixtures/raw-export.json` go with it, and `Directory.uniqueName` can go
-  back to private.
+- **Delete `experiment.sh prepare` and `ExportPreparer` once WorkloadHub's own `active` flag means what it
+  says (2026-09-21, replacing the 2026-09-19 entry).** The verb's team derivation is already gone: teams come
+  from `users.manager_id` now, so the entry that waited for WorkloadHub to populate `teams` no longer applies
+  — the teams it was waiting for were never the teams it needed. What is left of the verb is the activation
+  (6 of 264 users are `active` in a WorkloadHub still in testing, where the flag carries no meaning) and the
+  role promotion the hierarchy implies. Deleting it is still the whole remedy: nothing in production code but
+  the driver's own verb depends on it. `ExportPreparerTest`, `ExportPreparerPropertyTest`,
+  `ExperimentFlowTest.prepareThenSeedThenImportProducesCountableMembers` and
+  `forecast-tools/src/test/resources/fixtures/raw-export.json` go with it. `Directory.uniqueName` is already
+  back to package-private; `ProjectPlanner` uses it for the project team names.
+
+- **The forecast has never been measured against a real export (2026-09-21).** `tenure_weeks` changed meaning
+  with the hierarchy work, from "in a team since" to "active since", and the real export has no accuracy
+  baseline to compare either reading against. Nothing regressed, because nothing was ever measured; this is a
+  note that the first real run over the real export is also the first measurement.
 
 - **Real mode shapes work by join and leave dates it never writes back (2026-09-19).** `Directory.derive`
   gives ~10% of people a late join date and ~3% a leaving date inside the window (`LATE_JOIN_SHARE`,

@@ -1,7 +1,15 @@
 # Preparing a real WorkloadHub export for the seed
 
 Date: 2026-09-19
-Status: design, not yet implemented
+Status: implemented 2026-09-19; **sections 5 and 6 withdrawn on 2026-09-21**
+
+> **Partly superseded.** `docs/superpowers/specs/2026-09-21-hierarchy-teams-design.md` withdraws section 5
+> (the derived `teams`) and section 6 (`team_members` and `--joined`) in full, and amends section 4.1: a
+> manager of managers now becomes `SKILL_TEAM_LEADER`, which that section deliberately avoided. Everything
+> this document says about *why* a raw export forecasts nobody is still true of `users.active`; what is no
+> longer true is the third condition it names, a `team_members` row, which the forecast stopped requiring.
+> Read it as the record of what was decided on 2026-09-19, not as a description of the code.
+
 Supersedes nothing. Extends `2026-09-17-personal-leaves-capacity-and-seed-scope-design.md` (real mode) and
 `2026-09-18-seed-owns-the-work-tables-design.md` (the seed's landing path) without changing either.
 

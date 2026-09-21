@@ -143,7 +143,6 @@ public final class FactsBuilder {
         // A team is keyed by its leader, so `name` is the leader's own name, `manager_id` is the key itself,
         // and `parent_team_id` is the leader's own manager: the skill team leader a risk is escalated to.
         return map("id", str(out.teamId()), "name", lead == null ? null : lead.fullName(),
-                "department", lead == null ? null : lead.department(),
                 "parent_team_id", lead == null || lead.managerId() == null ? null : str(lead.managerId()),
                 "manager_id", str(out.teamId()), "totals", totals);
     }
