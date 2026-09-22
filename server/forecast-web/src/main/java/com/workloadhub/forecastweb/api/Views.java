@@ -30,13 +30,14 @@ public final class Views {
     public record UserView(UUID id, String fullName, String role, String jobTitle, String department, boolean active, List<TeamRelation> teams) {
     }
 
-    public record TeamView(UUID id, String name, UUID managerId, String managerName, UUID parentTeamId, String parentTeamName, int memberCount) {
+    /** {@code reportsToId} is the leader's own manager — a user, who usually keys no team (see Directory.Team). */
+    public record TeamView(UUID id, String name, UUID managerId, String managerName, UUID reportsToId, String reportsToName, int memberCount) {
     }
 
     public record MemberView(UUID id, String fullName, String role, String jobTitle) {
     }
 
-    public record TeamDetailView(UUID id, String name, UUID managerId, String managerName, UUID parentTeamId, String parentTeamName,
+    public record TeamDetailView(UUID id, String name, UUID managerId, String managerName, UUID reportsToId, String reportsToName,
             List<MemberView> members) {
     }
 

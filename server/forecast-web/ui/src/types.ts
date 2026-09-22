@@ -16,9 +16,9 @@ export interface SystemView {
 
 export interface TeamRelation { teamId: string; name: string; relation: 'manages' | 'member' | 'manages-parent' }
 export interface UserView { id: string; fullName: string; role: Role; jobTitle: string | null; department: string | null; active: boolean; teams: TeamRelation[] }
-export interface TeamView { id: string; name: string; managerId: string | null; managerName: string | null; parentTeamId: string | null; parentTeamName: string | null; memberCount: number }
+export interface TeamView { id: string; name: string; managerId: string | null; managerName: string | null; reportsToId: string | null; reportsToName: string | null; memberCount: number }
 export interface MemberView { id: string; fullName: string; role: Role; jobTitle: string | null }
-export interface TeamDetailView { id: string; name: string; managerId: string | null; managerName: string | null; parentTeamId: string | null; parentTeamName: string | null; members: MemberView[] }
+export interface TeamDetailView { id: string; name: string; managerId: string | null; managerName: string | null; reportsToId: string | null; reportsToName: string | null; members: MemberView[] }
 export interface TeamPermission { teamId: string; name: string; canRun: boolean; canView: boolean; runReason: string; viewReason: string }
 export interface MeView { user: MemberView; hasToken: boolean; teams: TeamPermission[] }
 export interface PermissionView { userId: string; role: Role; teamId: string; canRun: boolean; canView: boolean; runReason: string; viewReason: string }

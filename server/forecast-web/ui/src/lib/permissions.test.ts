@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ENDPOINTS } from './endpoints'
 import { describe as verdict, ROLE_MATRIX, summarise } from './permissions'
 
 describe('permissions', () => {
@@ -28,5 +29,15 @@ describe('permissions', () => {
     // A leader runs one team, so no row may promise "the teams they manage" any more.
     expect(ROLE_MATRIX.some((r) => r.run.includes('teams they manage'))).toBe(false)
     expect(ROLE_MATRIX.some((r) => r.run.includes('parent team'))).toBe(false)
+  })
+
+  // The same guard over the API reference, which the Docs page renders below its own (correct) definition of
+  // a team. Holding it over ROLE_MATRIX alone is why endpoints.ts still said "the teams they manage" and
+  // "manage the parent of" months after a team stopped being a row of the teams table.
+  it('keeps the old team model out of the API reference too', () => {
+    const text = ENDPOINTS.map((e) => `${e.purpose} ${e.response ?? ''}`).join(' ')
+    for (const stale of ['teams they manage', 'parent team', 'parentTeamId', 'parentTeamName', 'its manager, parent']) {
+      expect(text).not.toContain(stale)
+    }
   })
 })

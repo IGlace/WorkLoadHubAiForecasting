@@ -37,10 +37,13 @@ public class MeController {
     @GetMapping
     public MeView me(ActingUser user) {
         ForecastAccess access = facade.access();
+        // One resolved directory for the whole loop: asking run and view per team used to re-query the acting
+        // user's role twice per team and ask again whether each team exists -- about eight round trips a team.
+        Directory.Snapshot d = directory.snapshot();
         List<TeamPermission> teams = new ArrayList<>();
-        for (Directory.Team t : directory.teams()) {
-            ForecastAccess.Decision run = access.run(user.id(), t.id());
-            ForecastAccess.Decision view = access.view(user.id(), t.id());
+        for (Directory.Team t : d.teams()) {
+            ForecastAccess.Decision run = access.run(user.id(), t.id(), d);
+            ForecastAccess.Decision view = access.view(user.id(), t.id(), d);
             teams.add(new TeamPermission(t.id(), t.name(), run.allowed(), view.allowed(), run.reason(), view.reason()));
         }
         return new MeView(new MemberView(user.id(), user.fullName(), user.role(), user.jobTitle()), facade.hasToken(user), teams);

@@ -27,7 +27,7 @@ export function TeamsPage() {
                 return (
                   <tr key={t.id}>
                     <td><Link to={'/teams/' + t.id}>{t.name}</Link></td>
-                    <td>{t.parentTeamName ?? <span className="muted">nobody</span>}</td>
+                    <td>{t.reportsToName ?? <span className="muted">nobody</span>}</td>
                     <td className="num">{t.memberCount}</td>
                     <td><span className={'badge ' + (p?.canView ? 'ok' : 'no')} title={p?.viewReason}>{p?.canView ? 'view' : 'no'}</span> <span className="muted small">{p?.viewReason}</span></td>
                     <td><span className={'badge ' + (p?.canRun ? 'ok' : 'no')} title={p?.runReason}>{p?.canRun ? 'run' : 'no'}</span> <span className="muted small">{p?.runReason}</span></td>

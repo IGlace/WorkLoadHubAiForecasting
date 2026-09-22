@@ -34,18 +34,22 @@ public class DirectoryController {
 
     @GetMapping("/users")
     public List<UserView> users(ActingUser actingUser) {
-        List<Directory.Team> teams = directory.teams();
+        Directory.Snapshot d = directory.snapshot();
+        List<Directory.Team> teams = d.teams();
         Map<UUID, Directory.Team> teamById = new LinkedHashMap<>();
         teams.forEach(t -> teamById.put(t.id(), t));
         Map<UUID, List<TeamRelation>> relations = new LinkedHashMap<>();
         for (Directory.Team t : teams) {
-            // The leader manages their own team; the leader above them may act for it, one team at a time.
+            // The leader manages their own team; the leader above them may act for it, one team at a time --
+            // but only when that manager is a SKILL_TEAM_LEADER. A team leader reporting to another team
+            // leader is not allowed to run the team beneath them (ruling 3), and this page must not say they
+            // are: it is the one place where a displayed relation could contradict the enforced rule.
             relations.computeIfAbsent(t.id(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "manages"));
-            if (t.parentTeamId() != null) {
-                relations.computeIfAbsent(t.parentTeamId(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "manages-parent"));
+            if (t.reportsToId() != null && "SKILL_TEAM_LEADER".equals(d.roleOf(t.reportsToId()))) {
+                relations.computeIfAbsent(t.reportsToId(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "manages-parent"));
             }
         }
-        for (Directory.Membership m : directory.memberships()) {
+        for (Directory.Membership m : d.memberships()) {
             Directory.Team t = teamById.get(m.teamId());
             if (t != null) {
                 relations.computeIfAbsent(m.userId(), k -> new ArrayList<>()).add(new TeamRelation(t.id(), t.name(), "member"));
@@ -53,7 +57,7 @@ public class DirectoryController {
         }
         relations.values().forEach(list -> list.sort(java.util.Comparator.comparing(TeamRelation::name).thenComparing(TeamRelation::relation)));
         List<UserView> out = new ArrayList<>();
-        for (Directory.User u : directory.users()) {
+        for (Directory.User u : d.users()) {
             out.add(new UserView(u.id(), u.fullName(), u.role(), u.jobTitle(), u.department(), u.active(), relations.getOrDefault(u.id(), List.of())));
         }
         return out;
@@ -61,30 +65,21 @@ public class DirectoryController {
 
     @GetMapping("/teams")
     public List<TeamView> teams(ActingUser actingUser) {
-        Map<UUID, Directory.User> users = directory.usersById();
-        List<Directory.Team> teams = directory.teams();
-        Map<UUID, Directory.Team> teamById = new LinkedHashMap<>();
-        teams.forEach(t -> teamById.put(t.id(), t));
+        // The team's own name is its leader's, so `managerName` is `name`: no second read to recover it.
         List<TeamView> out = new ArrayList<>();
-        for (Directory.Team t : teams) {
-            out.add(new TeamView(t.id(), t.name(), t.managerId(), name(users, t.managerId()), t.parentTeamId(),
-                    t.parentTeamId() == null || !teamById.containsKey(t.parentTeamId()) ? null : teamById.get(t.parentTeamId()).name(), t.memberCount()));
+        for (Directory.Team t : directory.snapshot().teams()) {
+            out.add(new TeamView(t.id(), t.name(), t.managerId(), t.name(), t.reportsToId(), t.reportsToName(), t.memberCount()));
         }
         return out;
     }
 
     @GetMapping("/teams/{id}")
     public TeamDetailView team(ActingUser actingUser, @PathVariable UUID id) {
-        Directory.Team t = directory.team(id).orElseThrow(() -> ForecastException.of("TEAM_NOT_FOUND", "team " + id + " does not exist"));
-        Map<UUID, Directory.User> users = directory.usersById();
-        List<MemberView> members = directory.membersOf(id).stream().map(users::get).filter(u -> u != null)
+        Directory.Snapshot d = directory.snapshot();
+        Directory.Team t = d.team(id).orElseThrow(() -> ForecastException.of("TEAM_NOT_FOUND", "team " + id + " does not exist"));
+        Map<UUID, Directory.User> users = d.usersById();
+        List<MemberView> members = d.membersOf(id).stream().map(users::get).filter(u -> u != null)
                 .map(u -> new MemberView(u.id(), u.fullName(), u.role(), u.jobTitle())).toList();
-        String parentName = t.parentTeamId() == null ? null : directory.team(t.parentTeamId()).map(Directory.Team::name).orElse(null);
-        return new TeamDetailView(t.id(), t.name(), t.managerId(), name(users, t.managerId()), t.parentTeamId(), parentName, members);
-    }
-
-    static String name(Map<UUID, Directory.User> users, UUID id) {
-        Directory.User u = id == null ? null : users.get(id);
-        return u == null ? null : u.fullName();
+        return new TeamDetailView(t.id(), t.name(), t.managerId(), t.name(), t.reportsToId(), t.reportsToName(), members);
     }
 }

@@ -35,7 +35,11 @@ public final class ForecastAccess {
      * whether a report is counted depends on their own job title alone.
      */
     public String roleOf(UUID userId) {
-        String role = effectiveRole(userId);
+        return roleOf(userId, null);
+    }
+
+    public String roleOf(UUID userId, Directory.Snapshot directory) {
+        String role = directory != null ? directory.roleOf(userId) : effectiveRole(userId);
         if (role == null) {
             throw new HostForbidden("unknown user " + userId);
         }
@@ -62,14 +66,32 @@ public final class ForecastAccess {
         return view(userId, teamId).allowed();
     }
 
+    /** The same answers from a directory already resolved, without a further query. See {@link #run}. */
+    public boolean canRun(UUID userId, UUID teamId, Directory.Snapshot directory) {
+        return run(userId, teamId, directory).allowed();
+    }
+
+    public boolean canView(UUID userId, UUID teamId, Directory.Snapshot directory) {
+        return view(userId, teamId, directory).allowed();
+    }
+
     public Decision run(UUID userId, UUID teamId) {
-        String role = roleOf(userId);
+        return run(userId, teamId, null);
+    }
+
+    /**
+     * Whether this user may run this team. {@code directory}, when given, is a directory already resolved by
+     * the caller and every question is answered from it: a page asking about every team otherwise re-queries
+     * the acting user's role twice per team and asks again whether each team exists.
+     */
+    public Decision run(UUID userId, UUID teamId, Directory.Snapshot directory) {
+        String role = roleOf(userId, directory);
         return switch (role) {
             case "ADMIN", "CENTER_MANAGER" -> new Decision(true, role + " may run a forecast for any team");
-            case "TEAM_LEADER" -> manages(userId, teamId)
+            case "TEAM_LEADER" -> manages(userId, teamId, directory)
                     ? new Decision(true, "TEAM_LEADER manages this team")
                     : new Decision(false, "TEAM_LEADER may only run their own team");
-            case "SKILL_TEAM_LEADER" -> managesParentOf(userId, teamId)
+            case "SKILL_TEAM_LEADER" -> managesParentOf(userId, teamId, directory)
                     ? new Decision(true, "SKILL_TEAM_LEADER manages this team's leader")
                     : new Decision(false, "SKILL_TEAM_LEADER may only run the team of a leader who reports to them");
             default -> new Decision(false, role + " may not run a forecast");
@@ -77,39 +99,57 @@ public final class ForecastAccess {
     }
 
     public Decision view(UUID userId, UUID teamId) {
-        String role = roleOf(userId);
+        return view(userId, teamId, null);
+    }
+
+    public Decision view(UUID userId, UUID teamId, Directory.Snapshot directory) {
+        String role = roleOf(userId, directory);
         return switch (role) {
             case "ADMIN", "VIEWER", "CENTER_MANAGER" -> new Decision(true, role + " may view any team");
-            case "TEAM_LEADER" -> manages(userId, teamId) ? new Decision(true, "TEAM_LEADER manages this team")
-                    : memberOf(userId, teamId) ? new Decision(true, "a member of this team")
+            case "TEAM_LEADER" -> manages(userId, teamId, directory) ? new Decision(true, "TEAM_LEADER manages this team")
+                    : memberOf(userId, teamId, directory) ? new Decision(true, "a member of this team")
                     : new Decision(false, "TEAM_LEADER may only view their own team or the one they belong to");
-            case "SKILL_TEAM_LEADER" -> managesParentOf(userId, teamId) ? new Decision(true, "SKILL_TEAM_LEADER manages this team's leader")
-                    : memberOf(userId, teamId) ? new Decision(true, "a member of this team")
+            case "SKILL_TEAM_LEADER" -> managesParentOf(userId, teamId, directory) ? new Decision(true, "SKILL_TEAM_LEADER manages this team's leader")
+                    : memberOf(userId, teamId, directory) ? new Decision(true, "a member of this team")
                     : new Decision(false, "SKILL_TEAM_LEADER may only view the team of a leader who reports to them, or their own");
-            case "MEMBER" -> memberOf(userId, teamId) ? new Decision(true, "a member of this team")
+            case "MEMBER" -> memberOf(userId, teamId, directory) ? new Decision(true, "a member of this team")
                     : new Decision(false, "MEMBER may only view the teams they belong to");
             default -> new Decision(false, role + " may not view a forecast");
         };
     }
 
     /** A leader manages exactly one team: their own, keyed by their own id. */
-    boolean manages(UUID userId, UUID teamId) {
-        return userId.equals(teamId) && leadsSomeone(teamId);
+    boolean manages(UUID userId, UUID teamId, Directory.Snapshot directory) {
+        return userId.equals(teamId) && leadsSomeone(teamId, directory);
     }
 
     /** A skill team leader may act for one leader beneath them at a time, never for everyone below at once. */
-    boolean managesParentOf(UUID userId, UUID teamId) {
-        return leadsSomeone(teamId) && !jdbc.sql("SELECT 1 FROM users WHERE id = ? AND manager_id = ?")
-                .param(teamId).param(userId).query().listOfRows().isEmpty();
+    boolean managesParentOf(UUID userId, UUID teamId, Directory.Snapshot directory) {
+        return leadsSomeone(teamId, directory) && userId.equals(managerOf(teamId, directory));
     }
 
-    /** The leader belongs to their own team, and so does everyone who reports to them. */
-    boolean memberOf(UUID userId, UUID teamId) {
-        if (!leadsSomeone(teamId)) {
+    /**
+     * The leader belongs to their own team, and so does every <b>counted</b> person who reports to them. The
+     * counted test is not decoration: {@code Directory.membersOf} and {@code memberships} both apply it, and
+     * without it somebody who has left, or a skill team leader reporting to a leader, is told they are "a
+     * member of this team" while appearing in no member list and never being forecast.
+     */
+    boolean memberOf(UUID userId, UUID teamId, Directory.Snapshot directory) {
+        if (!leadsSomeone(teamId, directory)) {
             return false;
         }
-        return userId.equals(teamId) || !jdbc.sql("SELECT 1 FROM users WHERE id = ? AND manager_id = ?")
-                .param(userId).param(teamId).query().listOfRows().isEmpty();
+        if (userId.equals(teamId)) {
+            return true;
+        }
+        Directory.Snapshot d = directory == null ? new Directory(jdbc).snapshot() : directory;
+        return d.counted(userId) && teamId.equals(managerOf(userId, d));
+    }
+
+    /** The user's manager, from the directory. */
+    private UUID managerOf(UUID userId, Directory.Snapshot directory) {
+        Directory.Snapshot d = directory == null ? new Directory(jdbc).snapshot() : directory;
+        return d.users().stream().filter(u -> u.id().equals(userId)).findFirst()
+                .map(Directory.User::managerId).orElse(null);
     }
 
     /**
@@ -118,8 +158,8 @@ public final class ForecastAccess {
      * matters — a SKILL_TEAM_LEADER has reports too, and their "team" would be the leaders beneath them,
      * which nobody may run (design 2026-09-21, rulings 1 and 3).
      */
-    private boolean leadsSomeone(UUID teamId) {
+    private boolean leadsSomeone(UUID teamId, Directory.Snapshot directory) {
         // Not roleOf: a team id naming nobody is simply not a team, which is an answer, not a refusal.
-        return "TEAM_LEADER".equals(effectiveRole(teamId));
+        return "TEAM_LEADER".equals(directory != null ? directory.roleOf(teamId) : effectiveRole(teamId));
     }
 }

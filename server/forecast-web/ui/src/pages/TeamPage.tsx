@@ -90,7 +90,7 @@ export function TeamPage() {
           <h1>{team.data?.name ?? 'Team'}</h1>
           <p className="lead">
             {team.data?.managerName ? <>led by <b>{team.data.managerName}</b></> : 'no leader'}
-            {team.data?.parentTeamName ? <> · who reports to {team.data.parentTeamName}</> : null} · {members.length} members
+            {team.data?.reportsToName ? <> · who reports to {team.data.reportsToName}</> : null} · {members.length} members
           </p>
         </div>
         <div className="row">

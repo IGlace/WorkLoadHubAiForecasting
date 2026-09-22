@@ -332,6 +332,24 @@ Decided 2026-09-04; no work planned. Recorded so they are not re-litigated.
 
 ## Java migration
 
+- **`forecast-web`'s UI against a real directory (2026-09-22).** The backend was made correct and the showcase
+  was run against a 264-user directory for the first time; these are what that run showed, deliberately left
+  for later at the owner's ruling to fix correctness and the per-request cost only:
+  - the Permissions page is a flat 264-entry `<select>` with no filter and neither job title nor department,
+    so about 230 options read "Some Name · MEMBER" (`PermissionsPage.tsx:40-43`); `ActingUserPicker` does have
+    a filter, but over name, role and title only — not `department`;
+  - `department` is fetched, typed and documented but rendered nowhere, though it is the one field that tells
+    twelve teams named after people apart;
+  - nothing tells the 79 counted users who are in no team that this is why they see nothing: they get
+    "views 0 of 12 teams" over a wall of "no", and the reason still reads "the teams they belong to" — a
+    plural for people who belong to none;
+  - a team page prints its leader's name twice ("Sofia Martin — led by **Sofia Martin**"), because a team's
+    name *is* its leader's;
+  - `/teams/<a user id that leads nothing>` says "permissions not loaded" instead of "that user leads no
+    team", and team ids are user ids now, so that URL is a natural thing to type;
+  - `CENTER_MANAGER` sits last in `ROLE_MATRIX`, after `VIEWER`, from when it ran nothing — which also puts it
+    last in the acting-user picker's groups.
+
 - **Delete `experiment.sh prepare` and `ExportPreparer` once WorkloadHub's own `active` flag means what it
   says (2026-09-21, replacing the 2026-09-19 entry).** The verb's team derivation is already gone: teams come
   from `users.manager_id` now, so the entry that waited for WorkloadHub to populate `teams` no longer applies
