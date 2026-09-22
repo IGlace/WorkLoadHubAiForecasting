@@ -52,9 +52,12 @@ end that calls the module the same way a real host will, against the same local 
   five tables in real mode, and the owner's feature-matrix rulings of 2026-09-16 (section 1 of the spec,
   `docs/design/2026-09-16-feature-matrix-review.html`) are applied. Two pages of 2026-09-17 describe the
   result for the application's developer, current state only: `docs/design/2026-09-17-workloadhub-schema-diagram.html`
-  (every table of the database with the module installed, what the module adds, what it reads and what the
-  data must contain, how the server integrates it) and `docs/design/2026-09-17-feature-matrix-now.html` (the
-  features, the logic and the rules; the 2026-09-16 page is kept as the reviewed record).
+  (every table of the database with the module installed, what the module adds to the schema and to the
+  running application, what it reads and what the data must contain, and the full integration guide: the host
+  layer, the calls, the results, the routes, the errors, running and testing it, modelled on `forecast-web`)
+  and `docs/design/2026-09-17-feature-matrix-now.html` (who is forecast and what a team is, the features, the
+  logic and the rules; the 2026-09-16 page is kept as the reviewed record). Both were brought up to the
+  hierarchy model of 2026-09-21 on 2026-09-22 and keep their file names.
 - `docs/superpowers/specs/2026-09-17-postgresql-only-and-tools-module-design.md`: **implemented, landed on
   dev on 2026-09-18.** PostgreSQL is the only database, one final `V1` migration, the seed and the driver in
   `forecast-tools`, core tests on a committed seeded fixture, a local PostgreSQL in `scripts/postgres.sh`.

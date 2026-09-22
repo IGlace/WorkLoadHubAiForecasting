@@ -109,7 +109,7 @@ ol.steps li { margin-bottom: 6px; }
 
 <p class="eyebrow">WorkloadHub AI Forecasting · how the forecast works</p>
 <h1>The feature matrix, as it stands</h1>
-<p class="lede">For the developer of the WorkloadHub application: what the forecast computes and how. What it reads from the database, what it derives from those numbers, the columns the model actually learns from, the rules it applies on the way, and how a leave becomes capacity. The tables it reads, what they must contain and how the module is wired into the server are on the companion page <a href="https://claude.ai/artifact/UB7y1Law2w3QEe66yS3enF" style="color:var(--accent)">The WorkloadHub database with the forecast installed</a>.</p>
+<p class="lede">For the developer of the WorkloadHub application: what the forecast computes and how. Who is forecast and what a team is, what it reads from the database, what it derives from those numbers, the columns the model actually learns from, the rules it applies on the way, and how a leave becomes capacity. The tables it reads, what they must contain and the guide to wiring the module into the server are on the companion page <a href="2026-09-17-workloadhub-schema-diagram.html" style="color:var(--accent)">The WorkloadHub database with the forecast installed</a>.</p>
 <nav class="toc" aria-label="Sections">
   <a href="#pipeline">1 · How a forecast is made</a>
   <a href="#activity">2 · A run, step by step</a>
@@ -131,7 +131,7 @@ ol.steps li { margin-bottom: 6px; }
     <rect x="10" y="40" width="250" height="90" rx="5" fill="var(--src-bg)" stroke="var(--src)" stroke-width="1.4"/>
     <text x="135" y="61" text-anchor="middle" font-weight="600">WorkloadHub database</text>
     <text x="135" y="80" text-anchor="middle" font-size="11">tasks · task_history · time_logs</text>
-    <text x="135" y="96" text-anchor="middle" font-size="11">users · projects · holidays</text>
+    <text x="135" y="96" text-anchor="middle" font-size="11">users (manager_id, job_title) · projects · holidays</text>
     <text x="135" y="112" text-anchor="middle" font-size="11">personal_leaves (APPROVED, PENDING)</text>
 
     <line x1="260" y1="85" x2="302" y2="85" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"/>
@@ -219,6 +219,10 @@ ol.steps li { margin-bottom: 6px; }
   <li><strong>A week is then placed on days.</strong> The predicted week is spread over the weekdays the member actually logs on, in the proportions of their last 13 weeks, skipping holidays and full leave days. Each day's demand is compared with that day's capacity, 8.8 h minus that day's leave hours. Overload is the excess and is never capped.</li>
 </ol>
 
+<h3>Who is forecast, and what a team is</h3>
+<p>A run is for one <strong>team</strong>, and a team is <strong>a team leader and the people who report to them directly</strong>: the structure is <code>users.manager_id</code>, and the team's id is the leader's own user id. WorkloadHub's <code>teams</code> and <code>team_members</code> tables hold project teams, ad-hoc groups around one project, and are not read. The role a person has in the forecast is the <strong>effective role</strong>, derived from <code>users.job_title</code> rather than read from <code>users.role</code>, because the directory leaves that column at <code>MEMBER</code> for almost everyone: a title containing "skill team leader" or "center manager" makes an actor, one containing "team lead" or "lead engineer" makes a leader, anything else a member; then a leader with no counted, active direct report is a member, because leading nobody is not a team. <code>ADMIN</code>, <code>CENTER_MANAGER</code> and <code>VIEWER</code> are the three roles still read from the column, since no title implies them.</p>
+<p>A <strong>counted</strong> person, one the model forecasts, is an active user whose effective role is <code>MEMBER</code> or <code>TEAM_LEADER</code>: the leader is forecast with their team, because team leaders do technical work. A skill team leader manages team leaders, does none, and is never a forecast subject; they run a forecast by choosing one leader beneath them. The whole directory is classified at the start of every run, because whether a leader keeps that role depends on who reports to them. Every counted user's history goes into the model, whichever team is being run; the team decides only whose forecast is produced.</p>
+
 <h2 id="activity">2 · A run, step by step</h2>
 <p>This is the activity of one forecast run as the code performs it, with the two decisions that change what a leader sees: whether the team has enough history to be scored, and whether anyone has a row in the last complete week to predict from.</p>
 <figure>
@@ -232,7 +236,7 @@ ol.steps li { margin-bottom: 6px; }
 
     <rect x="40" y="60" width="520" height="46" rx="14" fill="var(--paper-2)" stroke="currentColor" stroke-width="1.2"/>
     <text x="300" y="79" text-anchor="middle" font-weight="600">LOADING · read the team's data</text>
-    <text x="300" y="96" text-anchor="middle" font-size="11">every counted member, their tasks, history, logs, approved and pending leaves, holidays</text>
+    <text x="300" y="96" text-anchor="middle" font-size="11">every user, classified by job title; the counted ones, their tasks, history, logs, leaves, holidays</text>
     <line x1="300" y1="106" x2="300" y2="130" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah2)"/>
 
     <rect x="40" y="132" width="520" height="74" rx="14" fill="var(--drv-bg)" stroke="var(--drv)" stroke-width="1.2"/>
@@ -316,7 +320,7 @@ ol.steps li { margin-bottom: 6px; }
   <span><i class="sw target"></i>the target</span>
   <span><i class="sw flag"></i>a rule the forecast applies (section 5)</span>
 </div>
-<p class="hint">Features are grouped the way <code>Features.java</code> groups them. A name like <code>lag1 … lag13</code> stands for six columns built the same way; <code>_h</code> means one column per horizon (weeks after the origin, 1 to N+1). Absence comes from <code>personal_leaves</code> only; <code>absences</code>, <code>user_capacity</code> and <code>team_capacity</code> are not read.</p>
+<p class="hint">Features are grouped the way <code>Features.java</code> groups them. A name like <code>lag1 … lag13</code> stands for six columns built the same way; <code>_h</code> means one column per horizon (weeks after the origin, 1 to N+1). Absence comes from <code>personal_leaves</code> only; <code>absences</code>, <code>user_capacity</code> and <code>team_capacity</code> are not read. Teams come from <code>users.manager_id</code>; <code>teams</code> and <code>team_members</code> are not read.</p>
 <figure>
 <div class="scroll"><svg id="lineage-svg" role="img" aria-label="Lineage graph from database columns through derived intermediates to feature columns" style="min-width: 1100px"></svg></div>
 <div class="detail" id="detail">Click a box to see its inputs and what it feeds.</div>
@@ -350,14 +354,14 @@ ol.steps li { margin-bottom: 6px; }
 <tr><td class="name">estimate_ratio_13w</td><td><span class="kind drv">computed</span></td><td>hours logged on finished tasks ÷ their estimates</td><td>Whether Sara's tasks take longer or shorter than estimated. 1.0 means spot on.</td><td>1.25: her tasks take a quarter longer than planned</td><td>Turns estimated hours in the queue into a realistic expectation of logged hours.</td><td>no finished task in the window has both an estimate and logged hours · <span class="flagnote">blank, as of today</span></td></tr>
 <tr><td class="name">cycle_days_13w</td><td><span class="kind drv">computed</span></td><td>assignment and finish dates of tasks finished in the window</td><td>Sara's typical number of days from receiving a task to finishing it (the median).</td><td>9 days</td><td>Fast turnaround means arrivals become hours sooner.</td><td>she finished nothing in the window · <span class="flagnote">history</span></td></tr>
 <tr class="section"><td colspan="7">The team around the member</td></tr>
-<tr><td class="name">team_backlog_unassigned_hrs</td><td><span class="kind drv">computed</span></td><td>tasks of the team's projects — those its members hold tasks in by the week's end — created by week end, neither assigned nor finished; <code>original_estimate_hrs</code></td><td>Estimated hours of work sitting in the team's projects with nobody on it.</td><td>140 h unassigned across the team's projects</td><td>That pool is what will be handed out next; a large pool means more work coming to everyone.</td><td>never</td></tr>
-<tr><td class="name">proj_active</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code>, open tasks</td><td>How many of the team's ACTIVE projects still have work in them.</td><td>3</td><td>More live projects, more parallel demands on the same people.</td><td>never · <span class="flagnote">as of today</span></td></tr>
-<tr><td class="name">proj_planning</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code></td><td>How many of the team's projects are still in PLANNING.</td><td>1</td><td>The pipeline that will start producing tasks.</td><td>never · <span class="flagnote">as of today</span></td></tr>
+<tr><td class="name">team_backlog_unassigned_hrs</td><td><span class="kind drv">computed</span></td><td>tasks of the team's projects — those its members hold tasks in by the week's end — created by week end, neither assigned nor finished; <code>original_estimate_hrs</code></td><td>Estimated hours of work sitting in the team's projects with nobody on it.</td><td>140 h unassigned across the team's projects</td><td>That pool is what will be handed out next; a large pool means more work coming to everyone.</td><td>never · <span class="flagnote">team</span></td></tr>
+<tr><td class="name">proj_active</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code>, open tasks</td><td>How many of the team's ACTIVE projects still have work in them.</td><td>3</td><td>More live projects, more parallel demands on the same people.</td><td>never · <span class="flagnote">team, as of today</span></td></tr>
+<tr><td class="name">proj_planning</td><td><span class="kind drv">computed</span></td><td><code>projects.status</code></td><td>How many of the team's projects are still in PLANNING.</td><td>1</td><td>The pipeline that will start producing tasks.</td><td>never · <span class="flagnote">team, as of today</span></td></tr>
 <tr class="section"><td colspan="7">Who the member is</td></tr>
-<tr><td class="name">member_id, team_id</td><td><span class="kind src">database</span></td><td><code>users.id</code> and <code>users.manager_id</code>: a team is a leader and their direct reports, so the team id is the leader's own user id</td><td>Which person and which team this row belongs to, as categories.</td><td>Sara; team "Calibration"</td><td>Lets the booster learn each person's and each team's own level instead of one average for everyone.</td><td></td></tr>
+<tr><td class="name">member_id, team_id</td><td><span class="kind src">database</span></td><td><code>users.id</code> and <code>users.manager_id</code>: a team is a leader and their direct reports, so the team id is the leader's own user id</td><td>Which person and which team this row belongs to, as categories. The team is the one the member does their work in: the team they lead if they lead one, otherwise their manager's.</td><td>Sara; the team of her leader, Karim</td><td>Lets the booster learn each person's and each team's own level instead of one average for everyone.</td><td>team_id: the member neither leads a team nor reports to anyone · <span class="flagnote">team, blank</span></td></tr>
 <tr><td class="name">role</td><td><span class="kind src">database</span></td><td><code>users.job_title</code></td><td>MEMBER or TEAM_LEADER, the effective role: the job title decides, and a leader with no counted direct report is a member. <code>users.role</code> is not read for these two.</td><td>MEMBER</td><td>Leaders log a different mix and fewer task hours.</td><td></td></tr>
 <tr><td class="name">job_title</td><td><span class="kind src">database</span></td><td><code>users.job_title</code></td><td>The job title as written in the directory; blank titles form one category.</td><td>"Calibration engineer"</td><td>People with the same title tend to have similar weeks.</td><td></td></tr>
-<tr><td class="name">tenure_weeks</td><td><span class="kind drv">computed</span></td><td>the member's first activity: earliest <code>time_logs.log_date</code> or earliest <code>task_history</code> row they are the actor of</td><td>Weeks since Sara first did anything in the data. Blank when she has done nothing at all.</td><td>84 weeks</td><td>Newcomers ramp up; the model should not expect full hours from someone in their first month.</td><td></td></tr>
+<tr><td class="name">tenure_weeks</td><td><span class="kind drv">computed</span></td><td>the member's first activity: earliest <code>time_logs.log_date</code> or earliest <code>task_history</code> row they are the actor of</td><td>Weeks since Sara first did anything in the data.</td><td>84 weeks</td><td>Newcomers ramp up; the model should not expect full hours from someone in their first month.</td><td>she has done nothing at all in the loaded history · <span class="flagnote">blank</span></td></tr>
 <tr><td class="name">week_of_year</td><td><span class="kind drv">computed</span></td><td>the calendar</td><td>The ISO week number of the row's week.</td><td>36</td><td>Seasonality: summer and year-end weeks are lighter for most teams.</td><td></td></tr>
 <tr class="section"><td colspan="7">What is already known about the target week · one column per horizon h</td></tr>
 <tr><td class="name">due_hrs_h</td><td><span class="kind drv">computed</span></td><td>open tasks with <code>due_date</code> inside week w+h, their remaining hours by the module's count</td><td>Hours of Sara's open work that fall due in the target week.</td><td>16 h due in the week after next</td><td>Deadline pressure: hours due in a week tend to get logged in it.</td><td>never · <span class="flagnote">remaining, as of today</span></td></tr>
@@ -382,6 +386,7 @@ ol.steps li { margin-bottom: 6px; }
   <div class="callout"><h4>blank · Blank instead of invented</h4><p>Every ratio whose denominator is zero, and "weeks since" when there was no event, are left empty. XGBoost's trees learn a default direction for a missing value at each split from the training rows that lacked it, so a blank is its own branch, not a zero and not an average. Counts and sums stay zero, because zero is their true value. The full list is in the last column of the table in section 4.</p></div>
   <div class="callout"><h4>as of today · Five fields are read as they stand today</h4><p>The history replay rewinds assignments, statuses and logs to the row's week, but <code>reopened_from_done</code>, <code>projects.status</code>, <code>due_date</code>, <code>original_estimate_hrs</code> and <code>planned_week</code> have no history. A row for last March "knows" a due date or a plan that may have been set in June. A task's current value is the best available stand-in.</p></div>
   <div class="callout"><h4>44 h · Capacity is the forecast's own formula</h4><p><code>user_capacity</code> and <code>team_capacity</code> are not read. Capacity is <code>whf.default-weekly-hours</code> (44) × the week's working days / 5, minus the member's approved leave hours; a day is 8.8 h minus its leave. The team's capacity is the sum over its members.</p></div>
+  <div class="callout"><h4>team · A team is a leader and their direct reports; its projects are its members' tasks</h4><p>The team a row describes is the one the member works in: the team they lead if they lead one, otherwise their manager's, keyed by that leader's user id. A member who neither leads nor reports to anyone has a blank <code>team_id</code>. The team's projects are not read from any table: they are the projects its members hold tasks in, and a project counts from the day one of them was first assigned a task in it, so a row built for an earlier week does not see a project the team only picked up later.</p><p class="q"><code>teams</code>, <code>team_members</code> and <code>projects.team_id</code> are never read; <code>job_title_role_mappings</code>, the application's own table for the role rule, holds no rows yet and would be the permanent home of it.</p></div>
   <div class="callout"><h4>planned · Planned weeks are read</h4><p><code>planned_hrs_h</code> sums the estimates of the member's open tasks planned for the target week, and the facts carry <code>planned_hours</code> per window so the narrative can say "12 h planned for this window" and the verifier can check it. A planned week is filled only sometimes, and that is enough: an unplanned task simply counts zero.</p></div>
 </div>
 <h3>Recorded by the application but not used by the model</h3>
@@ -389,6 +394,8 @@ ol.steps li { margin-bottom: 6px; }
   <li><code>tasks.remaining_estimate_hrs</code> is used by the leader-facing facts but not by any feature column (rule "remaining").</li>
   <li><code>absences</code>, <code>user_capacity</code> and <code>team_capacity</code> are never read (rule "44 h").</li>
   <li><code>personal_leaves</code> rows with status <code>REJECTED</code> or <code>CANCELLED</code> are not loaded; <code>PENDING</code> ones reach the facts only.</li>
+  <li><code>teams</code>, <code>team_members</code> and <code>projects.team_id</code> are never read: they describe project teams, not who reports to whom (rule "team").</li>
+  <li><code>users.role</code> is read only for <code>ADMIN</code>, <code>CENTER_MANAGER</code> and <code>VIEWER</code>; the two leader roles come from <code>users.job_title</code>.</li>
   <li><code>task_comments</code>, <code>task_attachments</code>, <code>notifications</code>, <code>project_history</code>, <code>job_titles</code>, <code>job_title_role_mappings</code> and <code>user_roles</code> are never read.</li>
 </ul>
 
@@ -424,7 +431,7 @@ ol.steps li { margin-bottom: 6px; }
   <li><strong>The facts.</strong> Each member's <code>absence_hours</code> per window, and <code>pending_leaves</code>, which lists the member's <code>PENDING</code> leaves that touch the horizon, with start, end, type and hours, served by the <code>get_member_capacity</code> tool: a risk to the window the narrative may mention, never a reduction of capacity.</li>
 </ol>
 <p>Nothing in the model's own history columns (<code>lag*</code>, <code>roll_*</code>, arrivals, open work, team, identity) reads leaves at all, so what the model learns from the past does not depend on the leave table; only the target week's availability, the placement on days and the leader's capacity figures do.</p>
-<p class="hint">Source: <code>Features.java</code>, <code>FeatureBuilder.java</code>, <code>WeeklySeries.java</code>, <code>Lifecycle.java</code>, <code>LeaveDays.java</code>, <code>CapacityRule.java</code>, <code>FactsBuilder.java</code> and <code>ForecastRunner.java</code> of <code>forecast-core</code> on <code>dev</code> at <code>ee4dd97</code>; <code>docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md</code> for the column-by-column mapping.</p>
+<p class="hint">Source: <code>Features.java</code>, <code>FeatureBuilder.java</code>, <code>WeeklySeries.java</code>, <code>Lifecycle.java</code>, <code>EffectiveRole.java</code>, <code>ForecastRepository.java</code>, <code>LeaveDays.java</code>, <code>CapacityRule.java</code>, <code>FactsBuilder.java</code> and <code>ForecastRunner.java</code> of <code>forecast-core</code> on <code>dev</code> at <code>43407fa</code> (2026-09-22); <code>docs/design/2026-09-08-workloadhub-schema-and-feature-matrix.md</code> for the column-by-column mapping.</p>
 
 <script>
 (function () {
@@ -448,10 +455,9 @@ ol.steps li { margin-bottom: 6px; }
     {id:'th_rows', kind:'src', group:'task_history', label:'field_name · new_value · changed_at · user_id'},
     {id:'ts_cat', kind:'src', group:'task_statuses', label:'category'},
     {id:'tt_name', kind:'src', group:'task_types', label:'name'},
-    {id:'p_status', kind:'src', group:'projects', label:'status · team_id'},
-    {id:'tm_parent', kind:'src', group:'teams', label:'parent_team_id'},
-    {id:'tmem', kind:'src', group:'team_members', label:'team_id · joined_at'},
-    {id:'u_role', kind:'src', group:'users', label:'role · job_title'},
+    {id:'p_status', kind:'src', group:'projects', label:'status'},
+    {id:'u_role', kind:'src', group:'users', label:'job_title · role (ADMIN·CENTER_MANAGER·VIEWER)'},
+    {id:'u_mgr', kind:'src', group:'users', label:'manager_id · active'},
     {id:'h_rows', kind:'src', group:'holidays', label:'start_date · end_date · status · active'},
     {id:'pl_rows', kind:'src', group:'personal_leaves (APPROVED only)', label:'employee_id · dates · times · absence_hours'},
     // derived
@@ -468,7 +474,10 @@ ol.steps li { margin-bottom: 6px; }
     {id:'d_arrival', kind:'drv', group:'per member and week', label:'fresh arrival hours (weekly series)', note:'Sum of original_estimate_hrs of fresh tasks by assignment week.'},
     {id:'d_cal', kind:'drv', group:'calendar', label:'working calendar', note:'Weekdays minus holidays that are CONFIRMED and active.'},
     {id:'d_leave', kind:'drv', group:'calendar', label:'leave hours per member and day', rule:'leave', note:'Each APPROVED leave expanded into its working days: absence_hours dealt 8.8 h a day from the first day forward (backward when only begin_time is set), capped at 8.8 h a day; section 6.'},
-    {id:'d_teamproj', kind:'drv', group:'team', label:'projects of the team and its parent', note:'projects.team_id equal to the member’s primary team or its parent team.'},
+    {id:'d_role', kind:'drv', group:'per user', label:'effective role (title, then demotion)', rule:'team', note:'The job title classifies; a TEAM_LEADER with no counted, active direct report becomes MEMBER. Counted: active and MEMBER or TEAM_LEADER.'},
+    {id:'d_team', kind:'drv', group:'per user', label:'team (the leader’s user id)', rule:'team', note:'The team the member works in: their own if they are an effective leader, else their manager’s. Blank when neither.'},
+    {id:'d_joined', kind:'drv', group:'per user', label:'first activity (joined date)', note:'The earlier of the member’s first logged hour and the first task_history row they are the actor of; blank with no activity.'},
+    {id:'d_teamproj', kind:'drv', group:'team', label:'projects of the team, from its members’ tasks', rule:'team', note:'The projects the team’s members hold tasks in, each counted from the day one of them was first assigned a task in it.'},
     // features
     {id:'f_lag', kind:'feat', group:'own history', label:'lag1 … lag4, lag8, lag13'},
     {id:'f_roll', kind:'feat', group:'own history', label:'roll_mean_4/8/13 · roll_std_4/8/13'},
@@ -485,11 +494,11 @@ ol.steps li { margin-bottom: 6px; }
     {id:'f_inprog', kind:'feat', group:'open work', label:'in_progress_tasks'},
     {id:'f_ratio', kind:'feat', group:'open work', label:'estimate_ratio_13w', rule:'blank, as of today'},
     {id:'f_cycle', kind:'feat', group:'open work', label:'cycle_days_13w', rule:'history'},
-    {id:'f_backlog', kind:'feat', group:'team', label:'team_backlog_unassigned_hrs'},
-    {id:'f_pactive', kind:'feat', group:'team', label:'proj_active', rule:'as of today'},
-    {id:'f_pplan', kind:'feat', group:'team', label:'proj_planning', rule:'as of today'},
-    {id:'f_ident', kind:'feat', group:'identity', label:'member_id · team_id · role · job_title'},
-    {id:'f_tenure', kind:'feat', group:'identity', label:'tenure_weeks'},
+    {id:'f_backlog', kind:'feat', group:'team', label:'team_backlog_unassigned_hrs', rule:'team'},
+    {id:'f_pactive', kind:'feat', group:'team', label:'proj_active', rule:'team, as of today'},
+    {id:'f_pplan', kind:'feat', group:'team', label:'proj_planning', rule:'team, as of today'},
+    {id:'f_ident', kind:'feat', group:'identity', label:'member_id · team_id · role · job_title', rule:'team, blank'},
+    {id:'f_tenure', kind:'feat', group:'identity', label:'tenure_weeks', rule:'blank'},
     {id:'f_woy', kind:'feat', group:'identity', label:'week_of_year'},
     {id:'f_due', kind:'feat', group:'target week (per horizon)', label:'due_hrs_h', rule:'remaining, as of today'},
     {id:'f_planned', kind:'feat', group:'target week (per horizon)', label:'planned_hrs_h', rule:'as of today, planned'},
@@ -509,8 +518,9 @@ ol.steps li { margin-bottom: 6px; }
     ['t_type','d_family'], ['tt_name','d_family'],
     ['t_due','f_overdue'], ['t_due','f_due'], ['t_planned','f_planned'],
     ['t_prio','f_prio'], ['t_reopened','f_reopen'],
-    ['t_project','d_teamproj'], ['p_status','d_teamproj'], ['tm_parent','d_teamproj'], ['p_status','f_pactive'], ['p_status','f_pplan'],
-    ['tmem','f_ident'], ['tmem','f_tenure'], ['u_role','f_ident'],
+    ['t_project','d_teamproj'], ['t_assignee','d_teamproj'], ['d_assigned','d_teamproj'], ['d_team','d_teamproj'], ['p_status','f_pactive'], ['p_status','f_pplan'],
+    ['u_role','d_role'], ['u_mgr','d_role'], ['d_role','d_team'], ['u_mgr','d_team'], ['d_role','f_ident'], ['d_team','f_ident'], ['u_role','f_ident'],
+    ['tl_hours','d_joined'], ['th_rows','d_joined'], ['d_joined','f_tenure'],
     ['h_rows','d_cal'], ['pl_rows','d_leave'], ['d_cal','d_leave'],
     ['d_assigned','d_fresh'], ['d_assigned','d_arrival'], ['d_assigned','d_open'], ['d_assigned','f_n13'], ['d_assigned','f_family'], ['d_assigned','f_prio'], ['d_assigned','f_mode'], ['d_assigned','f_cycle'], ['d_assigned','f_backlog'],
     ['d_fresh','d_arrival'], ['d_family','f_family'], ['d_mode','f_mode'],
