@@ -184,8 +184,10 @@ is no SQL output any more: the real database is never seeded.
 
 ## What the seed writes
 
-Teams come from `users.manager_id`, one per manager under a department team per department code;
-job titles decide the kind of work; each member gets a weekly rhythm with seasonal dips, project
+Work comes from departments — `users.department`, one per department code — and teams come from
+`users.manager_id`, a team leader and the people who report to them directly. Neither is a row in `teams`:
+that table holds project teams, and real mode writes none of it. Job titles decide the kind of work, and,
+through the same rule the module uses, who leads; each member gets a weekly rhythm with seasonal dips, project
 ramps, team events and absences; tasks are created into the backlog or assigned directly, worked
 three at a time, logged day by day, reviewed, blocked or reopened at the design's rates, and a few
 finish without logs. Leaves are written as `personal_leaves` (paid leave blocks, one in five ending on a
@@ -213,7 +215,23 @@ bash server/tools/experiment.sh prepare ~/whf/workloadhub_export.json --out ~/wh
 bash server/tools/experiment.sh import ~/whf/prepared.json
 bash server/tools/experiment.sh seed --export ~/whf/prepared.json --out ~/whf/seeded.json
 bash server/tools/experiment.sh import ~/whf/seeded.json
+bash server/examples/run-host-example.sh                                 # the teams
+bash server/examples/run-host-example.sh --team <uuid> --as-of 2026-09-06
 ```
+
+The order of the two imports is not optional: the seeded file's carried projects keep the export's own
+`team_id` and its rows name the export's users, so the directory has to be in the database first. The second
+import never touches `users` or `teams`.
+
+**Leave `--end` at its default and run with an earlier `--as-of`.** The seed then ends today and the example
+forecasts a window that has already happened, which is the only way `accuracy` scores anything: it clamps its
+`to` to yesterday and compares against `time_logs`. Seeding to a date and running as-of the same date
+forecasts days with no logs behind them, and the accuracy table comes back empty with a message saying so.
+
+Walked end to end on 2026-09-22 against a 264-user export: 258 counted people, 12 teams of 5 to 25, 80
+projects (7 carried, 73 minted per department), 31,520 tasks, 121,568 logs over 52 weeks, imported in 36 s.
+A run for the 25-member team took 78 s and came back `confidence scored`, MAE 5.67 over 11 backtest scores,
+250 member-days, and `accuracy` over the fortnight before it scored 225 rows at MAE 1.85, MASE 1.084.
 
 `prepare` sets every user `active` and clears `deactivated_at` — the second matters as much as the first,
 because the module reads `deactivated_at` as the member's leaving date, and a user flipped active while
@@ -221,13 +239,21 @@ still carrying one is counted by `ForecastRepository` and then dropped by the ru
 their feature rows at that date, and `ForecastRunner.forTeam` filters out every member whose leaving date is
 not after the origin — a team of such members raises `TEAM_NOT_FOUND` outright.
 
-It then gives every manager inside the export the role their place implies: a manager whose own reports
-include another manager becomes `SKILL_TEAM_LEADER`, and every other manager becomes `TEAM_LEADER`. `ADMIN`
-and `CENTER_MANAGER` keep their roles, because `ProjectPlanner.fallbackOwner` looks for exactly those two,
-and a user who manages nobody is left alone. The promotion has a consequence worth reading off the command's
-own summary before the first real run: a skill team leader does no technical work, so `SKILL_TEAM_LEADER` is
-not a counted role and those people stop being forecast as individuals. They remain the people who may run
-the teams beneath them.
+It then writes each user's **effective role** into `users.role` — the role the module derives for itself, so
+the prepared file says what the forecast will do with it instead of the MEMBER the application leaves behind.
+`prepare` decides nothing of its own. The rule is the job title's (design 2026-09-21, section 16): a title
+containing `skill team leader` or `center manager` makes an actor, one containing `team lead` or
+`lead engineer` makes a leader, anything else a member; and a leader with no counted, active direct report is
+demoted to a member, because leading nobody is not a team. `ADMIN`, `CENTER_MANAGER` and `VIEWER` are read
+from the column and kept, since no job title implies them — which `ProjectPlanner.fallbackOwner` depends on
+for the first two.
+
+Two consequences worth reading off the command's own summary before the first real run. A skill team leader
+does no technical work, so `SKILL_TEAM_LEADER` is not a counted role and those people are not forecast as
+individuals; they remain the people who may run the teams beneath them. And the two member figures differ on
+purpose: a counted role is permission to be forecast, not a guarantee of it, because a run is per team, so
+somebody counted whose manager is an actor is never reached. On the owner's directory that is 258 counted,
+179 in a team.
 
 It writes no database and reads no credentials: a file in, a file out, nothing random, so one export always
 gives the same bytes. Its output holds real names and stays outside the repository, like the seed's.

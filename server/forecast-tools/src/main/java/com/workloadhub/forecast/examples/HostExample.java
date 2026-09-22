@@ -16,6 +16,7 @@ import com.workloadhub.forecast.api.RunProgress;
 import com.workloadhub.forecast.api.RunRequest;
 import com.workloadhub.forecast.api.RunResult;
 import com.workloadhub.forecast.api.RunSummary;
+import com.workloadhub.forecast.data.EffectiveRole;
 import com.workloadhub.forecast.Json;
 import java.time.Clock;
 import java.time.Duration;
@@ -152,36 +153,62 @@ public class HostExample {
      * TEAM_LEADER and the people who report to them directly, keyed by that leader's own user id (design
      * 2026-09-21), so this lists exactly those leaders. A skill team leader keys nothing: they lead team
      * leaders and run one of their teams, never a team of their own.
+     *
+     * <p>The role is the <b>effective</b> one, from {@link EffectiveRole}, exactly as the module derives it.
+     * Testing {@code users.role} in SQL instead would list nothing against a real WorkloadHub database, where
+     * that column reads MEMBER for almost everyone; it appears to work only after {@code prepare} has written
+     * the derived role back into a copy of the export, which a server never runs (design 2026-09-21,
+     * section 16). A host doing this from its own tables must derive the role the same way.
      */
-    private static UUID pickTeam(JdbcClient jdbc, String requested) {
+    static UUID pickTeam(JdbcClient jdbc, String requested) {
         if (requested != null) {
             return UUID.fromString(requested);
         }
+        Map<UUID, String> roles = effectiveRoles(jdbc);
+        Map<UUID, Integer> reports = new HashMap<>();
+        List<Map<String, Object>> users = jdbc.sql("SELECT id, full_name, manager_id FROM users ORDER BY full_name")
+                .query().listOfRows();
+        for (Map<String, Object> row : users) {
+            UUID id = UUID.fromString(String.valueOf(row.get("id")));
+            Object manager = row.get("manager_id");
+            if (manager != null && EffectiveRole.COUNTED.contains(roles.get(id))) {
+                reports.merge(UUID.fromString(String.valueOf(manager)), 1, Integer::sum);
+            }
+        }
         System.out.printf("%-38s %-24s %s%n", "team id (its leader)", "leader", "members");
-        for (Map<String, Object> row : jdbc.sql("""
-                SELECT m.id, m.full_name,
-                       (SELECT COUNT(*) FROM users r WHERE r.manager_id = m.id AND r.active
-                        AND r.role IN ('MEMBER', 'TEAM_LEADER')) AS members
-                FROM users m
-                WHERE m.role = 'TEAM_LEADER'
-                  AND EXISTS (SELECT 1 FROM users r WHERE r.manager_id = m.id AND r.active
-                              AND r.role IN ('MEMBER', 'TEAM_LEADER'))
-                ORDER BY m.full_name""").query().listOfRows()) {
-            System.out.printf("%-38s %-24s %s%n", row.get("id"), row.get("full_name"), row.get("members"));
+        for (Map<String, Object> row : users) {
+            UUID id = UUID.fromString(String.valueOf(row.get("id")));
+            // Every effective TEAM_LEADER keys a team: a leader nobody counted reports to is already a member.
+            if ("TEAM_LEADER".equals(roles.get(id))) {
+                System.out.printf("%-38s %-24s %s%n", id, row.get("full_name"), reports.getOrDefault(id, 0));
+            }
         }
         System.out.println("\npass one of them as --team <uuid>: the example acts as that team's leader");
         return null;
     }
 
     /**
+     * Example only: every user's effective role, derived from their job title the way the module does. A host
+     * with its own directory service does the same, or reads a role column it trusts.
+     */
+    static Map<UUID, String> effectiveRoles(JdbcClient jdbc) {
+        List<EffectiveRole.Candidate> candidates = jdbc
+                .sql("SELECT id, manager_id, role, job_title, active FROM users")
+                .query((rs, i) -> new EffectiveRole.Candidate(rs.getObject("id", UUID.class),
+                        rs.getObject("manager_id", UUID.class), rs.getString("role"), rs.getString("job_title"),
+                        rs.getBoolean("active")))
+                .list();
+        return EffectiveRole.resolve(candidates);
+    }
+
+    /**
      * Example only: the leader stands in for the authenticated user, because a token can only be stored for a
      * user who exists. A team is keyed by its leader, so the leader is the team id itself — checked here only
-     * to be sure they carry the role the run rules ask for. A server passes the session's own user id and has
-     * already checked the role.
+     * to be sure they carry the role the run rules ask for, and by the same effective-role rule as
+     * {@link #pickTeam}. A server passes the session's own user id and has already checked the role.
      */
-    private static UUID leaderOf(JdbcClient jdbc, UUID team) {
-        return jdbc.sql("SELECT id FROM users WHERE id = ? AND role = 'TEAM_LEADER'")
-                .param(team).query(String.class).optional().map(UUID::fromString).orElse(null);
+    static UUID leaderOf(JdbcClient jdbc, UUID team) {
+        return "TEAM_LEADER".equals(effectiveRoles(jdbc).get(team)) ? team : null;
     }
 
     /** Example only: the module answers in user ids, and the host already has the names. */
